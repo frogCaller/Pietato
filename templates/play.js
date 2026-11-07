@@ -1,7 +1,8 @@
 "use strict";
 // A game from the Pi, played here in EmulatorJS (GPL-3.0, emulatorjs.org): what to play is in this page's address (the
 // Screen view puts it there, where the Pi's screen was). Its in-game save comes from the Pi as it starts, and goes
-// back to the Pi as the game makes it, and when it's closed, so you can carry on there.
+// back to the Pi as the game makes it, and when it's closed, so you can carry on there. Played with the emulator the
+// Pi plays it with (moment), where you were comes from the Pi too, and goes back as it's closed.
 (() => {
   const q = new URLSearchParams(location.search);
   const CORES = {                                 // the systems it plays, and the core each needs
@@ -11,6 +12,8 @@
   };
   const core = q.get("core") || "", rom = q.get("rom") || "", bios = q.get("bios") || "";
   const save = /^Saves\/[^/]+\.srm$/.test(q.get("save") || "") ? q.get("save") : "";
+  const moment = q.get("moment") === "1" && save ? save.replace(/\.srm$/, ".state.auto") : "";   // (where you are: the
+  const pickUp = moment && q.get("state") === moment;                                           //  Pi has one to pick up)
   const color = /^#[0-9a-f]{6}$/i.test(q.get("color") || "") ? q.get("color") : "#60aae4";
   const home = (p) => "/api/home/" + p.split("/").map(encodeURIComponent).join("/");
   const note = document.getElementById("note");
@@ -50,6 +53,47 @@
       console.warn("The save from the Pi didn't load", e);
     }
   }
+  async function momentFromPi() {                 // where you were on the Pi, picked up (once the save's in)
+    const gm = manager();
+    if (!gm || !pickUp) return;
+    try {
+      const r = await fetch("/api/file?folder=games&download=1&path=" + encodeURIComponent(moment), { cache: "no-store" });
+      if (!r.ok) return;
+      const data = new Uint8Array(await r.arrayBuffer());
+      if (data.length) gm.loadState(data);
+    } catch (e) {
+      console.warn("Where you were on the Pi didn't load", e);
+    }
+  }
+  function rawState(s) {                          // the emulator's own state, out of RetroArch's wrapping ("RASTATE",
+    const text = (at, n) => String.fromCharCode(...s.subarray(at, at + n));   // then blocks of an id, a size and that
+    if (s.length < 8 || text(0, 7) !== "RASTATE") return s;                   // much, each padded to 8 bytes: the
+    const dv = new DataView(s.buffer, s.byteOffset, s.byteLength);            // emulator's is MEM's), as the Pi keeps it
+    for (let at = 8; at + 8 <= s.length;) {
+      const id = text(at, 4), size = dv.getUint32(at + 4, true);
+      if (id === "MEM ") return at + 8 + size <= s.length ? s.slice(at + 8, at + 8 + size) : null;
+      if (id === "END ") break;
+      at += 8 + size + ((8 - size % 8) % 8);
+    }
+    return null;
+  }
+  function momentToPi() {                         // where you are, back to the Pi as it's closed (after the save)
+    const gm = manager();
+    if (!started || !gm || !moment) return Promise.resolve(true);
+    let data = null;
+    try { data = rawState(gm.getState()); } catch (e) { return Promise.resolve(false); }
+    if (!data || !data.length) return Promise.resolve(false);
+    turn = turn.then(async () => {
+      try {
+        const r = await fetch("/api/upload?folder=games&exists=replace&path=" + encodeURIComponent(moment),
+          { method: "PUT", body: data, headers: { "Content-Type": "application/octet-stream" } });
+        return r.ok;
+      } catch (e) {
+        return false;
+      }
+    });
+    return turn;
+  }
   function toPi(data) {                           // the save back to the Pi, if it's changed (one at a time)
     turn = turn.then(async () => {
       if (!save || !data || !data.length || same(data, sent)) return true;
@@ -73,7 +117,8 @@
   window.addEventListener("message", async (e) => {
     if (e.source !== parent || e.origin !== location.origin || !e.data || e.data.pietato !== "close") return;
     const saved = await saveNow();
-    tell({ closed: true, saved });
+    const moved = await momentToPi();
+    tell({ closed: true, saved, moved });
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); });   // (a phone put away)
 
@@ -98,8 +143,9 @@
       EJS_color: color, EJS_backgroundColor: "#000000", EJS_biosUrl: bios ? home(bios) : "",
       EJS_defaultOptions: { "save-save-interval": "30",      // (the game's save, every half a minute: to the Pi too)
         "virtual-gamepad": touch ? "enabled" : "disabled" }, // (a tablet's buttons on the screen too, as a phone's)
-      EJS_ready: () => window.EJS_emulator.on("saveSaveFiles", (data) => toPi(data)),
-      EJS_onGameStart: async () => { await fromPi(); started = true; tell({ started: true }); },
+      EJS_ready: () => window.EJS_emulator.on("saveSaveFiles", (data) => { if (started) toPi(data); }),   // (not
+                                                      // before the Pi's save is in: it'd take its place with none)
+      EJS_onGameStart: async () => { await fromPi(); await momentFromPi(); started = true; tell({ started: true }); },
     });
     const s = document.createElement("script");
     s.src = "/ejs/data/loader.js";

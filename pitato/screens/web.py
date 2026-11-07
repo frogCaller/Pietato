@@ -23,7 +23,7 @@ from ..listen import LISTEN_MB, have_vosk, supported as listen_supported
 from ..system import on_pc
 from ..bot import FRIEND_FACES, FRIEND_STYLES
 from ..www import clean_title
-from ..games import BIOS_FOLDER, games_dir, save_name, SAVES_FOLDER
+from ..games import BIOS_FOLDER, find_core, game_title, games_dir, save_name, SAVES_FOLDER
 from .bluetooth import BT_PICKABLE
 from .chromium import CHROME_MENU
 from .games import GAME_MENU
@@ -35,6 +35,8 @@ HERE_GAMES = {"nes": "fceumm", "snes": "snes9x", "gb": "gambatte", "gbc": "gamba
               "genesis": "segaMD", "sms": "smsplus", "gg": "segaGG", "n64": "mupen64plus_next",   # system, as
               "ps1": "pcsx_rearmed", "nds": "melonds"}                                          # EmulatorJS has it
 HERE_ONE_FILE = (".cue", ".m3u", ".gdi")    # games in more than one file: they stay on the Pi
+HERE_LIBRETRO = {"segaMD": "genesis_plus_gx", "segaGG": "genesis_plus_gx"}   # ...the emulator a browser's core is, where
+                                                                            # its name isn't that
 HERE_BIOS = ("scph5501.bin", "scph5500.bin", "scph5502.bin", "scph1001.bin", "scph7001.bin")   # a PS1's, if it's there
 HERE_MOST = 300              # songs handed over with the one picked, at most
 WEB_HOLD = 15.0              # seconds Sound here and Mic here stay on after webui.py last says so (it does every 5)
@@ -605,8 +607,74 @@ class WebScreen:
             found = next((n for n in HERE_BIOS if os.path.isfile(os.path.join(folder, n))), None)
             bios = (self.home_rel(os.path.join(folder, found)) or "") if found else ""
         self.web_handoff = {"kind": "game", "title": it.get("title", ""), "core": core, "rom": rel, "bios": bios,
-                            "save": SAVES_FOLDER + "/" + save_name(src) + ".srm"}
+                            "save": SAVES_FOLDER + "/" + save_name(src) + ".srm",
+                            "moment": self.here_same_core(it.get("system"), core)}
+        self.here_moment(src)
         return True
+
+    @staticmethod
+    def here_same_core(system, core):
+        """The browser plays it with the emulator the Pi plays it with: where you are in it means the same to both
+        (it goes there with the game, and comes back as it closes). True."""
+        path = find_core(system) or ""
+        name = os.path.basename(path)[:-len("_libretro.so")] if path.endswith("_libretro.so") else ""
+        return bool(name) and name == HERE_LIBRETRO.get(core, core)
+
+    def here_moment(self, src):
+        """Where you left off in the game on the Pi, for the browser to pick up (the same emulator only)."""
+        h = self.web_handoff
+        if not h or not h.get("moment"):
+            return
+        rel = SAVES_FOLDER + "/" + save_name(src) + ".state.auto"
+        if os.path.isfile(os.path.join(games_dir(), rel)):
+            h["state"] = rel
+        else:
+            h.pop("state", None)
+
+    def web_here_move(self):
+        """Play here, turned on: the game on the Pi's screen moves to the phone or computer the web page's on (it ends
+        here, where you are kept, and that picks it up). One a browser can't play stays, and why's said. No game of
+        yours on (or one playing by itself): nothing moves, and what's picked next plays there."""
+        run = self.game
+        if run is None or self.view not in ("game", "gamemenu") or self.attract_on():
+            return {"ok": True}
+        if self.together_of(run) is not None:
+            return {"ok": True, "note": "A game you're playing together stays on the Pi"}
+        if self.game_ai_on():
+            return {"ok": True, "note": "The AI player is playing it on the Pi"}
+        g = run.game
+        it = {"src": g["path"], "title": g["title"], "system": g.get("system", "")}
+        self.here_begin(True)
+        out = {"ok": True}
+        try:
+            if self.here_take_game(it):
+                self.game_end()                        # (where you are, kept: it's what the browser picks up)
+                self.here_moment(g["path"])
+                self.toast("Playing on the web page now", 4)
+                self.dirty = True
+        finally:
+            out = self.here_end(out)
+        return out
+
+    def web_here_back(self, cmd):
+        """Play here, turned off while a game played on the web page: it carries on here (its save, and where you were
+        if the browser's emulator is this one's, came back as it closed)."""
+        rel = str(cmd.get("rom") or "")
+        path = os.path.realpath(os.path.join(home_dir(), rel)) if rel and not rel.startswith("/") else ""
+        root = os.path.realpath(games_dir())
+        system = self.game_system(path) if path.startswith(root + os.sep) and os.path.isfile(path) else None
+        if not system:
+            return {"error": "That game isn't on the Pi"}
+        if not self.web_ready():
+            return {"error": "There's no screen to play it on"}
+        if self.game is not None:
+            return {"error": "Another game's on the Pi"}
+        title = game_title(path)
+        why = self.game_cant({"path": path, "title": title, "system": system})
+        if why:
+            return {"error": why[0]}
+        self.game_open({"src": path, "title": title, "system": system})
+        return {"ok": True} if self.game is not None else {"error": "The game didn't start on the Pi"}
 
     def web_icon(self, name, size=96):
         """The home screen's icon for an app, for the web page (None: no such app)."""
@@ -777,6 +845,10 @@ class WebScreen:
             return {"ok": True, "title": todo[i]["title"]}
         if c == "show":
             return self.web_show(str(cmd.get("path") or ""))
+        if c == "here_move":                           # (Play here, turned on: the game on the Pi, to the web page)
+            return self.web_here_move()
+        if c == "here_back":                           # (...turned off: the game on the web page, back here)
+            return self.web_here_back(cmd)
         if c == "save":
             return self.web_net_save(str(cmd.get("path") or ""))
         if c == "player":

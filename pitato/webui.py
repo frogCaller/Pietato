@@ -104,7 +104,8 @@ CONTROL = ("127.0.0.1", 5480)                   # pitato.py's media mode, on thi
 CONTROL_KEY = "/run/pitato/control-key"       # ...and the key it asks for (made at its start)
 PI_GET = {"state", "screen", "catalog", "channels", "radio", "icon", "cameras", "camframe", "friend", "friendpic",
           "computers", "bluetooth", "settings", "places"}
-PI_POST = {"press", "open", "play", "show", "player", "learn", "mode", "reset_pads", "pad_swap", "camera", "friend",
+PI_POST = {"press", "open", "play", "show", "here_move", "here_back", "player", "learn", "mode", "reset_pads", "pad_swap",
+           "camera", "friend",
            "computer", "bluetooth", "settings", "tap", "swipe", "scroll", "type", "term", "save"}
 PI_ARGS = ("what", "genre", "q", "name", "size", "addr", "id", "after", "wait", "w")
 FRAME_WAIT = 20                                 # seconds the page's request for the screen's next picture waits, at most
@@ -741,6 +742,15 @@ def upload():
         except OSError:
             pass
         return jsonify(error="The upload didn't finish"), 400
+    if key == "games" and len(parts) == 2 and parts[0] == GAME_SAVES:   # (a game's save, or where you left off in it:
+        name = os.path.basename(target)                                  #  what's older, put aside)
+        try:
+            if name.endswith(".srm"):
+                moment_aside(folder, name[:-len(".srm")])
+            elif name.endswith(".state.auto"):
+                moment_aside(folder, name[:-len(".state.auto")], (".state.auto.cheevos",))
+        except OSError as ex:
+            print(f"saves: {name}: what it's newer than wasn't put aside ({ex})", flush=True)
     try:                                            # keep the file's own date (photos sort by it)
         mtime = int(request.args.get("mtime", "")) / 1000
         if 0 < mtime < time.time() + 86400:
@@ -990,6 +1000,21 @@ def shared():
 
 # ---- game saves that follow you from Pi to Pi (pitato/savesync.py asks these of your other Pietatos) -----------
 SAVE_EXTS = (".srm", ".rtc", ".state", ".state.cheevos", ".state.auto", ".state.auto.cheevos")   # (savesync.py's)
+GAME_SAVES = "Saves"           # (games.py's SAVES_FOLDER: in the Games folder)
+SAVES_REPLACED = ".replaced"   # (savesync.py's REPLACED: in it, what a newer save took the place of)
+
+
+def moment_aside(saves, name, exts=(".state.auto", ".state.auto.cheevos")):
+    """A game's save came, newer than where you left off in it on the Pi (Play here's, sent back as you play): where
+    you left off put aside, as savesync.py does, so the Pi doesn't take you back to before that save (it starts from
+    the save instead). Where you left off came (Play here's, as the game closed): its achievements' progress, which was
+    the old one's, put aside."""
+    for ext in exts:
+        src = os.path.join(saves, name + ext)
+        if os.path.isfile(src):
+            keep = os.path.join(saves, SAVES_REPLACED)
+            os.makedirs(keep, exist_ok=True)
+            os.replace(src, os.path.join(keep, name + ext))
 
 
 def saves_here(game):

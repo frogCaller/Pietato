@@ -2097,9 +2097,29 @@ $("#playHere").onclick = () => {
   HERE.on = !HERE.on;
   store.set("here", HERE.on);
   drawHereChip();
-  toast(HERE.on ? "What you pick now plays here, on this " + (PHONE ? "phone" : "computer")
-    : "What you pick plays on the Pi again");
+  if (HERE.on) hereMove(); else hereBack();
 };
+async function hereMove() {                               // (on: a game on the Pi's screen moves here)
+  let out = null;
+  try { out = await pi("here_move", {}); } catch (e) { toast(e.message); return; }
+  if (out && out.play) {
+    await openHere(out.play);
+    toast(out.play.state ? "Playing here now" : "Playing here now, from the game's last save");
+    if (S.view !== "screen") goView("screen");            // (where it plays: the Screen's)
+  } else if (out && out.note) toast(out.note);
+  else toast("What you pick now plays here, on this " + (PHONE ? "phone" : "computer"));
+  kick(150);
+}
+async function hereBack() {                               // (off: a game played here goes back to the Pi)
+  const p = HERE.game && HERE.what && HERE.what.kind === "game" ? HERE.what : null;
+  if (!p) { toast("What you pick plays on the Pi again"); return; }
+  toast("Sending the game back to the Pi…");
+  const sent = await closeHere();
+  if (sent && sent.saved === false) return;               // (said why: it isn't started there without its save)
+  try { await pi("here_back", { rom: p.rom }); toast("Playing on the Pi now"); }
+  catch (e) { toast(e.message); }
+  kick(150);
+}
 HERE.on = store.get("here", false) === true;
 drawHereChip();
 function handedOver(out) {                                // (the Pi's answer: something to play here, or why not)
@@ -2126,7 +2146,7 @@ async function openHere(p) {
     f.allow = "autoplay; fullscreen; gamepad";
     f.setAttribute("allowfullscreen", "");
     f.src = "/play?" + qs({ core: p.core, rom: p.rom, save: p.save || "", bios: p.bios || "", name: p.title || "",
-      color: (S.info && S.info.accent) || "" });
+      moment: p.moment ? "1" : "", state: p.state || "", color: (S.info && S.info.accent) || "" });
     box.classList.add("game");
     box.append(f);
     HERE.game = f;
@@ -2171,28 +2191,31 @@ $("#herePrev").innerHTML = ICONS.prev;
 $("#hereNext").innerHTML = ICONS.next;
 $("#herePrev").onclick = () => playAt(HERE.at - 1, 0);
 $("#hereNext").onclick = () => playAt(HERE.at + 1, 0);
-function closeHere() {                                    // (a game: its save sent to the Pi first, then it goes)
-  return new Promise((resolve) => {
-    const f = HERE.game;
+function closeHere() {                                    // (a game: its save sent to the Pi first, and where you
+  return new Promise((resolve) => {                       //  were, then it goes)
+    const f = HERE.game, moment = !!(HERE.what && HERE.what.moment);
     if (!HERE.what) return resolve();
     let over = false;
-    const heard = (e) => { if (f && e.source === f.contentWindow && e.data && e.data.closed) finish(e.data.saved); };
-    const finish = (saved) => {
+    const heard = (e) => {
+      if (f && e.source === f.contentWindow && e.data && e.data.closed) finish(e.data.saved, e.data.moved);
+    };
+    const finish = (saved, moved) => {
       if (over) return;
       over = true;
       window.removeEventListener("message", heard);
       if (saved === false) toast("The game's save didn't get to the Pi");
+      else if (moved === false) toast("Where you were in the game didn't get to the Pi");
       $("#hereBox").textContent = "";
       $("#here").hidden = true;
       $("#stage").classList.remove("here-on");
       HERE.what = HERE.game = null;
       kick(0);
-      resolve();
+      resolve({ saved, moved });
     };
     if (!f) return finish();
     window.addEventListener("message", heard);
     try { f.contentWindow.postMessage({ pietato: "close" }, location.origin); } catch (e) { finish(); }
-    setTimeout(() => finish(), 4000);
+    setTimeout(() => finish(), moment ? 20000 : 4000);    // (where you were can be a few MB: an N64 game's)
   });
 }
 $("#hereClose").onclick = () => closeHere();

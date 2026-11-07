@@ -24,7 +24,10 @@ Beside the screen (under it on a phone), On this computer (or On this phone) has
   and music, cartoons, films and radio, and NES, SNES, Game Boy, GBA, Genesis, Master System, Game
   Gear, PlayStation, N64 and DS games. Games play in [EmulatorJS](https://emulatorjs.org), which the
   Pi gets from npm the first time you play that kind of game (about 5 MB). A game's save comes from
-  the Pi and goes back to it as you play, so you can carry on on the Pi. Plex, Jellyfin, live
+  the Pi and goes back to it as you play, so you can carry on on the Pi. Turn Play here on while a
+  game's on the Pi, and it moves here; turn it off, and it goes back to the Pi. It carries on from the
+  same moment when your browser plays that kind of game with the same emulator as the Pi, and from
+  the game's last save when it doesn't (NES, Master System and Game Boy games). Plex, Jellyfin, live
   channels, Neo Geo, Neo Geo Pocket, PSP and Dreamcast games, and games in more than one file (a `.cue`)
   still play on the Pi.
 - **Sound here**: the Pi's sound plays on your phone or computer instead of the Pi. It's a moment
