@@ -142,6 +142,8 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.coder_state())
                 if u.path == "/bluetooth":
                     return self.reply(200, media.web_bluetooth())
+                if u.path == "/peers":                 # (your other Pietatos on now: the web page renames one)
+                    return self.reply(200, {"peers": media.pie.peer_rows()})
                 if u.path == "/settings":
                     return self.reply(200, media.web_settings())
                 if u.path == "/places":                # (towns, for Weather's location: it asks the internet)

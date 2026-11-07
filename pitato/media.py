@@ -1398,18 +1398,31 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         threading.Thread(target=self.share_loop, daemon=True, name="share").start()
 
     def share_loop(self):
-        host = clean_name(socket.gethostname(), 40)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         while self.sharing:
-            if self.setting("share") != "Off":
-                msg = json.dumps(self.share_beacon(host)).encode()
-                for to in ["255.255.255.255"] + self.pie.peer_tell():   # (everyone; and straight to each of yours
-                    try:                                                  #  heard before, which a Pi's WiFi saving
-                        s.sendto(msg, (to, CAM_BEACON))                   #  power can't miss as it can the first)
+            self.share_now()
+            time.sleep(PEER_SAYS)
+
+    def share_now(self):
+        """This Pietato's beacon, now: to everyone, and straight to each of yours heard before (which a Pi's WiFi saving
+        power can't miss as it can the first). Sharing off: nothing."""
+        if self.setting("share") == "Off":
+            return
+        msg = json.dumps(self.share_beacon(self.own_name())).encode()
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                for to in ["255.255.255.255"] + self.pie.peer_tell():
+                    try:
+                        s.sendto(msg, (to, CAM_BEACON))
                     except OSError:
                         pass                           # (no network yet: next time)
-            time.sleep(PEER_SAYS)
+        except OSError:
+            pass
+
+    def own_name(self):
+        """What this Pietato's called on your others (and on its web page): its name (Settings > Other Pietatos), or
+        the Pi's own name till it's given one."""
+        return clean_name(self.setting("name") or "", 40) or clean_name(socket.gethostname(), 40)
 
     def pie_heard(self, ip, msg):
         """(The Camera tab's listener.) A PiE-ink's beacon, or another Pietato's. Another Pietato new here, or back
@@ -1422,8 +1435,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         """This Pietato's beacon, straight to one at ip."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.sendto(json.dumps(self.share_beacon(clean_name(socket.gethostname(), 40))).encode(),
-                         (ip, CAM_BEACON))
+                s.sendto(json.dumps(self.share_beacon(self.own_name())).encode(), (ip, CAM_BEACON))
         except OSError:
             pass
 

@@ -2,9 +2,12 @@
 with Play here on, it plays on the page, and as it closes its save and where you were go back to the Pi (the emulator's
 own state, out of RetroArch's wrapping, as the Pi keeps it); turned on while the game's on the Pi, the game moves to the
 page and carries on from where you were there; turned off, it goes back to the Pi with where you were on the page.
-Media mode's main loop, its control server and the web page; a tiny Game Boy cartridge of its own, which counts once in
-its battery-backed RAM each time it starts, then waits: where you were is what that count says. (The page puts the save
-in as the game starts, so the count it makes then is before the save's in, and the save's count is what it shows.)"""
+While it plays on the page, the page's remote and its keyboard are the game's buttons, held as long as they're held (not
+the Pi's), and its Hotkey brings up the emulator's own; the emulator shows no buttons of its own, and on a phone the
+remote is under the game. Media mode's main loop, its control server and the web page; a tiny Game Boy cartridge of its
+own, which counts once in its battery-backed RAM each time it starts, then writes there which of its buttons are down:
+where you were is what that count says. (The page puts the save in as the game starts, so the count it makes then is
+before the save's in, and the save's count is what it shows.)"""
 import asyncio, os, shutil, socket, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, SP); sys.path.insert(0, TESTS); sys.path.insert(0, ROOT)
@@ -33,14 +36,21 @@ def check(what, cond):
 
 
 def cartridge():
-    """32 KB with 8 KB of battery-backed RAM (MBC1): it adds one to the RAM's first byte as it starts, then waits."""
+    """32 KB with 8 KB of battery-backed RAM (MBC1): it adds one to the RAM's first byte as it starts, then, over and
+    over, writes which of its buttons are down in the next two (A 1, B 2, SELECT 4, START 8; right 1, left 2, up 4,
+    down 8)."""
     rom = bytearray(32768)
     rom[0x100:0x104] = bytes([0x00, 0xC3, 0x50, 0x01])          # nop; jp 0x150
     rom[0x134:0x13B] = b"PIETATO"
     rom[0x147], rom[0x148], rom[0x149] = 0x03, 0x00, 0x02       # MBC1+RAM+BATTERY, 32 KB, 8 KB of RAM
+    look = lambda which, at: [0x3E, which, 0xE0, 0x00,           # ld a,which; ldh (0x00),a: the buttons, or the d-pad
+                              0xF0, 0x00, 0xF0, 0x00,            # ldh a,(0x00) twice (it settles)
+                              0x2F, 0xE6, 0x0F,                  # cpl; and 0x0f: down is 1
+                              0xEA, at, 0xA0]                    # ld (0xa0..),a
     prog = [0x3E, 0x0A, 0xEA, 0x00, 0x00,                        # ld a,0x0a; ld (0x0000),a: its RAM on
-            0x21, 0x00, 0xA0, 0x34,                              # ld hl,0xa000; inc (hl)
-            0x18, 0xFE]                                          # jr: here, for good
+            0x21, 0x00, 0xA0, 0x34]                              # ld hl,0xa000; inc (hl)
+    loop = look(0x10, 0x01) + look(0x20, 0x02)
+    prog += loop + [0x18, (-(len(loop) + 2)) & 0xFF]             # jr: round again
     rom[0x150:0x150 + len(prog)] = bytes(prog)
     x = 0
     for b in rom[0x134:0x14D]:
@@ -103,6 +113,9 @@ def loop():
 threading.Thread(target=loop, daemon=True).start()
 time.sleep(0.4)
 opened = []
+presses = []
+real_press = m.press
+m.press = lambda name, repeat=False: (presses.append((name, repeat)), real_press(name, repeat))[1]
 
 import logging; logging.getLogger("werkzeug").setLevel(logging.ERROR)
 sys.path.append(ROOT + "/pitato")
@@ -132,6 +145,7 @@ socket.gethostname = lambda: "gpi"
 threading.Thread(target=lambda: webui.app.run(host="127.0.0.1", port=5466, threaded=True), daemon=True).start()
 time.sleep(1)
 from playwright.async_api import async_playwright
+PAGE = "http://gpi.local:5466/#screen"
 
 
 def count():
@@ -162,23 +176,23 @@ async def game_frame(pg, sec=60):
     return None
 
 
-IN_MEMORY = """() => {                               // (the game's RAM as the emulator has it now: gambatte's state
+IN_MEMORY = """(at) => {                             // (the game's RAM as the emulator has it now: gambatte's state
   const s = EJS_emulator.gameManager.getState();        //  says "sram", its size in 3 bytes, then it. Not its save
   const label = [115, 114, 97, 109, 0];                 //  file: asked for, the page would send it to the Pi)
   for (let i = 0; i + 9 < s.length; i++) {
-    if (label.every((c, k) => s[i + k] === c)) return s[i + 8];
+    if (label.every((c, k) => s[i + k] === c)) return s[i + 8 + at];
   }
   return null;
 }"""
 
 
-async def in_game(f, want=None, sec=10):
-    """What the game's count says (its RAM's first byte): once it says want (its save, and where you were, put in as
-    it starts), or as it is after sec seconds."""
+async def in_game(f, want=None, sec=10, at=0):
+    """What the game's count says (its RAM's first byte; at 1: its buttons down, 2: its d-pad's): once it says want (its
+    save, and where you were, put in as it starts), or as it is after sec seconds."""
     t, n = time.monotonic(), None
     while True:
         try:
-            n = await f.evaluate(IN_MEMORY)
+            n = await f.evaluate(IN_MEMORY, at)
         except Exception:
             n = None
         if want is None or n == want or time.monotonic() - t > sec:
@@ -201,9 +215,10 @@ async def page_toasts(pg):
 async def web():
     async with async_playwright() as pw:
         b = await pw.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-gl=swiftshader",
-                                           "--enable-unsafe-swiftshader"])
-        pg = await b.new_page(viewport={"width": 1280, "height": 900})
-        await pg.goto("http://localhost:5466/#screen")
+                                           "--enable-unsafe-swiftshader",
+                                           "--host-resolver-rules=MAP gpi.local 127.0.0.1"])   # (by the Pi's name, as on
+        pg = await b.new_page(viewport={"width": 1280, "height": 900})                          #  your network: not a
+        await pg.goto(PAGE)                                                                     #  secure page)
         await pg.wait_for_selector("#playHere", state="visible", timeout=10000)
         await pg.wait_for_function("typeof SCR !== 'undefined' && SCR.state && SCR.state.mode === 'media'",
                                    timeout=10000)
@@ -249,6 +264,52 @@ async def web():
               and "last save" not in await page_toasts(pg))
         await pg.screenshot(path=S + "/here_playing.png")
 
+        # the remote and the keyboard: the game's buttons, held as long as they're held; never the Pi's
+        presses.clear()
+        box = await pg.locator('#remoteBox .fbtn[data-b="a"]').bounding_box()
+        await pg.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await pg.mouse.down()
+        held = await in_game(f, 1, at=1)
+        await asyncio.sleep(0.8)
+        still = await in_game(f, at=1)
+        await pg.mouse.up()
+        let_go = await in_game(f, 0, at=1)
+        check(f"the remote's A held: the game's A, down till it's let go of ({held}, {still}, then {let_go})",
+              held == 1 and still == 1 and let_go == 0)
+        box = await pg.locator('#remoteBox .dp[data-b="right"]').bounding_box()
+        await pg.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await pg.mouse.down()
+        right = await in_game(f, 1, at=2)
+        await pg.mouse.up()
+        check(f"...its ▶: the game's ({right}, then {await in_game(f, 0, at=2)})", right == 1)
+        on_game = await pg.evaluate("document.activeElement === document.querySelector('#hereBox iframe')")
+        await pg.keyboard.down("ArrowLeft")                                # (the game's page has the keyboard: the
+        await pg.keyboard.down("Enter")                                    #  web page's keys, the same buttons)
+        left, a = await in_game(f, 2, at=2), await in_game(f, 1, at=1)
+        await pg.keyboard.up("ArrowLeft")
+        await pg.keyboard.up("Enter")
+        check(f"...the keyboard: with the game in front ({on_game}), ◀ and Enter (A, not its START) held, the game's "
+              f"({left}, {a}; then {await in_game(f, 0, at=2)}, {await in_game(f, 0, at=1)})",
+              on_game and left == 2 and a == 1)
+        await pg.locator("#hereWhat").evaluate("e => { e.tabIndex = -1; e.focus(); }")   # (...or the web page has it)
+        await pg.keyboard.down("Enter")
+        a = await in_game(f, 1, at=1)
+        await pg.keyboard.up("Enter")
+        check(f"...and with the web page in front: Enter, A too ({a}, then {await in_game(f, 0, at=1)})", a == 1)
+        await pg.click('#remoteBox [data-b="select"]')
+        await pg.click('#remoteBox [data-b="start"]')
+        check(f"...and none of it went to the Pi ({presses})", presses == [])
+        hidden = "EJS_emulator.elements.menu.classList.contains('ejs_menu_bar_hidden')"
+        before = await f.evaluate(hidden)
+        await pg.click('#remoteBox [data-b="hotkey"]')
+        await asyncio.sleep(0.3)
+        check(f"...its Hotkey: the emulator's own buttons ({before} hidden, then {await f.evaluate(hidden)})",
+              before is True and await f.evaluate(hidden) is False and presses == [])
+        check("...the emulator's own buttons on the screen: off", await f.evaluate(
+            "EJS_emulator.virtualGamepad.style.display === 'none'"))
+        check("...this page isn't the secure one: where a controller of yours works, said",
+              await pg.is_visible("#herePad") and "secure page" in await pg.inner_text("#herePad"))
+
         # turned off: back to the Pi, with where you were here
         await f.evaluate("EJS_emulator.gameManager.restart()")             # (started again here: 5 + 1)
         n = await in_game(f, 6)
@@ -263,6 +324,55 @@ async def web():
         check(f"...and the page says so ({await page_toasts(pg)!r})", "Playing on the Pi now" in await page_toasts(pg)
               and not await pg.evaluate("!!document.querySelector('#hereBox iframe')"))
         await pg.screenshot(path=S + "/here_back.png")
+        presses.clear()
+        await pg.click('#remoteBox .fbtn[data-b="b"]')
+        await asyncio.sleep(0.3)
+        check(f"...the remote's the Pi's again ({presses})", ("b", False) in presses)
+
+        # a phone: the remote under the game (its buttons the game's), no buttons of the emulator's own
+        m.game = None
+        ph = await b.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True,
+                              has_touch=True)
+        await ph.goto(PAGE)
+        await ph.wait_for_function("typeof SCR !== 'undefined' && SCR.state && SCR.state.mode === 'media'",
+                                   timeout=10000)
+        remote_before = await ph.is_visible("#remoteBox")
+        run = FakeRun()
+        m.game, m.view = run, "game"
+        await asyncio.sleep(0.2)
+        await ph.click("#playHere")
+        f = None
+        t = time.monotonic()
+        while f is None and time.monotonic() - t < 30:                    # (a phone: its Start, tapped, plays it)
+            f = next((x for x in ph.frames if "/play?" in x.url), None)
+            await asyncio.sleep(0.25)
+        if f is not None:
+            await f.wait_for_selector(".ejs_start_button", timeout=30000)
+            await f.tap(".ejs_start_button")
+        f = await game_frame(ph)
+        check(f"a phone: the remote, hidden before ({remote_before}), under the game now", f is not None
+              and not remote_before and await ph.is_visible("#remoteBox"))
+        if f is not None:
+            pad = await f.evaluate("EJS_emulator.virtualGamepad.style.display")
+            check(f"...the emulator's own buttons off, though it's a phone ({pad!r})", pad == "none")
+            box = await ph.locator('#remoteBox .fbtn[data-b="a"]').bounding_box()
+            await ph.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            a_btn = await ph.locator('#remoteBox .fbtn[data-b="a"]').bounding_box()
+            game_box = await ph.locator("#hereBox").bounding_box()
+            check(f"...the game and the remote both on the screen ({round(game_box['height'])} px of game, the A "
+                  f"button's bottom at {round(a_btn['y'] + a_btn['height'])} of 844)",
+                  game_box["height"] > 200 and a_btn["y"] + a_btn["height"] <= 844)
+            check("...no sideways scrolling", await ph.evaluate("document.documentElement.scrollWidth <= innerWidth"))
+            check("...the emulator's own buttons put away till they're wanted, and no tip for the Pi's screen", await
+                  f.evaluate("EJS_emulator.elements.menu.classList.contains('ejs_menu_bar_hidden')")
+                  and not await ph.is_visible("#tvTip"))
+            await asyncio.sleep(3)                                             # (the "Playing here now" gone)
+            await ph.screenshot(path=S + "/here_phone.png")
+            m.game_open = lambda it: None
+            await ph.click("#playHere")
+            await asyncio.sleep(1.5)
+            check(f"...turned off: the remote as it was (hidden: {not await ph.is_visible('#remoteBox')})",
+                  not await ph.is_visible("#remoteBox"))
         await b.close()
 
 

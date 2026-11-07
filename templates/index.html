@@ -226,6 +226,7 @@
   .here-box.song span { color: var(--muted); overflow-wrap: anywhere; }
   .here-box.song audio { width: 100%; }
   .here-what { flex: 1; min-width: 0; font-weight: 600; color: var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .here-pad { margin: 2px 4px 0; font-size: 13.5px; color: var(--body); }
   .stage:fullscreen .here-box, .stage:fullscreen .here .tv-bar { width: min(100%, calc((100vh - 80px) * 16 / 9)); margin-inline: auto; }
   /* full screen: just the Pi's screen, as big as it goes, with Back and Home under it */
   .stage:fullscreen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 12px; background: #000; }
@@ -808,6 +809,8 @@
   .set-pics .fr-thumb[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
   .set-pics .fr-note { grid-column: 1 / -1; }
   .set-here { font-size: 15px; font-weight: 600; }
+  .set-l .peer-name { display: flex; align-items: center; gap: 8px; }
+  .peer-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px var(--line-2) inset; }
   .set-here.ok { color: var(--ok); }
   .nets { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; }
   .net { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
@@ -893,7 +896,7 @@
     .dock button[aria-current="true"] { color: var(--text); }
     .dock button[aria-current="true"] svg { color: var(--accent); }
     .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
-    .here-box.game { aspect-ratio: auto; height: calc(100vh - var(--top) - 180px); height: calc(100svh - var(--top) - 180px); min-height: 280px; }
+    .here-box.game { aspect-ratio: 4 / 3; }               /* (the remote under it: its buttons are the game's) */
   }
   @media (max-width: 640px) {
     .row { grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; padding: 7px 8px; }
@@ -975,6 +978,8 @@
             <button class="tb sq" type="button" id="herePrev" title="Previous" aria-label="Previous" hidden></button>
             <button class="tb sq" type="button" id="hereNext" title="Next" aria-label="Next" hidden></button>
           </div>
+          <p class="here-pad" id="herePad" hidden>To play with a controller connected to this
+            <span id="herePadOn">computer</span>, <a id="herePadLink" href="#">open the secure page</a>.</p>
         </div>
       </div>
       <form class="typer" id="typer" hidden autocomplete="off">
@@ -1677,8 +1682,23 @@ function holdUp(name) {                                   // let go of here
 function holdsLetGo() {                                   // (the page put away: nothing left held down on the Pi)
   for (const name of Object.keys(HOLDS)) holdUp(name);
 }
-window.addEventListener("blur", holdsLetGo);
-document.addEventListener("visibilitychange", () => { if (document.hidden) holdsLetGo(); });
+window.addEventListener("blur", () => { holdsLetGo(); hereKeysLetGo(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { holdsLetGo(); hereKeysLetGo(); } });
+
+// A game playing here (Play here): the remote's buttons, and the keyboard's, are its, held as long as they're held
+// (its own buttons on the screen are off). Its Hotkey brings up the emulator's own (save, load...).
+const HERE_KEYS = new Set();                              // the keyboard's, down in it now
+const herePlaying = () => !!(HERE.game && HERE.what && HERE.what.kind === "game");
+function hereButton(name, down) {
+  const map = HERE.what.buttons || {};                    // (a PlayStation's go by place, as on the Pi)
+  const msg = name === "hotkey" ? { pietato: "menu" } : { pietato: "button", name: map[name] || name, down };
+  if (name === "hotkey" && !down) return;
+  try { HERE.game.contentWindow.postMessage(msg, location.origin); } catch (e) {}
+}
+function hereKeysLetGo() {
+  for (const name of HERE_KEYS) if (herePlaying()) hereButton(name, false);
+  HERE_KEYS.clear();
+}
 async function homeButton() {
   try {
     if (SCR.state && SCR.state.mode === "terminal") await pi("mode", { to: "media" });
@@ -1695,8 +1715,11 @@ function flash(name) {                                    // (B is on the remote
 for (const b of $$(".rk[data-b]")) {
   const name = b.dataset.b;
   if (DIRS.has(name)) b.innerHTML = ICONS.chev({ up: 0, right: 90, down: 180, left: 270 }[name]);
-  let wait = 0, again = 0;
-  const stop = () => { clearTimeout(wait); clearInterval(again); b.classList.remove("held"); holdUp(name); };
+  let wait = 0, again = 0, game = false;
+  const stop = () => {
+    clearTimeout(wait); clearInterval(again); b.classList.remove("held");
+    if (game) { game = false; if (herePlaying()) hereButton(name, false); } else holdUp(name);
+  };
   b.addEventListener("mousedown", (e) => e.preventDefault());       // the keyboard stays with the page
   b.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
@@ -1704,6 +1727,7 @@ for (const b of $$(".rk[data-b]")) {
     try { b.setPointerCapture(e.pointerId); } catch (err) {}
     b.classList.add("held");
     if (name === "home") { homeButton(); return; }
+    if (herePlaying() && b.closest("#remoteBox")) { game = true; hereButton(name, true); return; }   // (a game here)
     if (name === "hotkey") { press(name); return; }
     holdDown(name, () => {                                // (not a game: pressed once, and again and again while held)
       if (REPEATS.has(name)) wait = setTimeout(() => { again = setInterval(() => press(name, true), 120); }, 420);
@@ -1712,7 +1736,10 @@ for (const b of $$(".rk[data-b]")) {
   for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) b.addEventListener(ev, stop);
   b.addEventListener("click", (e) => {                   // Enter or Space on a focused button
     if (e.detail !== 0) return;
-    if (name === "home") homeButton(); else { press(name); flash(name); }
+    if (name === "home") homeButton();
+    else if (herePlaying() && b.closest("#remoteBox")) {
+      hereButton(name, true); setTimeout(() => { if (herePlaying()) hereButton(name, false); }, 120); flash(name);
+    } else { press(name); flash(name); }
   });
 }
 const KEYS = {
@@ -1724,13 +1751,29 @@ document.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t.closest && t.closest("input, textarea, select, [contenteditable]")) return;
   const name = KEYS[e.key];
-  if (!name || (SCR.state && SCR.state.mode !== "media")) return;
+  if (!name) return;
+  if (herePlaying()) {                                    // (a game here: its, held till it's let go)
+    if (e.key === "Enter" && t.closest && t.closest("button, a, [role=button]")) return;
+    e.preventDefault();
+    if (!e.repeat) hereKey(name, true);
+    return;
+  }
+  if (SCR.state && SCR.state.mode !== "media") return;
   if (e.key === "Enter" && t.closest && t.closest("button, a, [role=button]")) return;
   e.preventDefault();
   if (e.repeat) { if (REPEATS.has(name) && !HOLDS[name]) press(name, true); return; }   // (a game holds it: no more)
   holdDown(name); flash(name);
 });
-document.addEventListener("keyup", (e) => { const name = KEYS[e.key]; if (name) holdUp(name); });
+document.addEventListener("keyup", (e) => {
+  const name = KEYS[e.key];
+  if (!name) return;
+  if (HERE_KEYS.has(name)) { hereKey(name, false); return; }
+  holdUp(name);
+});
+function hereKey(name, down) {                            // (the keyboard's, in the game here)
+  if (down && !HERE_KEYS.has(name) && herePlaying()) { HERE_KEYS.add(name); hereButton(name, true); flash(name); }
+  else if (!down && HERE_KEYS.delete(name) && herePlaying()) hereButton(name, false);
+}
 
 // ---- the screen itself, touched: as on the Pi, a tap picks what's there and a tap on what's picked opens it;
 // a swipe (or the mouse's wheel) moves along; what's tapped where is the Pi's to say, from where it drew things
@@ -1852,7 +1895,8 @@ function termShow(on) {
   TERM.on = on;
   $("#term").hidden = !on;
   $("#tv").classList.toggle("term-on", on);
-  $("#tvTip").hidden = on || store.get("taps", 0) >= 3;    // (taps are media mode's)
+  $("#tvTip").hidden = on || !!HERE.what || store.get("taps", 0) >= 3;   // (taps are media mode's: not with
+                                                                         //  something playing here instead)
   if (!on) { $("#termBar").hidden = true; return; }
   if (!TERM.key) return termLocked();
   $("#termLock").hidden = true;
@@ -2148,8 +2192,11 @@ async function openHere(p) {
     f.src = "/play?" + qs({ core: p.core, rom: p.rom, save: p.save || "", bios: p.bios || "", name: p.title || "",
       moment: p.moment ? "1" : "", state: p.state || "", color: (S.info && S.info.accent) || "" });
     box.classList.add("game");
-    box.append(f);
+    f.addEventListener("load", () => { try { f.focus(); } catch (e) {} }, { once: true });   // (the keyboard: the
+    box.append(f);                                        //  game's, not the Play here switch's, Enter and all)
     HERE.game = f;
+    if (!WIDE.matches) $("#remoteBox").hidden = false;     // (a phone: the remote under it is the game's)
+    $("#herePad").hidden = window.isSecureContext;        // (a browser lets a page have a controller on a secure one)
     HERE.list = []; HERE.at = 0;
     $("#hereWhat").textContent = p.title || "";
     $("#herePrev").hidden = $("#hereNext").hidden = true;
@@ -2206,6 +2253,8 @@ function closeHere() {                                    // (a game: its save s
       if (saved === false) toast("The game's save didn't get to the Pi");
       else if (moved === false) toast("Where you were in the game didn't get to the Pi");
       $("#hereBox").textContent = "";
+      $("#herePad").hidden = true;
+      if (!WIDE.matches) showRemote($("#remoteBtn").getAttribute("aria-expanded") === "true");   // (as it was)
       $("#here").hidden = true;
       $("#stage").classList.remove("here-on");
       HERE.what = HERE.game = null;
@@ -2219,9 +2268,18 @@ function closeHere() {                                    // (a game: its save s
   });
 }
 $("#hereClose").onclick = () => closeHere();
+$("#herePadOn").textContent = PHONE ? "phone" : "computer";
+$("#herePadLink").onclick = async (e) => {               // (the game's save, and where you were, to the Pi first)
+  e.preventDefault();
+  await closeHere();
+  location.href = "https://" + location.hostname + ":5443/" + location.hash;
+};
 window.addEventListener("message", (e) => {               // (the game's page: it couldn't start, say)
   if (e.origin !== location.origin || !HERE.game || e.source !== HERE.game.contentWindow || !e.data) return;
   if (e.data.error) toast(e.data.error + ". With Play here off, it plays on the Pi");
+  if (e.data.started && !document.activeElement?.closest?.("#remoteBox")) HERE.game.focus();
+  const name = typeof e.data.key === "string" && KEYS[e.data.key];   // (a key, pressed with the game's page in front:
+  if (name) hereKey(name, !!e.data.down);                             //  as one pressed here)
 });
 
 // Sound here: the Pi's sound plays on this phone or computer instead of the Pi's speaker, a moment behind it (two 16-bit
@@ -4280,7 +4338,8 @@ async function drawDraw() {
 }
 
 // ---- settings: everything the Pi's Settings has, and each app's own (passwords and tokens never come here) ---------
-const SET = { data: null, error: "", timer: 0, armed: {}, ask: {}, open: {}, typed: {}, places: null, placesQ: "" };
+const SET = { data: null, error: "", timer: 0, armed: {}, ask: {}, open: {}, typed: {}, places: null, placesQ: "",
+              peerPw: {} };                             // (peerPw: another Pietato that wants its page's password)
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const SET_MORE = {                                      // what's on this page already, where it is
   id: "elsewhere", title: "Elsewhere", about: "", rows: [
@@ -4315,6 +4374,7 @@ async function setSave(key, value, ctl, quiet) {    // (what the Pi said, or nul
     const r = await pi("settings", { key, value });
     if (!quiet || (r && r.said)) toast((r && r.said) || "Saved");
     ok = r || {};
+    if (key === "name") loadInfo();                       // (this Pietato's new name, at the top of the page)
   } catch (e) {
     toast(e.message);
     for (const n of $$("#setList > .set-sec")) delete n.dataset.sig;   // (each row as it really is again)
@@ -4517,6 +4577,47 @@ const SET_DRAW = {
       if (await setSave(r.key, inp.value.trim(), save)) { delete SET.typed[r.key]; inp.blur(); }
     };
     f.append(inp, save);
+    c.append(f);
+    return row;
+  },
+  peer(r) {                                             // another of yours on your network: its name, to change
+    const [row, c, l] = setRow(r);
+    l.textContent = "";                                 // (where it is, and its colour: they stay as its name changes)
+    const who = el("b", "peer-name", "The one at " + r.where);
+    if (r.colour) { const dot = el("i", "peer-dot"); dot.style.background = r.colour; who.prepend(dot); }
+    l.append(who, el("span", "set-note", r.seen));
+    const f = el("form", "stack");
+    const line = el("div", "in-row");
+    const inp = setInput("Its name", 40, false, r.key);
+    if (SET.typed[r.key] === undefined) inp.value = r.value;
+    inp.setAttribute("aria-label", "A new name for " + r.value);
+    const save = button("btn", "Rename");
+    save.type = "submit";
+    const pw = setInput("Its web page's password", 128, true, r.key + ".pw");
+    pw.setAttribute("aria-label", "The web page password of " + r.value);
+    pw.hidden = !SET.peerPw[r.url];
+    const show = () => { save.hidden = !inp.value.trim() || inp.value.trim() === r.value; };
+    show();
+    inp.oninput = () => { if (inp.value === r.value) delete SET.typed[r.key]; show(); };
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = inp.value.trim();
+      if (!name || name === r.value) return;
+      save.disabled = true;
+      try {
+        await post("/api/peer_name", { url: r.url, name, password: pw.hidden ? "" : pw.value });
+        toast("Renamed " + name);
+        delete SET.typed[r.key]; delete SET.typed[r.key + ".pw"]; delete SET.peerPw[r.url];
+        unfocus(f);
+        setTimeout(() => setKick(0), 600);             // (its own beacon, saying its new name, on its way too)
+      } catch (err) {
+        if (err.kind === "password") { SET.peerPw[r.url] = true; pw.hidden = false; pw.focus(); }
+        toast(err.message);
+      }
+      if (save.isConnected) save.disabled = false;
+    };
+    line.append(inp, save);
+    f.append(line, pw);
     c.append(f);
     return row;
   },

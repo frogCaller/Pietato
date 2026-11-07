@@ -12,3 +12,8 @@ CoinGecko and Yahoo Finance see one Pietato instead of several. Your game saves 
 stop playing, that Pietato passes the game's saves to the others that are on, and when you start a game,
 it checks the others for a newer save first. A save that gets replaced is kept in `Games/Saves/.replaced`.
 Settings > Share with other Pietatos turns all of this off.
+
+If your Pietatos all have the same name, give each one its own in Settings > Other Pietatos on the web
+page: this one's name at the top, and below it each of the others that are on, with its address. A name
+you give another one is set on that one, so all of them call it that when you send something. If that
+one's web page has a password, you type it once to rename it.

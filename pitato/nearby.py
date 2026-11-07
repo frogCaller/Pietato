@@ -397,6 +397,28 @@ class PieInk:
             return [(u, h["host"]) for u, h in sorted(self.heard.items(), key=lambda kv: -kv[1]["seen"])
                     if h.get("peer") and now - h["seen"] <= within]
 
+    def peer_rows(self, within=180):
+        """Your other Pietatos heard lately, for Settings > Other Pietatos, by name: [{"url", "name", "accent", "ago"}]
+        (ago: seconds since it said it's there). None with sharing off."""
+        if not self.peers_on():
+            return []
+        now = time.time()
+        with self.lock:
+            rows = [{"url": u, "name": h["host"], "accent": h.get("accent") or "", "ago": max(0, int(now - h["seen"]))}
+                    for u, h in self.heard.items() if h.get("peer") and now - h["seen"] <= within]
+        return sorted(rows, key=lambda r: (r["name"].lower(), r["url"]))
+
+    def named(self, url, name):
+        """Another of your Pietatos, given a new name (Settings > Other Pietatos): called that here at once (its own
+        beacon says so too, soon)."""
+        with self.lock:
+            for d in (self.heard, self.peers_kept):
+                if url in d:
+                    d[url]["host"] = name
+            kept = url in self.peers_kept
+        if kept:
+            self.save_peers()
+
     def peer_accent(self, url):
         """Another Pietato's colour (its Settings > Accent colour, as its beacon says): (r, g, b), or None (one that
         doesn't say)."""

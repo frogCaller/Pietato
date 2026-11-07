@@ -15,6 +15,8 @@
   const moment = q.get("moment") === "1" && save ? save.replace(/\.srm$/, ".state.auto") : "";   // (where you are: the
   const pickUp = moment && q.get("state") === moment;                                           //  Pi has one to pick up)
   const color = /^#[0-9a-f]{6}$/i.test(q.get("color") || "") ? q.get("color") : "#60aae4";
+  const IDS = { b: 0, y: 1, select: 2, start: 3, up: 4, down: 5, left: 6, right: 7, a: 8, x: 9, l: 10, r: 11,
+                l2: 12, r2: 13, l3: 14, r3: 15 };   // (a controller's buttons, by libretro's numbers, as the Pi's)
   const home = (p) => "/api/home/" + p.split("/").map(encodeURIComponent).join("/");
   const note = document.getElementById("note");
   let started = false, sent = null, turn = Promise.resolve();
@@ -115,12 +117,34 @@
   }
 
   window.addEventListener("message", async (e) => {
-    if (e.source !== parent || e.origin !== location.origin || !e.data || e.data.pietato !== "close") return;
+    if (e.source !== parent || e.origin !== location.origin || !e.data) return;
+    if (e.data.pietato === "button") {            // the web page's remote (or its keyboard): a button, down or up
+      const gm = manager(), name = String(e.data.name);
+      if (gm && started && Object.prototype.hasOwnProperty.call(IDS, name)) {
+        gm.simulateInput(0, IDS[name], e.data.down ? 1 : 0);
+      }
+      return;
+    }
+    if (e.data.pietato === "menu") {              // ...its Hotkey: the emulator's own buttons (save, load...)
+      if (started && window.EJS_emulator.menu) window.EJS_emulator.menu.toggle();
+      return;
+    }
+    if (e.data.pietato !== "close") return;
     const saved = await saveNow();
     const moved = await momentToPi();
     tell({ closed: true, saved, moved });
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); });   // (a phone put away)
+  const PAGE_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Escape", "Backspace",
+                             "x", "X", "y", "Y", "[", "]"]);   // (the web page's keys for its remote's buttons)
+  for (const type of ["keydown", "keyup"]) {      // ...here too: to the web page, which says which buttons they are,
+    window.addEventListener(type, (e) => {        //  as it does when it has the keyboard (the emulator's own
+      if (!PAGE_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;   // keys for them aren't its)
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!e.repeat) tell({ key: e.key, down: type === "keydown" });
+    }, true);
+  }
 
   async function start() {
     const pkg = CORES[core];
@@ -135,17 +159,26 @@
       return say(why, true);
     }
     note.hidden = true;
-    const touch = matchMedia("(pointer: coarse)").matches;   // (a phone: its Start, tapped, brings the game's buttons
-    Object.assign(window, {                                   // on the screen, and lets its sound play)
+    const touch = matchMedia("(pointer: coarse)").matches;   // (a phone: its Start, tapped, lets its sound play)
+    Object.assign(window, {
       EJS_player: "#game", EJS_core: core, EJS_gameUrl: home(rom), EJS_gameName: q.get("name") || "Game",
       EJS_pathtodata: "/ejs/data/", EJS_startOnLoaded: !touch, EJS_startButtonName: "Start",
-      EJS_language: "en-US", EJS_disableAutoLang: false,
+      EJS_language: "en-US", EJS_disableAutoLang: false, EJS_noAutoFocus: true,   // (the web page keeps the keyboard)
       EJS_color: color, EJS_backgroundColor: "#000000", EJS_biosUrl: bios ? home(bios) : "",
       EJS_defaultOptions: { "save-save-interval": "30",      // (the game's save, every half a minute: to the Pi too)
-        "virtual-gamepad": touch ? "enabled" : "disabled" }, // (a tablet's buttons on the screen too, as a phone's)
+        "virtual-gamepad": "disabled" },                     // (no buttons of its own: the web page's remote, or a
+                                                             //  controller of yours, is the game's)
       EJS_ready: () => window.EJS_emulator.on("saveSaveFiles", (data) => { if (started) toPi(data); }),   // (not
                                                       // before the Pi's save is in: it'd take its place with none)
-      EJS_onGameStart: async () => { await fromPi(); await momentFromPi(); started = true; tell({ started: true }); },
+      EJS_onGameStart: async () => {
+        const ejs = window.EJS_emulator;
+        if (ejs.toggleVirtualGamepad) ejs.toggleVirtualGamepad(false);   // (a phone's too)
+        setTimeout(() => { if (ejs.menu) ejs.menu.close(); }, 100);      // (its own buttons: HOME brings them)
+        await fromPi();
+        await momentFromPi();
+        started = true;
+        tell({ started: true });
+      },
     });
     const s = document.createElement("script");
     s.src = "/ejs/data/loader.js";

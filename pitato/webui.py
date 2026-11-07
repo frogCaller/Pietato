@@ -57,6 +57,7 @@ import subprocess
 import tarfile
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -179,6 +180,16 @@ def accent():
     except (OSError, ValueError):
         name = None
     return ACCENTS.get(name, ACCENTS["Blue"])
+
+
+def own_name():
+    """This Pietato's name (Settings > Other Pietatos), or the Pi's own till it's given one."""
+    try:
+        with open(STATE_FILE) as f:
+            name = (json.load(f).get("settings") or {}).get("name")
+    except (OSError, ValueError):
+        name = None
+    return (" ".join(name.split())[:40] if isinstance(name, str) else "") or socket.gethostname()
 
 
 def clean_name(name):
@@ -306,8 +317,9 @@ PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "comp
              "bluetooth", "settings", "places"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
               "/api/handoff", "/api/handoff/file", "/api/together")
-PEER_LOCKED = ("/api/pilot",)   # ...and this one from your network only, and with the page's password if it has one
-                                # (another of yours controlling this one can do what the page's remote can)
+PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
+                                            # has one (another of yours controlling this one can do what the page's
+                                            # remote can; or rename it)
 
 
 def coder_path():
@@ -545,7 +557,7 @@ def info():
         root = root_of(key)
         folders.append({"key": key, "label": LABELS[key], "path": shown_path(key),
                         "files": None if key in ("home", "settings", "computers") else count_files(root)})
-    return jsonify(name=socket.gethostname(), accent=accent(), folders=folders, kinds=KINDS,
+    return jsonify(name=own_name(), accent=accent(), folders=folders, kinds=KINDS,
                    settingsFiles=SETTINGS_FILES, disk={"free": du.free, "total": du.total, "spare": SPARE})
 
 
@@ -1116,6 +1128,66 @@ def pilot():
         cmd["has"] = [b for b in body["has"][:32] if isinstance(b, str) and len(b) <= 12]
     cmd["from"] = request.remote_addr
     return pi_reply(ask_pi("POST", "/pilot", cmd, timeout=12))
+
+
+@app.post("/api/name")
+def named_by_peer():
+    """Another of your Pietatos renames this one (its Settings > Other Pietatos): it's called that on them all then."""
+    body = request.get_json(silent=True)
+    name = body.get("name") if isinstance(body, dict) else None
+    if not isinstance(name, str) or len(name) > 200:
+        return jsonify(ok=False, error="What's that?"), 400
+    return pi_reply(ask_pi("POST", "/settings", {"key": "name", "value": name}))
+
+
+def peer_post(url, body, password="", timeout=6):
+    """Another of your Pietatos' web page, asked: (its status, its answer), or (None, None) when it isn't answering.
+    Straight to it on your network (no proxy), with its page's password when it has one."""
+    headers = {"Content-Type": "application/json", "User-Agent": "Pietato"}
+    if password:
+        headers["Authorization"] = "Basic " + base64.b64encode(f"pietato:{password}".encode()).decode()
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers=headers)
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=timeout) as r:
+            return r.status, r.read(1 << 16)
+    except urllib.error.HTTPError as ex:
+        return ex.code, b""
+    except (OSError, ValueError):
+        return None, None
+
+
+@app.post("/api/peer_name")
+def peer_name():
+    """Settings > Other Pietatos: another of yours given a new name, by asking it (with its web page's password, typed
+    here, when it has one). It's called that on all of them then: its own beacon says so."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("url"), str) or not isinstance(body.get("name"), str):
+        return jsonify(ok=False, error="What's that?"), 400
+    url, name = body["url"], " ".join(body["name"].split())
+    password = body.get("password") if isinstance(body.get("password"), str) else ""
+    if not name:
+        return jsonify(ok=False, error="Give it a name"), 400
+    if len(name) > 40:
+        return jsonify(ok=False, error="That's too long: 40 letters at most"), 400
+    got = ask_pi("GET", "/peers", timeout=5)
+    try:
+        peers = json.loads(got[1]).get("peers") if got is not None and got[0] == 200 else None
+    except (ValueError, AttributeError):
+        peers = None
+    if not isinstance(peers, list):
+        return jsonify(ok=False, error="Media mode isn't answering"), 503
+    if not any(isinstance(p, dict) and p.get("url") == url for p in peers):   # (one of yours, on now: no address
+        return jsonify(ok=False, error="That Pietato isn't on your network now"), 404   # of anything else)
+    status, _ = peer_post(url + "/api/name", {"name": name}, password)
+    if status == 401:
+        return jsonify(ok=False, kind="password", error="That isn't its web page's password" if password
+                       else "Its web page has a password: type it to rename it"), 409
+    if status is None:
+        return jsonify(ok=False, error="It isn't answering"), 504
+    if status != 200:
+        return jsonify(ok=False, error=f"It didn't take the name ({status})"), 502
+    ask_pi("POST", "/peer_named", {"url": url, "name": name}, timeout=5)
+    return jsonify(ok=True, said="Renamed")
 
 
 @app.get("/api/handoff/file")

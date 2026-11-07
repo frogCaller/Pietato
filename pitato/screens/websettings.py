@@ -3,8 +3,10 @@ Assistant's, the Bot's, the games'...), to see and change from a phone or a comp
 to the page: it's told whether there is one, and may put in another."""
 import os
 import re
+import socket
 import threading
 import time
+import urllib.parse
 
 from ..config import (ACCENTS, SCREEN_MODES, WALLPAPERS, clean_name, edit_config, home_dir, read_config,
                       settings_glob)
@@ -115,9 +117,12 @@ class WebSettingsScreen:
                 sound["note"] = self.sound_value()     # (Auto: HDMI, say)
         sec("sound", "Sound and video", [sound, choice("screen", "Video size", SCREEN_MODES)])
         sec("start", "Starting up", [choice("start"), choice("start_song")])
-        sec("share", "Your other Pietatos", [choice("share")], "Prices and the weather fetched once for them all, and "
-            "your game saves following you: a game picks up where you left it on whichever of them you played it on "
-            "last.")
+        sec("share", "Other Pietatos", [
+            {"key": "name", "label": "This Pietato's name", "kind": "text", "value": self.setting("name") or "",
+             "placeholder": clean_name(socket.gethostname(), 40), "max": 40,
+             "note": "What your other Pietatos call it, when you send them something. Living room, say."},
+            choice("share")] + self.web_peer_rows(), "Prices and the weather fetched once for them all, and your game "
+            "saves following you: a game picks up where you left it on whichever of them you played it on last.")
 
         # WiFi
         w, went = self.wifi, self.wifi.get("said")
@@ -341,6 +346,32 @@ class WebSettingsScreen:
         return {"sections": sections}
 
     # -- one changed (media mode's own thread) -------------------------------------------------------------------------
+    def web_peer_rows(self):
+        """Settings > Other Pietatos: one row for each of yours on now, its name to change."""
+        if self.setting("share") == "Off":
+            return [{"key": "peers_off", "label": "On your network", "kind": "info",
+                     "value": "With sharing off, they aren't looked for"}]
+        rows = []
+        for p in self.pie.peer_rows():
+            ago = p["ago"]
+            seen = "On now" if ago < 45 else "Heard a minute ago" if ago < 120 else "Heard a few minutes ago"
+            rows.append({"key": "peer_" + re.sub(r"[^A-Za-z0-9]", "_", p["url"]), "label": p["name"], "kind": "peer",
+                         "url": p["url"],
+                         "value": p["name"], "where": urllib.parse.urlsplit(p["url"]).hostname or "", "seen": seen,
+                         "colour": hex_of(dict(ACCENTS)[p["accent"]]) if p["accent"] in dict(ACCENTS) else ""})
+        return rows or [{"key": "peers_none", "label": "On your network", "kind": "info",
+                         "value": "None heard yet. Each says it's there every 20 seconds"}]
+
+    def web_set_name(self, value, cmd):
+        """This Pietato's name, for your others (from its own Settings, or another of yours renaming it)."""
+        name = clean_name(str(value or ""), 40)
+        if len(str(value or "").strip()) > 40:
+            return {"error": "That's too long: 40 letters at most"}
+        self.set_setting("name", name)
+        self.share_now()                               # (your others hear it now, not in 20 seconds)
+        self.dirty = True
+        return {"ok": True, "said": "Renamed" if name else "Called by the Pi's own name again"}
+
     def web_settings_do(self, cmd):
         key = str(cmd.get("key") or "")
         value = cmd.get("value")

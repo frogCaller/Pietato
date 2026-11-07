@@ -27,7 +27,10 @@ Beside the screen (under it on a phone), On this computer (or On this phone) has
   the Pi and goes back to it as you play, so you can carry on on the Pi. Turn Play here on while a
   game's on the Pi, and it moves here; turn it off, and it goes back to the Pi. It carries on from the
   same moment when your browser plays that kind of game with the same emulator as the Pi, and from
-  the game's last save when it doesn't (NES, Master System and Game Boy games). Plex, Jellyfin, live
+  the game's last save when it doesn't (NES, Master System and Game Boy games). While a game plays
+  here, the remote (and your keyboard) are its buttons, and Hotkey brings up its save and load. A
+  controller connected to your phone or computer works too, on the secure page (below), as browsers
+  only let a secure page have one. Plex, Jellyfin, live
   channels, Neo Geo, Neo Geo Pocket, PSP and Dreamcast games, and games in more than one file (a `.cue`)
   still play on the Pi.
 - **Sound here**: the Pi's sound plays on your phone or computer instead of the Pi. It's a moment

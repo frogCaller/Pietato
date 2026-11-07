@@ -8,6 +8,7 @@ import time
 import urllib.parse
 
 from ..config import clean_name, home_dir
+from ..nearby import PEER_KEPT
 from ..util import classify, IMAGE_EXTS, item, title_of
 from ..net import cam_address, cam_host, cam_is_local, cam_key
 from ..fine import detail
@@ -26,7 +27,7 @@ from ..www import clean_title
 from ..games import BIOS_FOLDER, find_core, game_title, games_dir, save_name, SAVES_FOLDER
 from .bluetooth import BT_PICKABLE
 from .chromium import CHROME_MENU
-from .games import GAME_MENU
+from .games import GAME_BUTTON_MAPS, GAME_MENU
 
 SWIPE_MOST = 12              # presses a swipe (or a mouse's wheel, at once) stands for, at most
 HERE_VIDEO = (".mp4", ".m4v", ".webm", ".mov", ".mkv")                          # Play here: what a browser plays
@@ -609,6 +610,8 @@ class WebScreen:
         self.web_handoff = {"kind": "game", "title": it.get("title", ""), "core": core, "rom": rel, "bios": bios,
                             "save": SAVES_FOLDER + "/" + save_name(src) + ".srm",
                             "moment": self.here_same_core(it.get("system"), core)}
+        if GAME_BUTTON_MAPS.get(it.get("system")):     # (the web page's buttons, to the game as they'd go here)
+            self.web_handoff["buttons"] = dict(GAME_BUTTON_MAPS[it["system"]])
         self.here_moment(src)
         return True
 
@@ -845,6 +848,12 @@ class WebScreen:
             return {"ok": True, "title": todo[i]["title"]}
         if c == "show":
             return self.web_show(str(cmd.get("path") or ""))
+        if c == "peer_named":                          # (another of yours, renamed from this one's Settings: the web
+            url, name = str(cmd.get("url") or ""), clean_name(str(cmd.get("name") or ""), 40)   # page asked it)
+            if name and any(p["url"] == url for p in self.pie.peer_rows(PEER_KEPT)):
+                self.pie.named(url, name)
+                self.dirty = True
+            return {"ok": True}
         if c == "here_move":                           # (Play here, turned on: the game on the Pi, to the web page)
             return self.web_here_move()
         if c == "here_back":                           # (...turned off: the game on the web page, back here)
