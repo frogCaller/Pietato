@@ -407,8 +407,15 @@ class Screen:
         l = self.l
         return [f"{l.green(l.done)}  {title}", f"{l.dim(l.bar)}  {l.dim(answer)}", l.dim(l.bar)]
 
-    def intro(self, title):
-        self.say(f"{self.l.dim(self.l.top)}  {self.l.bold(title)}", self.l.dim(self.l.bar))
+    def intro(self, title, words=""):
+        """The top: the title, and a few words on what this is, broken to the screen's width."""
+        l, w = self.l, max(20, self.width() - 3)
+        heads = wrap(title, w)
+        out = [f"{l.dim(l.top)}  {l.bold(heads[0])}"] + [f"{l.dim(l.bar)}  {l.bold(x)}" for x in heads[1:]]
+        out.append(l.dim(l.bar))
+        if words:
+            out += [f"{l.dim(l.bar)}  {x}" for x in wrap(words, w)] + [l.dim(l.bar)]
+        self.say(*out)
 
     def note(self, title, lines, mark=None):
         l = self.l
@@ -629,6 +636,8 @@ class Screen:
 
 
 # ---- your services: checked as they're added, kept as Settings keeps them ---------------------------------------
+TITLE = "Pietato: Home screen, game console, remote and buddy for your TV"   # (the README's title)
+
 SERVICES = [
     ("ha", "Home Assistant", "the TV Remote and Lights"),
     ("pihole", "Pi-hole", "its numbers, in the Home tab"),
@@ -682,7 +691,10 @@ class Wizard:
     # ---- the whole of it ----
     def run(self):
         s, l, m = self.s, self.s.l, self.m
-        s.intro("Pietato setup")
+        pad = "" if m.handheld else " and a game controller"     # (a handheld has its own buttons)
+        s.intro(TITLE, f"Pietato turns this {m.machine}{pad} into a media center for live TV, videos, music, radio, "
+                       "photos, smart home controls and the games you own. A few questions first, then setup puts in "
+                       "what it needs.")
         what = [x for x in (m.name() if m.model.replace("\0", "").strip() else "", m.os) if x]   # (its model, its OS)
         room = []
         if m.mem:

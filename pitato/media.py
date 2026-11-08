@@ -19,7 +19,7 @@ from .system import SysHistory, has_desktop, is_pc, on_pc, system_info, system_n
 from .handheld import has_emulationstation
 from .bluetooth import Bluetooth
 from . import screen as screen_out
-from .screen import Framebuffer, slow_pi
+from .screen import Framebuffer, slow_pi, sound_away
 from .fine import scale as drawing_scale, set_scale as set_drawing_scale
 from .library import (
     BOOT_SONG_WAIT, fit_box, LIBRARY, LISTEN_KINDS, MEDIA_VT, PLAYING, read_streams, SCREEN_KINDS, SCREEN_SAY,
@@ -376,7 +376,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                      "ssid_t": 0.0, "said": None}   # (said: how connecting or forgetting went, for the web page)
         self.bt = Bluetooth()        # Settings > Bluetooth, and the web page's: pitato/bluetooth.py
         self.bt.on_change = self.bt_changed
-        self.bt.sound_note = self.bt_sound_note
         self.bt_pick = None          # ...the device picked on its page (None: the switch)
         self.bt_at = 0               # ...and its row, last it was drawn
         self.picking = None          # "wallpaper" while a picture is being picked in Photos
@@ -487,6 +486,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.wall = (None, None)
         if key == "turn":
             self.turn_screen()
+        if key == "sound":                             # (one of the Pi's own picked: the sound leaves Bluetooth
+            sound_away(value not in (None, "", "Auto"))   # headphones for it; what's playing moves now)
+            self.sound_look = 0.0
         self.save_state()
         self.dirty = True
 

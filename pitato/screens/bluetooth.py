@@ -2,6 +2,7 @@
 and a keyboard's code to type in, big, while it pairs. pitato/bluetooth.py does the work, on threads of its own."""
 import time
 
+from ..screen import bt_outputs
 from ..theme import ACCENT, BODY, DONE, MUTED, ROW, TEXT
 
 BT_BUSY = {"pair": "Pairing…", "connect": "Connecting…", "disconnect": "Disconnecting…", "forget": "Forgetting…"}
@@ -54,11 +55,6 @@ class BluetoothScreen:
         if self.active and self.view == "list" and self.tab_type() == "settings":
             self.dirty = True
 
-    def bt_sound_note(self):
-        """(On Bluetooth's thread) headphones just connected: where the sound goes, by Settings > Sound."""
-        return ("Sound plays through it" if self.setting("sound") == "Auto"
-                else "For sound through it, set Settings > Sound to Auto")
-
     def bt_value(self):
         """Settings' first page: Bluetooth's row."""
         s = self.bt.summary()
@@ -76,7 +72,8 @@ class BluetoothScreen:
         self.set_page, self.bt_pick, self.bt_at = "bluetooth", None, 0
         self.confirm = (None, 0.0)
         self.bt.watch("screen", True)
-        self.bt.look()                                 # (if it's on: the ones in pairing mode come up)
+        if not bt_outputs():                           # (if it's on: the ones in pairing mode come up. Not with
+            self.bt.look()                             # headphones on: looking round makes their sound skip. X looks)
 
     def bt_close(self):
         self.set_page, self.set_sel = "root", self.settings_root_index("bluetooth")

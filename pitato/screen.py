@@ -605,12 +605,19 @@ def sound_card(choice):
 
 def sound_route(choice):
     """Where Settings > Sound sends sound now: "web" (the web page's Sound here, while it's on, whatever Settings says),
-    "bluetooth" (Auto, while Bluetooth headphones or a speaker are connected), a card's id, or "" (the system's own)."""
+    "bluetooth" (while Bluetooth headphones or a speaker are connected, whatever Settings says, as on a phone: unless
+    one of the Pi's own was picked since they connected), a card's id, or "" (the system's own)."""
     if web_sound():
         return "web"
-    if choice in (None, "", "Auto") and bt_outputs():
+    if bt_outputs() and not _bt_seen["away"]:
         return "bluetooth"
     return sound_card(choice) or ""
+
+
+def sound_away(away):
+    """Settings > Sound just picked: one of the Pi's own (True: the sound leaves Bluetooth headphones for it, if any are
+    connected, till headphones connect or go), or Auto or the headphones (False: the headphones have it)."""
+    _bt_seen["away"] = bool(away)
 
 
 def sound_on_hdmi(route):
@@ -714,7 +721,8 @@ BT_LINKS = "/sys/class/bluetooth"   # hci0, and hci0:N for each device connected
 BT_ASK_SOON = 1.5              # seconds BlueALSA's answer is good for, a while after a device connects or goes
 BT_ASK_LATER = 15.0            # ...and otherwise
 BT_SETTLE = 20.0               # ...that while
-_bt_seen = {"at": -1e9, "outs": [], "links": None, "moved": -1e9, "here": None, "names": {}}
+_bt_seen = {"at": -1e9, "outs": [], "links": None, "moved": -1e9, "here": None, "names": {},
+            "away": False}     # (one of the Pi's own picked in Settings > Sound since they connected: sound_away)
 
 
 def bt_links():
@@ -765,6 +773,8 @@ def bt_outputs(fresh=False):
     if outs is None:                                   # (busy, or it timed out: as it was, unless nothing's connected)
         outs = list(seen["outs"]) if links else []
     outs.sort(key=lambda o: o[1])
+    if {d for d, _ in outs} != {d for d, _ in seen["outs"]}:
+        seen["away"] = False                           # (headphones came, or went: the sound's theirs again)
     seen["at"], seen["outs"] = now, outs
     return outs
 

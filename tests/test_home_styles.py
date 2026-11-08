@@ -184,4 +184,30 @@ os.makedirs(S + "/shots", exist_ok=True)
 for style, img in shots.items():
     img.save(S + f"/shots/{style.replace(' ', '')}.png")
 m.leave()
+
+# ---- the background on a big TV: a smooth sweep, no bands or blocks (its colours' steps dithered)
+import numpy as np
+
+
+def edges(a, k=12):
+    """How sharply its colour turns anywhere down the middle, averaged k rows at a time (what the eye sees of it from
+    the sofa): a band's edge turns sharply (a whole step at once, before the change: 1 or more); a smooth sweep
+    hardly at all, however steep."""
+    col = a[:, a.shape[1] // 2 - 40:a.shape[1] // 2 + 40].astype(float).mean(axis=1)
+    sweep = col[:len(col) // k * k].reshape(-1, k, 3).mean(axis=1)
+    return np.abs(np.diff(sweep, n=2, axis=0)).max()
+
+
+SHIFT = np.array([3, 2, 3], np.uint8)                  # (an RGB565 screen: the bits each colour loses)
+for name in ("Midnight", "Aurora", "Dusk", "Ocean", "Forest"):
+    a = np.asarray(g.wallpaper(name, (1920, 1080)))
+    turn = edges(a)
+    check(f"{name} at 1920 x 1080: a smooth sweep, no band's edge or block anywhere ({turn:.2f}; it was 1.0 to 1.2)",
+          turn < 0.4 and np.array_equal(a, np.asarray(g.wallpaper(name, (1920, 1080)))))
+    b = np.asarray(g.wallpaper(name, (640, 480), depth=(5, 6, 5)))
+    kept = b >> SHIFT                                  # (the steps a 16-bit screen keeps of it)
+    exact = np.rint(kept * (255 / ((1 << (8 - SHIFT.astype(int))) - 1))).astype(np.uint8)
+    turn = edges(kept.astype(float) * (1 << SHIFT), 24)
+    check(f"...on a 16-bit screen (the GPi Case's): dithered to its own steps, kept as they are, no band's edge "
+          f"({turn:.2f}; it was 4.3 to 6)", np.array_equal(b, exact) and turn < 2.0)
 print("ALL OK" if all(ok_all) else f"{ok_all.count(False)} FAILED")

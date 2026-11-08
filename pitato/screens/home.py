@@ -158,9 +158,11 @@ class HomeScreen:
     def home_wall(self):
         """The home screen's background, made again only when it changes."""
         s = scale()
-        key = (self.setting("wallpaper"), self.setting("picture"), self.fb.w, self.fb.h, s)
+        fields = getattr(self.fb, "fields", None)          # (a 16-bit screen: its few steps, dithered to)
+        depth = tuple(ln for _, ln in fields) if getattr(self.fb, "bpp", 32) == 16 and fields else 8
+        key = (self.setting("wallpaper"), self.setting("picture"), self.fb.w, self.fb.h, s, depth)
         if self.wall[0] != key:
-            self.wall = (key, made_fine(wallpaper(key[0], (self.fb.w * s, self.fb.h * s), key[1])))
+            self.wall = (key, made_fine(wallpaper(key[0], (self.fb.w * s, self.fb.h * s), key[1], depth)))
         return self.wall[1]
 
     def home_canvas(self):

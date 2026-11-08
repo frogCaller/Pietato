@@ -285,9 +285,27 @@ if not ONLY or "questions" in ONLY:
     check(f"Default: everything, and restart when it's done ({got})", got != "cancelled" and got == {
         "GPI": "no", "CASE": "", "MODE": "default", "LEAVE_OUT": "", "AUTOLOGIN": "yes", "DESKTOP": "pietato",
         "REBOOT": "yes", "CONNECTED": "", "MINUTES": "152", "GO": "yes"} and not t.keys)
-    check("...it starts with what this Pi is",
-          sc.startswith("┌  Pietato setup\n│\n◇  This Pi ─") and "│  Raspberry Pi 4 Model B · Debian GNU/Linux 12 "
-          "(bookworm)" in sc and "│  4 GB of memory · 23 GB free on its card" in sc)
+    top = sc.split("◇  This Pi ─")[0]
+    words = " ".join(x[3:] for x in top.split("\n")[2:] if x.startswith("│  "))
+    check(f"...it starts with a title and what Pietato is, before any question ({top!r})",
+          sc.startswith("┌  Pietato: Home screen, game console, remote and buddy for your TV\n│\n│  Pietato turns ")
+          and words == "Pietato turns this Pi and a game controller into a media center for live TV, videos, music, "
+          "radio, photos, smart home controls and the games you own. A few questions first, then setup puts in what it "
+          "needs." and top.endswith("│\n") and "?" not in top)
+    check("...then what this Pi is",
+          "│  Raspberry Pi 4 Model B · Debian GNU/Linux 12 (bookworm)" in sc
+          and "│  4 GB of memory · 23 GB free on its card" in sc)
+    _, narrow, _ = wizard(PI4, [("snap", "enter"), "enter", "enter", ("snap", "enter")], cols=40)
+    head = narrow.split("◇  This Pi")[0]
+    said = " ".join(x[3:] for x in head.split("\n") if x.startswith(("┌  ", "│  ")))
+    check(f"...on a narrow screen, the title and the words broken to its width, nothing cut off ({head!r})",
+          all(len(x) <= 39 for x in head.split("\n")) and "…" not in head
+          and said.startswith("Pietato: Home screen, game console, remote and buddy for your TV Pietato turns this Pi")
+          and said.endswith("then setup puts in what it needs."))
+    _, hand, _ = wizard(dict(ZERO2, HANDHELD="R36S", MACHINE="handheld", MODEL=""), ["enter"] * 6)
+    check("...a handheld: its own buttons, no game controller to add",
+          "Pietato turns this handheld into a media center" in " ".join(
+              x[3:] for x in hand.split("\n") if x.startswith("│  ")))
     first = t.snaps[0]
     check("...Default or Custom: what each is, and how long Default takes",
           "◆  How do you want to set it up?\n│  ● Default  everything this Pi can run, about 2 h 30 min\n│  ○ Custom\n"
@@ -774,7 +792,8 @@ if not ONLY or "terminal" in ONLY:
     sc = screen(out)
     check(f"...Ctrl+C: nothing's changed ({rc}, {W.read_answers(ans)}); on the Pi's console, plain letters",
           rc == 3 and W.read_answers(ans) == {"GO": "no"} and "\n|\nx  Not now: nothing's changed" in sc
-          and sc.startswith("+  Pietato setup\n|\no  This Pi ---") and "(*) Default" in CSI.sub("", out)
+          and sc.startswith("+  Pietato: Home screen, game console, remote and buddy for your TV\n|\n|  Pietato turns ")
+          and "\n|\no  This Pi ---" in sc and "(*) Default" in CSI.sub("", out)
           and "Up/Down pick" in CSI.sub("", out) and not re.search("[◆◇│●○↑↓·…]", out))
 
 # ---- the screen while setup.sh works ----

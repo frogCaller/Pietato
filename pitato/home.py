@@ -1,15 +1,29 @@
 """The home screen's icons, and the background behind them. The Games icon can be a console's own (one you have
 games for: a picture of it from the Games list's, in its colour) instead of the controller."""
+import functools
 import math
 
 from .theme import co_mix, FONT_BOLD
 
 
-def wallpaper(name, size, picture=""):
-    """The home screen's background: a picture (darkened so the icons read), or a soft
-    gradient with a glow, worked out small and scaled up so it costs little."""
-    from .fine import ImageDraw
-    from PIL import Image, ImageFilter, ImageOps
+@functools.lru_cache(maxsize=None)
+def bayer(n=8):
+    """An n x n ordered-dither matrix (n a power of 2): thresholds evenly spread over -0.5 to 0.5."""
+    import numpy as np
+    m = np.zeros((1, 1))
+    while m.shape[0] < n:
+        m = np.block([[4 * m, 4 * m + 2], [4 * m + 3, 4 * m + 1]])
+    return ((m + 0.5) / (n * n) - 0.5).astype(np.float32)
+
+
+def wallpaper(name, size, picture="", depth=8):
+    """The home screen's background: a picture (darkened so the icons read), or a soft gradient with a glow, worked out
+    small (so it costs little) and scaled up, both in fractions of a colour's steps; then each step's edge spread over
+    a fine, even pattern (ordered dithering), so a big TV shows a smooth sweep, not bands or blocks. (A pattern, not
+    grain: the web page's pictures of the screen stay small.) depth: the bits a colour has on this screen, 8, or
+    (5, 6, 5) on a 16-bit one (the GPi Case's), whose few steps it's dithered to instead."""
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFilter, ImageOps
     w, h = size
     if name == "Picture" and picture:
         try:
@@ -30,18 +44,29 @@ def wallpaper(name, size, picture=""):
     }
     top, bottom, glows = looks.get(name, looks["Midnight"])
     sw, sh = max(w // 4, 1), max(h // 4, 1)
-    small = Image.new("RGB", (sw, sh))
-    d = ImageDraw.Draw(small)
-    for y in range(sh):
-        t = y / max(sh - 1, 1)
-        d.line((0, y, sw, y), fill=tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    top, bottom = np.array(top, np.float32), np.array(bottom, np.float32)
+    t = np.linspace(0.0, 1.0, sh, dtype=np.float32)[:, None, None]
+    small = np.repeat(top + (bottom - top) * t, sw, axis=1)          # (sh, sw, 3): top to bottom
     for gx, gy, gr, col in glows:
         glow = Image.new("L", (sw, sh), 0)
         r = gr * sw
-        ImageDraw.Draw(glow).ellipse((gx * sw - r, gy * sh - r, gx * sw + r, gy * sh + r), fill=110)
-        glow = glow.filter(ImageFilter.GaussianBlur(r / 2))
-        small = Image.composite(Image.new("RGB", (sw, sh), col), small, glow)
-    return small.resize(size, Image.BICUBIC)
+        ImageDraw.Draw(glow).ellipse((gx * sw - r, gy * sh - r, gx * sw + r, gy * sh + r), fill=255)
+        m = np.asarray(glow.filter(ImageFilter.GaussianBlur(r / 2)), np.float32)[..., None] * (110 / 255 / 255)
+        small += (np.array(col, np.float32) - small) * m             # (at most 110/255 of its colour, as it was)
+    bits = (depth,) * 3 if isinstance(depth, int) else tuple(depth)
+    grain = np.tile(bayer(8), (h // 8 + 1, w // 8 + 1))[:h, :w]  # (half a step either way, in 64 even turns)
+    out = np.empty((h, w, 3), np.uint8)
+    for c, b in enumerate(bits):
+        steps = (1 << min(max(int(b), 1), 8)) - 1
+        ch = np.array(Image.fromarray(np.ascontiguousarray(small[..., c])).resize(size, Image.BICUBIC), np.float32)
+        ch *= steps / 255.0
+        ch += grain
+        np.clip(np.rint(ch, out=ch), 0, steps, out=ch)
+        if steps < 255:                                # (each step as an 8-bit colour the screen takes back to it)
+            ch *= 255.0 / steps
+            np.rint(ch, out=ch)
+        out[..., c] = ch
+    return Image.fromarray(out, "RGB")
 
 
 # ---- the home screen: an icon for each tab ------------------------------------------

@@ -7,8 +7,9 @@ import time
 from ..theme import ACCENT, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
 from ..config import SETTINGS, TURN_DEGREES
 from ..system import is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
-from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, hdmi_screens, res_name, resolution_choices,
-                      set_boot_video, set_terminal_turn, set_turn, sound_cards, sound_name, sound_place)
+from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
+                      resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
+                      sound_name, sound_place, sound_route)
 from ..home import wallpaper
 from ..weather import find_me, geocode, place_text
 from ..voice import BOT_VOICES, VOICE_MB, voices_here
@@ -68,12 +69,13 @@ class SettingsScreen:
         return self.settings_root_rows()
 
     def settings_root_rows(self):
-        """Settings' first page: Sound's outputs are this Pi's, Resolution is there for a TV or monitor, and Rotate
-        screen for any screen but the GPi Case's own (unless it's turned already: to turn it back)."""
+        """Settings' first page: Sound's outputs are this Pi's (and Bluetooth headphones connected to it), Resolution is
+        there for a TV or monitor, and Rotate screen for any screen but the GPi Case's own (unless it's turned already:
+        to turn it back)."""
         rows = []
         for key, label, choices in SETTINGS:
             if key == "sound":
-                choices = ["Auto"] + [n for _, n in sound_cards()]
+                choices = self.sound_choices()
             elif key == "resolution" and not self.res_info():
                 continue
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
@@ -83,14 +85,62 @@ class SettingsScreen:
         return rows
 
     def sound_value(self):
-        """Settings > Sound's row: Auto says where the sound goes now (Bluetooth headphones, a USB speaker, HDMI...)."""
-        choice = self.setting("sound")
+        """Settings > Sound's row: Auto says where the sound goes now (Bluetooth headphones, a USB speaker, HDMI...);
+        Bluetooth headphones that have it, whatever was picked, say so by name."""
+        choice = self.setting("sound") or "Auto"
         place = sound_place(choice)
         if place[0] == "bluetooth":
-            return f"{choice}: {bt_output_name(place[1]) or 'Bluetooth'}"
-        if choice in (None, "", "Auto") and place[0]:
+            if choice == "Auto":
+                return f"Auto: {bt_output_name(place[1]) or 'Bluetooth'}"
+            return self.sound_bt_choice() or "Bluetooth"
+        if choice == "Auto" and place[0]:
             return f"Auto: {sound_name(place[0])}"
         return choice
+
+    def sound_bt_choice(self):
+        """Settings > Sound's choice for the Bluetooth headphones (or speaker) connected now, by name (with two, the one
+        connected last: the one sound goes to), or None."""
+        outs = bt_outputs()
+        if not outs:
+            return None
+        name = bt_output_name(outs[-1][0]) or "Bluetooth"
+        return f"{name} (Bluetooth)" if name in ["Auto"] + [n for _, n in sound_cards()] else name
+
+    def sound_choices(self):
+        """Settings > Sound's choices: Auto, the Pi's own, and Bluetooth headphones while they're connected (to go
+        back to them from one of the Pi's own: on Auto they have the sound already)."""
+        own = ["Auto"] + [n for _, n in sound_cards()]
+        bt = self.sound_bt_choice() if (self.setting("sound") or "Auto") != "Auto" else None
+        return own + [bt] if bt else own
+
+    def sound_shown(self):
+        """The choice Settings > Sound is on: Bluetooth headphones while they have the sound (Auto stays Auto: it gives
+        it to them)."""
+        choice = self.setting("sound") or "Auto"
+        if choice != "Auto" and sound_route(choice) == "bluetooth":
+            return self.sound_bt_choice() or choice
+        return choice
+
+    def pick_sound(self, value):
+        """A Settings > Sound choice picked, here or on the web page. Bluetooth headphones': the sound back to them,
+        the choice before kept for when they go. Any other: kept (set_setting takes the sound from them for it)."""
+        bt = self.sound_bt_choice()
+        if bt is not None and value == bt:
+            sound_away(False)
+            self.sound_look = 0.0                      # (what's playing: moved now)
+            self.dirty = True
+        else:
+            self.set_setting("sound", value)
+
+    def settings_now(self, key):
+        """A setting's choice, as its row shows it."""
+        return self.sound_shown() if key == "sound" else self.setting(key)
+
+    def settings_pick(self, key, value):
+        if key == "sound":
+            self.pick_sound(value)
+        else:
+            self.set_setting(key, value)
 
     def settings_root_index(self, key):
         """Where a row is on Settings' first page, to go back to."""
@@ -121,10 +171,10 @@ class SettingsScreen:
             if not repeat:
                 self.pad_swap()
         elif name in ("left", "right") and extra and not repeat:
-            cur = self.setting(key)
+            cur = self.settings_now(key)
             i = extra.index(cur) if cur in extra else 0
             value = extra[(i + (1 if name == "right" else -1)) % len(extra)]
-            self.set_setting(key, value)
+            self.settings_pick(key, value)
         elif name == "a" and not repeat:
             if key == "wifi":
                 self.set_page, self.set_sel = "wifi", 1
@@ -153,9 +203,9 @@ class SettingsScreen:
             elif key == "pad":
                 self.start_learn()
             elif extra:
-                cur = self.setting(key)
+                cur = self.settings_now(key)
                 i = extra.index(cur) if cur in extra else 0
-                self.set_setting(key, extra[(i + 1) % len(extra)])
+                self.settings_pick(key, extra[(i + 1) % len(extra)])
         elif name == "x" and not repeat and key == "pad" and self.pads:
             self.pads.forget()
             self.toast("Back to each controller's standard buttons", 3)

@@ -382,7 +382,6 @@ class Bluetooth:
         self.thread = None
         self.agent = Agent(self.got_code, self.agent_said)
         self.on_change = lambda: None
-        self.sound_note = lambda: "Sound plays through it"   # (headphones connected: media mode says where it goes)
 
     # -- what's there -------------------------------------------------------------
     def snapshot(self):
@@ -579,6 +578,15 @@ class Bluetooth:
         self.wake.set()
         self.changed()
 
+    def done_looking(self):
+        """Looking round stopped at once (headphones connecting: on a Pi it shares the radio with their sound, which
+        skips meanwhile). X, or Find devices, looks again."""
+        with self.lock:
+            self.look_until = 0.0
+        if self.agent.scanning:
+            self.agent.scan(False)
+        self.wake.set()
+
     # -- doing things: one at a time --------------------------------------------------
     def start_job(self, what, addr, fn, *args):
         """fn on a thread of its own: None once it's started, or why it can't."""
@@ -657,6 +665,8 @@ class Bluetooth:
 
     def connect_job(self, d, paired=False):
         name = d["name"]
+        if d["kind"] in SOUND_KINDS:
+            self.done_looking()                       # (its sound would skip: the looking shares the radio)
         ok, _, err = bus([f"--timeout={BT_CONNECT}", "call", BUS, d["path"], DEV, "Connect"], BT_CONNECT)
         if not ok and "already connected" not in err.lower():
             self.refresh()
@@ -670,7 +680,8 @@ class Bluetooth:
         if d["kind"] in SOUND_KINDS or not d["kind"]:  # headphones, a speaker (or one that doesn't say)
             up = self.sound_up(d["path"], wait=d["kind"] in SOUND_KINDS)
             if up:
-                return f"{name} is connected. {self.sound_note()}"
+                self.done_looking()
+                return f"{name} is connected. Sound plays through it"
             if up is None and d["kind"] in SOUND_KINDS:
                 return f"{name} is connected. To hear sound through it, run setup.sh again"
         return f"{name} is connected"

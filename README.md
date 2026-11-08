@@ -1,8 +1,8 @@
-# Pietato
+# Pietato: Home screen, game console, remote and buddy for your TV
 
 Pietato turns a Raspberry Pi and a game controller into a media center for live TV, videos, music, radio,
-photos, smart home controls and the games you own. It also works on a PC with Ubuntu or Debian, in a
-GPi Case 2W or GPi Case 2, and on an R36S or a similar handheld with dArkOS.
+photos, smart home controls and the games you own. It also works on a PC with Ubuntu or Debian, and in a
+GPi Case 2W or GPi Case 2.
 
 <p>
   <img src="docs/tv.gif" height="260">

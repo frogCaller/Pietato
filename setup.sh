@@ -1859,18 +1859,25 @@ if [ -f /etc/bluetooth/main.conf ]; then
   fi
 fi
 systemctl enable --now bluetooth || true
-# Bluetooth headphones and speakers: BlueALSA plays through them (with Settings > Sound on Auto, sound goes to
-# them while they're connected). Only as the player (A2DP source): the Pi isn't a speaker for your phone. Left
-# out where PipeWire or PulseAudio looks after Bluetooth's sound (a desktop): the two would trip over each other.
+# Bluetooth headphones and speakers: BlueALSA plays through them (sound goes to them while they're connected).
+# Only as the player (A2DP source): the Pi isn't a speaker for your phone. Left out where PipeWire or PulseAudio
+# looks after Bluetooth's sound (a desktop): the two would trip over each other.
 if command -v wireplumber >/dev/null 2>&1 || command -v pulseaudio >/dev/null 2>&1; then
   echo "(PipeWire or PulseAudio has Bluetooth's sound on this $MACHINE: BlueALSA left out.)"
 elif apt-get install -y bluez-alsa-utils libasound2-plugin-bluez && command -v bluealsa >/dev/null 2>&1; then
+  # Its sound sent a step under BlueALSA's best (SBC's medium, about two thirds of the data), so it doesn't skip: a
+  # Pi's Bluetooth shares one radio with its WiFi. And the link kept up a few seconds after a song, so the next one
+  # starts at once. (Each only where this BlueALSA has it.)
+  BT_ARGS="-p a2dp-source"
+  BT_HELP=$(bluealsa --help 2>&1 || true)
+  case "$BT_HELP" in *--sbc-quality*) BT_ARGS="$BT_ARGS --sbc-quality=medium" ;; esac
+  case "$BT_HELP" in *--keep-alive*) BT_ARGS="$BT_ARGS --keep-alive=5" ;; esac
   install -d /etc/systemd/system/bluealsa.service.d
   cat > /etc/systemd/system/bluealsa.service.d/pitato.conf <<BLUEALSA
 # Pietato (setup.sh): sound to Bluetooth headphones and speakers, the Pi as the player
 [Service]
 ExecStart=
-ExecStart=$(command -v bluealsa) -p a2dp-source
+ExecStart=$(command -v bluealsa) $BT_ARGS
 BLUEALSA
   systemctl daemon-reload
   systemctl enable bluealsa 2>/dev/null || true

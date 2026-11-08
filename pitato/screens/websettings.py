@@ -110,11 +110,9 @@ class WebSettingsScreen:
                                confirm="The Pi restarts at this size, then asks on its screen whether to keep it. "
                                        "If nobody says so, it goes back."))
         sec("screen", "Screen", rows)
-        sound = choice("sound", "Sound", root["sound"][1])
-        if sound["value"] in (None, "", "Auto"):
-            sound["value"] = "Auto"
-            if self.sound_value() != "Auto":
-                sound["note"] = self.sound_value()     # (Auto: HDMI, say)
+        sound = choice("sound", "Sound", root["sound"][1], value=self.sound_shown())   # (Bluetooth headphones, by
+        if sound["value"] == "Auto" and self.sound_value() != "Auto":                   # name, while they have it)
+            sound["note"] = self.sound_value()     # (Auto: HDMI, say)
         sec("sound", "Sound and video", [sound, choice("screen", "Video size", SCREEN_MODES)])
         sec("start", "Starting up", [choice("start"), choice("start_song")])
         sec("share", "Other Pietatos", [
@@ -402,7 +400,7 @@ class WebSettingsScreen:
         if key == "sim_full" and self.tab_type() == "sim":
             self.sim_set_full(value == "On")           # (the sim on the screen grows or shrinks)
         else:
-            self.set_setting(key, value)
+            self.settings_pick(key, value)             # (Sound: Bluetooth headphones picked aren't kept as its choice)
         if key == "units":
             self.weather_changed()
         return {"ok": True}

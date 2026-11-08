@@ -120,10 +120,10 @@ class PlayerScreen:
 
     # -- Bluetooth headphones, a USB speaker: the sound goes where they are ------------------------------------
     def sound_tick(self, now):
-        """Bluetooth headphones (or a speaker), or a USB speaker, connected while something plays, with Settings >
-        Sound on Auto: its sound moves to them, and it plays on. The ones it played through gone: back to the Pi's
-        own, paused, as a phone does (A plays on); a game brings up its menu; music in the terminal, where nothing
-        shows it's paused, stops."""
+        """Bluetooth headphones (or a speaker) connected while something plays, or a USB speaker with Settings > Sound
+        on Auto: its sound moves to them, and it plays on (and moves when Settings > Sound takes it from the headphones,
+        or gives it back). The ones it played through gone: back to the Pi's own, paused, as a phone does (A plays
+        on); a game brings up its menu; music in the terminal, where nothing shows it's paused, stops."""
         run, p = self.game, self.proc
         was = self.game_sound if run is not None else self.sound_used if p is not None else None
         if not was or (run is None and self.kind is None):
@@ -291,7 +291,7 @@ class PlayerScreen:
         self.started = time.monotonic()
         self.voice.stop(unload=True)                   # (the player has the sound, and the memory)
         args = list(args)
-        place = sound_place(self.setting("sound"))     # Settings > Sound (Auto: Bluetooth headphones, if on)
+        place = sound_place(self.setting("sound"))     # Settings > Sound (Bluetooth headphones, while they're on)
         if "-ao" in args:
             args[args.index("-ao") + 1] = sound_device(None, place[0])
         self.sound_used, self.sound_look = place, time.monotonic() + SOUND_LOOK

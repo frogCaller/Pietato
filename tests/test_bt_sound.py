@@ -1,9 +1,11 @@
-"""Bluetooth headphones' sound (BlueALSA), against the pretend BlueZ and BlueALSA (btfake): where Settings > Sound
-sends it (Auto: the headphones, while they're connected; a card stays a card), BlueALSA asked only while something's
-connected over Bluetooth, and seldom once things settle; a song or a video moving to the headphones as they connect,
-and pausing, silent, as they go (A plays on at its volume); a player that stopped as they went picked up where it
-was; a game's sound moving too (its menu up as they go), through the real emulator's sound command; what Settings >
-Bluetooth says as they connect; Settings > Sound's row; and setup.sh's BlueALSA."""
+"""Bluetooth headphones' sound (BlueALSA), against the pretend BlueZ and BlueALSA (btfake): where it goes (the
+headphones, while they're connected, whatever Settings > Sound is on, as on a phone; one of the Pi's own picked there
+meanwhile takes it from them, till they connect again), BlueALSA asked only while something's connected over Bluetooth,
+and seldom once things settle; a song or a video moving to the headphones as they connect, and pausing, silent, as they
+go (A plays on at its volume); a player that stopped as they went picked up where it was; a game's sound moving too
+(its menu up as they go), through the real emulator's sound command; Settings > Sound's row and its choices (the
+headphones by name), on the Pi and the web page; what Settings > Bluetooth says as they connect; no looking round
+while they're on (it makes them skip); and setup.sh's BlueALSA, its sound a step lighter so it doesn't skip."""
 import copy, json, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, SP + "/btfake")
@@ -106,7 +108,7 @@ def busctl(path, method):
 
 
 def fresh_look():
-    g._bt_seen.update(at=-1e9, outs=[], links=None, moved=-1e9, here=None)
+    g._bt_seen.update(at=-1e9, outs=[], links=None, moved=-1e9, here=None, away=False)
 
 
 # ---- where sound goes: BlueALSA asked only while something's connected ------------------------------------------------
@@ -130,18 +132,24 @@ check("...not asked again straight away", g.bt_outputs() == [] and g.sound_route
 busctl(H, "Connect")
 check(f"headphones connected: there at once (a link came: asked afresh) {g.bt_outputs()}",
       g.bt_outputs() == [(H, 1)] and asked() == n + 4)
-check("...Auto sends sound to them; a card stays a card", g.sound_route("Auto") == "bluetooth"
-      and g.sound_route(None) == "bluetooth" and g.sound_route("Headphones") == ""
-      and g.sound_place("Auto") == ("bluetooth", H))
+check("...sound goes to them, whatever Settings > Sound is on (as on a phone)", g.sound_route("Auto") == "bluetooth"
+      and g.sound_route(None) == "bluetooth" and g.sound_route("Headphones") == "bluetooth"
+      and g.sound_place("Auto") == ("bluetooth", H) and g.sound_place("Headphones") == ("bluetooth", H))
 check("...mplayer's and aplay's names for them", g.sound_device(None, "bluetooth") == "alsa:device=bluealsa,alsa"
       and g.aplay_device(None, "bluetooth") == "bluealsa" and g.sound_device("Auto") == "alsa:device=bluealsa,alsa"
-      and g.aplay_device("Auto") == "bluealsa" and g.sound_device("Headphones") == "alsa"
-      and g.aplay_device("Headphones") == "")
+      and g.aplay_device("Auto") == "bluealsa" and g.sound_device("Headphones") == "alsa:device=bluealsa,alsa"
+      and g.aplay_device("Headphones") == "bluealsa")
+g.sound_away(True)
+check("...one of the Pi's own picked in Settings > Sound meanwhile: that, headphones or not",
+      g.sound_route("Headphones") == "" and g.sound_device("Headphones") == "alsa"
+      and g.aplay_device("Headphones") == "" and g.bt_outputs() == [(H, 1)])
 check("...their name, from BlueZ", g.bt_output_name(H) == "WH-1000XM4" and g.bt_output_name() == "WH-1000XM4"
       and g.bt_output_name("/not/bluez") == "")
 busctl(J, "Connect")
 check(f"a speaker connected after them: the one connected last is the one used ({g.bt_outputs()})",
       [d for d, _ in g.bt_outputs()] == [H, J] and g.sound_place("Auto") == ("bluetooth", J))
+check("...and it has the sound, one of the Pi's own picked before it connected or not",
+      g.sound_place("Headphones") == ("bluetooth", J))
 F.change(lambda s: s["pcms"].extend([{"addr": HP, "seq": 9, "transport": "HFP-AG", "mode": "sink"},
                                      {"addr": HP, "seq": 10, "transport": "A2DP-sink", "mode": "source"}]))
 check("only A2DP's, with the Pi as the player (not a headset's microphone, or the Pi as a speaker)",
@@ -318,33 +326,98 @@ check("...A: plays on, at it", until(lambda: told(p2["pid"])[-2:] == ["pausing_k
       and now_is(p2["pid"]) == "playing" and not m.paused)
 m.press("down")
 
-m.set_setting("sound", "Headphones")
+# Settings > Sound: one of the Pi's own picked with the headphones on; them connecting again; and back to them
 g.sound_cards = lambda: [("Headphones", "Headphones")]
+check(f"Settings > Sound's choices on Auto: Auto and the Pi's own ({m.sound_choices()}, {m.sound_shown()})",
+      m.sound_choices() == ["Auto", "Headphones"] and m.sound_shown() == "Auto")
+m.set_setting("sound", "Headphones")
 m.play(songs, 1)
 own = start_no(6)
-check(f"Settings > Sound on a card: that card, headphones or not ({opt(own['argv'], '-ao')})",
+check(f"Settings > Sound set to a card with the headphones on: that card ({opt(own['argv'], '-ao')})",
       opt(own["argv"], "-ao") == "alsa:device=default=Headphones,alsa" and m.sound_used == ("Headphones", ""))
-busctl(H, "Disconnect"); look(); busctl(H, "Connect"); look()
-check("...they come and go: it plays on", still(6) and not m.paused)
-check(f"...Settings > Sound's row: the card ({m.sound_value()})", m.sound_value() == "Headphones")
-m.set_setting("sound", "Auto")
+check(f"...its row says the card ({m.sound_value()}); the headphones are a choice, to go back to "
+      f"({m.sound_choices()})", m.sound_value() == "Headphones" and m.sound_shown() == "Headphones"
+      and m.sound_choices() == ["Auto", "Headphones", "WH-1000XM4"])
+busctl(H, "Disconnect"); look()
+check("...they go: it plays on", still(6) and not m.paused and m.sound_choices() == ["Auto", "Headphones"])
+busctl(H, "Connect"); look()
+again = start_no(7)
+check(f"...they connect again: the sound's theirs, without a trip to Settings ({opt(again['argv'], '-ao')}, {m.msg})",
+      still(7) and opt(again["argv"], "-ao") == "alsa:device=bluealsa,alsa" and m.msg == "Sound through WH-1000XM4"
+      and not m.paused and m.sound_used == ("bluetooth", H))
+check(f"...its row says them ({m.sound_value()}), Headphones kept for when they go ({m.setting('sound')})",
+      m.sound_value() == "WH-1000XM4" and m.sound_shown() == "WH-1000XM4" and m.setting("sound") == "Headphones")
+m.tab, m.view, m.set_page = m.tab_index("settings"), "list", "root"     # (◀▶ on its row, on the Pi)
+m.load_tab(m.tab)
+m.set_sel = m.settings_root_index("sound")
+m.press("right")
+look()
+check(f"Settings > Sound's row, ▶ from them: Auto, still theirs ({m.sound_value()}, {m.sound_choices()})",
+      still(7) and m.setting("sound") == "Auto" and m.sound_value() == "Auto: WH-1000XM4"
+      and m.sound_choices() == ["Auto", "Headphones"])
+m.press("left")
+look()
+card = start_no(8)
+check(f"...◀: the Pi's Headphones, the sound off them ({opt(card['argv'], '-ao')}, {m.msg})",
+      still(8) and opt(card["argv"], "-ao") == "alsa:device=default=Headphones,alsa"
+      and m.msg == "Sound through Headphones" and m.sound_value() == "Headphones")
+m.press("right")
+look()
+bt = start_no(9)
+check(f"...▶: them, by name, Headphones kept ({opt(bt['argv'], '-ao')}, {m.setting('sound')}, {m.msg})",
+      still(9) and opt(bt["argv"], "-ao") == "alsa:device=bluealsa,alsa" and m.setting("sound") == "Headphones"
+      and m.sound_value() == "WH-1000XM4" and m.msg == "Sound through WH-1000XM4")
+
+
+def web_sound_row():
+    return next(r for s in m.web_settings()["sections"] for r in s["rows"] if r["key"] == "sound")
+
+
+row = web_sound_row()
+check(f"the web page's Settings > Sound: on them, by name ({row['value']}, {row['choices']})",
+      row["value"] == "WH-1000XM4" and row["choices"] == ["Auto", "Headphones", "WH-1000XM4"] and not row.get("note"))
+out = m.web_settings_do({"key": "sound", "value": "Headphones"})
+look()
+card = start_no(10)
+check(f"...Headphones picked there: the sound off them ({out}, {opt(card['argv'], '-ao')})", out == {"ok": True}
+      and still(10) and opt(card["argv"], "-ao") == "alsa:device=default=Headphones,alsa"
+      and web_sound_row()["value"] == "Headphones")
+out = m.web_settings_do({"key": "sound", "value": "WH-1000XM4"})
+look()
+bt = start_no(11)
+check(f"...them by name: back to them, not kept as the choice ({out}, {opt(bt['argv'], '-ao')})",
+      out == {"ok": True} and still(11) and opt(bt["argv"], "-ao") == "alsa:device=bluealsa,alsa"
+      and m.setting("sound") == "Headphones" and web_sound_row()["value"] == "WH-1000XM4")
+out = m.web_settings_do({"key": "sound", "value": "Auto"})
+look()
+row = web_sound_row()
+check(f"...Auto: still theirs, and it says so ({out}, {row['value']}, {row.get('note')}, {row['choices']})",
+      out == {"ok": True} and still(11) and row["value"] == "Auto" and row.get("note") == "Auto: WH-1000XM4"
+      and row["choices"] == ["Auto", "Headphones"])
+check("...their name isn't one of Auto's choices (Auto has them already)",
+      "error" in m.web_settings_do({"key": "sound", "value": "WH-1000XM4"}) and m.setting("sound") == "Auto")
+m.view = "list"
+m.set_page = "root"
+m.stop()
+
 g.sound_cards = lambda: [("vc4hdmi0", "HDMI"), ("Headphones", "Headphones")]
 busctl(H, "Disconnect")
 g.hdmi_ports = lambda: [0]
+n0 = len(starts()) + 1
 m.play(songs, 1)
-tv = start_no(7)
+tv = start_no(n0)
 check(f"Auto, a TV on HDMI, no headphones: the TV ({opt(tv['argv'], '-ao')})",
       opt(tv["argv"], "-ao") == "alsa:device=hdmi=vc4hdmi0.0.4.130.0.1,alsa")
 g.hdmi_ports = lambda: []
 look()
-check("...the TV unplugged: it plays on, as before (only Bluetooth moves it)", still(7) and not m.paused)
+check("...the TV unplugged: it plays on, as before (only Bluetooth moves it)", still(n0) and not m.paused)
 g.sound_cards = lambda: []
 m.stop()
 
 # a video: it moves too, and says so on the picture; one that stopped as they went picks up where it was
 busctl(H, "Connect")
 m.play(films, 0, start=0)
-v0 = start_no(8)
+v0 = start_no(n0 + 1)
 check("a film through the headphones", opt(v0["argv"], "-ao") == "alsa:device=bluealsa,alsa" and m.kind == "video")
 m.pos = 300.0
 busctl(H, "Disconnect")
@@ -353,9 +426,9 @@ m.sound_look = time.monotonic() + 60          # (not due: it's looked at anyway,
 texts.clear()
 m.tick()
 curtain = list(texts)
-v1 = start_no(9)
+v1 = start_no(n0 + 2)
 check(f"...the player stopped as they went: started again where it was, paused ({opt(v1['argv'], '-ss')})",
-      still(9) and opt(v1["argv"], "-ss") == "297" and opt(v1["argv"], "-volume") == "0"
+      still(n0 + 2) and opt(v1["argv"], "-ss") == "297" and opt(v1["argv"], "-volume") == "0"
       and m.kind == "video" and m.paused and m.muted and m.cur is films[0])
 check("...not taken for finished", m.state["pos"].get(films[0]["key"]) != -1)
 check(f"...its curtain says why it's paused ({[x for x in curtain if 'Paused' in x]})",
@@ -364,7 +437,7 @@ check(f"...said so on the picture ({m.screen_note[0] if m.screen_note else None}
       m.screen_note and m.screen_note[0] == "Paused: WH-1000XM4 disconnected")
 busctl(H, "Connect")
 look()
-v2 = start_no(10)
+v2 = start_no(n0 + 3)
 check("...back: through them, still paused", opt(v2["argv"], "-ao") == "alsa:device=bluealsa,alsa"
       and m.paused and m.muted and opt(v2["argv"], "-ss") == "300")
 dropped = lambda pid: [e["dropped"] for e in log() if e.get("pid") == pid and "dropped" in e]
@@ -377,7 +450,7 @@ check("...A: plays on, at its volume", until(lambda: told(v2["pid"])[-3:-1] == [
 m.stop()
 check("stopped: nothing to move", m.sound_used is None and not m.muted)
 look()
-check("...and nothing started", still(10))
+check("...and nothing started", still(n0 + 3))
 for presses, want in ((1, "playing"), (2, "paused")):  # (A before it's listening: it's still filling its cache)
     busctl(H, "Connect")
     k = len(starts())
@@ -512,10 +585,51 @@ check("...slow to come up: waited for", b.connect(HP) is None and until(lambda: 
 busctl(H, "Disconnect")
 m.set_setting("sound", "Headphones")
 b.refresh()
-check(f"...Settings > Sound on a card: says to set it to Auto", b.connect(HP) is None
+check(f"...Settings > Sound on a card: theirs all the same ({b.snapshot()['status']})", b.connect(HP) is None
       and until(lambda: b.snapshot()["busy"] is None, 12)
-      and b.snapshot()["status"] == "WH-1000XM4 is connected. For sound through it, set Settings > Sound to Auto")
+      and b.snapshot()["status"] == "WH-1000XM4 is connected. Sound plays through it"
+      and g.sound_place(m.setting("sound")) == ("bluetooth", H))
 m.set_setting("sound", "Auto")
+
+# looking round makes their sound skip (a Pi's Bluetooth shares its radio): stopped as they connect, and not started
+# by Settings > Bluetooth opening while they're on
+busctl(H, "Disconnect")
+b.refresh()
+b.watch("screen", True)
+mark = len(F.log())
+check("looking round, a page open", b.look() is None and b.snapshot()["looking"]
+      and until(lambda: any("got scan on" in x for x in F.log()[mark:]), 4))
+mark = len(F.log())
+check("headphones connected meanwhile: done looking", b.connect(HP) is None
+      and until(lambda: b.snapshot()["busy"] is None, 12) and not b.snapshot()["looking"]
+      and b.snapshot()["status"] == "WH-1000XM4 is connected. Sound plays through it")
+lines = F.log()[mark:]
+off = next((i for i, x in enumerate(lines) if "got scan off" in x), None)
+call = next((i for i, x in enumerate(lines) if " busctl " in f" {x} " and "Connect" in x), None)
+check(f"...the looking stopped before they connected ({off}, {call}), and it stays stopped",
+      off is not None and call is not None and off < call and not F.get()["discovering"]
+      and (time.sleep(1.0) or not F.get()["discovering"]) and not b.snapshot()["looking"])
+b.watch("screen", False)
+until(lambda: b.thread is None, 6)
+m.tab, m.view, m.set_page = m.tab_index("settings"), "list", "root"
+m.load_tab(m.tab)
+m.set_sel = m.settings_root_index("bluetooth")
+m.press("a")
+time.sleep(0.6)
+check(f"Settings > Bluetooth opened with them on: not looking round ({m.set_page})",
+      m.set_page == "bluetooth" and not m.bt.snapshot()["looking"] and not F.get()["discovering"])
+check("...X still looks", (m.press("x"), until(lambda: m.bt.snapshot()["looking"], 2))[1]
+      and until(lambda: F.get()["discovering"], 4))
+m.press("b")
+check("...gone from the page: done looking", m.set_page == "root"
+      and until(lambda: not F.get()["discovering"] and m.bt.thread is None, 8))
+busctl(H, "Disconnect")
+m.bt.refresh()
+m.set_sel = m.settings_root_index("bluetooth")
+m.press("a")
+check("...and with them off, it looks round on opening, as before", until(lambda: m.bt.snapshot()["looking"], 3))
+m.press("b")
+until(lambda: m.bt.thread is None, 8)
 busctl(H, "Disconnect")
 F.change(lambda s: s["devices"][HP].update(a2dp=False, a2dp_after=0))
 b.refresh()
@@ -557,9 +671,29 @@ m.bt_close()
 sh = open(ROOT + "/setup.sh").read()
 check("setup.sh: BlueALSA and its ALSA plugin", "apt-get install -y bluez-alsa-utils libasound2-plugin-bluez" in sh)
 check("...as the player only (A2DP source), its service set so", "/etc/systemd/system/bluealsa.service.d/pitato.conf"
-      in sh and "ExecStart=\nExecStart=$(command -v bluealsa) -p a2dp-source" in sh and "systemctl restart bluealsa" in sh)
+      in sh and 'BT_ARGS="-p a2dp-source"' in sh and "ExecStart=\nExecStart=$(command -v bluealsa) $BT_ARGS" in sh
+      and "systemctl restart bluealsa" in sh)
 check("...not where PipeWire or PulseAudio has Bluetooth's sound",
       "command -v wireplumber >/dev/null 2>&1 || command -v pulseaudio >/dev/null 2>&1" in sh)
+# its options, as setup.sh works them out, against a BlueALSA that has them (4.x's --help) and one that hasn't
+start = sh.index('  BT_ARGS="-p a2dp-source"')
+part = sh[start:sh.index("  install -d /etc/systemd/system/bluealsa.service.d", start)]
+os.makedirs(S + "/bluealsa_new"); os.makedirs(S + "/bluealsa_old")
+open(S + "/bluealsa_new/bluealsa", "w").write(
+    "#!/bin/sh\ncat <<'EOF'\nUsage:\n  bluealsa -p PROFILE [OPTION]...\n\nOptions:\n  -h, --help\t\t\tprint this help\n"
+    "  -p, --profile=NAME\t\tset enabled BT profiles\n  --keep-alive=SEC\t\tkeep Bluetooth transport alive\n"
+    "  --a2dp-force-mono\t\ttry to force monophonic sound\n  --sbc-quality=MODE\t\tset SBC encoder quality mode\n"
+    "EOF\n")
+open(S + "/bluealsa_old/bluealsa", "w").write("#!/bin/sh\necho 'Usage: bluealsa [OPTION]...' >&2\nexit 1\n")
+for d in ("bluealsa_new", "bluealsa_old"):
+    os.chmod(f"{S}/{d}/bluealsa", 0o755)
+said = {d: real_run(["bash", "-c", "set -e\n" + part + 'echo "$BT_ARGS"'], capture_output=True, text=True,
+                    env=dict(os.environ, PATH=f"{S}/{d}:/usr/bin:/bin")) for d in ("bluealsa_new", "bluealsa_old")}
+check(f"...a BlueALSA with them: SBC's medium (it doesn't skip) and the link kept up between songs "
+      f"({said['bluealsa_new'].stdout.strip()!r})",
+      said["bluealsa_new"].stdout.strip() == "-p a2dp-source --sbc-quality=medium --keep-alive=5")
+check(f"...one without them (its help fails, even): just the player, as before ({said['bluealsa_old'].stdout.strip()!r})",
+      said["bluealsa_old"].stdout.strip() == "-p a2dp-source" and said["bluealsa_old"].returncode == 0)
 r = real_run(["bash", "-n", ROOT + "/setup.sh"], capture_output=True)
 check("...and it still reads as bash", r.returncode == 0)
 

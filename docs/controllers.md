@@ -8,9 +8,11 @@ GPi Case's own buttons. Plug them in any time.
   start in the console instead, set Settings > At start-up to Terminal (or Game, to start in the game you
   played last).
 - If your controller is Bluetooth, put it in pairing mode and pick it in Settings > Bluetooth, or
-  under Bluetooth on the web page. Keyboards and headphones pair the same way, and while headphones
-  are connected, sound plays through them. If they disconnect, what's playing pauses. A USB speaker
-  works the same way while it's plugged in.
+  under Bluetooth on the web page. Keyboards and headphones pair the same way. While headphones or a
+  speaker are connected, sound plays through them (to hear the TV instead, pick it in Settings >
+  Sound), and if they disconnect, what's playing pauses. If their sound skips, move the Pi closer to
+  them: a Pi's Bluetooth shares one radio with its WiFi, so 5 GHz WiFi helps too, where the Pi has it.
+  A USB speaker plays the sound while it's plugged in, with Settings > Sound on Auto.
 - If A and B are the wrong way round, use that controller to set Settings > Swap A and B to On.
 - If a button does the wrong thing, open Settings > Controller and press each button it asks for.
 - If your controller has no Home button, press Select and Start together.
