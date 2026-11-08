@@ -96,6 +96,7 @@ from .screens.pilot import PilotScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
+VT_WAKE = 0.5                  # seconds on the terminal's console, on the way to media mode's, waking a PC's screen
 
 
 class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, JellyfinScreen,
@@ -901,18 +902,26 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         for i, tab in enumerate(LIBRARY):
             if tab["type"] not in ("channels", "camera", "system", "plex", "jellyfin") or i == self.tab:
                 self.load_tab(i)
+        here = ""
         try:
-            vt = subprocess.run(["fgconsole"], capture_output=True, text=True)
-            self.prev_vt = vt.stdout.strip() or "1"
+            here = subprocess.run(["fgconsole"], capture_output=True, text=True).stdout.strip()
+            self.prev_vt = here or "1"
         except OSError:
             pass
-        subprocess.run(["chvt", str(MEDIA_VT)])
+        if self.prev_vt == str(MEDIA_VT) or is_pc():   # the terminal's console, to go back to: never media mode's
+            self.prev_vt = "1"                         # own, and on a PC always 1, where it signs you in by itself
+        if here == str(MEDIA_VT) and is_pc():          # (not the desktop's that was). Ubuntu starts on this console
+            subprocess.run(["chvt", "1"])              # (vt.handoff=7, for its start-up screen), and its screen stays
+            time.sleep(VT_WAKE)                        # dark till a console's switched to: through the terminal's and
+        subprocess.run(["chvt", str(MEDIA_VT)])        # back, as from the desktop, wakes it
         try:
             self.ttyfd = os.open(f"/dev/tty{MEDIA_VT}", os.O_RDWR | os.O_NOCTTY)
             fcntl.ioctl(self.ttyfd, 0x4B3A, 1)   # KDSETMODE KD_GRAPHICS: no text/cursor
         except OSError:
             pass
         self.console_cursor(False)                     # (...and its cursor off, which its blinking asks after)
+        if is_pc() and getattr(self.fb, "take_screen", None):
+            self.fb.take_screen()                      # (a PC's: its picture back on the screen, if it isn't)
         self.dirty = True
         if self.playing_now():                         # what's playing, for a moment
             self.pop_now()

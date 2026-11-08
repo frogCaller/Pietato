@@ -6,16 +6,20 @@ speaker first), played straight to the card (sysdefault, or the HDMI port's own 
 PipeWire's on a desktop); Settings > Resolution through GRUB (put in by update-grub; as it was if that fails),
 DisplayPort and laptop screens too, and through media mode (a moment's wait, then it restarts); System's numbers (its
 maker and model, no Pi power light, a Desktop row with a desktop to start) and its dashboard (This PC, its disk);
-System > Desktop (A twice: Pietato stops, the desktop starts, by a job of its own); "the PC" said instead of "the Pi",
-in media mode and on the web page (its page, a game's page, the server's errors; never a Pi-hole or a Pi 4); its
-videos played as they are (never made smaller), at full quality, and 1080p from Plex, Jellyfin and live TV on a 1080p
-screen; every kind of game; the home screen's icons drawn on Ubuntu 24.04's Pillow (10.2: its rounded boxes in whole
-pixels, which it needs). And a Pi, as it was."""
+System > Desktop (A twice: Pietato stops, the desktop starts, by a job of its own); media mode starting on its own
+console (Ubuntu's start-up hands it over: vt.handoff=7) through the terminal's and back, its picture put back on
+the screen (a KMS framebuffer's, panned to where it is; a Pi's, never), HOME's terminal the terminal's console;
+"the PC" said instead of "the Pi", in media mode and on the web page (its page, a game's page, the server's errors;
+never a Pi-hole or a Pi 4); its videos played as they are (never made smaller), at full quality, and 1080p from Plex,
+Jellyfin and live TV on a 1080p screen; every kind of game; the home screen's icons drawn on Ubuntu 24.04's Pillow
+(10.2: its rounded boxes in whole pixels, which it needs). And a Pi, as it was (its console's in front already: straight
+to it, its screen left as it is)."""
 import json, os, shutil, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 import pietato_all as g
 from pitato import screen as SC, system as SY
+REAL_FB = SC.Framebuffer                          # (the real one: a stand-in takes its place below)
 
 S = SP + "/t_pc"
 shutil.rmtree(S, ignore_errors=True)
@@ -207,9 +211,14 @@ class FB:
     w, h = 640, 480
     real_w, real_h = 640, 480
     count = 0
+    taken = []                                    # (media mode putting its picture back on the screen)
 
     def __init__(self):
         self.frames, self.last = FB.count, None
+
+    def take_screen(self):
+        FB.taken.append(1)
+        return True
 
     def show(self, img):
         self.last = img.copy(); FB.count += 1; self.frames = FB.count
@@ -224,6 +233,7 @@ class FB:
 
 g.Framebuffer = FB
 m = g.Media(); m.enter()
+check(f"media mode on a PC: its picture put back on the screen as it starts ({len(FB.taken)})", FB.taken == [1])
 check(f"System's numbers: its maker and model as the board, no Pi power light ({n['board']}, {n['power']})",
       n["board"] == "Dell Inc. OptiPlex 7050" and n["power"] is None)
 SY.DESKTOP = S + "/display-manager.service"
@@ -338,8 +348,127 @@ check(f"System's dashboard: This PC, its maker and model, its disk ({[t for t in
       and any(t.startswith("Free on the disk") for t in texts) and not any("card" in t for t in texts))
 check("...no power light (a Pi's own)", "Power OK" not in texts and not any(t.startswith("Power") for t in texts))
 
+# ---- a PC that starts on media mode's console (Ubuntu's start-up screen's: vt.handoff=7). Its screen stays dark till
+#      a console's switched to, so media mode goes through the terminal's and back; HOME's terminal is the terminal's ----
+fg, vts = ["7"], []
+
+
+def consoles(cmd, *a, **k):
+    if isinstance(cmd, (list, tuple)) and cmd[:1] == ["fgconsole"]:
+        return type("R", (), {"stdout": fg[0] + "\n", "returncode": 0, "stderr": ""})()
+    if isinstance(cmd, (list, tuple)) and cmd[:1] == ["chvt"]:
+        vts.append(cmd[1]); fg[0] = cmd[1]
+        return type("R", (), {"stdout": "", "returncode": 0, "stderr": ""})()
+    return real_run(cmd, *a, **k)
+
+
+was_run = g.subprocess.run
+g.subprocess.run = consoles
+m.leave()
+fg[0], vts[:], FB.taken[:] = "7", [], []
+t0 = time.monotonic()
+m.enter()
+took = time.monotonic() - t0
+check(f"starting on media mode's console (Ubuntu's start-up hands it over): through the terminal's and back, a moment "
+      f"there, its picture put back on the screen ({vts}, {took:.1f}s, {len(FB.taken)})",
+      vts == ["1", "7"] and took >= MM.VT_WAKE and FB.taken == [1] and m.active)
+vts[:] = []
+m.leave()
+check(f"...HOME's terminal: the terminal's console, never media mode's ({vts})", vts == ["1"])
+vts[:] = []
+m.enter()
+check(f"...and back from it: straight there, as ever ({vts})", vts == ["7"])
+m.leave()
+fg[0], vts[:] = "2", []
+m.enter()
+check(f"...started from another console (the desktop's, that was): straight there, and HOME's terminal is the "
+      f"terminal's console all the same ({vts}, {m.prev_vt})", vts == ["7"] and m.prev_vt == "1")
+g.subprocess.run = was_run
+m.tab, m.view = si, "list"                        # (System's list again, as it was)
+
+# ---- the framebuffer, put back on the screen: a KMS one's (i915drmfb) panned to where it is; a Pi's never touched ----
+asked = []
+real_ioctl, real_read = SC.fcntl.ioctl, SC.read_file
+SC.fcntl.ioctl = lambda f, req, arg=0, *a: (asked.append(req), b"\0" * 160 if req == 0x4600 else arg)[1]
+fb = object.__new__(REAL_FB)
+fb.f = open(S + "/fb0", "w+b")
+for name, want in (("i915drmfb", [0x4600, 0x4606]), ("amdgpudrmfb", [0x4600, 0x4606]), ("bcm2708_fb", []), ("", [])):
+    SC.read_file = lambda p, d="", name=name: name if p == "/sys/class/graphics/fb0/name" else real_read(p, d)
+    asked[:] = []
+    got = fb.take_screen()
+    check(f"...{name or 'no name'}: {'panned to where it is' if want else 'not touched'} ({[hex(x) for x in asked]}, {got})",
+          asked == want and got == bool(want))
+
+
+def busy(f, req, arg=0, *a):
+    if req == 0x4606:
+        raise OSError(16, "Device or resource busy")
+    return b"\0" * 160
+
+
+SC.fcntl.ioctl = busy
+SC.read_file = lambda p, d="": "i915drmfb" if p == "/sys/class/graphics/fb0/name" else real_read(p, d)
+check("...something else has the screen (the kernel says it's busy): left to it", fb.take_screen() is False)
+SC.fcntl.ioctl, SC.read_file = real_ioctl, real_read
+fb.f.close()
+
+# ---- a 21:9 monitor (3440x1440): the menus drawn as finely as it has pixels, and written the plain way (as a game's
+#      picture is: Intel's graphics keeps a compressed copy of the screen that only a write refreshes) ----
+check(f"how finely the menus are drawn on a PC: 3440x1440's at 3 (its own pixels, not each 3 x 3), 2560x1440's at 3, "
+      f"1080p's at 2, 4K's at 2 ({SC.fine_scale(3, 1140, 480)}, {SC.fine_scale(3, 853, 480)}, "
+      f"{SC.fine_scale(2, 960, 540)}, {SC.fine_scale(4, 960, 540)})",
+      (SC.fine_scale(3, 1140, 480), SC.fine_scale(3, 853, 480), SC.fine_scale(2, 960, 540),
+       SC.fine_scale(4, 960, 540)) == (3, 3, 2, 2))
+RGB32 = [(16, 8), (8, 8), (0, 8)]
+
+
+def wide_fb(name, sysname):
+    """A stand-in for a 3440x1440 screen (a file), its driver's name as the kernel says it."""
+    path = f"{S}/{name}"
+    open(path, "wb").write(b"\x77" * (3440 * 1440 * 4))
+    SC.read_file = lambda p, d="": sysname if p == f"/sys/class/graphics/{name}/name" else real_read(p, d)
+    f = object.__new__(REAL_FB)
+    f.f = open(path, "r+b", buffering=0)
+    f.setup(3440, 1440, 0, 0, 32, RGB32, 3440 * 4)
+    return f, path
+
+
+from PIL import Image
+wide_menu = Image.new("RGB", (1140, 480), (40, 120, 200))
+ImageDraw.Draw(wide_menu).rectangle((1130, 470, 1139, 479), fill=(0, 255, 0))     # (a green corner)
+
+
+def wide_ok(path):
+    import numpy as np
+    px = np.fromfile(path, dtype="<u4").reshape(1440, 3440)
+    return (px[:, :10].max() == 0 and px[:, 3430:].max() == 0 and px[1439, 3429] == 0x00ff00
+            and px[1410, 3400] == 0x00ff00 and px[1409, 3399] != 0x00ff00 and px[720, 1720] == 0x2878c8)
+
+
+wf, wpath = wide_fb("fb7", "i915drmfb")
+wf.show(wide_menu)
+check(f"...on a PC's KMS screen (i915drmfb): written the plain way, not mapped, every pixel where it goes "
+      f"({wf.memory()}, {wf.s})", wf.memory() is None and wf.kms() and wide_ok(wpath) and wf.s == 3)
+wf.close()
+SC.read_file = real_read
+
 # ---- and a Pi, as it was ----
 SY.DMI = S + "/nodmi"
+g.subprocess.run = consoles
+m.leave()
+fg[0], vts[:], FB.taken[:] = "7", [], []
+m.enter()
+check(f"a Pi with media mode's console in front already (it stopped without giving it back): straight there, HOME's "
+      f"terminal the terminal's console, its screen left as it is ({vts}, {m.prev_vt}, {len(FB.taken)})",
+      vts == ["7"] and m.prev_vt == "1" and not FB.taken)
+g.subprocess.run = was_run
+m.tab, m.view = si, "list"
+wf, wpath = wide_fb("fb8", "vc4drmfb")
+wf.show(wide_menu)
+check(f"...a 3440x1440 screen on a Pi: mapped as ever, drawn at 3 x 3 as ever ({wf.memory() is not None}, {wf.s})",
+      wf.memory() is not None and not wf.kms() and wide_ok(wpath) and wf.s == 1)
+wf.close()
+SC.read_file = real_read
 make_cards({0, 7})
 check(f"a Pi: its outputs as before ({SC.sound_cards()})", SC.sound_cards() == [("PCH", "HDA Intel PCH")])
 check(f"...and its sound through ALSA's way as before ({SC.sound_device('HDA Intel PCH')})",

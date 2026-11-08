@@ -123,8 +123,9 @@ def slow_pi():
             or bool(re.search(r"Compute Module( 3)?( Plus)? Rev", m)) or is_handheld())
 
 
-FINE_PIXELS = {"pi4": 2_100_000, "fast": 4_000_000}   # most pixels a frame of the menus drawn finely may have (fine.py):
-                                                     # a Pi 4 draws a 1080p one quickly enough, a Pi 5 or a PC 1440p
+FINE_PIXELS = {"pi4": 2_100_000, "fast": 4_000_000,   # most pixels a frame of the menus drawn finely may have (fine.py):
+               "pc": 6_500_000}                      # a Pi 4 draws a 1080p one quickly enough, a Pi 5 a 1440p one, and
+                                                     # a PC an ultrawide's (3440x1440: else 1, each pixel 3 x 3: blocky)
 
 
 def fine_scale(k, w, h):
@@ -141,7 +142,8 @@ def fine_scale(k, w, h):
     if slow_pi():
         return 1
     m = pi_model()
-    most = FINE_PIXELS["pi4"] if re.search(r"Pi 4\b|Pi 400|Compute Module 4", m) else FINE_PIXELS["fast"]
+    most = FINE_PIXELS["pc"] if is_pc() else FINE_PIXELS["pi4"] if re.search(r"Pi 4\b|Pi 400|Compute Module 4", m) \
+        else FINE_PIXELS["fast"]
     for s in range(k, 1, -1):
         if k % s == 0 and w * s * h * s <= most:
             return s
@@ -879,6 +881,20 @@ class Framebuffer:
                 continue
         return False
 
+    def take_screen(self):
+        """Its picture put back on the screen, if nothing else has the screen: a KMS framebuffer's (a PC's, i915drmfb
+        and the like), panned to where it is, which has the kernel show it again. A PC's start-up screen can leave the
+        screen showing nothing when it goes, so whatever's drawn here never shows. True if the kernel did; False on
+        anything else (a Pi's firmware framebuffer: not touched), or when something else has the screen."""
+        if not read_file(f"/sys/class/graphics/{os.path.basename(self.f.name)}/name").endswith("drmfb"):
+            return False
+        try:
+            var = fcntl.ioctl(self.f, 0x4600, bytes(160))   # FBIOGET_VSCREENINFO
+            fcntl.ioctl(self.f, 0x4606, var)                # FBIOPAN_DISPLAY: to the same place
+            return True
+        except OSError:
+            return False
+
     def turn_to(self, turn):
         """Turned another way, from the next picture on (the screen's black, to start)."""
         self.turn = turn if turn in TURNS else 0
@@ -959,10 +975,11 @@ class Framebuffer:
     def memory(self):
         """A big screen's pixels, mapped (rows of the stride): copying a picture into them is quicker than
         writing it out row by row, and a doubled one needn't be made first. None on the GPi Case's
-        screen (it writes its own way, as ever), or if the screen can't be mapped."""
+        screen (it writes its own way, as ever), on a PC's (kms(): written the plain way, as a game is), or if the
+        screen can't be mapped."""
         if getattr(self, "mem", False) is False:      # (not tried yet)
             self.mem = None
-            if not self.same or self.turn:
+            if (not self.same or self.turn) and not self.kms():
                 try:
                     import mmap
                     import numpy as np
@@ -973,6 +990,16 @@ class Framebuffer:
                 except (OSError, ValueError, ImportError, AttributeError, TypeError):
                     self.mem = None
         return self.mem
+
+    def kms(self):
+        """A PC's screen, a KMS framebuffer (i915drmfb and the like): written the plain way, never mapped. Its
+        graphics driver learns what's changed from each write, and Intel's keeps a compressed copy of the picture
+        on the screen that only that refreshes: mapped, a game's menu was drawn, but the game's last picture stayed
+        on the screen in front of it."""
+        if getattr(self, "kms_was", None) is None:
+            self.kms_was = is_pc() and read_file(
+                f"/sys/class/graphics/{os.path.basename(self.f.name)}/name").endswith("drmfb")
+        return self.kms_was
 
     def close_memory(self):
         self.mem, mapping, self.mapping = False, getattr(self, "mapping", None), None

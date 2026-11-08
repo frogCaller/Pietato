@@ -833,7 +833,12 @@ for _ in range(7):                                     # (a Game Boy Color game:
 press(e.BTN_SOUTH, 1.0)
 check("Quit game from the real loop: the list", m.view == "list" and m.game is None)
 press(e.BTN_MODE, 0.5)
-check("HOME in the list: the terminal, as ever", not m.active)
+check(f"HOME in the list: it says how to reach the terminal, and stays ({m.msg!r})",
+      m.active and m.msg == "For the terminal, hold HOME and press ◀")
+pad.send((e.EV_KEY, e.BTN_MODE, 1)); time.sleep(0.1)                   # (HOME held, ◀ pressed with it)
+press(e.BTN_DPAD_LEFT, 0.2)
+pad.send((e.EV_KEY, e.BTN_MODE, 0)); time.sleep(0.5)
+check("HOME and ◀: the terminal", not m.active)
 done.set(); th.join(5)
 check("no errors in the loop", not errors and not th.is_alive())
 
