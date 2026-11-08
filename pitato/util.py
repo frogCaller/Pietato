@@ -134,6 +134,34 @@ def pictures_dir():
     return home_folder("Pictures")
 
 
+def move_new(src, folder, name):
+    """The file src, moved into folder as name (name-2, name-3... if taken), owned like the folder: put there as it
+    is when it's on the same disk (a big one needs no room for a second copy), copied (copy_new) when it isn't."""
+    st = os.stat(folder)
+    try:
+        same = os.stat(src).st_dev == st.st_dev
+    except OSError:
+        same = False
+    if same:
+        os.chown(src, st.st_uid, st.st_gid)
+        os.chmod(src, 0o644)
+        stem, ext = os.path.splitext(name)
+        path, n = os.path.join(folder, name), 2
+        while n < 10000:
+            try:
+                os.link(src, path)                     # (never over one that's there: taken, the next name)
+            except FileExistsError:
+                path, n = os.path.join(folder, f"{stem}-{n}{ext}"), n + 1
+                continue
+            except OSError:                            # (a disk that can't: copied instead)
+                break
+            os.remove(src)
+            return path
+    path = copy_new(src, folder, name)
+    os.remove(src)
+    return path
+
+
 def copy_new(src, folder, name, progress=None, chunk=1 << 20):
     """A copy of the file src in folder as name (name-2, name-3... if taken), owned like the folder, with src's date.
     Copied under a hidden name first, so nothing sees half a file. progress: a dict, its "done" the bytes so far."""

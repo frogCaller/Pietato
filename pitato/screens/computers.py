@@ -2,7 +2,8 @@
 that asks the network goes on a thread of its own, so a slow computer, or one that's gone, never holds the
 screen up: what it finds comes back to net_tick. SELECT on one of its files (in the list, or open) saves a copy on
 this Pi, in the folder for its kind: a picture in Pictures, a video in Videos, a song in Music, a game in Games,
-anything else in Documents (net_save)."""
+anything else in Documents (net_save). HOME on one in the list is its menu: Save to this Pi, or Send to another
+Pietato (◀▶ for which, while another of yours is on): a copy for it to keep, in its folder for that kind (net_keep)."""
 import collections
 import os
 import shutil
@@ -12,7 +13,10 @@ import time
 from ..computers import folder_name, Trouble
 from ..config import home_dir, web_private
 from ..games import GAME_SYSTEMS
+from ..handoff import BIG_KEEPS, FILE_MOST, HANDOFF_ASK, HANDOFF_GO, not_sent, VIDEO_KEEP_MOST
 from ..util import copy_new, home_folder, human_size, item, kind_by_name
+from .games import PEER_JOBS
+from .handoff import handoff_post
 
 NET = "net:"                  # Other computers' own places: "net:" (the list) and "net:<address>" (its folders)
 SEEN_FRESH = 3.0              # seconds a folder's look stays new enough not to look again on the way in
@@ -20,6 +24,8 @@ SCAN_MOST = 5000              # files shown from one folder
 SAVE_SPARE = 64 << 20         # room left on the card after a file from another computer is saved onto it
 SAVE_SAY = 1.0                # seconds between words on how far a save has got
 SAVE_FOLDERS = {"image": "Pictures", "video": "Videos", "audio": "Music", "game": "Games"}   # (the rest: Documents)
+KEEP_VIEWS = {"Pictures": "photo", "Videos": "video", "Music": "music", "Games": "game"}   # ...sent to another Pietato
+                                                                                         # to keep (the rest: "file")
 GAME_FILES = {e for s in GAME_SYSTEMS for e in s[3]} - {".zip"}   # (a zip could be anything)
 
 
@@ -124,6 +130,123 @@ class ComputersScreen:
             return {"error": "That file isn't there"}
         self.net_save(path)
         return {"ok": True, "said": "Saving it onto the Pi"}
+
+    # -- HOME on one of its files: its menu (Save to this Pi; Send to another Pietato) -------------------------------
+    def net_home(self):
+        """HOME on a file of another computer's in Files: its menu (Save to this Pi; Send to another Pietato, ◀▶ for
+        which, while another of yours is on); from the menu, back to the list. False: HOME as ever."""
+        if self.view == "netmenu":
+            self.net_menu_close()
+            return True
+        row = self.net_row_picked()
+        if row is None:
+            return False
+        self.net_menu = {"sel": 0, "view": self.view, "bg": self.screen_dimmed(), "row": row}
+        self.view = "netmenu"
+        self.dirty = True
+        return True
+
+    def net_row_picked(self):
+        """The file picked in Files, if it's another computer's (not a folder, or ".."), or None."""
+        if not (self.active and self.view == "list" and self.tab_type() == "browser"):
+            return None
+        items, sel = self.tab_items(), self.sels.get(self.tab, 0)
+        it = items[sel] if 0 <= sel < len(items) else None
+        if not it or it.get("kind") in ("dir", "up") or not self.net_file(str(it.get("src") or "")):
+            return None
+        return dict(it)
+
+    def net_menu_items(self):
+        keep = [("keep", "Send to another Pietato")] if self.handoff_target() is not None else []
+        return [("back", "Back to the list"), ("save", "Save to this Pi")] + keep
+
+    def net_menu_close(self):
+        m = getattr(self, "net_menu", None)
+        self.net_menu = None
+        if self.view == "netmenu":
+            self.view = (m or {}).get("view") or "list"
+        self.dirty = True
+
+    def press_net_menu(self, name, repeat):
+        m = getattr(self, "net_menu", None)
+        if m is None:
+            self.net_menu_close()
+            return None
+        menu = self.net_menu_items()
+        job = menu[m["sel"] % len(menu)][0]
+        if name in ("up", "down"):
+            m["sel"] = (m["sel"] + (1 if name == "down" else -1)) % len(menu)
+        elif repeat:
+            return None
+        elif name in ("left", "right") and job in PEER_JOBS:
+            self.handoff_cycle(1 if name == "right" else -1)
+        elif name == "b" or (name == "a" and job == "back"):
+            self.net_menu_close()
+        elif name == "a":
+            self.net_menu_close()                      # (back to the list: it goes meanwhile)
+            if job == "save":
+                self.net_save(m["row"]["src"])
+            else:
+                self.net_keep(m["row"]["src"])
+        self.dirty = True
+        return None
+
+    def render_net_menu(self):
+        """HOME on another computer's file: its menu, over the list (its name; how big it is, and whose)."""
+        m = getattr(self, "net_menu", None)
+        if m is None:
+            self.net_menu_close()
+            return
+        row = m["row"]
+        found = self.computers.owner(row["src"])
+        whose = found[0]["addr"] if found else "another computer"
+        where = f"{human_size(row['size'])} on {whose}" if isinstance(row.get("size"), int) else f"On {whose}"
+        self.render_send_menu(m, self.net_menu_items(), row.get("title") or os.path.basename(row["src"]), where,
+                              "net_menu")
+
+    def net_keep(self, path):
+        """A file on another computer, sent through this Pi for the one picked to keep: a copy in its own Pictures,
+        Music, Videos, Games or Documents (by its kind, as Save to this Pi picks), named as it is. Asking the computer
+        and that Pietato goes on a thread of its own: either may be slow to answer (how it went: net_save_tick)."""
+        target = self.handoff_target()
+        if target is None:
+            self.toast("None of your other Pietatos is on", 3)
+            return
+        name = os.path.basename(path)
+        if web_private(name):
+            self.toast("That one stays on this Pi", 4)
+            return
+        self.toast(f"Asking {target[1]}…", 4)
+
+        def job():
+            self.net_saved.append(self.net_keep_ask(path, name, *target))
+            self.wake()
+        threading.Thread(target=job, daemon=True, name="net-keep").start()
+
+    def net_keep_ask(self, path, name, url, host):
+        """(Its own thread.) That Pietato asked first whether it can keep the file, then given a key to it (it takes
+        it from this one's web page, which reads it from the computer): (it went, what to say)."""
+        try:
+            size = os.path.getsize(path)
+            view = KEEP_VIEWS.get(save_folder(path), "file")
+        except OSError as ex:
+            return False, f"Couldn't read {name} ({ex.strerror or 'the computer stopped answering'})"
+        if size > (VIDEO_KEEP_MOST if view in BIG_KEEPS else FILE_MOST):
+            return False, f"{name} is too big to send ({human_size(size)})"
+        body = {"view": view, "title": name, "size": size}
+        said = handoff_post(url, dict(body, kind="file", keep=True, check=True), HANDOFF_ASK)
+        if said is None:
+            return False, f"{host} not responding"
+        if (said.get("status") == 400 or (said.get("ok") and said.get("keep") is not True)
+                or (not said.get("ok") and said.get("error") == "What's that?")):
+            return False, f"{host} needs updating first (System > Update software there)"
+        if not said.get("ok"):
+            return False, f"{host}: {said.get('error') or 'it can’t keep it'}"
+        key = self.handoff_keys().issue(path)
+        said = handoff_post(url, dict(body, kind="file", keep=True, file=key), HANDOFF_GO)
+        if said is None or not said.get("ok"):
+            return False, not_sent(host, said)
+        return True, f"Sending {name} to {host}, for its {said.get('folder') or 'folders'}"
 
     # -- places --------------------------------------------------------------------------
     def is_net(self, path):

@@ -62,7 +62,10 @@ check("...and what you're looking at", HO.clean_file({"view": "pdf", "title": "a
       == ("text", "n.txt", 0, {"first": "x" * HO.FIRST_MOST, "frac": 0.0, "big": 0})
       and HO.clean_file({"view": "photo", "title": "p.jpg", "size": 5, "rot": 9}) == ("photo", "p.jpg", 5, {"rot": 0})
       and HO.clean_file({"view": "photo", "title": "../p.jpg", "size": 5}) is None
-      and HO.clean_file({"view": "game", "title": "p", "size": 5}) is None
+      and HO.clean_file({"view": "game", "title": "p", "size": 5}) == ("game", "p", 5, {})   # (from another computer,
+      and HO.clean_file({"view": "file", "title": "p", "size": HO.FILE_MOST + 1})              #  to keep: as big as a
+      == ("file", "p", HO.FILE_MOST + 1, {})                                                  #  film, a disc game too)
+      and HO.clean_file({"view": "exe", "title": "p", "size": 5}) is None
       and HO.clean_file({"view": "pdf", "title": "p", "size": HO.FILE_MOST + 1}) is None
       and HO.clean_file({"view": "pdf", "title": "p", "size": True}) is None and HO.file_place("../a/b?.pdf") == "a_b_.pdf")
 
@@ -852,6 +855,121 @@ try:
     del m.pie.heard[BEFORE]
     before.shutdown()
     m.handoff_to = THEIRS
+
+    # ---- Files > Other computers: HOME on one of its files: Save to this Pi, or Send to another Pietato --------------
+    from PIL import Image
+    NETR = S + "/net"
+    PC = NETR + "/10.0.0.5/Shared"
+    os.makedirs(PC + "/Trips")
+    for fname, data in (("Boat.mp4", b"\0\0\0\x18ftypmp42" + bytes(range(256)) * 64),
+                        ("tetris.gba", bytes(range(256)) * 8), ("photos.zip", b"PK" + bytes(range(256)) * 16)):
+        open(f"{PC}/{fname}", "wb").write(data)
+    Image.new("RGB", (64, 48), (240, 120, 40)).save(PC + "/sunset.jpg")
+    was_root, was_owner = m.computers.root, m.computers.owner
+    m.computers.root = NETR
+    m.computers.owner = lambda p: (({"addr": "10.0.0.5", "how": "smb"}, "Shared", PC)   # (as it is once it's added)
+                                   if os.path.normpath(p).startswith(PC) else None)
+    bi = m.tab_index("browser")
+
+    def net_pick(fname):
+        m.net_seen[PC] = (time.monotonic(), g.scan(PC))   # (what's there, as a look would find)
+        m.open_app(bi)
+        m.browse(PC)
+        m.sels[bi] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == fname)
+
+    def net_said(start, secs=10.0):
+        """What the Pi says next about a file sent or saved (it says it as the main loop ticks)."""
+        end = time.time() + secs
+        while time.time() < end:
+            m.net_save_tick(time.monotonic())
+            news = [t for t in toasts[start:] if not t.startswith(("Asking ", "Saving "))]
+            if news:
+                return news[-1]
+            time.sleep(0.05)
+        return None
+
+    def net_send(fname):
+        """HOME on it, Send to another Pietato, A: what's said, and whether the TV kept it."""
+        net_pick(fname)
+        m.net_home()
+        m.press("down")
+        m.press("down")
+        n, start = tv_lines(), len(toasts)
+        m.press("a")
+        return net_said(start), n
+
+    net_pick("photos.zip")
+    check(f"another computer's file in Files: HOME, its menu, in its buttons ({m.list_hints()})",
+          ("HOME", "Save or send") in m.list_hints() and ("SELECT", "Save") in m.list_hints())
+    frames = FB.frames
+    took = m.net_home()
+    m.dirty = True
+    m.flush()
+    check(f"...HOME: its menu, over the list: Save to this Pi, or Send to another Pietato ({m.view}, "
+          f"{m.net_menu_items()})", took and m.view == "netmenu" and FB.frames > frames and m.net_menu_items() == [
+              ("back", "Back to the list"), ("save", "Save to this Pi"), ("keep", "Send to another Pietato")])
+    m.press("b")
+    check("...B: back to the list, the file still picked", m.view == "list"
+          and m.tab_items()[m.sels[bi]]["title"] == "photos.zip")
+    m.net_home()
+    m.net_home()
+    check("...HOME again, the same", m.view == "list")
+    m.net_home()
+    m.press("down")
+    start = len(toasts)
+    m.press("a")
+    said = net_said(start)
+    check(f"...Save to this Pi, A: a copy in this one's Documents, as SELECT saves ({said!r})",
+          said == "Saved to Documents" and m.view == "list"
+          and open(HOME + "/Documents/photos.zip", "rb").read() == open(PC + "/photos.zip", "rb").read())
+    said, n = net_send("photos.zip")
+    check(f"...Send to another Pietato, A: a copy kept in the TV's Documents, straight from the computer ({said!r})",
+          said == "Sending photos.zip to tv, for its Documents" and until_kept(TV + "/Documents/photos.zip", n)
+          and open(TV + "/Documents/photos.zip", "rb").read() == open(PC + "/photos.zip", "rb").read()
+          and m.view == "list")
+    for fname, folder in (("Boat.mp4", "Videos"), ("tetris.gba", "Games"), ("sunset.jpg", "Pictures")):
+        said, n = net_send(fname)
+        check(f"...{fname}: kept in the TV's {folder} ({said!r})", said == f"Sending {fname} to tv, for its {folder}"
+              and until_kept(f"{TV}/{folder}/{fname}", n)
+              and open(f"{TV}/{folder}/{fname}", "rb").read() == open(f"{PC}/{fname}", "rb").read())
+    left = [f for _, _, files in os.walk(TV + "/.pietato/cache/handoff-files") for f in files
+            if f in ("photos.zip", "Boat.mp4", "tetris.gba", "sunset.jpg")]
+    check(f"...each moved into place there, nothing left half-made or in its cache ({left})", not left
+          and not [x for d in ("Videos", "Games", "Documents", "Pictures") for x in os.listdir(f"{TV}/{d}")
+                   if x.startswith(".")])
+    was_most = g.FILE_MOST
+    g.FILE_MOST = 100
+    said, n = net_send("sunset.jpg")
+    g.FILE_MOST = was_most
+    check(f"...one too big to send: said, nothing asked of the TV ({said!r})",
+          said is not None and said.startswith("sunset.jpg is too big to send") and tv_lines() == n)
+    net_pick("Trips")
+    check("HOME on a folder, or on ..: HOME as ever", m.net_home() is False and m.view == "list")
+    heard = dict(m.pie.heard)
+    m.pie.heard.clear()
+    net_pick("tetris.gba")
+    check(f"...with none of your other Pietatos on: its menu all the same, to save it ({m.net_home()}, "
+          f"{m.net_menu_items()})", m.view == "netmenu" and m.net_menu_items() == [("back", "Back to the list"),
+                                                                                    ("save", "Save to this Pi")])
+    m.press("b")
+    m.open_photo([PC + "/sunset.jpg"], 0)
+    check(f"one of its pictures open, none of yours on: HOME, its menu, to save it ({m.file_home()}, "
+          f"{m.file_menu_items()})", m.view == "filemenu" and m.file_menu_items() == [
+              ("back", "Back to the picture"), ("save", "Save to this Pi")])
+    m.press("down")
+    start = len(toasts)
+    m.press("a")
+    said = net_said(start)
+    check(f"...Save to this Pi, A: in Pictures; the picture still open ({said!r})", said == "Saved to Pictures"
+          and m.view == "photo" and open(HOME + "/Pictures/sunset.jpg", "rb").read()
+          == open(PC + "/sunset.jpg", "rb").read())
+    m.pie.heard.update(heard)
+    m.file_home()
+    check(f"...one on: Save to this Pi, and View or Send on another Pietato ({m.file_menu_items()})",
+          [k for k, _ in m.file_menu_items()] == ["back", "save", "send", "keep"])
+    m.press("b")
+    m.close_viewer()
+    m.computers.root, m.computers.owner = was_root, was_owner
 
     LOCKED = S + "/locked"
     os.makedirs(LOCKED)

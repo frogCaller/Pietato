@@ -572,8 +572,8 @@ class DrawScreen:
         if ttype == "browser" and self.is_net(self.cwd):
             pc = items and sel < len(items) and items[sel]["kind"] == "netpc"
             keep = items and sel < len(items) and items[sel]["kind"] not in ("dir", "up") \
-                and self.net_file(items[sel]["src"])           # (one of its files: a copy onto this Pi)
-            hints += ([("SELECT", "Save")] if keep else []) + [("B", "Up")] + (
+                and self.net_file(items[sel]["src"])           # (one of its files: a copy onto this Pi; HOME, its menu:
+            hints += ([("SELECT", "Save"), ("HOME", "Save or send")] if keep else []) + [("B", "Up")] + (   # or send)
                 [("Y", "Forget")] if pc else [] if self.cwd.startswith("net:") else [("Y", "Hidden")])
         elif ttype == "browser":
             hints += [("B", "Up" if self.cwd.rstrip("/") != home_dir() and self.cwd != "/" else "Home"),
@@ -593,6 +593,8 @@ class DrawScreen:
             hints += [("X", "Controls"), ("B", "Home")]
         if self.kind in LISTEN_KINDS and ttype != "photos":
             hints.append(("START", "Now playing"))
+        if ttype == "browser" and any(h[0] == "HOME" for h in hints):   # (another computer's file: Tabs and Hidden
+            hints = self.hints_room(hints, keep=("A", "SELECT", "HOME", "B", "START"))   # go first, if they don't fit)
         if not items:
             hints = [h for h in hints if h[0] not in ("A", "START")]
         if self.parent_of(self.tab) is not None:

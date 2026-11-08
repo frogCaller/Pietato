@@ -176,6 +176,28 @@ TERM = type("UI", (), {"write": (lambda self, t, c, v: log(key=c, value=v)) if P
                        "syn": lambda *a: None})()   # (the terminal's keys)
 threading.Thread(target=lambda: g.run(TERM, m,
                                       control, stop=done.is_set), daemon=True).start()
+def state_now():
+    """What's on its screen, for the test (read on its main loop, so never halfway through opening something)."""
+    run = m.game
+    inv = m.invite or {}
+    v = dict(m.v)
+    shown = {k: v[k] for k in ("type", "title", "path", "page", "pages", "fit", "zoom", "scroll", "sx", "top",
+                               "size", "rot", "items") if k in v}
+    if v.get("type") == "text":
+        lines = v.get("lines") or []
+        shown["first"] = lines[v["top"]] if v.get("top", 0) < len(lines) else ""
+    target = m.handoff_target()
+    return json.dumps({"game": run.game["path"] if run else None, "kind": m.kind, "view": m.view,
+                       "viewer": shown, "to": target[0] if target else None,
+                       "file_menu": [k for k, _ in m.file_menu_items()] if m.view == "filemenu" else [],
+                       "menu": [k for k, _ in m.game_menu_items()] if run else [],
+                       "send": m.game_value("send") if run else "",
+                       "note": m.together_note() if run else "",
+                       "invite": {"host": inv.get("host"), "title": (inv.get("ident") or {}).get("title"),
+                                  "link": inv.get("link"), "pick": inv.get("pick"),
+                                  "games": [x["title"] for x in inv.get("games") or []]} if inv else None})
+
+
 print(f"READY http://127.0.0.1:{web.server_port}", file=SAY, flush=True)
 try:
     for line in sys.stdin:                            # (the test says what to do here, a line at a time)
@@ -199,26 +221,19 @@ try:
                               "pads": [{"name": p.dev.name, "kind": p.kind, "path": p.path, "down": sorted(p.down),
                                         "swapped": p.swapped} for p in pads if p.kind == "pilot"]}),
                   file=SAY, flush=True)
-        elif words[0] == "state":
-            run = m.game
-            inv = m.invite or {}
-            v = dict(m.v)
-            shown = {k: v[k] for k in ("type", "title", "path", "page", "pages", "fit", "zoom", "scroll", "sx", "top",
-                                       "size", "rot", "items") if k in v}
-            if v.get("type") == "text":
-                lines = v.get("lines") or []
-                shown["first"] = lines[v["top"]] if v.get("top", 0) < len(lines) else ""
-            target = m.handoff_target()
-            print(json.dumps({"game": run.game["path"] if run else None, "kind": m.kind, "view": m.view,
-                              "viewer": shown, "to": target[0] if target else None,
-                              "file_menu": [k for k, _ in m.file_menu_items()] if m.view == "filemenu" else [],
-                              "menu": [k for k, _ in m.game_menu_items()] if run else [],
-                              "send": m.game_value("send") if run else "",
-                              "note": m.together_note() if run else "",
-                              "invite": {"host": inv.get("host"), "title": (inv.get("ident") or {}).get("title"),
-                                         "link": inv.get("link"), "pick": inv.get("pick"),
-                                         "games": [x["title"] for x in inv.get("games") or []]} if inv else None}),
-                  file=SAY, flush=True)
+        elif words[0] == "state":                     # (on its main loop: never halfway through opening something)
+            got, done_it = [], threading.Event()
+
+            def job():
+                try:
+                    got.append(state_now())
+                finally:
+                    done_it.set()
+            m.soon_jobs.append(job)
+            m.wake()
+            if not done_it.wait(10):
+                got.append(state_now())
+            print(got[0], file=SAY, flush=True)
         elif words[0] in ("press", "news", "expire", "home"):   # (done on its main loop, as a button would be)
             done_it = threading.Event()
             rest = words[1].split() if len(words) > 1 else []

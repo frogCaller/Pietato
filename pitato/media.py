@@ -949,6 +949,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.close_keyboard(False)
         if self.view == "mediamenu":                   # (HOME's menu on Now playing: closed, the music plays on)
             self.media_menu_close()
+        if self.view == "netmenu":                     # (HOME's menu on another computer's file: back to the list)
+            self.net_menu_close()
         if self.kind not in LISTEN_KINDS:
             self.stop()
         self.active = False
@@ -1908,6 +1910,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return self.press_text(name, repeat)
         if self.view == "filemenu":                    # HOME on what you're looking at: View on another Pietato
             return self.press_file_menu(name, repeat)
+        if self.view == "netmenu":                     # HOME on another computer's file: Save, or Send
+            return self.press_net_menu(name, repeat)
 
         if self.view == "now" and self.kind in LISTEN_KINDS:
             if repeat:
@@ -2229,6 +2233,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         draw = {"home": self.render_home, "keys": self.render_keys, "help": self.render_help,
                 "learn": self.render_learn, "gamemenu": self.render_game_menu, "invite": self.render_invite,
                 "konami": self.render_konami_in, "filemenu": self.render_file_menu, "mediamenu": self.render_media_menu,
+                "netmenu": self.render_net_menu,
                 "photo": self.render_photo, "keepres": self.render_keep_res,
                 "pdf": self.render_pdf, "update": self.render_update,
                 "text": self.render_text, "sketch": self.render_sketch, "chromenu": self.render_chrome_menu,

@@ -5,6 +5,8 @@ address (like `192.168.1.20`). On Windows or a Mac, share a folder first; on Lin
 files open read-only, so nothing on that computer is changed from the Pi. To keep a copy on the Pi,
 press SELECT on a file (in its list, or while you're looking at it), or Save to the Pi on the web page:
 pictures go in Pictures, videos in Videos, music in Music, games in Games and the rest in Documents.
+HOME on a file opens its menu: Save to this Pi, or Send to another Pietato (◀▶ picks which one), which
+sends it straight from that computer to the other Pietato to keep, in the same folders there.
 
 If you have more than one Pietato on your network, they share what they fetch: coin and stock prices
 and charts, and the weather. Whichever needs something first fetches it, and the others ask it, so

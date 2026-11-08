@@ -26,8 +26,10 @@ REL_MOST = 300
 POS_MOST = 7 * 24 * 3600
 FILE_VIEWS = ("photo", "pdf", "text")   # what a file you're looking at is shown in (a picture, a PDF or a document,
                                         # some text): each can go to another of your Pietatos
-KEEP_ONLY = ("music", "video")   # ...and a file that goes only to be kept there (a song of yours, for its Music; a
-                                 # video, for its Videos)
+KEEP_ONLY = ("music", "video", "game", "file")   # ...and a file that goes only to be kept there (a song of yours,
+                                 # for its Music; a video, for its Videos; from another computer, a game for its Games,
+                                 # or any other file, for its Documents)
+BIG_KEEPS = ("video", "game", "file")   # ...the ones that may be as big as a film (a disc game, say)
 FILE_MOST = 256 << 20         # bytes: what you're looking at goes if it's no bigger
 VIDEO_KEEP_MOST = 16 << 30    # ...a video, to keep there
 FILE_COPY_TIME = 300.0        # seconds its copy may take (at least)
@@ -176,7 +178,7 @@ def clean_file(d):
     view, title, size = d.get("view"), d.get("title"), d.get("size")
     if (view not in FILE_VIEWS + KEEP_ONLY or not isinstance(title, str) or not title.strip() or "/" in title
             or "\0" in title or type(size) is not int
-            or not 0 <= size <= (VIDEO_KEEP_MOST if view == "video" else FILE_MOST)):
+            or not 0 <= size <= (VIDEO_KEEP_MOST if view in BIG_KEEPS else FILE_MOST)):
         return None
 
     def num(key, most, default=0.0):

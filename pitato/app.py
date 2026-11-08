@@ -80,9 +80,10 @@ def run(ui, media, control=None, stop=None):
     def home():
         """HOME: in a game, the game's menu (or back to the game); cmatrix or hollywood stops; Chromium's menu (or
         back to Chromium); on a picture, a PDF or some text, a video or Now playing (or a song, a video or a picture
-        picked in a list), its menu while another of your Pietatos is on (or back to it). In the terminal: media
-        mode again. On its own it never goes to the terminal: HOME and ◀ does (button()). The screen resting: it
-        wakes, and that's all. Controlling another of yours: a press of HOME there."""
+        picked in a list), its menu while another of your Pietatos is on (or back to it); on another computer's file
+        in Files, its menu (Save to this Pi, or Send to another Pietato). In the terminal: media mode again. On its
+        own it never goes to the terminal: HOME and ◀ does (button()). The screen resting: it wakes, and that's all.
+        Controlling another of yours: a press of HOME there."""
         if sent_on(MEDIA_TOGGLE, True):               # (the GPi Case's star, tapped: HOME, there)
             sent_on(MEDIA_TOGGLE, False)
             return
@@ -90,7 +91,7 @@ def run(ui, media, control=None, stop=None):
             media.stir()
             return
         if media.active and (media.game_home() or media.prog_home() or media.chromium_home() or media.konami_home()
-                             or media.file_home() or media.media_home()):
+                             or media.file_home() or media.media_home() or media.net_home()):
             menu_held.clear()
             return
         if media.active:                              # (HOME on its own here once went to the terminal: said how now)

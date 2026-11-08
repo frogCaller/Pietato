@@ -3,7 +3,7 @@
 cover, an ID3v1 tag, a CRC), MP4/M4A/MOV (moov at either end), FLAC (with an ID3 tag before it), WAV (16 and 24-bit,
 with a LIST chunk, one never finished), Ogg Vorbis and Opus. Broken and unknown files: None, and probe_length asks
 ffprobe (or mplayer). How long each way takes."""
-import os, shutil, subprocess, sys, time
+import os, shutil, subprocess, sys, time, random
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 D = SP + "/t_lengths"                         # (made once, kept)
 sys.path.insert(0, ROOT)
@@ -82,12 +82,13 @@ cut = len(wav) * 2 // 3
 open(W + "/unfinished.wav", "wb").write(wav[:cut])
 subprocess.run(Q + ["-f", "lavfi", "-i", "sine=duration=6", "-c:a", "mp2", "-b:a", "128k", "-f", "mp2",
                     W + "/crc.mp3"], check=True)
-open(W + "/noise.mp3", "wb").write(os.urandom(50_000))
+NOISE = random.Random(7)                   # (the same noise each time: random bytes now and then pass for a
+open(W + "/noise.mp3", "wb").write(NOISE.randbytes(50_000))   #  frame or two, and the check came and went)
 open(W + "/empty.mp3", "wb").close()
 open(W + "/text.mp4", "w").write("not a video\n" * 100)
 open(W + "/half.m4a", "wb").write(open(D + "/aac.m4a", "rb").read()[:5000])
-open(W + "/fake.ogg", "wb").write(b"OggS" + os.urandom(3000))
-open(W + "/fake.flac", "wb").write(b"fLaC" + os.urandom(100))
+open(W + "/fake.ogg", "wb").write(b"OggS" + NOISE.randbytes(3000))
+open(W + "/fake.flac", "wb").write(b"fLaC" + NOISE.randbytes(100))
 
 
 def ffprobe(path):

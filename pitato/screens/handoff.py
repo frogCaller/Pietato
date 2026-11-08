@@ -23,7 +23,7 @@ from ..handoff import (clean_file, clean_ident, clean_media, copy_file, copy_gam
 from ..library import LIBRARY, LISTEN_KINDS, SCREEN_KINDS
 from ..screen import grab_screen
 from ..theme import ACCENT, BG, BODY, LINE, MUTED, ROW, TEXT
-from ..util import clock, copy_new, home_dir, home_folder, in_home
+from ..util import clock, home_dir, home_folder, in_home, move_new
 from .. import savesync
 from .games import PEER_DOT, PEER_JOBS
 
@@ -444,8 +444,8 @@ class HandoffScreen:
         if self.view == "filemenu":
             self.file_menu_close()
             return True
-        if self.handoff_target() is None:
-            return False
+        if self.handoff_target() is None and not (self.view in FILE_VIEWS and self.file_net_path()):
+            return False                               # (another computer's file: its menu has Save to this Pi)
         if self.view in FILE_VIEWS and self.v.get("type") == self.view:
             self.file_menu_open()
             return True
@@ -469,18 +469,35 @@ class HandoffScreen:
         m = getattr(self, "file_menu", None) or {}
         back = ("Back to the pictures" if m.get("row") is not None
                 else FILE_BACK.get(m.get("view") or self.v.get("type"), "Back to it"))
-        return [("back", back), ("send", "View on another Pietato"), ("keep", "Send to another Pietato")]
+        save = [("save", "Save to this Pi")] if m.get("row") is None and self.file_net_path() else []
+        peers = ([("send", "View on another Pietato"), ("keep", "Send to another Pietato")]
+                 if self.handoff_target() is not None or not save else [])
+        return [("back", back)] + save + peers
+
+    def file_net_path(self):
+        """The file you're looking at, if it's another computer's (its menu has Save to this Pi), or None."""
+        v = self.v
+        try:
+            path = v["items"][v["i"]] if v.get("type") == "photo" else v.get("path") or ""
+        except (KeyError, IndexError, TypeError):
+            return None
+        return path if isinstance(path, str) and self.net_file(path) else None
+
+    def screen_dimmed(self):
+        """What's on the screen now, dimmed: behind a menu over it (None if there's nothing to dim)."""
+        last = getattr(self.fb, "last", None)
+        if last is None or detail(last) != scale() or last.size != (self.fb.w, self.fb.h):
+            return None
+        try:
+            from PIL import ImageEnhance
+            pic = last.pic if detail(last) > 1 else last
+            return made_fine(ImageEnhance.Brightness(pic.convert("RGB")).enhance(0.3), scale())
+        except (OSError, ValueError, AttributeError):
+            return None
 
     def file_menu_open(self, row=None):
-        bg, last = None, getattr(self.fb, "last", None)
-        if last is not None and detail(last) == scale() and last.size == (self.fb.w, self.fb.h):
-            try:
-                from PIL import ImageEnhance            # (what's on the screen, dimmed, behind the menu)
-                pic = last.pic if detail(last) > 1 else last
-                bg = made_fine(ImageEnhance.Brightness(pic.convert("RGB")).enhance(0.3), scale())
-            except (OSError, ValueError, AttributeError):
-                bg = None
-        self.file_menu = {"sel": 0, "view": self.view, "bg": bg, "row": row}   # (row: a picture picked in Photos)
+        self.file_menu = {"sel": 0, "view": self.view, "bg": self.screen_dimmed(),
+                          "row": row}                  # (row: a picture picked in Photos)
         self.view = "filemenu"
         self.dirty = True
 
@@ -506,6 +523,11 @@ class HandoffScreen:
             self.handoff_cycle(1 if name == "right" else -1)
         elif name == "b" or (name == "a" and job == "back"):
             self.file_menu_close()
+        elif name == "a" and job == "save":
+            path = self.file_net_path()
+            self.file_menu_close()                     # (back to it: a copy's made onto this Pi meanwhile)
+            if path:
+                self.net_save(path)
         elif name == "a" and job == "keep":
             self.file_keep()
         elif name == "a":
@@ -911,9 +933,10 @@ class HandoffScreen:
 
     def handoff_keep_file(self, cmd, url, host, view, title, size):
         """A file another of yours sends to keep (Send to another Pietato): copied into your own folders, a picture
-        into Pictures, a song into Music, a video into Videos, the rest into Documents, named as it was there (a number on the end, if
-        that's taken). What's on the screen here stays as it is (a list of that folder's shows it)."""
-        folder = {"photo": "Pictures", "music": "Music", "video": "Videos"}.get(view, "Documents")
+        into Pictures, a song into Music, a video into Videos, a game into Games, the rest into Documents, named as it
+        was there (a number on the end, if that's taken). What's on the screen here stays as it is (a list of that
+        folder's shows it)."""
+        folder = {"photo": "Pictures", "music": "Music", "video": "Videos", "game": "Games"}.get(view, "Documents")
         try:
             room = shutil.disk_usage(home_dir()).free
         except OSError:
@@ -933,7 +956,7 @@ class HandoffScreen:
         def copy():
             try:
                 copy_file(f"{url}/api/handoff/file?token={key}", tmp, size)
-                kept = copy_new(tmp, home_folder(folder), name)
+                kept = move_new(tmp, home_folder(folder), name)   # (moved, not copied again: a film needs no room twice)
             except Exception as ex:                    # (a lost connection, too: said, not left unsaid)
                 print(f"handoff: {title} from {host}, to keep: {ex!r}", flush=True)
                 self.soon_jobs.append(lambda: self.toast(f"Couldn't get {title} from {host}", 5))

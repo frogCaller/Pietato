@@ -404,7 +404,7 @@ class WebScreen:
                 rows = {"game_menu": lambda: self.game_menu_items() if self.game is not None else GAME_MENU,
                         "chrome_menu": lambda: CHROME_MENU, "ha_menu": self.ha_rows,
                         "cam_menu": self.cam_menu_rows, "file_menu": self.file_menu_items,
-                        "media_menu": self.media_menu_items}[key]
+                        "media_menu": self.media_menu_items, "net_menu": self.net_menu_items}[key]
             else:
                 return None
             return len(rows())
@@ -780,6 +780,8 @@ class WebScreen:
             self.close_viewer()
         if self.view == "mediamenu":                   # (HOME's menu on a video: closed, the video as it was)
             self.media_menu_close()
+        if self.view == "netmenu":                     # (HOME's menu on another computer's file: the list again)
+            self.net_menu_close()
         self.prog_stop()                               # (Apps' cmatrix and the rest: it stops)
         if self.proc_owns_screen() or self.game is not None:
             self.stop()                                # (a video, or a game: kept for next time)
