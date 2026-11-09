@@ -79,6 +79,8 @@ SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you
     ("start_song", "Random song at start-up", ["Off", "On"]),   # one of yours from ~/Music, as it starts
     ("share", "Share with other Pietatos", ["On", "Off"]),   # prices and the weather fetched once for them all, and
                                                             # your game saves following you (savesync.py)
+    ("glow", "TV backlight", None),   # an LED grid behind the TV, on this Pi's GPIO 10, lit by your games and music
+                                      # (screens/glow.py: only on a Pi that can have one)
 ]
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
@@ -86,8 +88,10 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "c
                     "game_picture": "Fit", "start_song": "Off", "home_style": "Glass",
                     "ds_screens": "Left/Right", "ds_touch": "Right stick, R2", "app_full": "Off", "turn": "Off",
                     "sys_view": "Dashboard", "battery": "Auto", "share": "On", "attract": "On",
-                    "group_talk": "On", "group_eyes": "On"}   # (Apps > Group chat: they talk among themselves; a USB
+                    "group_talk": "On", "group_eyes": "On",   # (Apps > Group chat: they talk among themselves; a USB
                                                               # camera notices you: screens/group.py)
+                    "glow_on": "Off", "glow_follow": "Any of yours", "glow_bright": "25%", "glow_beat": "On",
+                    "glow_turn": "0°", "glow_mirror": "On", "glow_wiring": "Rows"}   # (Settings > TV backlight)
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,
                   "Minimal": "Glass"}                                                               # and one gone)

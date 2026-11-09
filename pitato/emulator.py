@@ -61,6 +61,7 @@ import zlib
 import numpy as np
 
 from .discs import cue_fixed
+from . import glow
 from . import netplay
 from .gpu import CONTEXT_GLES_VERSION, CORE_CB, GPU, GPUError, HWRender, ON_GPU, wanted_version
 from . import screen as screens
@@ -229,6 +230,13 @@ class DiskControl(C.Structure):
                 ("get_num_images", C.CFUNCTYPE(C.c_uint)),
                 ("replace_image_index", C.CFUNCTYPE(C.c_bool, C.c_uint, C.c_void_p)),
                 ("add_image_index", C.CFUNCTYPE(C.c_bool))]
+
+
+RUMBLE = C.CFUNCTYPE(C.c_bool, C.c_uint, C.c_int, C.c_uint16)   # (port, which motor, how hard: 0 to 65535)
+
+
+class RumbleInterface(C.Structure):
+    _fields_ = [("set_rumble_state", RUMBLE)]
 
 
 class MemoryDescriptor(C.Structure):
@@ -858,6 +866,8 @@ class Core:
         self.gpu, self.hw, self.gpu_error = None, None, ""   # (a game drawn in 3D: the graphics chip)
         self.log_cb = LOG(self.log)
         self.logged = 0                                # (lines it's put in the log)
+        self.on_rumble = None                          # a game shaking a controller: said (the TV backlight's red)
+        self.rumble_cb = RUMBLE(self.rumble)
         self.missing = []                              # the chips an arcade game's zip hasn't got, as its emulator says
         self.disk, self.disk_ext = None, False         # (a game on discs: changing them)
         self.regions = []                              # its memory, where the game sees it: (start, length, pointer)
@@ -974,6 +984,15 @@ class Core:
     def put_string(self, data, value):
         C.cast(data, C.POINTER(C.c_char_p))[0] = value
 
+    def rumble(self, port, effect, strength):
+        """A game shaking a controller (it's been hit, mostly): passed on (glow.py: the TV backlight flashes red)."""
+        try:
+            if self.on_rumble is not None:
+                self.on_rumble(int(port), int(effect), int(strength))
+        except Exception as ex:                        # (never the game's end)
+            print(f"game: rumble: {ex!r}", file=sys.stderr, flush=True)
+        return True
+
     def answer(self, cmd, data):
         if cmd == 10:                                 # SET_PIXEL_FORMAT
             fmt = C.cast(data, C.POINTER(C.c_int))[0]
@@ -981,6 +1000,9 @@ class Core:
                 self.fmt = fmt
                 return True
             return False
+        if cmd == 23:                                 # GET_RUMBLE_INTERFACE: its controller shaken (the lights flash)
+            C.cast(data, C.POINTER(RumbleInterface))[0].set_rumble_state = self.rumble_cb
+            return True
         if cmd == 3:                                  # GET_CAN_DUPE
             C.cast(data, C.POINTER(C.c_bool))[0] = True
             return True
@@ -1302,6 +1324,8 @@ class Session:
     watch_who = ""
     watch_count = 0
     watch_hold = watch_asked = watch_paused = watch_fresh = False
+    glow = edges = hits = None                        # (no LED grid to light: glow.py's)
+    glow_next = rp_next = hit_at = 0.0
 
     def __init__(self, args, chan):
         self.args, self.chan = args, chan
@@ -1349,6 +1373,7 @@ class Session:
             self.screen.close()
             raise
         self.sound = Sound(args.sound, self.core.av.timing.sample_rate, args.volume)
+        self.core.on_rumble = self.glow_rumble        # (a hit: your TV backlight flashes red)
         self.ra = None                                # its achievements (RetroAchievements), if you're signed in
         self.ra_said = None                           # ...how many are yours, as media mode was last told
         self.cheevos_start()
@@ -1388,7 +1413,64 @@ class Session:
             self.screen.show_gpu(self.core.gpu, fmt[0], fmt[1], aspect, self.core.hw["flipped"])
         else:
             self.screen.show(a, fmt, aspect)
+        if self.glow is not None and self.glow.to:
+            self.glow_frame(a, fmt)
         self.stats[3] += time.perf_counter() - t
+
+    # -- your TV backlight (glow.py: an LED grid behind the TV, on another of your Pietatos or this one) -------------
+    def glow_aim(self, words):
+        """Where the picture's colours go now (glow ADDRESS:PORT ...; glow -: nowhere)."""
+        to = glow.targets(words)
+        if to and self.glow is None:
+            self.glow, self.edges, self.hits = glow.GlowOut(), glow.Edges(), glow.HitWatch()
+        if self.glow is not None:
+            self.glow.aim(to)
+
+    def glow_frame(self, a, fmt):
+        """The picture's edges, to the LEDs (GLOW_EVERY at most; one the graphics chip drew: from the screen)."""
+        now = time.monotonic()
+        if now < self.glow_next:
+            return
+        self.glow_next = now + glow.GLOW_EVERY * 0.85   # (every other picture, at 60 a second)
+        try:
+            if a is not None:
+                rgb = {FMT_RGB565: glow.rgb565, FMT_XRGB8888: glow.rgb888}.get(fmt, glow.rgb555)
+                colours = self.edges.colours(a, rgb)
+            else:
+                p = self.screen.plan
+                if p is None:
+                    return
+                view = unturn_pixels(p["view"], self.screen.turn)
+                colours = self.edges.colours(view, glow.rgb_fields(self.screen.fields))
+            self.glow.frame(colours)
+        except Exception as ex:                       # (never the game's end: just no colours)
+            print(f"game: the TV backlight stopped ({ex!r})", file=sys.stderr, flush=True)
+            self.glow.aim(())
+
+    def glow_hit(self, strength):
+        now = time.monotonic()
+        if self.glow is not None and self.glow.to and now - self.hit_at >= glow.HIT_GAP:
+            self.hit_at = now
+            self.glow.event("hit", strength)
+
+    def glow_rumble(self, port, effect, strength):
+        """A game shaking player 1's controller: a hit, mostly (the lights flash red)."""
+        if port == 0 and strength >= glow.RUMBLE_HIT:
+            self.glow_hit(min(1.0, strength / 65535 + 0.3))
+
+    def glow_presence(self):
+        """What RetroAchievements says you're doing, looked at now and then: lives or health gone down, a hit."""
+        now = time.monotonic()
+        if now < self.rp_next:
+            return
+        self.rp_next = now + 0.25
+        try:
+            hit = self.hits.take(self.ra.rich_presence())
+        except Exception:                             # (an older rcheevos, a game it doesn't know: no hits from it)
+            self.rp_next = now + 60.0
+            return
+        if hit:
+            self.glow_hit(hit)
 
     # -- two Pietatos playing it together (pitato/netplay.py) ----------------------------------------------------
     def net_about(self, key=""):
@@ -1627,7 +1709,7 @@ class Session:
                 w.check(self.frame, total)
         w.frame(self.frame, self.core.buttons[0], self.core.buttons[1])
 
-    # -- watching another's game (--watch: netplay.py's WatchLink) ------------------------------------------------------
+    # -- watching another's game (--watch: netplay.py's WatchLink) -----------------------------------------------------
     def watch_join(self, spec):
         """Another's game, watched: taken up as it is now (its state); from then on its buttons play it here too. False:
         it couldn't be."""
@@ -1939,6 +2021,8 @@ class Session:
                             ach.get("title") or "", ach.get("description") or ""])
         self.cheevos_tell(*self.cheevos_counts())
         self.say("cheevo", (ach.get("title") or "").replace("\n", " "))
+        if self.glow is not None:
+            self.glow.event("cheevo")                 # (your TV backlight: gold)
 
     def cheevos_login(self, result, message):
         """Signed in, or not: its key turned down (or too old), or RetroAchievements not reached (no word of it
@@ -2053,6 +2137,8 @@ class Session:
         elif what == "watchstop":
             self.watch_stop()
             self.say("watchstopped")
+        elif what == "glow":                           # where the picture's colours go: your TV backlight's grids
+            self.glow_aim(words[1:])
         elif what == "notice":                         # a few words over the picture, for a few seconds
             self.screen.notice([" ".join(words[1:])[:80]])
         elif what == "pause":
@@ -2244,6 +2330,8 @@ class Session:
                 self.core.buttons = live              # (back to what's held here)
             if self.ra is not None:
                 self.cheevos_frame()
+                if self.glow is not None and self.glow.to and self.ra is not None:
+                    self.glow_presence()
             self.stats[2] += time.perf_counter() - t
             self.frame += 1
             self.stats[0] += 1
@@ -2291,6 +2379,8 @@ class Session:
         self.sound.stop()
         self.net_stop()                               # (the other's told: it's left)
         self.watch_stop()                             # (...and so are the ones watching)
+        if self.glow is not None:
+            self.glow.close()                         # (your TV backlight: it goes dark by itself)
         if self.watch is not None:
             self.watch.bye()
         try:

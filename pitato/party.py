@@ -5,12 +5,14 @@ the same place in it, on all of them. A song of yours: each takes it from the le
 the leader takes it once and passes it on byte for byte (Relay, RelayServer), so all of them play the same bytes from
 the same one on. Each one decodes it with FFmpeg as soon as it's told, then plays it through aplay so its first sound
 comes out at T, and keeps it in step with the leader's clock from then on (a speaker's clock runs a little fast or slow:
-now and then a sample's let go of, or said twice). screens/party.py starts it, and tells the others what to play."""
+now and then it's played a hair faster or slower, for a moment). screens/party.py starts it, and tells the others what
+to play."""
 import collections
 import fcntl
 import json
 import os
 import queue
+import random
 import socket
 import struct
 import subprocess
@@ -23,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
+from .glow import Beats
 from .util import UA
 
 PARTY_PORT = 5446            # the leader's clock (UDP) and the station it passes on (TCP)
@@ -31,11 +34,21 @@ PARTY_PINGS = 12             # pings to the leader's clock: the quickest answer'
 PARTY_RATE = 48000           # samples a second, as it's played (two channels, 16 bits each)
 FRAME = 4                    # bytes a sample takes
 PARTY_OUT = (100000, 20000)  # aplay's buffer and its period, in microseconds (the same on each one: as late, alike)
-PARTY_PIPE = 0.04            # seconds of sound waiting in aplay's pipe, kept
+PARTY_PIPE = 0.04            # seconds of sound waiting in aplay's pipe, kept (more when this one's busy: half again
+PARTY_PIPE_MOST = 0.25       # as long as it's lately been kept from looking, up to this, so aplay never runs out)
 PARTY_STEP = 0.01            # seconds between looks at how it's keeping up
-PARTY_SLACK = 0.002          # seconds out of step before it's put right...
-PARTY_FIX = 48               # ...a millisecond's samples at a time (let go of, or said again)
-PARTY_JUMP = 0.05            # ...or, this far out, all at once
+PARTY_FIT = 4.0              # seconds of how much aplay had taken when that a straight line's drawn through: when it'll
+                             # take what's written next (it takes a period at a time: a look at a moment can be a period
+                             # out either way; the line goes through the middle of them)
+PARTY_SETTLE = 0.4           # seconds how far out of step it is is worked out over, from that
+PARTY_SLACK = 0.002          # seconds out of step before it's put right (2 ms: as far as sound goes in 70 cm): played
+PARTY_EVEN = 0.0004          # a little faster or slower till it's this near
+PARTY_NEAR = 0.0008          # ...or this far out for PARTY_WAIT seconds on end (a sound card that keeps time: still
+PARTY_WAIT = 3.0             # as near to the clock as the rest)
+PARTY_TRIM = 0.003           # ...at most this much faster or slower (0.3%: too little to hear)
+PARTY_PULL = 2.0             # ...a second out: this much faster or slower (and as much less for less)
+PARTY_JUMP = 0.05            # ...or, this far out, all at once (faded across: no click)
+PARTY_FADE = 0.005           # seconds a sound fades in after silence, or out into a pause
 PARTY_DECODED = 30.0         # seconds of sound decoded ahead, at most
 PARTY_KEEP = 4 << 20         # bytes of a station the leader keeps, to pass on (a few minutes of it)
 PARTY_BEHIND = 3.0           # seconds of a station a start is from, behind the newest that's come (each one's ready)
@@ -295,6 +308,53 @@ def pipe_fill(fd):
         return None
 
 
+class Pace:
+    """How fast aplay's taking the sound, and when it'll take a given sample: a straight line through how much it had
+    taken when, over the last PARTY_FIT seconds (from a moment after it starts: it fills its buffer at once first),
+    drawn again every tenth of a second."""
+
+    def __init__(self, start):
+        self.start = start + PARTY_OUT[0] / 1e6 + 0.15
+        self.seen = collections.deque()
+        self.line = None                               # (t0, taken then, from where on the line, samples a second)
+        self.drawn = 0.0
+
+    def add(self, t, taken):
+        if t < self.start:
+            return
+        self.seen.append((t, taken))
+        while self.seen[0][0] < t - PARTY_FIT:
+            self.seen.popleft()
+        if t - self.drawn >= 0.1:
+            self.drawn = t
+            self.line = self.draw()
+
+    def draw(self):
+        """The line through them, once there's enough of them and it's a likely one (as fast as the usual rate, near
+        enough); else None."""
+        if len(self.seen) < 20 or self.seen[-1][0] - self.seen[0][0] < 0.3:
+            return None
+        ts = np.fromiter((p[0] for p in self.seen), dtype=np.float64, count=len(self.seen))
+        cs = np.fromiter((p[1] for p in self.seen), dtype=np.float64, count=len(self.seen))
+        x, y = ts - ts[0], cs - cs[0]
+        xm, ym = x.mean(), y.mean()
+        rate = float(((x - xm) * (y - ym)).sum() / max(((x - xm) ** 2).sum(), 1e-12))
+        if not 0.98 * PARTY_RATE < rate < 1.02 * PARTY_RATE:
+            return None
+        return float(ts[0]), float(cs[0]), float(ym - rate * xm), rate
+
+    def when(self, sample, t, taken):
+        """When aplay takes sample (counted from its start), by this one's clock: from the line, if there is one; else
+        from how much it's taken now, at the usual rate."""
+        if self.line is not None:
+            t0, c0, base, rate = self.line
+            if abs(c0 + base + rate * (t - t0) - taken) < 3 * PARTY_OUT[1] / 1e6 * PARTY_RATE:
+                return t0 + (sample - c0 - base) / rate
+            self.seen.clear()                          # (it stopped a moment, or jumped: a new line from here)
+            self.line = None
+        return t + (sample - taken) / PARTY_RATE
+
+
 class PartyPlayer:
     """One song or station, played in step with the leader's clock. src: a file, or a web address (the leader's web page,
     or the station it passes on); at: when it plays, by the leader's clock; pos: from where in it (seconds); clock: the
@@ -302,8 +362,9 @@ class PartyPlayer:
     pre and you, as_you's); aplay plays it, its first sound at that time, the rest kept in step: where it is in it is a
     sum of the clock from then on (paused: as it was, till it plays on)."""
 
-    def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None):
+    def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None, on_beat=None):
         self.src, self.pos0 = src, max(0.0, float(pos or 0))
+        self.beats = Beats(PARTY_RATE, on_beat) if on_beat is not None else None   # (an LED grid's: glow.py)
         self.clock = clock or time.monotonic
         self.device, self.volume = device, volume
         self.lock = threading.Lock()
@@ -314,7 +375,17 @@ class PartyPlayer:
         self.stop_at = None                            # (when it pauses, the sample it pauses on): paused from then
         self.done_at = None                            # when its last sound plays (the leader's clock), once it's known
         self.played = 0                                # samples written to aplay of it (not silence)
-        self.last = bytes(FRAME)                       # ...the last of them (said again, to wait a moment)
+        self.x = 0.0                                   # where it is: a fraction of a sample on from self.next
+        self.drift = None                              # how far out of step it is, worked out over a while (samples:
+                                                       # + behind the clock, - ahead of it)
+        self.trim = 1.0                                # samples taken for each one played (a little more or less:
+                                                       # faster or slower, to put it right)
+        self.landing = False                           # ...put right: on to a whole sample again, smoothly
+        self.off_since = None                          # ...when it was last more than PARTY_NEAR out (and still is)
+        self.fade = 0                                  # samples left of a fade in (after silence, or a jump)
+        self.xfade = None                              # ...what it was playing before a jump (and how much of it's
+                                                       #  gone): faded out as it goes on
+        self.until = None                              # ...ahead after a jump: silence till then (the leader's clock)
         self.closed = False
         self.aplay = None
         args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error"]
@@ -418,8 +489,9 @@ class PartyPlayer:
 
     # -- feeding aplay ------------------------------------------------------------------------------------------------
     def play(self):
-        latency = PARTY_OUT[0] / 1e6                   # (aplay's buffer, kept full: what's written is heard that late)
-        want_fill = int(PARTY_PIPE * PARTY_RATE) * FRAME
+        latency = PARTY_OUT[0] / 1e6                   # (aplay's buffer, kept full: what it takes is heard that late)
+        was, pending, sent, pace = None, b"", 0, None
+        last, away = None, 0.0                         # (when it last looked; the longest between looks, lately)
         while not self.closed:
             a = self.aplay
             if a is None or a.poll() is not None:      # (no sound out: tried again a moment later)
@@ -427,76 +499,235 @@ class PartyPlayer:
                 if not self.closed:
                     self.start_aplay()
                 continue
+            if a is not was:                           # (a new aplay: how fast it takes it, from the start)
+                was, pending, sent, pace = a, b"", 0, Pace(time.monotonic())
             fd = a.stdin.fileno()
+            t0 = time.monotonic()
             fill = pipe_fill(fd) or 0
-            n = (want_fill - fill) // FRAME            # samples to write now
+            now = time.monotonic()
+            away = max(now - last if last is not None else 0.0, away * 0.998)
+            last = now
+            want_fill = int(min(PARTY_PIPE_MOST, max(PARTY_PIPE, away * 1.5)) * PARTY_RATE) * FRAME
+            taken = (sent - fill) / FRAME              # (samples aplay's taken so far)
+            if now - t0 < 0.002:                       # (a look that took a while, kept waiting: not on the line)
+                pace.add((t0 + now) / 2, taken)
+            n = (want_fill - fill - len(pending)) // FRAME   # samples to write now
             if n > 0:
-                head = self.clock() + fill / FRAME / PARTY_RATE + latency   # (when the next one written is heard)
+                first = (sent + len(pending)) / FRAME  # (the first of them: when aplay takes it, and it's heard then)
+                head = pace.when(first, now, taken) + latency + (self.clock() - time.monotonic())
                 data = self.next_out(head, n)
+                if self.beats is not None:             # (its beats, as they'll be heard: your TV backlight's)
+                    try:
+                        self.beats.feed(data, head)
+                    except Exception as ex:
+                        print(f"party: no beats ({ex!r})", flush=True)
+                        self.beats = None
+                pending += data
+            if pending:                                # (all of it, in order: what the pipe can't take yet, next time)
                 try:
-                    os.write(fd, data)
+                    k = os.write(fd, pending)
                 except BlockingIOError:
-                    pass
+                    k = 0
                 except OSError:
+                    k = 0
                     try:
                         a.kill()
                     except OSError:
                         pass
-            time.sleep(PARTY_STEP)
+                sent += k
+                pending = pending[k:]
+            time.sleep(PARTY_STEP * (0.5 + random.random()))   # (never in time with aplay's own gulps: its line's
+                                                               #  through the middle of them, not one side)
 
     def next_out(self, head, n):
         """n samples to write, the first heard at head (the leader's clock): silence till it starts (and while it's
-        paused), then the song, a little let go of or said again to keep it where the clock says it should be."""
-        out = bytearray()
+        paused), then the song, kept where the clock says it should be: played a fraction faster or slower when it's
+        out of step (worked out over a while), all at once only when it's far out (or at its start)."""
+        out = []                                       # (pieces: each samples x 2, floats)
+        rate = PARTY_RATE
         with self.lock:
-            while len(out) < n * FRAME:
-                t = head + len(out) / FRAME / PARTY_RATE
+            i = 0
+            measured = False
+            while i < n:
+                t = head + i / rate
+                left = n - i
+                if self.until is not None and t < self.until:   # (ahead, after a jump: silence till the clock's there)
+                    k = min(left, max(1, int(np.ceil((self.until - t) * rate))))
+                    out.append(np.zeros((k, 2), dtype=np.float32))
+                    i += k
+                    continue
+                self.until = None
                 want = self.sample_at(t)
-                left = n - len(out) // FRAME
                 if want is None:                       # (silence: till it starts, or plays on, or for the rest)
                     at = self.anchor[0] if self.stop_at is None else None
-                    k = left if at is None or at <= t else min(left, max(1, int((at - t) * PARTY_RATE)))
-                    out += bytes(k * FRAME)
+                    k = left if at is None or at <= t else min(left, max(1, int((at - t) * rate)))
+                    out.append(np.zeros((k, 2), dtype=np.float32))
+                    i += k
+                    self.fade, self.xfade = int(PARTY_FADE * rate), None   # (a fade in when it plays again)
                     continue
-                err = want - self.next                 # (+: behind the clock; -: ahead of it)
-                if abs(err) > PARTY_JUMP * PARTY_RATE or (self.played == 0 and err):
-                    fix = err                          # (far out, or its very start: put right at once)
-                elif abs(err) > PARTY_SLACK * PARTY_RATE:
-                    fix = max(-PARTY_FIX, min(PARTY_FIX, err))
-                else:
-                    fix = 0
-                if fix > 0:                            # (behind: those let go of)
-                    have = len(self.pcm) // FRAME
-                    drop = min(fix, have)
-                    del self.pcm[:drop * FRAME]
-                    self.next += drop
-                    if drop < fix and not self.decoded:   # (not decoded yet: what's due is let go of as it comes)
-                        out += bytes(left * FRAME)
+                if self.stop_at is not None and self.stop_at[0] > t:   # (a pause coming: up to it, this time)
+                    left = min(left, max(1, int(np.ceil((self.stop_at[0] - t) * rate))))
+                err = want - (self.next + self.x)      # (+: behind the clock; -: ahead of it)
+                if self.played == 0 or (abs(err) > PARTY_JUMP * rate and abs(self.drift or 0.0) > PARTY_JUMP * rate / 2):
+                    if self.jump(err, out, left, t):   # (far out, or its very start: put right at once)
                         break
-                elif fix < 0:                          # (ahead: the last sound said again, a little longer, while
-                    k = min(-fix, left)                #  the clock catches up with where it is in it)
-                    out += (bytes(out[-FRAME:]) if len(out) >= FRAME else self.last) * k
+                    i = sum(len(p) for p in out)
                     continue
-                left = n - len(out) // FRAME
-                take = min(left, len(self.pcm) // FRAME)
-                if take <= 0:
-                    if self.decoded:                   # (the end: its last sound's heard then)
-                        if self.done_at is None:
-                            self.done_at = t
-                        out += bytes(left * FRAME)
-                        break
-                    out += bytes(left * FRAME)         # (not decoded yet: silence, and it catches up after)
+                if not measured:                       # (how far out it is, worked out over a while)
+                    measured = True
+                    k = min(1.0, n / rate / PARTY_SETTLE)
+                    self.drift = err if self.drift is None else self.drift + (err - self.drift) * k
+                    self.steer(t)
+                got = self.take(left)
+                if got is None:                        # (nothing to play now)
+                    if self.decoded and self.done_at is None:
+                        self.done_at = t               # (the end: its last sound's heard then)
+                    out.append(np.zeros((left, 2), dtype=np.float32))
                     break
-                chunk = bytes(self.pcm[:take * FRAME])
-                del self.pcm[:take * FRAME]
-                self.next += take
-                self.played += take
-                if self.volume < 100:
-                    a = np.frombuffer(chunk, dtype="<i2")
-                    chunk = ((a.astype(np.int32) * int(self.volume * 256 // 100)) >> 8).astype("<i2").tobytes()
-                out += chunk
-                self.last = chunk[-FRAME:]
-        return bytes(out[:n * FRAME])
+                out.append(self.shaped(got, t))
+                i += len(got)
+        a = np.concatenate(out)[:n] if out else np.zeros((n, 2), dtype=np.float32)
+        return np.clip(np.rint(a), -32768, 32767).astype("<i2").tobytes()
+
+    def jump(self, err, out, left, t):
+        """Put right at once: behind, what's due let go of; ahead, silence till the clock gets there. At its start, it
+        fades in; in the middle, what it was playing fades out across the jump (into what's due, or the silence): no
+        click. True: the rest of this is silence (it isn't decoded that far yet, or it's over)."""
+        fresh = self.played == 0
+        fade = int(PARTY_FADE * PARTY_RATE)
+        was = None if fresh else self.peek(fade)       # (what it was about to play)
+        self.x, self.drift, self.trim, self.landing, self.off_since = 0.0, 0.0, 1.0, False, None
+        self.until = None
+        e = int(round(err))
+        if e > 0:                                      # (behind: what's due let go of)
+            drop = min(e, len(self.pcm) // FRAME)
+            del self.pcm[:drop * FRAME]
+            self.next += drop
+            if drop < e:
+                if self.decoded and self.done_at is None:
+                    self.done_at = t                   # (it's over: what was due is past its end)
+                out.append(self.fading(was, left))     # (or not decoded yet: let go of as it comes)
+                self.fade, self.xfade = fade, None
+                return True
+            if was is None or not len(was):
+                self.fade = fade
+            else:
+                self.xfade = (was, 0)                  # (faded out as what's due now's faded in: take's)
+        elif e < 0:                                    # (ahead: silence till the clock's there, it faded out into it)
+            self.until = t - e / PARTY_RATE
+            k = min(-e, left)
+            out.append(self.fading(was, k))
+            self.fade, self.xfade = fade, None
+            return False
+        elif fresh:
+            self.fade = fade
+        self.played = max(1, self.played)              # (in step from here)
+        return False
+
+    def peek(self, k):
+        """The next k samples it'd play (fewer at its end), just as take would make them, not taken: floats."""
+        have = len(self.pcm) // FRAME
+        k = min(k, int((have - 2 - self.x) / self.trim) + 1) if have >= 2 else 0
+        if k <= 0:
+            return np.zeros((0, 2), dtype=np.float32)
+        pos = self.x + self.trim * np.arange(k, dtype=np.float64)
+        i0 = pos.astype(np.int64)
+        f = (pos - i0).astype(np.float32)[:, None]
+        src = np.frombuffer(bytes(self.pcm[:(int(i0[-1]) + 2) * FRAME]), dtype="<i2").reshape(-1, 2).astype(np.float32)
+        return src[i0] * (1 - f) + src[i0 + 1] * f
+
+    def fading(self, was, k):
+        """k samples: was, faded out (as loud as it's set), then silence."""
+        a = np.zeros((k, 2), dtype=np.float32)
+        if was is not None and len(was) and k:
+            m = min(k, len(was))
+            ramp = 1.0 - np.arange(1, m + 1, dtype=np.float32) / (len(was) + 1)
+            a[:m] = was[:m] * (ramp * self.volume / 100.0)[:, None]
+        return a
+
+    def steer(self, t):
+        """Faster or slower, from how far out of step it is (t: when, by the leader's clock): a little, while it's more
+        than PARTY_SLACK out (or PARTY_NEAR, for a while), till it's within PARTY_EVEN."""
+        d = self.drift / PARTY_RATE                    # (seconds: + behind, so a little faster)
+        if self.trim == 1.0:
+            if abs(d) < PARTY_NEAR:
+                self.off_since = None
+                return
+            if abs(d) < PARTY_SLACK:
+                if self.off_since is None:
+                    self.off_since = t
+                if t - self.off_since < PARTY_WAIT:
+                    return
+        if abs(d) < PARTY_EVEN:
+            self.landing, self.off_since = True, None  # (the next piece: as near as can be to its own speed, ending
+            return                                     #  on a whole sample, then just as they are)
+        self.landing = False
+        self.trim = 1.0 + max(-PARTY_TRIM, min(PARTY_TRIM, d * PARTY_PULL))
+
+    def take(self, k):
+        """Up to k samples, from where it is, at self.trim of the decoded ones each (in between two: a mix of them);
+        None when there are none to take."""
+        have = len(self.pcm) // FRAME
+        if self.trim == 1.0 and self.x == 0.0:         # (in step: just as they are)
+            k = min(k, have)
+            if k <= 0:
+                return None
+            got = np.frombuffer(bytes(self.pcm[:k * FRAME]), dtype="<i2").reshape(-1, 2).astype(np.float32)
+            del self.pcm[:k * FRAME]
+            self.next += k
+            self.played += k
+            return self.crossed(got)
+        r = self.trim
+        k = min(k, int((have - 2 - self.x) / r) + 1 if have >= 2 else 0)
+        if k <= 0:
+            return None
+        if self.landing and k >= 64:                   # (ending on a whole sample: a hair faster or slower for it)
+            r = (round(self.x + k) - self.x) / k
+        pos = self.x + r * np.arange(k, dtype=np.float64)
+        i0 = pos.astype(np.int64)
+        f = (pos - i0).astype(np.float32)[:, None]
+        src = np.frombuffer(bytes(self.pcm[:(int(i0[-1]) + 2) * FRAME]), dtype="<i2").reshape(-1, 2).astype(np.float32)
+        got = src[i0] * (1 - f) + src[i0 + 1] * f
+        end = self.x + r * k
+        used = int(round(end)) if self.landing and k >= 64 else int(end)
+        del self.pcm[:used * FRAME]
+        self.next += used
+        self.x = max(0.0, end - used)
+        if self.landing and k >= 64:                   # (on a whole sample: just as they are, from here)
+            self.x, self.trim, self.landing = 0.0, 1.0, False
+        self.played += k
+        return self.crossed(got)
+
+    def crossed(self, got):
+        """What it takes, with what it was playing before a jump faded out across the first of it (as what it takes
+        fades in)."""
+        if self.xfade is None:
+            return got
+        was, at = self.xfade
+        m = min(len(was) - at, len(got))
+        g = (np.arange(at + 1, at + m + 1, dtype=np.float32) / (len(was) + 1))[:, None]
+        got[:m] = was[at:at + m] * (1 - g) + got[:m] * g
+        at += m
+        self.xfade = None if at >= len(was) else (was, at)
+        return got
+
+    def shaped(self, a, t):
+        """Samples as they're heard: as loud as it's set, faded in after silence or a jump, and out into a pause that's
+        coming (t: when the first is heard)."""
+        gain = np.full(len(a), self.volume / 100.0, dtype=np.float32)
+        if self.fade > 0:
+            total = int(PARTY_FADE * PARTY_RATE)
+            k = min(self.fade, len(a))
+            done = total - self.fade
+            gain[:k] *= (done + np.arange(1, k + 1, dtype=np.float32)) / total
+            self.fade -= k
+        if self.stop_at is not None:                   # (a pause on its way: faded out into it)
+            stop = self.stop_at[0]
+            times = t + np.arange(len(a), dtype=np.float64) / PARTY_RATE
+            near = (times >= stop - PARTY_FADE) & (times < stop)
+            if near.any():
+                gain[near] *= ((stop - times[near]) / PARTY_FADE).astype(np.float32)
+        return a * gain[:, None]
 
     def close(self):
         self.closed = True
@@ -515,8 +746,9 @@ class PartyProc:
     title), answers from it, and poll(). lead: the leader's (its song's end is the end: it goes on to the next); the
     others' wait for the next song from the leader."""
 
-    def __init__(self, player, title="", artist="", length=None, lead=False):
+    def __init__(self, player, title="", artist="", length=None, lead=False, control=None):
         self.player, self.lead = player, lead
+        self.control = control                         # pause, and seek: media mode's to do (all of them, in a party)
         self.title, self.artist, self.length = title, artist, length
         self.lines = queue.Queue()
         self.stdin, self.stdout, self.stderr = self, self, iter(())
@@ -550,6 +782,13 @@ class PartyProc:
                 self.say(f"ANS_META_ARTIST='{self.artist}'")
             elif c == "get_property" and words[1:2] == ["pause"]:
                 self.say(f"ANS_pause={'yes' if self.player.paused() else 'no'}")
+            elif c == "pause" and self.control is not None:
+                self.control("pause", None)
+            elif c == "seek" and len(words) > 1 and self.control is not None:
+                try:
+                    self.control("seek", (float(words[1]), int(words[2]) if len(words) > 2 else 0))
+                except ValueError:
+                    pass
 
     def flush(self):
         pass

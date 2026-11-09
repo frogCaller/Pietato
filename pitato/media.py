@@ -98,6 +98,7 @@ from .screens.group import GroupScreen
 from .screens.fishtank import FishScreen
 from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
+from .screens.glow import GlowScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -111,7 +112,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen, LobbyScreen,
-            PartyScreen):
+            PartyScreen, GlowScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -1004,6 +1005,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.ears.stop()
         self.camera.stop()
         self.camera.close()
+        self.glow_stop()                               # (the TV backlight's LEDs dark)
+        self.glow_station_end()
         if self.active and self.fb is not None and system_stopping():
             self.goodbye()                 # the Pi is going off (the power switch, say): say so
             return
@@ -1491,6 +1494,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 game = None
             if game is not None:
                 beacon["game"] = game
+            grid = self.glow_beacon()                  # (its TV backlight: for your others to light)
+            if grid is not None:
+                beacon["glow"] = grid
         return beacon
 
     def web_shared(self):
@@ -1563,6 +1569,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
+        self.glow_tick(now)                            # (your TV backlights: this one's music on them)
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:

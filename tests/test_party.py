@@ -1,17 +1,19 @@
-"""Party mode (pitato/party.py, screens/party.py): your Pietatos playing the same song or station at once, in step. First
-its parts on their own: the leader's clock and another's pings of it (an offset found as NTP finds one, the quickest
-answer the nearest; none without the party's key); a station passed on (its song titles taken out of the sound, and
-kept; each one that takes it gets the same bytes from the same one on); and the players, against pretend sound cards
-(aplay here logs when each bit is heard): two started for the same time play the same sound at the same moment, one told
-late or whose sound card's clock runs fast or slow too, they pause and play on together, and a song's end is known.
-Then two Pietatos: this one ("gpi") and the TV's in a process of its own (peer_pietato.py, "tv"). A song plays here;
-HOME's menu has Party mode; the TV's asked, sets its clock against this one's, and from then on plays what this one
-plays, in step (taken from this one's web page): A here pauses both, A on the TV plays both on, R on the TV skips both
-to the next song. A song from the web (as the Internet Archive's are): each takes it from there, in step. Then a
-station, passed on by this one: both play the same bytes, in step; the TV leaves, and the party's over here. Ended from
-HOME's menu: the TV stops, this one plays on, on its own. Last, this one in another's party, with a game on here: the
-party's next song isn't played over the game; it leaves the party instead."""
-import json, os, shutil, statistics, subprocess, sys, threading, time
+"""Party mode (pitato/party.py, screens/party.py): your Pietatos playing the same song or station at once, in step.
+First its parts on their own: the leader's clock and another's pings of it (an offset found as NTP finds one, the
+quickest answer the nearest; none without the party's key); a station passed on (its song titles taken out of the
+sound, and kept; each one that takes it gets the same bytes from the same one on); and the players, against pretend
+sound cards (aplay here logs when each bit is heard): two started for the same time play the same sound at the same
+moment, one told late or whose sound card's clock runs fast or slow too, they pause and play on together, and a
+song's end is known; and kept in step without a click (a tone through it, a sound card taking it a period at a time
+as ALSA does, one running fast and kept waiting a moment, a pause faded out and in). Then two Pietatos: this one
+("gpi") and the TV's in a process of its own (peer_pietato.py, "tv"). A song plays here; HOME's menu has Party mode;
+the TV's asked, sets its clock against this one's, and from then on plays what this one plays, in step (taken from
+this one's web page): A here pauses both, A on the TV plays both on, R on the TV skips both to the next song. A song
+from the web (as the Internet Archive's are): each takes it from there, in step. Then a station, passed on by this
+one: both play the same bytes, in step; the TV leaves, and the party's over here. Ended from HOME's menu: the TV
+stops, this one plays on, on its own. Last, this one in another's party, with a game on here: the party's next song
+isn't played over the game; it leaves the party instead."""
+import json, math, os, shutil, statistics, subprocess, sys, threading, time, wave
 from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler, ThreadingHTTPServer
 real_run = subprocess.run                              # (FFmpeg, to make a station's sound: the test stands in for the rest)
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -225,18 +227,20 @@ def player(name, at, pos=0.0, speed=1.0, clock=None, src=SONG):
 
 at = time.monotonic() + 1.5
 a = player("a", at)
-b = player("b", at, speed=1.004)                       # (its sound card's clock runs fast)
+b = player("b", at, speed=1.001)                       # (its sound card's clock runs fast: ten times more than one does)
 time.sleep(0.6)
-c = player("c", at, speed=0.997)                       # (told late, and its clock runs slow)
+c = player("c", at, speed=0.999)                       # (told late, and its clock runs slow)
 time.sleep(1.5 + 6)
 la, lb, lc = (lag(f"{S}/{n}.log", at, after=1.0) for n in "abc")
+NEAR = 2 * P.PARTY_SLACK * 1000 + 1                    # (ms: each is kept within PARTY_SLACK of the clock, so two are
+                                                       #  within twice that of each other; and a millisecond, measuring)
 check(f"two players for the same time: each heard where the clock says, as near as its sound card can say (mean "
       f"{la[0]:.1f} ms, at most {la[1]:.1f}; {lb[0]:.1f}, {lb[1]:.1f}; {lc[0]:.1f}, {lc[1]:.1f})" if None not in la + lb + lc
       else "two players for the same time", None not in la + lb + lc and max(la[1], lb[1], lc[1]) < 35
-      and max(la[0], lb[0], lc[0]) - min(la[0], lb[0], lc[0]) < 4)
+      and max(la[0], lb[0], lc[0]) - min(la[0], lb[0], lc[0]) < NEAR)
 ab, cb = apart(f"{S}/a.log", f"{S}/b.log", at), apart(f"{S}/a.log", f"{S}/c.log", at)
 check(f"...one whose sound card runs fast, and one told late whose runs slow: in step with it all the same "
-      f"({ab}, {cb})", ab[0] is not None and cb[0] is not None and abs(ab[0]) < 4 and abs(cb[0]) < 4)
+      f"({ab}, {cb})", ab[0] is not None and cb[0] is not None and abs(ab[0]) < NEAR and abs(cb[0]) < NEAR)
 p_at = time.monotonic() + 0.4
 for pl in (a, b, c):
     pl.pause_at(p_at)
@@ -254,7 +258,7 @@ time.sleep(2.0)
 on = [h for h in heard(f"{S}/a.log") if h[0] > r_at + 0.2 and h[1] is not None]
 check(f"...on again together, from where they were ({on[0][1] if on else None:.3f} s, paused at {pos[0]:.3f})"
       if on else "...on again together", on and abs(on[0][1] - (pos[0] + (on[0][0] - r_at))) < 0.03
-      and abs(apart(f"{S}/a.log", f"{S}/c.log", r_at, after=0.3)[0]) < 4)
+      and abs(apart(f"{S}/a.log", f"{S}/c.log", r_at, after=0.3)[0]) < NEAR)
 for pl in (a, b, c):
     pl.close()
 short = S + "/short.wav"
@@ -279,6 +283,72 @@ time.sleep(3.0)
 check("...another's: not ended (it waits for the leader's next)", other.poll() is None)
 other.stdin.write("quit\n")
 check("...quit: ended", other.poll() == 0 and e.closed)
+
+# ---- clean sound: kept in step without a click ----------------------------------------------------------------------
+GULPS = S + "/gulps"                                   # (a pretend aplay that takes its sound a period at a time, as
+os.makedirs(GULPS)                                     #  ALSA does, playing it at its sound card's rate; all it's given
+open(GULPS + "/aplay", "w").write('''#!/usr/bin/env python3
+import os, sys, time
+args = sys.argv[1:]
+rate = int(args[args.index("-r") + 1]) if "-r" in args else 48000
+buf = next((int(a.split("=")[1]) for a in args if a.startswith("--buffer-time=")), 100000) / 1e6
+per = next((int(a.split("=")[1]) for a in args if a.startswith("--period-time=")), 20000) / 1e6
+speed = float(os.environ.get("FAKE_SPEED", "1.0"))
+out = open(os.environ["FAKE_OUT"], "ab", buffering=0)
+inp, period = sys.stdin.buffer, int(per * rate) * 4
+held, start, played = 0, None, 0
+while True:
+    if start is not None:
+        done = int((time.monotonic() - start) * rate * speed) - played
+        if done > 0:
+            played += min(done, held)
+            held -= min(done, held)
+    if held * 4 + period <= buf * rate * 4:
+        data = inp.read(period)
+        if not data:
+            break
+        out.write(data)
+        held += len(data) // 4
+        if start is None and held * 4 >= buf * rate * 4 - period:
+            start = time.monotonic()
+        continue
+    time.sleep(per / 4)
+''')                                                    #  written to FAKE_OUT)
+os.chmod(GULPS + "/aplay", 0o755)
+TONE = S + "/tone.wav"
+tt = np.arange(RATE * 20) / RATE
+tone = (8000 * np.sin(2 * np.pi * 1000 * tt)).astype("<i2")
+with wave.open(TONE, "wb") as w:
+    w.setnchannels(2); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(np.stack([tone, tone], -1).tobytes())
+LIMIT = 3 * 8000 * (2 * np.pi * 1000 / RATE) ** 2       # (a tone's own second difference, at most, three times over)
+was_path = os.environ["PATH"]
+os.environ["PATH"] = GULPS + ":" + was_path
+for speed, pause in (("1.0", True), ("1.001", False)):
+    os.environ["FAKE_OUT"], os.environ["FAKE_SPEED"] = f"{S}/tone-{speed}.raw", speed
+    open(os.environ["FAKE_OUT"], "wb").close()
+    t0 = time.monotonic() + 0.5
+    pl = P.PartyPlayer(TONE, t0, volume=100)
+    if pause:                                          # (paused a moment, and on again: faded out, and in)
+        pl.pause_at(t0 + 3.0)
+        time.sleep(3.6)
+        pl.resume_at(time.monotonic() + 0.2)
+    else:                                              # (kept from it a moment, as a busy Pi can: Python's taken up
+        time.sleep(3.0)                                #  with a big sort a third of a second; it jumps to put that
+        big = [math.sin(k) for k in range(1200000)]    #  right, faded across)
+        big.sort()
+        del big
+    time.sleep(10.0 - 3.6 if pause else 7.0)
+    drift = (pl.drift or 0.0) / RATE * 1000
+    pl.close()
+    out = np.frombuffer(open(os.environ["FAKE_OUT"], "rb").read(), dtype="<i2").reshape(-1, 2)[:, 0].astype(np.float64)
+    on = np.nonzero(np.abs(out) > 100)[0]
+    out = out[on[0]:on[-1] - 240] if len(on) > 1000 else out
+    clicks = int(np.sum(np.abs(np.diff(out, 2)) > LIMIT))
+    check(f"a tone through it, its sound card {'as fast as the clock' if speed == '1.0' else 'running fast'}"
+          f"{', paused and on again' if pause else ', kept waiting a moment'}: kept in step ({drift:+.1f} ms) without "
+          f"a click ({clicks})",
+          clicks == 0 and abs(drift) < P.PARTY_SLACK * 1000 + 1)
+os.environ["PATH"] = was_path
 
 # ---- two Pietatos ------------------------------------------------------------------------------------------------------
 SONGS = [HOME + "/Music/One.wav", HOME + "/Music/Two.wav"]

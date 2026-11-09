@@ -15,6 +15,7 @@ from ..config import home_dir
 from ..library import LISTEN_KINDS
 from ..party import (ClockServer, clock_offset, PARTY_LEAD, PARTY_PORT, PartyPlayer, PartyProc, probe, Relay,
                      RelayServer)
+from .glow import GLOW_LEAD, GLOW_SOON
 from ..screen import aplay_device, sound_place
 from .. import savesync
 
@@ -110,32 +111,35 @@ class PartyScreen:
     def party_play(self, it, kind, target, start):
         """(play(), leading a party.) It, here and on each of yours at once: a moment from now, from where it is, each
         taking it from here (a song: from this one's web page; a station: passed on from this one, byte for byte, or
-        each its own if it can't be)."""
+        each its own if it can't be). Not in a party, but an LED grid wants its beat (screens/glow.py): just here, on
+        the same player (a station passed through here all the same: for its song's names)."""
         p = self.party
-        at = time.monotonic() + PARTY_LEAD
+        at = time.monotonic() + (PARTY_LEAD if p is not None else GLOW_LEAD)
         pos = max(0.0, float(start or 0)) if kind == "audio" else 0.0
         title = artist = ""
         length = None
         if kind == "radio":
-            relay = p["relay"]
+            st = p if p is not None else self.glow_station_for()
+            relay = st["relay"]
             if relay is None or relay.url != target or relay.gone is not None:
                 if relay is not None:
                     relay.close()
-                relay = p["relay"] = Relay(target)
-                p["server"].relay = relay
-                p["song"] = ""
+                relay = st["relay"] = Relay(target)
+                st["server"].relay = relay
+                st["song"] = ""
+            port = st["server"].port
             if relay.ready(3.0):
-                path = f"/station?token={p['token']}&from={relay.start_byte()}"
-                mine, theirs = f"http://127.0.0.1:{PARTY_PORT}{path}", {"port": PARTY_PORT, "path": path}
+                path = f"/station?token={st['token']}&from={relay.start_byte()}"
+                mine, theirs = f"http://127.0.0.1:{port}{path}", {"port": port, "path": path}
             else:                                      # (it can't be passed on: each takes it, all at once)
                 print(f"party: {it['title']} can't be passed on ({relay.gone}): each takes it", flush=True)
                 relay.close()
-                p["relay"] = p["server"].relay = None
+                st["relay"] = st["server"].relay = None
                 mine, theirs = target, {"url": target}
         elif os.path.isfile(target):
             title, artist, length = probe(target)
             mine = target                              # (the others: from this one's web page, where they know it is)
-            theirs = {"web": "/api/handoff/file?token=" + self.handoff_keys().issue(target)}
+            theirs = {"web": "/api/handoff/file?token=" + self.handoff_keys().issue(target)} if p is not None else {}
         else:                                          # (one from the web, the Internet Archive's: each takes it there)
             mine, theirs = target, {"url": target}
         item = {"kind": kind, "title": it["title"], "sub": it.get("sub") or "", "meta_title": title,
@@ -161,19 +165,43 @@ class PartyScreen:
 
     def party_pause(self):
         """A, leading: all of them pause (or play on) together, a moment from now."""
+        got = self.party_toggle()
+        if got is not None:
+            self.paused = got
+            self.dirty = True
+
+    def party_toggle(self):
+        """The player paused, or played on, a moment from now (all of them, leading a party): True if it's paused now,
+        False if it plays on, None if it isn't party mode's player. (Whether it's shown paused: the caller's.)"""
         proc = self.proc
         if not isinstance(proc, PartyProc):
-            return
-        at = time.monotonic() + PARTY_SOON
+            return None
+        at = time.monotonic() + (PARTY_SOON if self.party_leading() else GLOW_SOON)
         if proc.player.stop_at is not None:
             proc.player.resume_at(at)
             self.party_tell({"kind": "resume", "at": at})
-            self.paused = False
-        else:
-            proc.player.pause_at(at)
-            self.party_tell({"kind": "pause", "at": at})
-            self.paused = True
-        self.dirty = True
+            return False
+        proc.player.pause_at(at)
+        self.party_tell({"kind": "pause", "at": at})
+        return True
+
+    def party_control(self, what, arg):
+        """(Party mode's player, told "pause" or "seek" as mplayer is: the web page's remote, the Bot.) Done here, and on
+        all of them in a party (in another's: the leader's asked)."""
+        if what == "pause":
+            if self.party_on() and not self.party_leading():
+                self.party_ask("pause")
+            else:
+                self.party_toggle()
+        elif what == "seek" and self.kind == "audio" and isinstance(self.proc, PartyProc):
+            step, how = arg
+            if self.party_on() and not self.party_leading():
+                self.party_ask("ahead" if step >= 0 else "behind")
+                return
+            here = self.proc.player.position()
+            length = self.proc.length
+            to = here + step if how == 0 else (length or 0) * step / 100 if how == 1 else step
+            self.play(self.queue, self.qi, start=max(0.0, to), show=False)
 
     def party_seek(self, d):
         """◀▶ in a song, leading: all of them from a little further on (or back), together."""
@@ -294,9 +322,10 @@ class PartyScreen:
             self.stop()                                # (the song before it: the leader's already stopped its own)
         place = sound_place(self.setting("sound"))
         pre, you = as_you(home_dir())
+        beat = self.glow_beat if self.glow_beats_wanted() else None   # (an LED grid pulsing to it: screens/glow.py)
         player = PartyPlayer(src, at, pos=pos, device=aplay_device(None, place[0]), volume=self.volume,
-                             clock=time.monotonic if lead else self.party_clock, pre=pre, you=you)
-        proc = PartyProc(player, title=title, artist=artist, length=length, lead=lead)
+                             clock=time.monotonic if lead else self.party_clock, pre=pre, you=you, on_beat=beat)
+        proc = PartyProc(player, title=title, artist=artist, length=length, lead=lead, control=self.party_control)
         if not lead:
             self.queue, self.qi = [it], 0
             self.pop_now()

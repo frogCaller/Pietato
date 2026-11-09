@@ -218,7 +218,12 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 in, else a TV on HDMI (a monitor that says it has no sound: the headphone jack), else
                 the Pi's own; or HDMI, headphones, a USB speaker...; a microphone isn't listed),
                 controller, swap A and B, start-up, and a random song at start-up. Bluetooth headphones
-                gone while something plays: it pauses (A plays on through the Pi), a game's menu comes up
+                gone while something plays: it pauses (A plays on through the Pi), a game's menu comes up.
+                TV backlight (a Pi with its pins free): an 8x8 grid of WS2812B LEDs on GPIO 10 (SPI: the
+                first time, config.txt's lines for it, then a restart), lit with the edges of the game on
+                whichever of your Pietatos it follows (pitato/glow.py: a UDP packet each picture), red for a
+                hit (lives or health going down, in its RetroAchievements rich presence; or the controller
+                shaken), gold for an achievement, and pulsing to music (party mode's player finds the beats)
 
 Your settings files (radio.txt, bot.txt...) are in the static folder of the Pietato folder.
 setup.sh tells the service where that is; run by hand, it's the static folder next to this script.

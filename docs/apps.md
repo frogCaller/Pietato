@@ -93,6 +93,21 @@ R and START on any of them pause it, move about in a song or skip, for all of th
 HOME's menu ends it on the one you started it on, and leaves it on the others. Settings > Share with other
 Pietatos needs to be on.
 
+## TV backlight
+
+An 8x8 grid of WS2812B LEDs behind your TV can light up with the colours along the edges of the game you're
+playing, on whichever of your Pietatos it follows. It flashes red when you're hit, gold when you unlock an
+achievement, and pulses to music. A hit is a game's lives or health going down in its RetroAchievements rich
+presence, or a game shaking the controller, so it shows in the games those cover.
+
+To wire it to the Pi behind the TV (not one in a GPi Case, whose screen uses those pins), connect DIN to GPIO 10
+(pin 19) and GND to a ground pin. Power it with 5 V from its own supply, since 64 LEDs can draw more than a Pi
+gives, and join that supply's ground to the Pi's. If the first LED flickers, a level shifter (a 74AHCT125) on DIN
+helps. Then turn it on in Settings > TV backlight. The first time, it turns on the Pi's SPI and asks you to
+restart. The same page sets which Pietato it follows (any of yours that's playing, by default), how bright it
+is, and whether it pulses to music. Turn, Mirror and Wiring match how it's put up: Show which way is up lights
+its top row red and its left side green.
+
 ## Fish Tank
 
 Each Pietato has a fish of its own in Apps > Fish Tank. With two or more on the same network, their tanks join up

@@ -420,7 +420,8 @@ class PlayerScreen:
         hls = is_hls(target)
         if kind == "live" and not plexlive and hls:     # the version that suits the Pi
             target = hls_pick(target)
-        if kind in LISTEN_KINDS and self.party_leading():   # (party mode: on all of yours too, in step: screens/party.py)
+        if kind in LISTEN_KINDS and (self.party_leading() or (self.party is None and self.glow_beats_wanted())):
+            # (party mode: on all of yours too, in step: screens/party.py; or just here, for an LED grid's beat)
             self.retry = None
             return self.party_play(it, kind, target, start)
         net = "://" in target

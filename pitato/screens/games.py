@@ -574,6 +574,7 @@ class GameScreen:
             self.watched_tick(run)                     # (watched by your others: who's come)
         if self.together_of(run) is not None:          # (played together: the other joined, left...)
             self.together_tick(run, now)
+        self.glow_game_tick(run, now)                  # (your TV backlights: where its colours go)
         if run.ended or (run.state == "starting" and now - self.game_since > 15):
             why = run.error or ("The game didn't start" if run.state == "starting" else "The game stopped")
             self.game_end()

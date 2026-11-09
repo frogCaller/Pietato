@@ -89,3 +89,6 @@ If you have a RetroAchievements account (it's free, at [retroachievements.org](h
 sign in on the web page, in Settings > Achievements, and your games earn achievements as you play. Each one
 shows at the top of the game when you get it, and Achievements in the game's menu lists them all. They're the
 regular kind (not hardcore), so save states still work. Disc games in `.chd` files don't get them yet.
+
+With an LED grid behind your TV, a game lights it with the colours along its edges: see
+[TV backlight](apps.md#tv-backlight).

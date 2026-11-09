@@ -676,6 +676,7 @@ def main():
     media.share_start()                            # (your other Pietatos told it's here: what it fetches, shared)
     media.eyes_start()                             # (a USB camera plugged in: someone moving is you, here: group chat)
     media.dock_start()                             # (a GPi Case 2: its dock watched, the picture following it)
+    media.glow_start()                             # (Settings > TV backlight: its LED grid lit)
     media.chromium_leftover()                      # (Chromium, if the last Pietato left it running: closed)
     control = Control()
     serve_control(media, control, key=control_key())

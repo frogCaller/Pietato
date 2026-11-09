@@ -26,6 +26,7 @@ from ..games import system
 from ..cheevos import LoginError, ra_account, ra_forget, ra_login, ra_save
 from .weather import WX_UNITS
 from .games import DS_SCREENS, DS_TOUCH, GAME_PICTURES
+from .glow import GLOW_KEYS
 
 ENTITY = re.compile(r"[a-z_]+\.[a-z0-9_]+")          # a Home Assistant entity: light.kitchen
 COIN = re.compile(r"[a-z0-9][a-z0-9-]{0,59}")         # a coin, as CoinGecko knows it: bitcoin, shiba-inu
@@ -127,6 +128,10 @@ class WebSettingsScreen:
             if self.setting("share") != "Off" else [])
             + self.web_peer_rows(), "Prices and the weather fetched once for them all, your game saves following "
             "you (a game picks up where you left it on whichever of them you played it on last), and Group chat.")
+        if "glow" in root:                             # (an LED grid behind the TV: a Pi with the pins for one)
+            sec("glow", "TV backlight", self.web_glow_rows(), "An 8 by 8 grid of LEDs behind the TV, lit with the "
+                "colours along the edges of the game on whichever of your Pietatos it follows, flashing red when "
+                "you're hit and gold for an achievement, and pulsing to music.")
 
         # WiFi
         w, went = self.wifi, self.wifi.get("said")
@@ -382,7 +387,7 @@ class WebSettingsScreen:
         if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "sound",
                    "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery", "share",
                    "attract") \
-                or key.startswith("game_picture_"):
+                or key.startswith("game_picture_") or key in GLOW_KEYS:
             return self.web_pick(key, value)
         handler = getattr(self, "web_set_" + key, None)
         if not key.isidentifier() or handler is None:
