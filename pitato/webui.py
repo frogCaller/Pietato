@@ -316,7 +316,7 @@ def host_ok():
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
              "bluetooth", "settings", "places"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
-              "/api/handoff", "/api/handoff/file", "/api/together")
+              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1111,6 +1111,21 @@ def together():
     cmd = {k: body[k] for k in TOGETHER_KEYS if k in body}
     cmd["from"] = request.remote_addr
     return pi_reply(ask_pi("POST", "/together", cmd, timeout=12))
+
+
+# ---- your Pietatos' group chat (pitato/circle.py, screens/group.py) -------------------------------------------------
+@app.route("/api/group", methods=["GET", "POST"])
+def group_chat():
+    """Another of your Pietatos says a line in the group chat (POST), or asks what's been said since it was off (GET,
+    since: when, by the clock). Pietato answers only one of yours (one it's heard lately, at this address)."""
+    if request.method == "POST":
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get("msg"), dict):
+            return jsonify(ok=False, error="What's that?"), 400
+        return pi_reply(ask_pi("POST", "/group", {"msg": body["msg"], "from": request.remote_addr}, timeout=8))
+    since = request.args.get("since", "0")[:24]
+    return pi_reply(ask_pi("GET", "/group?" + urllib.parse.urlencode({"since": since, "from": request.remote_addr or ""}),
+                           timeout=8))
 
 
 # ---- another of your Pietatos controlling this one with its buttons (pitato/pilot.py) --------------------------------

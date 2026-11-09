@@ -1,6 +1,8 @@
 """Settings > Home screen style: Bright, Glass (to start with) and Cards (Minimal's gone: one picked before is
 Glass now), each drawn its own way, and each with every app's line along the bottom, what's playing popping up, and
-the weather there once Weather knows where you are (and not before)."""
+the weather there once Weather knows where you are (and not before). Cards on a bigger screen: a TV's as far
+apart across as down; an ultrawide's in two rows of taller cards (▶, ▼ and ▲ going through them); the GPi
+Case's as ever."""
 import io, json, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -134,6 +136,46 @@ for style in ["Bright", "Glass", "Cards"]:
         a_x = next(xy for t, f, xy in said if t == "A")[0]
         check("...rings round the buttons' letters", near(img.getpixel((int(a_x) - 10, 456)), (150, 158, 170), 40)
               and near(img.getpixel((int(a_x), 456 - 6)), img.getpixel((int(a_x), 456 - 6)), 0))
+
+# ---- Cards on a bigger screen: a TV's as far apart as its rows are; an ultrawide's in two rows of taller cards ----
+def card_gaps(cols):
+    """(a card's width and height, the gap across, the gap down) for the cards just drawn."""
+    slots = g.home_layout(len(apps), cols)
+    a, b, c = (m.card_box(k, slots, cols, 0) for k in (0, 1, cols))
+    return round(a[2] - a[0]), round(a[3] - a[1]), round(b[0] - a[2]), round(c[1] - a[3])
+
+
+m.set_setting("home_style", "Cards")
+m.view, m.home_sel = "home", 0
+m.fb.w, m.fb.h = 960, 540                           # (a TV's, its menus 960 x 540)
+texts = drawn(m)
+wide, high, across, down = card_gaps(m.home_columns(len(apps)))
+check(f"Cards on a TV: five across, as far apart across as down, none drawn out wide ({wide} x {high}, {across} "
+      f"across, {down} down)", m.home_columns(len(apps)) == 5 and across == down == 27 and wide <= 1.75 * high
+      and "Settings" in texts)
+m.fb.w, m.fb.h = 1140, 480                          # (an ultrawide's: 3440 x 1440, its menus 1140 x 480)
+texts = drawn(m)
+cols = m.home_columns(len(apps))
+wide, high, across, down = card_gaps(cols)
+check(f"...on an ultrawide: two rows, {cols} across, taller cards as far apart across as down ({wide} x {high}, "
+      f"{across} across, {down} down), every app on it", cols == 8 and high == 118 and across == down == 26
+      and m.home_rows_fit() == 2 and all(n in texts for n in ("Home", "Games", "Settings")))
+glyph_y = next(xy for t, f, xy in said if t == "Home")[1]
+x0, y0, x1, y1 = m.card_box(0, g.home_layout(len(apps), cols), cols, 0)
+check(f"...its name lower down a taller card, in the middle of it with its glyph ({glyph_y - y0:.0f} of {y1 - y0:.0f})",
+      y1 - glyph_y == 16 + (118 - 92) // 2)
+moves = []
+for b in ("right",) * 8 + ("down", "up"):
+    m.press(b); moves.append(apps[m.home_sel % len(apps)])
+check(f"...▶ along the top row and on to the next; ▼ and ▲ to the nearest below and above ({moves})",
+      moves[:8] == apps[1:9] and moves[8] == apps[8] and moves[9] in apps[:8])
+m.set_setting("home_style", "Glass")
+check(f"...Glass's on an ultrawide: three rows as ever ({m.home_columns(len(apps))} across)",
+      m.home_columns(len(apps)) == 5 and m.home_rows_fit() == 3)
+del m.fb.w, m.fb.h                                  # (the GPi Case's again)
+m.set_setting("home_style", "Cards")
+check(f"...and on the GPi Case as ever ({card_gaps(5)})",
+      m.home_columns(len(apps)) == 5 and card_gaps(5) == (108, 92, 14, 12))
 
 # the pop-up, in each
 radio = {"key": "r1", "title": "Jazz Radio", "kind": "radio", "src": "http://192.168.1.20:8000/jazz", "sub": ""}

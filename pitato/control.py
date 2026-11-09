@@ -142,6 +142,8 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.coder_state())
                 if u.path == "/bluetooth":
                     return self.reply(200, media.web_bluetooth())
+                if u.path == "/group":                 # (the group chat: what's been said, for another of yours)
+                    return self.reply(200, media.web_group_since(q.get("since"), q.get("from")))
                 if u.path == "/peers":                 # (your other Pietatos on now: the web page renames one)
                     return self.reply(200, {"peers": media.pie.peer_rows()})
                 if u.path == "/settings":
@@ -230,6 +232,12 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_saves_news(cmd))
                 except Exception as ex:
                     print(f"saves: {ex!r}", flush=True)
+                    return self.reply(500, {"error": "Something went wrong on the Pi"})
+            if cmd["cmd"] == "group":                  # a line said in the group chat, on another of yours: kept
+                try:                                   # at once, off the main loop
+                    return self.reply(200, media.web_group(cmd))
+                except Exception as ex:
+                    print(f"group chat: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "computer":               # another computer's files: it can take a while, so here
                 try:

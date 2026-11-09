@@ -123,7 +123,8 @@ rows = {r["kind"]: r for r in sec["rows"]}
 peer = rows.get("peer") or {}
 check(f"Settings has Other Pietatos: this one's name, sharing, and each of yours on now ({sec['title']}, "
       f"{[r['kind'] for r in sec['rows']]})", sec["title"] == "Other Pietatos"
-      and [r["kind"] for r in sec["rows"]] == ["text", "choice", "peer"])
+      and [r["kind"] for r in sec["rows"]] == ["text", "choice", "choice", "choice", "peer"]   # (Group chat's two)
+      and [r["key"] for r in sec["rows"]][2:4] == ["group_talk", "group_eyes"])
 check(f"...this one's name: none yet, the Pi's own in its place ({rows['text']})",
       rows["text"]["key"] == "name" and rows["text"]["value"] == "" and rows["text"]["placeholder"] == "gpi")
 check(f"...the den's: its name, where it is, its colour, that it's on ({peer})", peer.get("value") == "raspberrypi"

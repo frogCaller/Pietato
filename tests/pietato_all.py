@@ -13,7 +13,7 @@ if _REPO not in sys.path:
     sys.path.append(_REPO)           # (after this folder)
 
 _ORDER = ["theme", "config", "asyou", "util", "lengths", "net", "system", "gpicase", "bluetooth", "screen", "gpu", "radio", "tv", "library", "home",
-          "weather", "documents", "filters", "cameras", "nearby", "voice", "listen", "bot", "coder", "crypto", "stocks",
+          "weather", "documents", "filters", "cameras", "circle", "nearby", "voice", "listen", "bot", "coder", "crypto", "stocks",
           "homeassistant", "pihole", "plex", "jellyfin", "computers", "sims", "clock", "notes", "fortune", "mandelbrot", "snake", "shrink", "update", "emulator", "discs", "games", "handoff",
           "www", "chromium",
           "inputs", "pilot", "control",
@@ -24,6 +24,7 @@ _ORDER = ["theme", "config", "asyou", "util", "lengths", "net", "system", "gpica
           "screens.settings", "screens.bluetooth", "screens.controller", "screens.weather", "screens.web", "screens.computers", "screens.progs", "screens.pihole", "screens.sysdash",
           "screens.hasettings", "screens.websettings", "screens.www", "screens.chromium", "screens.handoff",
           "screens.attract", "screens.together", "screens.konami", "screens.notes", "screens.fortune", "screens.pilot",
+          "screens.group",
           "media", "app",
           "assist", "face", "screens.assist"]   # (last: their names never hide another module's, as computers' parse)
 _MAYBE = {"screens.hasettings", "screens.websettings", "www", "chromium", "screens.www", "screens.chromium",
@@ -43,10 +44,13 @@ _mods = [_m for _m in (_load(_n) for _n in _ORDER) if _m is not None]
 if _reloading:                       # importlib.reload(pietato_all): the whole package afresh, as before
     for _m in _mods:
         importlib.reload(_m)
-for _m in _mods:                     # (what's asked of the bot, kept for this test alone, not where the Pi keeps it)
-    if _m.__name__ == "pitato.assist":
+for _m in _mods:                     # (what's asked of the bot, kept for this test alone, not where the Pi keeps it;
+    if _m.__name__ == "pitato.assist":                                   # the group chat too)
         _m.ASSIST_FILE = _os.path.join(_os.environ.get("PIETATO_TEST_WORK") or "/tmp", "tassist_gk",
                                        f"assist_{_os.getpid()}.json")
+    if _m.__name__ == "pitato.circle":
+        _m.GROUP_LOG = _os.path.join(_os.environ.get("PIETATO_TEST_WORK") or "/tmp", "tgroup_gk",
+                                     f"group_{_os.getpid()}.json")
 
 
 class _AllOfIt(types.ModuleType):

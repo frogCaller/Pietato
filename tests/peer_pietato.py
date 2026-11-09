@@ -11,7 +11,8 @@ It prints READY <its web page's address> once it's answering; then takes a line 
 screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu),
 news WHAT WHY (its emulator says WHAT, then ends: netgone, say), expire (another's asking to play together, not answered
 in time), peer URL NAME, set KEY VALUE (a setting), pilots (the controllers another Pietato's working it with, as
-JSON), quit. PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone."""
+JSON), group say TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON, for log), quit.
+PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone."""
 import json
 import os
 import sys
@@ -44,7 +45,7 @@ for d in ("Music", "Videos", "Pictures", "Documents", "Games/Saves"):
 S = HOME + "/.pietato"
 os.makedirs(S, exist_ok=True)
 g.STATE_FILE = S + "/state.json"; g.CACHE_DIR = S + "/cache"; g.PLEX_FILE = S + "/plex.json"; g.PADS_FILE = S + "/pads.json"
-g.COMPUTERS_FILE = S + "/computers.json"; g.NET_ROOT = S + "/net"
+g.COMPUTERS_FILE = S + "/computers.json"; g.NET_ROOT = S + "/net"; g.GROUP_LOG = S + "/group.json"
 g.home_dir = lambda: HOME
 import gk_static  # noqa: E402
 gk_static.use_home(g, HOME)
@@ -215,6 +216,30 @@ try:
             key, value = words[1].split(None, 1)
             m.set_setting(key, value.strip())
             print("ok", file=SAY, flush=True)
+        elif words[0] == "group":                       # the group chat: say TEXT, log, quiet on|off, answer Yes|No
+            rest = (words[1] if len(words) > 1 else "").split(None, 1)
+            got, done_it = [], threading.Event()
+
+            def job(what=rest[0] if rest else "", arg=rest[1].strip() if len(rest) > 1 else ""):
+                try:
+                    c = m.circle
+                    if what == "say":
+                        m.you_noticed()
+                        c.you_said(arg)
+                    elif what == "quiet":
+                        m.set_setting("group_talk", "Off" if arg == "on" else "On")
+                        c.set_quiet(arg == "on")
+                    elif what == "answer":
+                        ask = c.open_ask()
+                        got.append(json.dumps({"ok": bool(ask and c.answer(ask, arg))}))
+                    elif what == "log":
+                        got.append(json.dumps(c.lines()))
+                finally:
+                    done_it.set()
+            m.soon_jobs.append(job)
+            m.wake()
+            done_it.wait(10)
+            print(got[0] if got else "ok", file=SAY, flush=True)
         elif words[0] == "pilots":                      # the controllers another Pietato's working it with
             pads = list(m.pads.by_path.values()) if m.pads else []
             print(json.dumps({"active": m.active, "view": m.view, "home_sel": m.home_sel, "guard": m.web_guard,

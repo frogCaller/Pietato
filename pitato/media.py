@@ -28,6 +28,7 @@ from .weather import Weather
 from .documents import doc_text
 from .cameras import CAM_BEACON, CAM_SHOT_SHOW, Camera
 from .nearby import PEER_KEEP, PEER_SAYS, PieInk
+from .circle import YOU_WITHIN
 from .voice import Voice
 from .listen import Ears, LISTEN_TRIES
 from .term import Terminal
@@ -93,6 +94,7 @@ from .screens.fortune import FortuneScreen
 from .screens.together import TogetherScreen
 from .screens.konami import KonamiScreen
 from .screens.pilot import PilotScreen
+from .screens.group import GroupScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -105,7 +107,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
-            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen):
+            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -468,6 +470,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.weather = Weather(lambda: self.setting("location"),
                                lambda: "C" if self.setting("units") == "°C" else "F", pie=self.pie)
         self.weather.on_change = self.weather_drawn
+        self.group_setup()                             # (Apps > Group chat: your Pietatos talking: screens/group.py)
 
     # -- settings ------------------------------------------------------------
     def setting(self, key):
@@ -693,6 +696,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.items[i] = self.lights_rows()
         elif tab["type"] == "konami":
             self.items[i] = self.konami_rows()
+        elif tab["type"] == "chat":                    # Apps > Group chat (screens/group.py)
+            self.items[i] = []
+            if self.active and self.tab == i and self.view == "list":
+                self.group_opened()
         elif tab["type"] == "pilot":                   # Home > Control another Pietato: which of yours are on
             self.items[i] = self.pilot_rows()
             self.pilot_looked = time.monotonic()
@@ -1420,13 +1427,15 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         power can't miss as it can the first). Sharing off: nothing."""
         if self.setting("share") == "Off":
             return
-        msg = json.dumps(self.share_beacon(self.own_name())).encode()
+        name = self.own_name()
+        msg = json.dumps(self.share_beacon(name)).encode()
+        full = json.dumps(self.share_beacon(name, full=True)).encode()   # (straight to yours: the group chat's too)
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 for to in ["255.255.255.255"] + self.pie.peer_tell():
                     try:
-                        s.sendto(msg, (to, CAM_BEACON))
+                        s.sendto(msg if to == "255.255.255.255" else full, (to, CAM_BEACON))
                     except OSError:
                         pass                           # (no network yet: next time)
         except OSError:
@@ -1448,15 +1457,22 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         """This Pietato's beacon, straight to one at ip."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.sendto(json.dumps(self.share_beacon(self.own_name())).encode(), (ip, CAM_BEACON))
+                s.sendto(json.dumps(self.share_beacon(self.own_name(), full=True)).encode(), (ip, CAM_BEACON))
         except OSError:
             pass
 
-    def share_beacon(self, host):
+    def share_beacon(self, host, full=False):
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
         colour (Settings > Accent colour: a dot in it beside its name on your other Pietatos, to tell apart two of
-        the same name)."""
-        return {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
+        the same name). full: the one told straight to each of yours (not to everyone on the network), for the group
+        chat too: what it's doing, what it's made of, and how long ago you were last noticed here."""
+        beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
+        if full:
+            beacon.update(doing=self.group_doing(), hw=self.group_hardware())
+            you = self.you_at
+            if you is not None and 0 <= time.time() - you <= YOU_WITHIN:
+                beacon["you"] = round(time.time() - you)
+        return beacon
 
     def web_shared(self):
         """GET /api/shared (from your network only: webui.py): what this Pietato has fetched, for your other
@@ -1524,6 +1540,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.fortune_tick(now)                     # (the Fortune Cookie: read out loud, or not)
         if self.pilot_on() or (self.view == "list" and self.tab_type() == "pilot"):
             self.pilot_tick(now)                       # (Home > Control another Pietato)
+        self.group_tick(now)                           # (Apps > Group chat: your Pietatos talking, and its pop-ups)
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:
@@ -1987,6 +2004,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 return r
         if ttype == "konami":
             r = self.press_konami(name, repeat)
+            if r != "pass":
+                return r
+        if ttype == "chat":
+            r = self.press_group(name, repeat)
             if r != "pass":
                 return r
         if ttype == "www":

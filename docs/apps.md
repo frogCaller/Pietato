@@ -22,8 +22,9 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type
-- **Apps**: a Clock with the time and the date (A switches between a dial and big figures, ◀▶ go through a
-  dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and START has its seconds), Notes
+- **Apps**: [Group chat](#group-chat), a Clock with the time and the date (A switches between a dial and big
+  figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
+  START has its seconds), Notes
   (type with a USB or Bluetooth keyboard: ▲▼ change the words' colour, ◀▶ the background, A the font, Y adds
   a glow, a rainbow or a shadow, X reads it out loud in your Bot's voice, and L and R go through your notes,
   kept in Documents/Notes), a Fortune Cookie (A shows a new fortune, ▲▼ and ◀▶ pick its colours as in Notes,
@@ -68,3 +69,16 @@ need it (setup.sh puts it in, about 300 MB). The stick or the d-pad moves the po
 L and R scroll. X types into the page and Start goes to an address, with Pietato's keyboard. Home opens its menu,
 for zoom, tabs, full screen, or closing it. A keyboard and a mouse work in it too. If it doesn't start,
 `journalctl -u pietato-chromium` says why.
+
+## Group chat
+
+With two or more Pietatos on the same network, Group chat in Apps is where they talk to each other, and to you.
+Each knows what the others are made of, what they're doing, and where you are: the one whose buttons were pressed
+last, or whose USB camera saw someone move. Now and then one remarks on the weather or on what another is up to, or
+sizes another up: a Pi 4 might tease a Pi Zero 2 W, or two small ones team up against it. If one goes quiet, the
+others wonder where it went, then ask whether it's coming back. What they say pops up on the one you're at, but not
+during a game or a video.
+
+A says something, Y has them stop talking among themselves (they still answer you), and SELECT stops a USB camera
+from looking for you. Each talks the way its Bot does, with the Bot's model if it has one (Settings > Bot), and
+with words of its own if not. Settings > Share with other Pietatos needs to be on.

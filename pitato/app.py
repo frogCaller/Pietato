@@ -229,6 +229,7 @@ def run(ui, media, control=None, stop=None):
                 continue                               # shutting down: let go of things, no more
             if down:
                 media.pad_used = pad                   # (the one in hand: Settings > Swap A and B's)
+                media.you_noticed()                    # (you're here: for the group chat, your others know)
             if sticks:
                 name = media.game_pad_button(pad, name)
                 if name is None:
@@ -245,6 +246,8 @@ def run(ui, media, control=None, stop=None):
         media mode's, cmatrix's and a text box's too (it types nothing of its own), but not Settings > Controller's.
         While Chromium's in front, keys and mouse are Chromium's own."""
         pointer = kb.pointer(ev)
+        if not pointer and getattr(ev, "type", None) == e.EV_KEY and getattr(ev, "value", 0) == 1:
+            media.you_noticed()                        # (a key typed here, the terminal's too: you're here)
         if (not media.active or media.learning or media.chromium_shown()            # (Chromium's, while it's in front)
                 or (not pointer and (media.prog is not None or typing()))):
             for name in kb.let_go("pointer" if pointer else "keys"):   # (nothing stays held down)
@@ -267,6 +270,7 @@ def run(ui, media, control=None, stop=None):
             return
         for gesture in touch.translate(ev):
             media.web_guard = False                    # someone at the Pi has it
+            media.you_noticed()
             if media.resting:
                 media.stir()
                 continue
@@ -670,6 +674,7 @@ def main():
     media.shrinker.start()                         # (big videos made smaller, in the background)
     media.updater.start()                          # (a newer version looked for now and then: System > Update software)
     media.share_start()                            # (your other Pietatos told it's here: what it fetches, shared)
+    media.eyes_start()                             # (a USB camera plugged in: someone moving is you, here: group chat)
     media.dock_start()                             # (a GPi Case 2: its dock watched, the picture following it)
     media.chromium_leftover()                      # (Chromium, if the last Pietato left it running: closed)
     control = Control()

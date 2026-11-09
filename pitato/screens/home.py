@@ -38,7 +38,7 @@ class HomeScreen:
     def press_home(self, name, repeat):
         apps = self.home_apps()
         n = len(apps)
-        cols = home_cols(n)
+        cols = self.home_columns(n)
         sel = self.home_sel
         if name in ("left", "right"):
             sel = (sel + (1 if name == "right" else -1)) % n
@@ -119,6 +119,12 @@ class HomeScreen:
     }
     CARD_X, CARD_GAP, CARD_R, GLYPH = 22, 14, 20, 52   # Cards: its margins, the gap between cards, their corners'
                                                       # roundness, a glyph's size
+    CARD_GAP_SHARE = 0.125                           # Cards: the gap between cards, at least this much of a card's
+                                                      # width (and the rows' own gap): a wider screen's further apart
+    CARD_WIDEST = 1.75                               # ...and a card never wider than this against its height
+    CARDS_WIDE = 2.1                                 # a screen this many times wider than high (an ultrawide, 21:9):
+    WIDE_CARDS = (118, 118, 26)                      # Cards in two rows (if 9 across do), taller: a card this high, the
+                                                      # first row's top, the gap between the rows
 
     def home_style(self):
         style = self.setting("home_style")
@@ -126,10 +132,25 @@ class HomeScreen:
 
     def home_geometry(self):
         """(a tile, the first row's top, a row, its name's middle under it). On a taller screen than the GPi
-        Case's (a monitor's 540 lines), the rows lower down and further apart: the room shared out."""
+        Case's (a monitor's 540 lines), the rows lower down and further apart: the room shared out. Cards on an
+        ultrawide: two rows of taller cards (cards_two_rows()), their glyph and name in the middle of them."""
         tile, top, row, dy = self.HOME_GEOMETRY[self.home_style()]
+        if self.cards_two_rows():
+            high, top, gap = self.WIDE_CARDS
+            tile, row, dy = high, high + gap, dy - (high - tile) // 2
         extra = max(0, (self.fb.h if self.fb else 480) - 480)
         return tile, top + extra // 3, row + extra // 4, dy
+
+    def cards_two_rows(self, n=None):
+        """Cards on an ultrawide (21:9): its apps in two rows, as many across as that takes (up to 9), not three
+        rows of cards drawn out wide."""
+        if self.home_style() != "Cards" or not self.fb or self.fb.w < self.CARDS_WIDE * self.fb.h:
+            return False
+        return -(-(len(self.home_apps()) if n is None else n) // 2) <= 9
+
+    def home_columns(self, n):
+        """Icons across, for n of them: as home_cols() has it, or Cards' two rows on an ultrawide."""
+        return -(-n // 2) if self.cards_two_rows(n) else home_cols(n)
 
     def home_icon(self, name, lit=False):
         style, s = self.home_style(), scale()
@@ -177,9 +198,24 @@ class HomeScreen:
         if style == "Bright":
             return (W - 20) / cols
         if style == "Cards":
-            return (W - 2 * self.CARD_X + self.CARD_GAP) / cols
+            _, wide, gap = self.card_grid(cols)
+            return wide + gap
         return (W - 2 * self.HOME_X - self.TILE) / max(cols - 1, 1)   # (the first tile on the left margin, the last
                                                                         # on the right: the time and weather's)
+
+    def card_grid(self, cols):
+        """Cards across the screen: (the first one's left, a card's width, the gap between them). As wide as fits,
+        the gap at least CARD_GAP, the rows' own gap and CARD_GAP_SHARE of a card (the GPi Case's: 108 wide, 14
+        apart; a TV's further apart, as its rows are); never wider than CARD_WIDEST of their height, the room left
+        either side of them all."""
+        tile, _, row, _ = self.home_geometry()
+        room, gap = self.fb.w - 2 * self.CARD_X, max(self.CARD_GAP, row - tile)
+        wide = (room - (cols - 1) * gap) / cols
+        if self.CARD_GAP_SHARE * wide > gap:
+            wide = room / (cols + (cols - 1) * self.CARD_GAP_SHARE)
+            gap = self.CARD_GAP_SHARE * wide
+        wide = min(wide, self.CARD_WIDEST * tile)
+        return (self.fb.w - cols * wide - (cols - 1) * gap) / 2, wide, gap
 
     def card_box(self, k, slots, cols, first):
         """Where app k's tile is: (x0, y0, x1, y1)."""
@@ -191,9 +227,10 @@ class HomeScreen:
             cx = 10 + (c + 0.5) * pitch
         else:
             cx = self.HOME_X + tile / 2 + c * pitch
-        if style == "Cards":                          # (cards: as wide as fits)
-            x0 = self.CARD_X + c * pitch
-            return x0, top + (r - first) * row, x0 + pitch - self.CARD_GAP, top + (r - first) * row + tile
+        if style == "Cards":                          # (cards: as wide as fits, card_grid())
+            left, wide, _ = self.card_grid(cols)
+            x0 = left + c * pitch
+            return x0, top + (r - first) * row, x0 + wide, top + (r - first) * row + tile
         x0, y0 = cx - tile / 2, top + (r - first) * row
         return x0, y0, x0 + tile, y0 + tile
 
@@ -227,7 +264,8 @@ class HomeScreen:
                 d.rounded_rectangle((x0 - 1, y0 - 1, x1 + 1, y1 + 1), radius=self.CARD_R + 1, fill=CARD_PICKED,
                                     outline=ACCENT, width=2)
             glyph = self.home_icon(name)
-            img.paste(glyph, (int((x0 + x1 - self.GLYPH) / 2), int(y0 + 11)), glyph)
+            lift = (y1 - y0 - self.HOME_GEOMETRY["Cards"][0]) // 2   # (a taller card: its glyph lower, its name
+            img.paste(glyph, (int((x0 + x1 - self.GLYPH) / 2), int(y0 + 11 + lift)), glyph)   # higher: in the middle)
             label = self.fit(d, HOME_LABELS.get(name, name), F["home4_label"], x1 - x0 - 6)
             d.text(((x0 + x1) / 2, y1 + dy), label, font=F["home4_label"], fill=TEXT if picked else LABEL, anchor="mm")
             return
@@ -447,7 +485,7 @@ class HomeScreen:
         style = self.home_style()
         apps = self.home_apps()
         n = len(apps)
-        cols = home_cols(n)
+        cols = self.home_columns(n)
         sel = self.home_sel % n
         rows_fit = self.home_rows_fit()
         first = max(0, min(sel // cols - rows_fit + 1, (n - 1) // cols - rows_fit + 1))

@@ -50,7 +50,7 @@ was_toast = m.toast
 m.toast = lambda text, secs=4: (toasts.append(text), was_toast(text, secs))[1]
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
 check(f"Apps has the Fortune Cookie, after Notes ({apps['children'][:4]})",
-      apps["children"][:3] == ["Clock", "Notes", "Fortune Cookie"])
+      apps["children"][1:4] == ["Clock", "Notes", "Fortune Cookie"])   # (after Group chat)
 fi = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Fortune Cookie")
 
 

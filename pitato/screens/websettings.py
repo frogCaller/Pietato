@@ -119,8 +119,14 @@ class WebSettingsScreen:
             {"key": "name", "label": "This Pietato's name", "kind": "text", "value": self.setting("name") or "",
              "placeholder": clean_name(socket.gethostname(), 40), "max": 40,
              "note": "What your other Pietatos call it, when you send them something. Living room, say."},
-            choice("share")] + self.web_peer_rows(), "Prices and the weather fetched once for them all, and your game "
-            "saves following you: a game picks up where you left it on whichever of them you played it on last.")
+            choice("share")] + ([   # (Apps > Group chat's, while they share)
+            choice("group_talk", "They talk among themselves", ["On", "Off"],
+                   note="In Apps > Group chat, and popping up on the one you're at. Off: they still answer you."),
+            choice("group_eyes", "Its camera notices you", ["On", "Off"],
+                   note="A USB camera plugged in looks for someone moving, so your others know you're here.")]
+            if self.setting("share") != "Off" else [])
+            + self.web_peer_rows(), "Prices and the weather fetched once for them all, your game saves following "
+            "you (a game picks up where you left it on whichever of them you played it on last), and Group chat.")
 
         # WiFi
         w, went = self.wifi, self.wifi.get("said")

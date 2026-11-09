@@ -272,10 +272,13 @@ class DrawScreen:
             self.msg_pill(d)
 
     def msg_pill(self, d):
-        """A short notice (toast) above the footer (or, while the Bot's bored, what it says: in its place)."""
+        """A short notice (toast) above the footer (or, while the Bot's bored, what it says: in its place). With
+        neither: a line said in your Pietatos' group chat, popped up (screens/group.py)."""
         if self.bored_bubble(d):
             return
         if not self.msg:
+            if getattr(self, "group_pop", None):
+                self.group_bubble(d)
             return
         F, W, H = self.fonts, self.fb.w, self.fb.h
         msg = self.fit(d, self.msg, F["small"], W - 72)
@@ -650,6 +653,8 @@ class DrawScreen:
                 self.render_coder() if self.bot_mode() == "work" else self.render_friend()
         if ttype == "sim":
             return self.render_sim()
+        if ttype == "chat":                            # (Apps > Group chat: screens/group.py)
+            return self.render_group()
         if ttype == "games":
             return self.render_games()
         if ttype == "finance":

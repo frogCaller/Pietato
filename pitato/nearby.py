@@ -11,6 +11,7 @@ import urllib.parse
 
 from .config import CACHE_DIR, clean_name, read_config, settings_glob, WEB_PORT
 from .theme import ACCENTS
+from .circle import hw_clean
 from .util import UA
 from .net import cam_address, cam_host, cam_key, CamHTTP, CamHTTPS, read_capped
 
@@ -77,6 +78,21 @@ def pie_addr(text):
         return None
     host = f"[{u.hostname}]" if ":" in u.hostname else u.hostname
     return f"{u.scheme}://{host}:{port}"
+
+
+def group_news(msg, old, now):
+    """What another Pietato's beacon says for the group chat (pitato/circle.py): which run of it this is, always; and,
+    in the one told straight to this one, what it's doing, what it's made of and how long ago you were last noticed
+    there (as when, here). The one to everyone doesn't say: what was heard before is kept."""
+    out = {"id": clean_name(msg.get("id"), 24)}
+    if "hw" not in msg:
+        out.update({k: old[k] for k in ("hw", "doing", "you") if k in old})
+        return out
+    you = msg.get("you")
+    out.update(hw=hw_clean(msg.get("hw")), doing=clean_name(msg.get("doing"), 60),
+               you=now - you if isinstance(you, (int, float)) and not isinstance(you, bool) and 0 <= you <= 86400
+               else None)
+    return out
 
 
 def wx_units(data, have, want):
@@ -271,7 +287,10 @@ class PieInk:
             seen = p.get("seen") if isinstance(p, dict) else None
             if (pie_addr(url) == url and isinstance(seen, (int, float)) and not isinstance(seen, bool)
                     and 0 <= now - seen <= PEER_KEPT):
-                self.peers_kept[url] = {"host": clean_name(p.get("host"), 40) or "", "seen": float(seen)}
+                accent = p.get("accent")
+                self.peers_kept[url] = {"host": clean_name(p.get("host"), 40) or "", "seen": float(seen),
+                                        "accent": accent if isinstance(accent, str) and accent in dict(ACCENTS) else "",
+                                        "hw": hw_clean(p.get("hw"))}
 
     def save_peers(self):
         with self.lock:
@@ -332,10 +351,13 @@ class PieInk:
         url, now = f"http://{ip}:{port}", time.time()
         save = False
         with self.lock:
-            back = now - (self.heard.get(url) or {}).get("seen", 0) > 60     # new, or back after a while
+            old = self.heard.get(url) or {}
+            back = now - old.get("seen", 0) > 60      # new, or back after a while
             accent = msg.get("accent")
             self.heard[url] = {"host": clean_name(msg.get("host"), 40) or ip, "seen": now, "peer": peer,
                                "accent": accent if isinstance(accent, str) and accent in dict(ACCENTS) else ""}
+            if peer:                                  # (for the group chat: which run of it this is; and, from the
+                self.heard[url].update(group_news(msg, old, now))   # beacon told straight to this one, the rest)
             if len(self.heard) > 16:
                 for old in sorted(self.heard, key=lambda u: self.heard[u]["seen"])[:len(self.heard) - 16]:
                     del self.heard[old]
@@ -346,7 +368,9 @@ class PieInk:
             if peer:                                  # (remembered, for next time: on disk now and then)
                 kept = self.peers_kept.get(url)
                 save = kept is None or now - kept["seen"] > PEER_KEPT_SAVE
-                self.peers_kept[url] = {"host": self.heard[url]["host"], "seen": now}
+                self.peers_kept[url] = {"host": self.heard[url]["host"], "seen": now,
+                                        "accent": self.heard[url]["accent"],
+                                        "hw": self.heard[url].get("hw") or (kept or {}).get("hw") or {}}
                 if len(self.peers_kept) > 16:
                     for old in sorted(self.peers_kept, key=lambda u: self.peers_kept[u]["seen"])[:-16]:
                         del self.peers_kept[old]
@@ -418,6 +442,24 @@ class PieInk:
             kept = url in self.peers_kept
         if kept:
             self.save_peers()
+
+    def group_members(self):
+        """Your other Pietatos, for the group chat (pitato/circle.py): those heard lately, and those kept from before
+        (PEER_KEPT): [{"url", "name", "id", "seen", "accent", "doing", "hw", "you"}]. None with sharing off."""
+        if not self.peers_on():
+            return []
+        with self.lock:
+            out = {u: {"url": u, "name": p["host"] or urllib.parse.urlsplit(u).hostname or u, "id": "",
+                       "seen": p["seen"], "accent": p.get("accent") or "", "doing": "", "hw": p.get("hw") or {},
+                       "you": None} for u, p in self.peers_kept.items()}
+            for u, h in self.heard.items():
+                if h.get("peer"):
+                    kept = out.get(u) or {}
+                    out[u] = {"url": u, "name": h["host"], "id": h.get("id") or "",
+                              "seen": max(h["seen"], kept.get("seen", 0)), "accent": h.get("accent") or "",
+                              "doing": h.get("doing") or "", "hw": h.get("hw") or kept.get("hw") or {},
+                              "you": h.get("you")}
+        return list(out.values())
 
     def peer_accent(self, url):
         """Another Pietato's colour (its Settings > Accent colour, as its beacon says): (r, g, b), or None (one that

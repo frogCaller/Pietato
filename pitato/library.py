@@ -28,8 +28,8 @@ LIBRARY = [
     {"name": "Finance", "type": "finance", "files": [settings_glob("finance.txt")], "empty": ""},
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
-     "children": ["Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Forest Fire", "Mandelbrot Set",
-                  "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire", "htop"]},
+     "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Forest Fire",
+                  "Mandelbrot Set", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire", "htop"]},
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
     {"name": "Settings", "type": "settings", "empty": ""},
@@ -66,6 +66,8 @@ LIBRARY = [
     {"name": "Snake", "type": "sim", "sim": "snake", "parent": "Games", "badge": "EAT", "title": "Snake",
      "about": "Eat the apples, don't crash", "empty": ""},
     # inside Apps
+    {"name": "Group chat", "type": "chat", "parent": "Apps", "badge": "CHAT",   # (screens/group.py, circle.py)
+     "about": "Your Pietatos, talking", "empty": ""},
     {"name": "Clock", "type": "sim", "sim": "clock", "parent": "Apps", "badge": "TIME",
      "about": "The time and the date", "empty": ""},
     {"name": "Notes", "type": "sim", "sim": "notes", "parent": "Apps", "badge": "NOTE",   # (pitato/notes.py)

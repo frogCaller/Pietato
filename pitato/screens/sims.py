@@ -622,7 +622,7 @@ class SimScreen:
             img.paste(self.sim_feet[hints], (0, fb.h - self.FOOTER))
         self.sim_msg(img, low=full and not card_open)  # (a notice stays over the sim)
         last_key, last_count, last_t, whole_t = self.sim_shown
-        key = (key, self.msg, self.bored_said(), card_open and hints)
+        key = (key, self.msg, self.bored_said(), card_open and hints, self.group_shown())
         if (full or key != last_key or getattr(fb, "frames", None) != last_count or now - last_t > 0.5
                 or now - whole_t > 3 or not hasattr(fb, "show_part")):
             fb.show(img)                               # the whole picture: full screen, or something
@@ -640,6 +640,8 @@ class SimScreen:
             self.bored_bubble(ImageDraw.Draw(img), low=low)
             return
         if not self.msg:
+            if self.group_shown():                     # (a line said in the group chat, popped up)
+                self.group_bubble(ImageDraw.Draw(img), low=low)
             return
         W, H = self.fb.w, self.fb.h
         tile = self.sim_tile(self.msg, "small", TEXT, ROW)
