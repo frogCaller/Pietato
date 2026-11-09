@@ -16,6 +16,8 @@ Media mode starts it (pitato/games.py) and tells it what to do, a line at a time
     notice Some words    ...or a few words at the top, for a few seconds
     nethost 5442 KEY IP  open for another Pietato to join (from that address, with that key), as player 2
                          (pitato/netplay.py); netstop: not any more (or not together any more)
+    watchhost 5444 KEY   open for your other Pietatos to watch (with that key: any number of them); watchstop: not any
+                         more (each told)
     volume 80            how loud (0 to 100)
     picture Fit          as big as fits (Fit), whole pixels only (Sharp), or the whole screen (Fill: stretched to it)
     disc 2               another disc in (a game on more than one): the tray opens, then shuts a moment later
@@ -28,11 +30,13 @@ Media mode starts it (pitato/games.py) and tells it what to do, a line at a time
 It answers on a channel of its own (cores print what they like on its output): ready new|resumed,
 disc 1 3 (the disc in, of how many), paused, resumed, saved, loaded, nostate, reset, error <why>, failed <why>
 (the game ended itself as it started: a PSP game that won't boot), peek 7 <hex>... (- for memory it hasn't),
-mem ok|none, shot ok|none, badge ok|none, nethost ok PORT|error <why>, netstopped, and news of playing
-together: netjoined <who>, netleft <why> (player 1: the other's gone), netgone <why> (player 2: the host's game's
-ended, and so has this one), bye.
+mem ok|none, shot ok|none, badge ok|none, nethost ok PORT|error <why>, netstopped, watchhost ok PORT|error <why>,
+watchstopped, and news of playing together: netjoined <who>, netleft <why> (player 1: the other's gone), netgone <why>
+(player 2: the host's game's ended, and so has this one); of being watched: watchjoined <who>, watchleft <who>,
+watchers <how many>; and of watching (--watch): watchgone <why> (the host's game's ended, and so has this one), bye.
 
 Run as: python3 -m pitato.emulator --core CORE --game GAME --saves FOLDER [--resume] [--turn 90] ...
+(--net ADDRESS:PORT:KEY: another's game, joined as player 2; --watch ADDRESS:PORT:KEY: another's game, watched.)
 (--turn: a screen on its side, Settings > Rotate screen: the pictures go onto it turned that far clockwise.)"""
 import argparse
 import ctypes as C
@@ -114,6 +118,8 @@ LOG_CORES = ("Mupen64Plus-Next", "ParaLLEl N64", "PPSSPP", "Flycast",   # emulat
              "FinalBurn Neo", "FinalBurn Neo (neogeo subset)")    # ...and one that says there which chips are missing
 LOG_MOST = 200           # lines an emulator puts in the log, at most, a game (a PSP game can go on and on)
 SWAP_FRAMES = 60         # frames the tray stays open when the disc's changed (so the game sees it)
+WATCH_NOT = ("down", "up", "stick", "save", "load", "reset", "disc", "option", "nethost", "watchhost")   # (watching
+                         # another's game: what isn't done here, the host's buttons alone playing it)
 RESUME_TRIES = 3         # frames run to pick up where you were, for an emulator that won't before it's running
 LATE_STATES = ("Mupen64Plus-Next", "ParaLLEl N64")   # ...those emulators
 SKIP_MOST = 3            # frames in a row left undrawn when it's behind, at most
@@ -1291,6 +1297,11 @@ class Session:
     net = net_wait = None                             # (not together: as it is till it's asked, and in a session made
     net_key = net_who = ""                            #  without its start, as the tests make one)
     net_asked = net_paused = False
+    watch = watchers = None                           # (not watching another's, nor watched)
+    watching = False                                  # (...and never was, this time: its saves are its own)
+    watch_who = ""
+    watch_count = 0
+    watch_hold = watch_asked = watch_paused = watch_fresh = False
 
     def __init__(self, args, chan):
         self.args, self.chan = args, chan
@@ -1347,6 +1358,15 @@ class Session:
         self.net_sums = {}                            # ...this one's sums of its game (player 2's), till the host's come
         self.net_asked = False                        # ...player 2's asked for the host's game again
         self.net_paused = False                       # ...the other's menu's up (said so on the picture)
+        self.watchers = None                          # your other Pietatos watching this game (watchhost: netplay.py)
+        self.watch_count = 0                          # ...how many, as media mode was last told
+        self.watch_fresh = False                      # ...the game changed by more than its buttons (a state loaded,
+                                                      #    started over): to them again at the next frame
+        self.watch = None                             # watching another's game (--watch): the link
+        self.watch_who = ""                           # ...whose
+        self.watch_hold = False                       # ...a few frames in hand before it plays on (a slow moment)
+        self.watch_asked = False                      # ...it's out of step: the host's game asked for again
+        self.watch_paused = False                     # ...the host's menu is up (said so on the picture)
 
     def slow(self):
         """It's been behind (frames left undrawn) a good share of the last few hundred frames."""
@@ -1465,11 +1485,8 @@ class Session:
         try:
             if link.host:
                 again = link.asked_again()
-                if again is not None:                  # (player 2 got out of step: the game as it is here, again)
-                    data = self.core.serialize()
-                    if data:
-                        self.core.unserialize(data)    # (this one from it too: the two alike from here)
-                        link.send_state(self.frame, data)
+                if again is not None:                  # (player 2 got out of step: the game as it is here, again; to
+                    self.state_to_all()                #  the watchers too, all alike from here)
             else:
                 new = link.new_state()
                 if new is not None and self.core.unserialize(new[1]):
@@ -1534,6 +1551,8 @@ class Session:
             self.core.unserialize(data)                # (this one takes it up again too: an emulator's state isn't
             link.begin(self.frame)                     #  all of it, for some (Genesis Plus GX's: where it is in a
             link.send_state(self.frame, data)          #  frame), so the two start alike)
+            if self.watchers is not None:              # (...and so do the ones watching)
+                self.watchers.state(self.frame, data)
         except netplay.Gone as ex:
             link.bye()
             print(f"game: the other Pietato didn't join ({ex})", file=sys.stderr, flush=True)
@@ -1544,6 +1563,156 @@ class Session:
         self.screen.notice([f"{self.net_who or 'The other Pietato'} joined: player 2"])
         self.say("netjoined", self.net_who or "-")
         return True
+
+    def state_to_all(self):
+        """The game as it is now, to all it's shared with (player 2's game, and each one watching): this one takes it up
+        again too, so all of them carry on alike from here. False: its emulator can't hand its game over."""
+        data = self.core.serialize()
+        if not data:
+            return False
+        self.core.unserialize(data)
+        if self.net is not None and self.net.host:
+            self.net.send_state(self.frame, data)
+        if self.watchers is not None:
+            self.watchers.state(self.frame, data)
+        return True
+
+    # -- watched by your other Pietatos (netplay.py: Watchers) -------------------------------------------------------
+    def watch_host(self, port, key):
+        """This game, open for your other Pietatos to watch (it plays on meanwhile). Its port."""
+        if self.watchers is not None:
+            if self.watchers.key == key:
+                return self.watchers.port
+            self.watch_stop()
+        about = dict(self.net_about(), watch=True)
+        try:
+            self.watchers = netplay.Watchers(port, key, about)
+        except OSError:                                # (that port's taken: another, whichever's free)
+            self.watchers = netplay.Watchers(0, key, about)
+        for p in (0, 1):                               # (both players' controllers there, as they are on the watchers)
+            self.core.plug(p)
+        return self.watchers.port
+
+    def watch_stop(self):
+        w, self.watchers = self.watchers, None
+        if w is not None:
+            w.close()
+            if self.watch_count:
+                self.watch_count = 0
+                self.say("watchers", 0)
+
+    def watch_host_frame(self):
+        """Before a frame, watched: the ones that have come or gone, said; the game to new ones (and to all, if one's
+        out of step or the game's been changed by more than its buttons); a check now and then; and this frame's
+        buttons, both players' (as they are now, together or not), on their way."""
+        w = self.watchers
+        w.tidy()
+        for what, who in w.news():
+            self.say(what, who or "-")
+        if w.ready() or w.asked_again() or self.watch_fresh:
+            self.watch_fresh = False
+            if not self.state_to_all():
+                print("game: this emulator can't hand its game over to watch", file=sys.stderr, flush=True)
+                self.watch_stop()
+                return
+        n = w.tidy()
+        if n != self.watch_count:
+            self.watch_count = n
+            self.say("watchers", n)
+        if not n:
+            return
+        if self.frame % netplay.NET_CHECK == 0:
+            total = self.net_sum()
+            if total is not None:
+                w.check(self.frame, total)
+        w.frame(self.frame, self.core.buttons[0], self.core.buttons[1])
+
+    # -- watching another's game (--watch: netplay.py's WatchLink) ------------------------------------------------------
+    def watch_join(self, spec):
+        """Another's game, watched: taken up as it is now (its state); from then on its buttons play it here too. False:
+        it couldn't be."""
+        self.net_about()
+        try:
+            addr, port, key = spec.rsplit(":", 2)
+            link = netplay.WatchLink(netplay.join(addr, int(port)))
+        except (OSError, ValueError) as ex:
+            self.say("failed", f"Couldn't reach the other Pietato's game ({ex})")
+            return False
+        try:
+            other = link.wait_for(lambda: link.hello, netplay.NET_HELLO_WAIT)
+            if not other:
+                raise netplay.Gone("it didn't say hello")
+            mine = self.net_about(key)
+            if other.get("core") != mine["core"]:
+                raise netplay.Gone("its emulator is another version than this one's: update both Pietatos")
+            if other.get("game") != mine["game"]:
+                raise netplay.Gone("its copy of the game isn't the same as this one's")
+            link.say_hello(mine)
+            if not link.wait_for(lambda: link.states[:1], netplay.NET_HELLO_WAIT):
+                raise netplay.Gone("its game didn't come")
+            frame, state = link.state_due(0, now=True)
+            for p in (0, 1):
+                self.core.plug(p)
+            if not self.core.unserialize(state):
+                raise netplay.Gone("its game wouldn't load here")
+        except netplay.Gone as ex:
+            link.bye()
+            self.say("failed", f"Couldn't watch: {ex}")
+            return False
+        self.frame, self.watch, self.watch_who = frame, link, str(other.get("who") or "")
+        self.watching = True                           # (nothing of the game's kept here, from now on)
+        self.watch_hold = True                         # (a few frames in hand first)
+        return True
+
+    def watch_frame(self):
+        """Before a frame, watching: the host's game again if it's sent it (out of step, or it changed), a check that
+        this one's in step, and the frame's buttons, the host's (both players'). False: no frame now (not here yet:
+        a few in hand first, then on it goes); "hurry": it's fallen behind (this frame not drawn, nor waited for)."""
+        w = self.watch
+        if w.gone is not None:
+            why = w.gone
+            w.close()
+            self.watch = None
+            self.say("watchgone", why)
+            self.quit = True
+            return False
+        ahead = w.ahead(self.frame)
+        if ahead > netplay.WATCH_FAR and not self.watch_asked:   # (far behind: its game as it is now, instead)
+            self.watch_asked = True
+            w.ask_again()
+        new = w.state_due(self.frame, now=self.watch_asked)
+        if new is not None:
+            if self.core.unserialize(new[1]):
+                if self.watch_asked:
+                    print(f"game: in step again with {self.watch_who or 'the other Pietato'}, from frame {new[0]}",
+                          file=sys.stderr, flush=True)
+                self.frame = new[0]
+            self.watch_asked = False
+            ahead = w.ahead(self.frame)
+        if w.paused and ahead <= 0:
+            if not self.watch_paused:
+                self.watch_paused = True
+                self.screen.notice([f"Paused on {self.watch_who or 'the other Pietato'}"])
+                self.screen.notice_now()
+            return False
+        self.watch_paused = False
+        if self.watch_hold and ahead < netplay.WATCH_AHEAD and not w.paused:   # (paused there: what's here, played out)
+            return False
+        self.watch_hold = False
+        got = w.take(self.frame)
+        if got is None:                                # (none in hand: a few first, then on)
+            self.watch_hold = True
+            return False
+        if self.frame % netplay.NET_CHECK == 0:
+            theirs = w.their_sum(self.frame)
+            mine = self.net_sum() if theirs is not None else None
+            if mine is not None and mine != theirs and not self.watch_asked:
+                self.watch_asked = True                # (out of step: the host's game again, once)
+                w.ask_again()
+                print(f"game: out of step with {self.watch_who or 'the other Pietato'} at frame {self.frame}: its "
+                      f"game again", file=sys.stderr, flush=True)
+        self.core.buttons[0], self.core.buttons[1] = got
+        return "hurry" if ahead > netplay.WATCH_HURRY else True
 
     def net_end(self, why):
         """The other's gone: player 1 plays on alone; player 2's game ends (it was the host's)."""
@@ -1572,7 +1741,9 @@ class Session:
         self.saved_sram = self.core.read_memory(SAVE_RAM) + self.core.read_memory(RTC)
 
     def keep(self):
-        """The in-game save (and the clock some games keep), written if it changed."""
+        """The in-game save (and the clock some games keep), written if it changed. (Watching another's game: never.)"""
+        if self.watching:
+            return
         sram, rtc = self.core.read_memory(SAVE_RAM), self.core.read_memory(RTC)
         if sram + rtc == self.saved_sram:
             return
@@ -1840,6 +2011,8 @@ class Session:
             return
         what, arg = words[0], (words[1] if len(words) > 1 else "")
         bit = BUTTON_IDS.get(arg)
+        if self.watching and what in WATCH_NOT:
+            return                                     # (watching: the host's game, played by its buttons alone)
         if what in ("down", "up") and bit is not None:
             port = player(words[2] if len(words) > 2 else "")    # (whose: player 1's, unless it says)
             key = (port, arg)
@@ -1872,11 +2045,21 @@ class Session:
         elif what == "netstop":
             self.net_stop()
             self.say("netstopped")
+        elif what == "watchhost":                      # open for your other Pietatos to watch
+            try:
+                self.say("watchhost", "ok", self.watch_host(int(arg), words[2] if len(words) > 2 else ""))
+            except (OSError, ValueError, IndexError) as ex:
+                self.say("watchhost", "error", str(ex))
+        elif what == "watchstop":
+            self.watch_stop()
+            self.say("watchstopped")
         elif what == "notice":                         # a few words over the picture, for a few seconds
             self.screen.notice([" ".join(words[1:])[:80]])
         elif what == "pause":
             if self.net is not None:
                 self.net.pause(True)                   # (the other's paused too)
+            if self.watchers is not None:
+                self.watchers.pause(True)              # (...and the ones watching are told)
             if not self.paused:
                 self.paused = True
                 self.core.buttons = [0] * PLAYERS
@@ -1888,6 +2071,8 @@ class Session:
         elif what == "resume":
             if self.net is not None:
                 self.net.pause(False)
+            if self.watchers is not None:
+                self.watchers.pause(False)
             if self.paused:
                 self.paused = False
                 self.screen.clear()
@@ -1899,9 +2084,11 @@ class Session:
             self.say("saved" if self.save_state(".state") else "error Couldn't save")
         elif what == "load":
             ok = self.load_state(".state")
+            self.watch_fresh = bool(ok)                # (the ones watching: the game as it is now, at the next frame)
             self.say("nostate" if ok is None else "loaded" if ok else "error That save wouldn't load")
         elif what == "reset":
             self.core.lib.retro_reset()
+            self.watch_fresh = True
             if self.ra is not None:
                 self.ra.reset()
             self.say("reset")
@@ -1968,6 +2155,7 @@ class Session:
                 want = -1
             if self.core.swap(want):
                 self.insert_at = self.frame + SWAP_FRAMES   # (the tray open a moment, as the game expects)
+                self.watch_fresh = True
                 if self.ra is not None and self.core.disc_path(want):   # (its achievements: that disc's)
                     try:
                         self.ra.change_media(path=self.core.disc_path(want))
@@ -1985,8 +2173,10 @@ class Session:
             self.core.swap(self.first_disc[0], close=True)   # (an emulator that can't start on it: in it goes)
         if self.args.net and not self.net_join(self.args.net):   # (player 2: the host's game, joined)
             return
+        if getattr(self.args, "watch", "") and not self.watch_join(self.args.watch):   # (watching another's game)
+            return
         resumed = False
-        if self.args.resume and self.net is None:
+        if self.args.resume and self.net is None and self.watch is None:
             ok = self.load_state(".state.auto")
             if ok is False and self.core.library in LATE_STATES:
                 for _ in range(RESUME_TRIES):          # (an N64's takes it only once it's running)
@@ -1998,7 +2188,8 @@ class Session:
             resumed = bool(ok)
         self.screen.clear()
         self.sound.start()
-        self.say("ready", "net" if self.net is not None else "resumed" if resumed else "new")
+        self.say("ready", "net" if self.net is not None else "watch" if self.watch is not None
+                 else "resumed" if resumed else "new")
         i, n = self.core.discs()
         if n > 1:
             self.say("disc", i + 1, n)
@@ -2014,6 +2205,9 @@ class Session:
                     conn = self.net_wait.take()
                     if conn is not None and self.net_welcome(conn):
                         self.net.pause(True)
+                if self.watchers is not None and self.watchers.ready():   # (the ones come to watch meanwhile: the
+                    self.state_to_all()                                    #  game, and that it's paused here)
+                    self.watchers.pause(True)
                 continue
             for (port, name), at in list(self.letgo.items()):
                 if self.frame >= at:
@@ -2032,10 +2226,18 @@ class Session:
             if live is False:                         # (together: no frame now, the other's menu up, say)
                 self.commands(0.02)
                 continue
+            seen = self.watch_frame() if self.watch is not None else None
+            if seen is False:                         # (watching: the host's buttons for it not here yet)
+                self.commands(0.005)
+                continue
+            if self.watchers is not None:             # (watched: this frame's buttons, to the ones watching)
+                self.watch_host_frame()
             now = time.monotonic()
-            if now - self.beat > 0.25:                # a long stall (the Pi busy): start the beat again
-                self.beat = now
+            if now - self.beat > 0.25 or seen == "hurry":   # a long stall (the Pi busy), or behind the one it's
+                self.beat = now                             # watching: start the beat again
             self.core.draw = now - self.beat < period or skipped >= SKIP_MOST   # behind: this one isn't drawn
+            if seen == "hurry" and skipped < SKIP_MOST:
+                self.core.draw = False                # (catching up: most of these not drawn)
             t = time.perf_counter()
             self.core.run()
             if live:
@@ -2066,10 +2268,10 @@ class Session:
                     break
                 self.commands(left)
             now = time.monotonic()
-            if now >= self.next_keep:
+            if now >= self.next_keep and not self.watching:   # (watching: nothing of the game's is kept here)
                 self.next_keep = now + KEEP_EVERY
                 self.keep()
-            if now >= self.next_auto:
+            if now >= self.next_auto and not self.watching:
                 self.next_auto = now + AUTO_EVERY
                 self.auto_save()
             if now - self.stats[4] >= LOG_EVERY:
@@ -2088,15 +2290,19 @@ class Session:
         self.closed = True
         self.sound.stop()
         self.net_stop()                               # (the other's told: it's left)
+        self.watch_stop()                             # (...and so are the ones watching)
+        if self.watch is not None:
+            self.watch.bye()
         try:
             if self.insert_at is not None:
                 self.core.shut_tray()
                 self.insert_at = None
-            self.keep()
-            self.keep_disc()
-            if self.auto_writer is not None:
-                self.auto_writer.join(timeout=4)      # (the one it was writing, done before the last one)
-            self.save_state(".state.auto")
+            if not self.watching:                     # (watching another's: nothing of it kept here)
+                self.keep()
+                self.keep_disc()
+                if self.auto_writer is not None:
+                    self.auto_writer.join(timeout=4)  # (the one it was writing, done before the last one)
+                self.save_state(".state.auto")
         finally:
             self.cheevos_close()                      # (an unlock still on its way: sent first)
             self.core.close()
@@ -2121,6 +2327,7 @@ def main(argv=None):
                     "clockwise (a screen on its side)")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--net", default="", help="ADDRESS:PORT:KEY: join another Pietato's game there, as player 2")
+    ap.add_argument("--watch", default="", help="ADDRESS:PORT:KEY: watch another Pietato's game there")
     ap.add_argument("--option", action="append", default=[], help="an emulator's setting: key=value")
     args = ap.parse_args(argv)
     chan = os.fdopen(os.dup(1), "w", buffering=1)     # (to media mode)

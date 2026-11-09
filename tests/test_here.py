@@ -125,6 +125,7 @@ check(f"a Genesis game: the browser's segaMD is Genesis Plus GX, the Pi's ({out[
 class FakeRun:
     """A game on the Pi: its quitting noted (where you are, written as it ends)."""
     ended, state, error, disc, slow, cheevos, together, attract = False, "on", None, (1, 1), False, None, None, False
+    watching, watchers = None, 0
 
     def __init__(self, it):
         self.game = {"path": it["src"], "title": it["title"], "system": it["system"]}

@@ -36,6 +36,8 @@ class HomeScreen:
         return self.playing_now() and time.monotonic() < self.np_until
 
     def press_home(self, name, repeat):
+        if not repeat and self.press_lobby(name):      # (X, SELECT, L, R: your others' games, to watch or join)
+            return None
         apps = self.home_apps()
         n = len(apps)
         cols = self.home_columns(n)
@@ -408,28 +410,42 @@ class HomeScreen:
 
     def home_playing(self, img, d):
         """What's playing, top right, for a few seconds."""
-        from ..fine import Image, ImageDraw
-        F, W, style = self.fonts, self.fb.w, self.home_style()
         it = self.cur
         radio = self.kind == "radio"
         title = it["title"] if radio else (self.meta.get("title") or it["title"])
         sub = (self.meta.get("song") or it.get("sub") or "") if radio else (it.get("sub") or "")
         head = "PAUSED" if self.paused else "ON THE RADIO" if radio else "NOW PLAYING"
+        self.home_panel(img, d, head, title, sub, "Radio" if radio else "Music")
+
+    def home_lobby(self, img, d, e, n):
+        """Another of yours playing a game, top right (while nothing's popped up there): whose, which, and with whom;
+        a tap on it watches it (or joins it, for one that can't be watched)."""
+        head, title, sub = self.lobby_words(e, n)
+        box = self.home_panel(img, d, head.upper(), title, sub, "Games")
+        if e["watch"] or e["join"]:
+            self.tappable(box, "keys", "x" if e["watch"] else "select")
+
+    def home_panel(self, img, d, head, title, sub, tile):
+        """A card top right (what's playing, another's game): a few words over its title, and a line under it, in a
+        tile's colour (Music's, Radio's, Games'). Its box."""
+        from ..fine import Image, ImageDraw
+        F, W, style = self.fonts, self.fb.w, self.home_style()
         if style in ("Bright", "Cards"):           # a card
             x0, x1, y0 = W - 296, W - 20, 18 if style == "Bright" else self.HOME_TOP + 8
             if style == "Bright":
                 d.rounded_rectangle((x0, y0, x1, y0 + 78), radius=14, fill=ROW)
             else:
                 d.rounded_rectangle((x0, y0, x1, y0 + 78), radius=12, fill=CARD, outline=CARD_LINE)
-            d.text((x0 + 18, y0 + 17), head, font=F["key"], fill=ACCENT, anchor="lm")
+            d.text((x0 + 18, y0 + 17), self.fit(d, head, F["key"], x1 - x0 - 36), font=F["key"], fill=ACCENT,
+                   anchor="lm")
             d.text((x0 + 18, y0 + 42), self.fit(d, title, F["row_b"], x1 - x0 - 36), font=F["row_b"], fill=TEXT,
                    anchor="lm")
             if sub:
                 d.text((x0 + 18, y0 + 63), self.fit(d, sub, F["small"], x1 - x0 - 36), font=F["small"], fill=BODY,
                        anchor="lm")
-            return
+            return x0, y0, x1, y0 + 78
         x0, y0, x1, y1 = W - self.HOME_X - 280, 20, W - self.HOME_X, 98   # a panel like the tiles, in Music's or
-        tint = tile_tint("Radio" if radio else "Music")                    # Radio's colour
+        tint = tile_tint(tile)                                             # Radio's colour (or Games')
         key = ("panel", tint, x1 - x0, y1 - y0)
         if key not in self.icons:
             w, h = int(x1 - x0), int(y1 - y0)
@@ -445,12 +461,14 @@ class HomeScreen:
         panel = self.icons[key]
         img.paste(panel, (int(x0), int(y0)), panel)
         room = x1 - x0 - 36
-        d.text((x0 + 18, y0 + 19), head, font=F["home_pop_head"], fill=mix(tint, (255, 255, 255), 0.45), anchor="lm")
+        d.text((x0 + 18, y0 + 19), self.fit(d, head, F["home_pop_head"], room), font=F["home_pop_head"],
+               fill=mix(tint, (255, 255, 255), 0.45), anchor="lm")
         d.text((x0 + 18, y0 + 42), self.fit(d, title, F["home_pop_title"], room), font=F["home_pop_title"],
                fill=TEXT, anchor="lm")
         if sub:
             d.text((x0 + 18, y0 + 62), self.fit(d, sub, F["home_pop_sub"], room), font=F["home_pop_sub"],
                    fill=DATE, anchor="lm")
+        return x0, y0, x1, y1
 
     def home_footer4(self, d, hints, note):
         """Cards's buttons along the bottom: rings round the letters, thin lines between them, and the app's line on
@@ -493,8 +511,11 @@ class HomeScreen:
         img, d = self.home_grid(apps, cols, first, rows_fit)
 
         self.home_clock(d)
+        lobby = None if self.now_popped() else self.lobby_now()
         if self.now_popped():                          # what's playing, top right, for a few seconds
             self.home_playing(img, d)
+        elif lobby is not None:                        # (another of yours playing a game: to watch, or join)
+            self.home_lobby(img, d, *lobby)
         else:                                          # (the weather, once there's a place for it)
             self.home_widget(img, d)
 
@@ -525,6 +546,7 @@ class HomeScreen:
         hints = [("A", "Open")]
         if self.now_popped():                          # (START opens it any time; said while it's up)
             hints.append(("START", "Now playing"))
+        hints += self.lobby_hints()                    # (X: watch another's game; SELECT: join it)
         hints.append(("Y", "Terminal"))
         name_sel, tab_sel = apps[sel]
         about = HOME_ICONS.get(name_sel, (None, ""))[1]

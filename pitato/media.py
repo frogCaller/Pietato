@@ -96,6 +96,8 @@ from .screens.konami import KonamiScreen
 from .screens.pilot import PilotScreen
 from .screens.group import GroupScreen
 from .screens.fishtank import FishScreen
+from .screens.lobby import LobbyScreen
+from .screens.party import PartyScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -108,7 +110,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
-            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen):
+            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen, LobbyScreen,
+            PartyScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -1444,6 +1447,12 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         except OSError:
             pass
 
+    def share_news(self):
+        """What this one's doing has changed (a game started or ended, say): your others told now, not at its next
+        beacon. (Only while it's saying it's there at all: share_start.)"""
+        if self.sharing:
+            self.share_now()
+
     def own_name(self):
         """What this Pietato's called on your others (and on its web page): its name (Settings > Other Pietatos), or
         the Pi's own name till it's given one."""
@@ -1468,13 +1477,20 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
         colour (Settings > Accent colour: a dot in it beside its name on your other Pietatos, to tell apart two of
         the same name). full: the one told straight to each of yours (not to everyone on the network), for the group
-        chat too: what it's doing, what it's made of, and how long ago you were last noticed here."""
+        chat too: what it's doing, what it's made of, and how long ago you were last noticed here; and the game it's
+        playing, for their home screens' lobby (screens/lobby.py)."""
         beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
         if full:
             beacon.update(doing=self.group_doing(), hw=self.group_hardware())
             you = self.you_at
             if you is not None and 0 <= time.time() - you <= YOU_WITHIN:
                 beacon["you"] = round(time.time() - you)
+            try:
+                game = self.lobby_mine()               # (the game it's playing, for your others' lobbies)
+            except Exception:
+                game = None
+            if game is not None:
+                beacon["game"] = game
         return beacon
 
     def web_shared(self):
@@ -1545,6 +1561,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.pilot_tick(now)                       # (Home > Control another Pietato)
         self.group_tick(now)                           # (Apps > Group chat: your Pietatos talking, and its pop-ups)
         self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
+        if self.party is not None:
+            self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:
@@ -1945,6 +1963,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
         if self.view == "now" and self.kind in LISTEN_KINDS:
             if repeat:
+                return None
+            if self.party_press(name):                 # (party mode: pausing and skipping, for all of them)
                 return None
             radio = self.kind == "radio"
             if name == "a":

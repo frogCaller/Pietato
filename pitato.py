@@ -86,7 +86,10 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 Radio Browser directory), and your own list in static/radio.txt
                 Now playing (music or radio): SELECT puts on lofi art, a quiet pixel-art scene on the whole
                 screen (a rainy window, a rooftop at dusk or a night train: each song or station has its
-                own), what's playing in its corner; SELECT again for the usual page. It's kept for next time
+                own), what's playing in its corner; SELECT again for the usual page. It's kept for next time.
+                HOME there has Party mode: your other Pietatos that are on play it too, at the same moment
+                (pitato/party.py: each one's clock set against this one's, as NTP sets a clock, then "start at
+                time T"); A, L, R, START and the d-pad on any of them pause or skip for all of them
   Camera      - a USB camera plugged into this Pi (there by itself, while it's plugged in), cameras
                 on your other Pis (PiE-ink, or this repo's camera.py: setup.sh
                 --camera) or any camera on your network (its address and port: the picture is
@@ -136,7 +139,10 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 from the game's memory too (pitato/emerald.py): the story step by step, battles, text,
                 questions, walking where the story goes, healing and training on the way. Your buttons
                 wait while it plays, and Games/Saves/<game>.ai.log has what it saw and picked.
-                START on the list finds a game by name (or console), B all again
+                START on the list finds a game by name (or console), B all again.
+                Another of your Pietatos playing a game: the home screen says which, top right; X watches
+                it (this one runs the same game from its buttons alone: pitato/netplay.py), SELECT joins it
+                as player 2, L and R go through them
   Weather     - like PiE-ink's: now, the next hours, the week, and the US Weather
                 Service's own words; START has its settings: where you are, and °F or °C
   Finance     - stock and coin prices with charts, laid out like PiE-ink's crypto screen (yours

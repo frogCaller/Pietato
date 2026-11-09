@@ -645,7 +645,8 @@ try:
     check(f"HOME on Now playing, a song of yours: Send to another Pietato too ({m.media_menu_items()})",
           m.view == "mediamenu" and m.media_menu_items() == [("back", "Back to the music"),
                                                              ("send", "Play on another Pietato"),
-                                                             ("keep", "Send to another Pietato")])
+                                                             ("keep", "Send to another Pietato"),
+                                                             ("party", "Party mode")])   # (test_party.py)
     m.dirty = True
     m.flush()
     toasts.clear()
@@ -662,7 +663,7 @@ try:
     m.view = "now"
     m.media_home()
     check(f"...a station: no Send (nobody's file to keep: Play on another Pietato only) ({len(m.media_menu_items())})",
-          [j for j, _ in m.media_menu_items()] == ["back", "send"])
+          [j for j, _ in m.media_menu_items()] == ["back", "send", "party"])
     m.press("b")
     m.stop()
     mi = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Music")

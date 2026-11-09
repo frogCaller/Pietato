@@ -10,7 +10,8 @@ Pietato starts on a home screen of apps:
   in on the web page's Settings
 - **TV**: Plex (Continue watching, Watchlist, Live TV with news and sports), Jellyfin, about 250 old
   cartoons and 150 old films from the Internet Archive, and your own streams
-- **Music** and **Radio** (on Now playing, SELECT puts on lofi art: a quiet scene on the whole screen),
+- **Music** and **Radio** (on Now playing, SELECT puts on lofi art: a quiet scene on the whole screen, and
+  HOME has [Party mode](#party-mode)),
   **Photos** (filters, delete), **Videos** (picks up where you left off)
 - **Weather** (press START there to set where you are, and °F or °C), and **Finance**: stock and coin prices
   and charts. Press Y on Finance to look up more to add
@@ -82,6 +83,15 @@ during a game or a video.
 A says something, Y has them stop talking among themselves (they still answer you), and SELECT stops a USB camera
 from looking for you. Each talks the way its Bot does, with the Bot's model if it has one (Settings > Bot), and
 with words of its own if not. Settings > Share with other Pietatos needs to be on.
+
+## Party mode
+
+With two or more Pietatos on, HOME on Now playing has Party mode: each of your others that's on (and isn't in
+a game, a video or the terminal) plays the same song or station at the same moment, through its own speaker.
+Songs come from the one you started it on, and so does a station, so all of them play the same thing. A, ◀▶, L,
+R and START on any of them pause it, move about in a song or skip, for all of them. Each keeps its own volume.
+HOME's menu ends it on the one you started it on, and leaves it on the others. Settings > Share with other
+Pietatos needs to be on.
 
 ## Fish Tank
 

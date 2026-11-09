@@ -44,6 +44,7 @@ LOCAL = {
     "test_sega": "Genesis test games (sega, ps1), and a web browser (Playwright's Chromium)",
     "test_two": "Genesis test games (sega)",
     "test_netplay_game": "Genesis test games (sega)",
+    "test_watch_game": "Genesis test games (sega)",
     "test_link_cable": "gambatte built (gambatte)",
     "test_here_game": "EmulatorJS and its Game Boy core, as npm has them (ejs), and a web browser (Playwright's Chromium)",
     "test_hooks_rename": "a copy of Pietato from before its rename (gpi-media.before_rename), and Claude Code",

@@ -228,7 +228,8 @@ class HandoffScreen:
             self.media_menu_close()
             return True
         video = self.kind in SCREEN_KINDS and self.proc_owns_screen()
-        if (video or (self.view == "now" and self.kind in LISTEN_KINDS)) and self.media_sendable():
+        if (video or (self.view == "now" and self.kind in LISTEN_KINDS)) and \
+                (self.media_sendable() or (not video and self.party_label())):   # (or party mode's, on its own)
             self.media_menu_open(video)
             return True
         row = self.song_row() or self.video_row()
@@ -257,8 +258,11 @@ class HandoffScreen:
                     ("keep", "Send to another Pietato")]
         back = ("Back to the video" if m.get("video") else "Back to the station" if self.kind == "radio"
                 else "Back to the music")
+        if self.party_on():                            # (party mode: what it's playing is the party's)
+            return [("back", back), ("party", self.party_label())]
         keep = [("keep", "Send to another Pietato")] if self.media_keepable() else []   # (a song of yours, a copy)
-        return [("back", back), ("send", "Play on another Pietato")] + keep
+        party = [] if m.get("video") or not self.party_label() else [("party", self.party_label())]
+        return [("back", back), ("send", "Play on another Pietato")] + keep + party
 
     def media_keepable(self):
         """What's playing is a song of yours, a file here: a copy can go to another of yours to keep (Plex's and
@@ -333,6 +337,9 @@ class HandoffScreen:
         elif name == "a" and job == "keep":
             self.media_menu_close()                    # (back to Now playing: it plays on here, a copy goes)
             self.media_keep()
+        elif name == "a" and job == "party":           # (party mode: started, ended or left: screens/party.py)
+            self.media_menu_close()
+            self.party_job()
         elif name == "a":
             self.media_menu_close(play_on=False)       # (sent, it stops here; if it can't go, it plays on)
             self.media_send()

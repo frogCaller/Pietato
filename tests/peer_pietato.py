@@ -8,10 +8,13 @@ terminal's keys, go in the log too (another Pietato controlling this one: pilot.
     python3 peer_pietato.py HOME LOG NAME PEER_URL PEER_NAME [slow] [presses]
 
 It prints READY <its web page's address> once it's answering; then takes a line at a time: state (what's on its
-screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu),
-news WHAT WHY (its emulator says WHAT, then ends: netgone, say), expire (another's asking to play together, not answered
-in time), peer URL NAME, set KEY VALUE (a setting), pilots (the controllers another Pietato's working it with, as
-JSON), group say TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON, for log), quit.
+screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu), mediahome (...on a video or Now playing),
+news WHAT WHY (its emulator says WHAT, then ends: netgone, say), gamenews WHAT WHY (...and plays on: watchjoined, say),
+game PATH|TITLE|SYSTEM (a game of its own, opened), beacon (what it tells your others it is, and doing, as JSON),
+expire (another's asking to play together, not answered in time),
+peer URL NAME, set KEY VALUE (a setting), pilots (the controllers another Pietato's working it with, as JSON), group say
+TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON, for log), quit. Its emulator,
+asked to open its game (nethost, watchhost), says it has (at 5442 and 5444), and the ask goes in the log.
 PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone."""
 import json
 import os
@@ -90,8 +93,20 @@ def game_quit(self, timeout=0):
     log(quit=self.game["path"])
 
 
+def game_ask(self, line, wants, timeout=3.0):
+    log(asked=line)
+    if line.startswith("nethost "):
+        return "nethost", "ok 5442"
+    if line.startswith("watchhost "):
+        return "watchhost", "ok 5444"
+    return None, ""
+
+
 g.GameRun.start = game_start
 g.GameRun.quit = game_quit
+g.GameRun.ask = game_ask
+g.GameRun.send = lambda self, line: bool(line.startswith("notice ") and log(sent=line))   # (what it says on its
+#                                                                                          picture, logged)
 g.GameRun.pause = lambda self: True
 g.GameRun.resume = lambda self: None
 
@@ -188,9 +203,20 @@ def state_now():
         lines = v.get("lines") or []
         shown["first"] = lines[v["top"]] if v.get("top", 0) < len(lines) else ""
     target = m.handoff_target()
+    party = m.party or {}
     return json.dumps({"game": run.game["path"] if run else None, "kind": m.kind, "view": m.view,
+                       "watching": (run.watching or {}).get("with") if run and run.watching else None,
+                       "together": {k: v for k, v in (run.together or {}).items() if k in ("with", "host", "state")}
+                       if run else None, "lobby": [(e["host"], e["title"]) for e in m.lobby_entries()],
+                       "playing": type(m.proc).__name__ if m.proc else None,
+                       "party_src": getattr(getattr(m.proc, "player", None), "src", None),
+                       "cur": (m.cur or {}).get("title"), "paused": bool(m.paused),
+                       "party": {"lead": party.get("lead"), "with": party.get("name"),
+                                 "members": sorted((party.get("members") or {}).values()),
+                                 "offset": party.get("offset")} if party else None,
                        "viewer": shown, "to": target[0] if target else None,
                        "file_menu": [k for k, _ in m.file_menu_items()] if m.view == "filemenu" else [],
+                       "media_menu": [k for k, _ in m.media_menu_items()] if m.view == "mediamenu" else [],
                        "menu": [k for k, _ in m.game_menu_items()] if run else [],
                        "send": m.game_value("send") if run else "",
                        "note": m.together_note() if run else "",
@@ -215,6 +241,8 @@ try:
         elif words[0] == "set":                         # a setting, as Settings sets it
             key, value = words[1].split(None, 1)
             m.set_setting(key, value.strip())
+            if key == "volume":                         # (how loud it plays, now)
+                m.volume = int(value)
             print("ok", file=SAY, flush=True)
         elif words[0] == "group":                       # the group chat: say TEXT, log, quiet on|off, answer Yes|No
             rest = (words[1] if len(words) > 1 else "").split(None, 1)
@@ -240,6 +268,18 @@ try:
             m.wake()
             done_it.wait(10)
             print(got[0] if got else "ok", file=SAY, flush=True)
+        elif words[0] == "beacon":                      # what it tells your others (straight to each), its web page's
+            got, done_it = [], threading.Event()        # port as it really is
+
+            def job():
+                try:
+                    got.append(json.dumps(dict(m.share_beacon(m.own_name(), full=True), port=web.server_port)))
+                finally:
+                    done_it.set()
+            m.soon_jobs.append(job)
+            m.wake()
+            done_it.wait(10)
+            print(got[0] if got else "{}", file=SAY, flush=True)
         elif words[0] == "pilots":                      # the controllers another Pietato's working it with
             pads = list(m.pads.by_path.values()) if m.pads else []
             print(json.dumps({"active": m.active, "view": m.view, "home_sel": m.home_sel, "guard": m.web_guard,
@@ -259,7 +299,8 @@ try:
             if not done_it.wait(10):
                 got.append(state_now())
             print(got[0], file=SAY, flush=True)
-        elif words[0] in ("press", "news", "expire", "home"):   # (done on its main loop, as a button would be)
+        elif words[0] in ("press", "news", "gamenews", "game", "expire", "home", "mediahome"):   # (on its main loop,
+            #                                                                                     as a button would be)
             done_it = threading.Event()
             rest = words[1].split() if len(words) > 1 else []
 
@@ -269,9 +310,18 @@ try:
                         m.press(rest[0])
                     elif what == "home":
                         m.file_home()
+                    elif what == "mediahome":           # (HOME on a video or Now playing: its menu)
+                        m.media_home()
                     elif what == "news" and m.game is not None:
                         m.game.net_news.append((rest[0], " ".join(rest[1:])))
                         m.game.ended = True
+                    elif what == "gamenews" and m.game is not None:
+                        m.game.net_news.append((rest[0], " ".join(rest[1:])))
+                        if rest[0] == "watchers":
+                            m.game.watchers = int(rest[1])
+                    elif what == "game":
+                        path, title, key = " ".join(rest).split("|")
+                        m.game_open({"src": path, "title": title, "system": key})
                     elif what == "expire" and m.invite is not None:
                         m.invite["until"] = 0.0
                 finally:

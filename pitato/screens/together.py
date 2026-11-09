@@ -312,7 +312,8 @@ class TogetherScreen:
     # -- another's asking ----------------------------------------------------------------------------------------------
     def web_together(self, cmd):
         """POST /api/together (another of your Pietatos, through webui.py): whether this one can play a game with it
-        (ask), its asking to play (invite: shown, for A or B), or (to the one that asked) the answer."""
+        (ask), its asking to play (invite: shown, for A or B), or (to the one that asked) the answer; or, from its
+        home screen's lobby, to watch this one's game or join it (screens/lobby.py)."""
         peers = self.saves_peers(str(cmd.get("from") or ""))
         if not peers:
             return {"ok": False, "error": "Not one of your Pietatos"}
@@ -320,6 +321,8 @@ class TogetherScreen:
         kind = cmd.get("kind")
         if kind == "answer":
             return self.together_answered(url, host, cmd.get("yes") is True)
+        if kind in ("watch", "join"):                  # (its home screen's lobby: this one's game, to watch or join)
+            return self.lobby_asked(kind, url, host)
         ident = clean_ident(cmd)
         if ident is None or kind not in ("ask", "invite"):
             return {"ok": False, "error": "Which game?"}

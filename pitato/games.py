@@ -1004,14 +1004,16 @@ class GameRun:
         self.net_news = []                           # two Pietatos playing it together: what's happened (the other
                                                      # joined, left, ended it), for media mode to say
         self.together = None                         # ...and who with, how (screens/together.py)
+        self.watching = None                         # watching another's game: whose (screens/lobby.py)
+        self.watchers = 0                            # ...this one's, watched: by how many of your others
 
     def start(self, core, sound="", volume=80, picture="Fit", fb="/dev/fb0", resume=True, options=(), turn=0,
-              cheevos=True, saves=None, net=""):
+              cheevos=True, saves=None, net="", watch=""):
         """options: the emulator's settings ("key=value"), over what it'd have otherwise (a DS game's screens).
         turn: degrees the screen's picture is turned clockwise (a screen on its side: Settings > Rotate screen).
         cheevos: its achievements, if you've signed in to RetroAchievements. saves: a folder of its own for its saves
         (attract mode's, apart from yours), instead of Games/Saves. net: ADDRESS:PORT:KEY, another Pietato's game,
-        joined as player 2 (pitato/netplay.py)."""
+        joined as player 2 (pitato/netplay.py); watch: ADDRESS:PORT:KEY, another Pietato's game, watched."""
         exts = ",".join(system(self.game["system"])[3])
         saves = saves or os.path.join(games_dir(), SAVES_FOLDER)
         own = self.game["system"] in OWN_FILES          # (Mupen64Plus: its settings, its shaders)
@@ -1050,6 +1052,8 @@ class GameRun:
             cmd.append("--resume")
         if net:
             cmd += ["--net", net]
+        if watch:
+            cmd += ["--watch", watch]
         if turn:
             cmd += ["--turn", str(int(turn))]
         for o in options:
@@ -1091,7 +1095,12 @@ class GameRun:
                             self.cheevos = (got, total) if total > 0 else None
                         except ValueError:
                             self.cheevos = None
-                    if what in ("netjoined", "netleft", "netgone"):
+                    if what == "watchers":
+                        try:
+                            self.watchers = max(0, int(rest))
+                        except ValueError:
+                            pass
+                    if what in ("netjoined", "netleft", "netgone", "watchgone", "watchjoined", "watchleft", "watchers"):
                         self.net_news.append((what, rest))
                     elif what not in ("cheevos", "cheevo"):    # (news, not answers)
                         self.answers.append((what, rest))

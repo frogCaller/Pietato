@@ -316,7 +316,7 @@ def host_ok():
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
              "bluetooth", "settings", "places", "fish"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
-              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group")
+              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1104,13 +1104,30 @@ TOGETHER_KEYS = ("kind", "link", "yes", "port", "key", "file", "system", "rel", 
 
 @app.post("/api/together")
 def together():
-    """Another of your Pietatos asks whether this one can play a game with it, asks it to play, or answers."""
+    """Another of your Pietatos asks whether this one can play a game with it, asks it to play, or answers; or (from its
+    home screen's lobby) asks to watch the game this one's playing, or to join it as player 2."""
     body = request.get_json(silent=True)
-    if not isinstance(body, dict) or body.get("kind") not in ("ask", "invite", "answer"):
+    if not isinstance(body, dict) or body.get("kind") not in ("ask", "invite", "answer", "watch", "join"):
         return jsonify(ok=False, error="What's that?"), 400
     cmd = {k: body[k] for k in TOGETHER_KEYS if k in body}
     cmd["from"] = request.remote_addr
     return pi_reply(ask_pi("POST", "/together", cmd, timeout=12))
+
+
+PARTY_KEYS = ("kind", "token", "port", "at", "pos", "item", "src", "what", "song")
+
+
+@app.post("/api/party")
+def party():
+    """Party mode (pitato/party.py): another of your Pietatos leading one asks this one to join it, says what to play
+    and when, or that it's over; or, to the one leading, another in it asks it to pause or skip, or says it's left."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or body.get("kind") not in ("start", "play", "pause", "resume", "song", "stop", "ask",
+                                                              "leave"):
+        return jsonify(ok=False, error="What's that?"), 400
+    cmd = {k: body[k] for k in PARTY_KEYS if k in body}
+    cmd["from"] = request.remote_addr
+    return pi_reply(ask_pi("POST", "/party", cmd, timeout=8))
 
 
 # ---- your Pietatos' group chat (pitato/circle.py, screens/group.py) -------------------------------------------------

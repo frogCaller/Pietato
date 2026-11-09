@@ -40,6 +40,7 @@ GAME_MENU = [("resume", "Back to the game"), ("save", "Save state"), ("load", "L
              ("volume", "Volume"), ("picture", "Picture"), ("players", "Players"), ("ai", "AI player"),
              ("cheevos", "Achievements"), ("together", "Play together"), ("send", "Play on another Pietato"),
              ("quit", "Quit game")]
+WATCH_MENU = ("resume", "volume", "picture", "quit")   # (another's game, watched here: screens/lobby.py)
 DS_ONLY = ("screens", "touch")      # (a DS game's own)
 GAME_CHANGE = ("disc", "volume", "picture", "screens", "touch", "ai", "together", "send")   # (◀▶ changes these)
 DS_SCREENS = [("Left/Right", "Side by side"), ("Top/Bottom", "One above the other"),
@@ -564,7 +565,13 @@ class GameScreen:
             return
         if run.state in ("on", "paused") and not getattr(run, "noted", False):   # (it's started: one of the ones
             run.noted = True                                                    # played last now)
-            self.games_played(run.game["path"])
+            if not self.watching_of(run):              # (another's, watched: not one of yours played)
+                self.games_played(run.game["path"])
+            self.share_news()                          # (your others' lobbies: what it's playing, at once)
+        if self.watching_of(run):                      # (watching another's: it ended it, say)
+            self.watch_tick(run)
+        else:
+            self.watched_tick(run)                     # (watched by your others: who's come)
         if self.together_of(run) is not None:          # (played together: the other joined, left...)
             self.together_tick(run, now)
         if run.ended or (run.state == "starting" and now - self.game_since > 15):
@@ -880,8 +887,9 @@ class GameScreen:
         t = self.together_of(run)
         if t is not None:
             self.together_end(run)                     # (a link cable's save, back with yours)
-        if t is None or t.get("host") or t.get("link"):
+        if (t is None or t.get("host") or t.get("link")) and not self.watching_of(run):
             self.saves_tell(run)                       # (its saves written: your other Pietatos take them)
+        self.share_news()                              # (your others' lobbies: not playing it any more)
         gi = self.tab_index("games")
         if gi is not None:
             self.load_tab(gi)
@@ -1040,6 +1048,8 @@ class GameScreen:
         cheevos = self.game is not None and self.game.cheevos is not None
         send = self.game is not None and self.handoff_target() is not None
         two = self.together_can()                      # (Play together: Link cable, for a Game Boy game)
+        if self.watching_of():                         # (another's game, watched here)
+            return [("quit", "Stop watching") if m[0] == "quit" else m for m in GAME_MENU if m[0] in WATCH_MENU]
         return [(m[0], self.together_label()) if m[0] == "together" else m for m in GAME_MENU
                 if (m[0] != "disc" or many) and (m[0] not in DS_ONLY or ds)
                 and (m[0] != "players" or together) and (m[0] != "cheevos" or cheevos) and (m[0] != "send" or send)
@@ -1277,6 +1287,8 @@ class GameScreen:
                       (" (on its own: your bot's computer isn't answering)" if ai.alive() and ai.offline else "")
         if self.game is not None and self.together_note():
             sysname = self.together_note()             # (playing together: who with)
+        if self.watch_note():
+            sysname = self.watch_note()                # (another's game, watched here: whose)
         d.text((mx0 + 22, my0 + 46), self.fit(d, sysname, F["small"], mw - 44), font=F["small"], fill=MUTED,
                anchor="lm")
         waiting, until = m["confirm"]

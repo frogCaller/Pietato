@@ -83,16 +83,31 @@ def pie_addr(text):
 def group_news(msg, old, now):
     """What another Pietato's beacon says for the group chat (pitato/circle.py): which run of it this is, always; and,
     in the one told straight to this one, what it's doing, what it's made of and how long ago you were last noticed
-    there (as when, here). The one to everyone doesn't say: what was heard before is kept."""
+    there (as when, here), and the game it's playing (for the home screen's lobby: screens/lobby.py). The one to everyone
+    doesn't say: what was heard before is kept."""
     out = {"id": clean_name(msg.get("id"), 24)}
     if "hw" not in msg:
-        out.update({k: old[k] for k in ("hw", "doing", "you") if k in old})
+        out.update({k: old[k] for k in ("hw", "doing", "you", "game") if k in old})
         return out
     you = msg.get("you")
     out.update(hw=hw_clean(msg.get("hw")), doing=clean_name(msg.get("doing"), 60),
                you=now - you if isinstance(you, (int, float)) and not isinstance(you, bool) and 0 <= you <= 86400
-               else None)
+               else None, game=game_clean(msg.get("game")))
     return out
+
+
+def game_clean(g):
+    """What another Pietato says it's playing (its beacon's), kept to what makes sense: {"title", "system", "watch",
+    "join", "with", "watchers"}, or None."""
+    if not isinstance(g, dict):
+        return None
+    title, sysk, who, n = g.get("title"), g.get("system"), g.get("with"), g.get("watchers")
+    if not isinstance(title, str) or not clean_name(title, 60) or not isinstance(sysk, str) \
+            or not re.fullmatch(r"[a-z0-9]{1,12}", sysk):
+        return None
+    return {"title": clean_name(title, 60), "system": sysk, "watch": g.get("watch") is True,
+            "join": g.get("join") is True, "with": clean_name(who, 40) if isinstance(who, str) else "",
+            "watchers": n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 99 else 0}
 
 
 def wx_units(data, have, want):

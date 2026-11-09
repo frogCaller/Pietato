@@ -115,6 +115,9 @@ class GroupScreen:
                 title = (run.game.get("title") or "")[:40]
                 if self.attract_on():
                     return f"playing {title} by itself" if title else "playing a game by itself"
+                watching = self.watching_of(run)
+                if watching:                           # (another's game, watched here: screens/lobby.py)
+                    return f"watching {watching['with']} play {title}" if title else f"watching {watching['with']} play"
                 return f"playing {title}" if title else "playing a game"
             if self.proc and self.cur:
                 title = (self.cur.get("title") or "")[:40]

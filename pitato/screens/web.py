@@ -643,6 +643,8 @@ class WebScreen:
             return {"ok": True}
         if self.together_of(run) is not None:
             return {"ok": True, "note": "A game you're playing together stays on the Pi"}
+        if self.watching_of(run):
+            return {"ok": True, "note": "A game you're watching stays on the Pi"}
         if self.game_ai_on():
             return {"ok": True, "note": "The AI player is playing it on the Pi"}
         g = run.game
@@ -809,6 +811,8 @@ class WebScreen:
             return self.web_peer_handoff(cmd)
         if c == "together":                            # (...or asks to play a game together)
             return self.web_together(cmd)
+        if c == "party":                               # (party mode: what its leader says, or another of it asks)
+            return self.web_party(cmd)
         if c == "fishfeed":                            # (the web page's Fish Tank: food in a tank)
             return self.web_fish_feed(cmd)
         if c == "fishgrid":                            # (...or the tanks arranged)

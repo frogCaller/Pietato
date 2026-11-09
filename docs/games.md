@@ -56,6 +56,19 @@ If you have two Pietatos, with Settings > Share with other Pietatos on, a game's
   game has **Link cable** instead: you each play your own game, linked, to trade or battle Pokémon. It
   starts from the game's own save, so save in the game first, and what you traded is in your save after.
 
+When another of your Pietatos is playing a game, the home screen shows it top right (`Living room is playing`,
+the game and its console):
+
+- **X** watches it. This Pietato runs the same game along with it, from its buttons alone, so the picture is
+  sharp and next to nothing goes over your network. It's a moment behind, and its menu has Stop watching.
+  Nothing of the game is kept here. Game Boy, Game Boy Color, Game Boy Advance, NES, SNES, Genesis, Master
+  System, Game Gear, Neo Geo Pocket and Neo Geo games can be watched, by as many of yours as you like.
+- **SELECT** joins it as player 2, in a game two can play.
+- L and R go through them, when more than one is playing.
+
+Both need the same version of the game's emulator (System > Update software on both), and if this one hasn't got
+the game, it's copied over first.
+
 To play on a Pietato that has no controller (one on the TV, say) with another one's buttons, see
 [Another Pietato](controllers.md#another-pietato).
 

@@ -144,6 +144,11 @@ class PlayerScreen:
             gone = sound_moves(was[0]) and was[0] not in [c for c, _ in sound_cards()]
             lost = usb_name(was[0]) if gone else ""
         to = (bt_output_name(place[1]) or "Bluetooth") if place[0] == "bluetooth" else sound_name(place[0])
+        if run is None and getattr(p, "player", None) is not None and hasattr(p.player, "set_device"):
+            self.sound_used = place                    # (party mode's player: its sound moves, in step all along)
+            p.player.set_device(aplay_device(None, place[0]))
+            self.toast(f"{lost} disconnected" if gone else f"Sound through {to}", 4)
+            return
         if run is not None:
             self.game_sound = place
             if gone and self.view == "game":
@@ -415,6 +420,9 @@ class PlayerScreen:
         hls = is_hls(target)
         if kind == "live" and not plexlive and hls:     # the version that suits the Pi
             target = hls_pick(target)
+        if kind in LISTEN_KINDS and self.party_leading():   # (party mode: on all of yours too, in step: screens/party.py)
+            self.retry = None
+            return self.party_play(it, kind, target, start)
         net = "://" in target
         args = list(AUDIO_PLAYER if kind in LISTEN_KINDS else self.video_args())
         if kind == "radio":
