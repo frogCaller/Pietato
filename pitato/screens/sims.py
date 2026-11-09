@@ -5,8 +5,9 @@ import time
 from ..theme import ACCENT, BG, BODY, co_mix, LINE, MUTED, ROW, TEXT
 from ..library import LIBRARY
 from ..sims import (
-    ForestFire, Life, RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
+    Life, RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
     SIM_FLOOR, SIM_FULL, SIM_IN, SIM_PANEL)
+from ..fishtank import FishTank, fish_default
 from ..clock import Clock
 from ..mandelbrot import Mandelbrot
 from ..notes import Notes
@@ -14,7 +15,7 @@ from ..fortune import Fortune
 from ..snake import Snake
 
 
-SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, ForestFire, Mandelbrot, Snake)}
+SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Mandelbrot, Snake)}
 CLOCK_KEYS = {"a": "look", "up": "colour", "down": "colour", "left": "font", "right": "font",
               "x": "background", "y": "date"}    # the Clock's buttons: the option each changes (its seconds: START's)
 
@@ -36,6 +37,8 @@ class SimScreen:
         for k, _, ways, default in self.sim_rows(kind):
             if k == key:
                 v = self.setting("sim_full" if k == "full" else f"sim_{kind.key}_{k}")
+                if kind is FishTank and k == "kind" and v not in ways:
+                    default = fish_default(self.own_name())   # (a fish of its own, till you pick one)
                 return v if v in ways and not isinstance(v, bool) else default
         return None
 
@@ -93,6 +96,8 @@ class SimScreen:
         if kind is Clock:
             s.hours24 = self.setting("clock") == "24-hour"     # (Settings > Clock)
             s.full = self.sim_full()                           # (full screen: its dial a little smaller)
+        if kind is FishTank:
+            s.aq = self.aquarium                               # (the fish live on, here and on your others)
         return s
 
     def sim_set_full(self, on):
@@ -141,6 +146,14 @@ class SimScreen:
         if repeat:
             return None
         full, rps = self.sim_full(), s.key == "rps"
+        if s.key == "fish" and name in ("a", "y"):     # (the Fish Tank: A calls your fish, Y a new look)
+            if name == "a":
+                self.aquarium.call()
+                self.toast("Here, fish!", 2)
+            else:
+                self.fish_new_look()
+            self.dirty = True
+            return None
         if name in ("left", "right") and rps:
             if s.is_open():
                 s.choose(1 if name == "right" else -1)

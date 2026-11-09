@@ -1,7 +1,7 @@
 """Attract mode (Settings > Attract mode): when Pietato's left idle, plugged in (the battery saver off), the Bot gets
 bored and finds something to do, something else every minute or so: it plays one of your games (as an arcade
 cabinet's does), looks through your camera and says what it sees (turning it to look around, when it's one that turns:
-an OBSBOT on a Pi), puts up the weather, your stocks and coins, one of Apps' (the Game of Life, Forest Fire, the
+an OBSBOT on a Pi), puts up the weather, your stocks and coins, one of Apps' (the Game of Life, the Fish Tank, the
 Mandelbrot set, Rock Paper Scissors, a new fortune from the Fortune Cookie), a slideshow of your photos, or how the Pi's
 doing. Each time, it says something about it: its model's words when it has one (Settings > Bot), else a line of its
 own; on the screen, and out loud in the day (with a voice, and Talks out loud on). Games only: just games, as it was.
@@ -39,7 +39,7 @@ BADGE = (128, 112)            # the badge in the corner: the Bot's face, and wha
 SAVE_EXTS = (".srm", ".rtc", ".state.auto", ".disc")   # (yours, copied: where the AI player carries on from)
 BORED_FOR = {"camera": 80.0, "weather": 40.0, "finance": 40.0, "app": 75.0, "photos": 60.0, "system": 30.0}
 BORED_STILL = 45.0            # ...a camera that doesn't turn: this long (it looks once)
-BORED_APPS = ("Game of Life", "Forest Fire", "Mandelbrot Set", "Rock Paper Scissors",   # Apps' it watches
+BORED_APPS = ("Game of Life", "Fish Tank", "Mandelbrot Set", "Rock Paper Scissors",   # Apps' it watches
               "Fortune Cookie")                                                     # (...or opens)
 BORED_TALK = (8, 22)          # hours it says things out loud between (the rest of the time: just on the screen, so
                               # nobody's woken)
@@ -59,7 +59,7 @@ BORED_LINES = {
     "system": ("Let me check how I'm doing.", "Time for a quick check-up.", "How am I doing? Let's see."),
 }
 BORED_APP_LINES = {"Game of Life": "I could watch the Game of Life all day.",
-                   "Forest Fire": "Forest fires, from a safe distance.",
+                   "Fish Tank": "Just watching the fish.",
                    "Mandelbrot Set": "Let's take a dive into the Mandelbrot set.",
                    "Rock Paper Scissors": "Rock, paper or scissors? Let's find out."}
 # ...and what its model's asked to say

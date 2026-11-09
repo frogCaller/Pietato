@@ -95,6 +95,7 @@ from .screens.together import TogetherScreen
 from .screens.konami import KonamiScreen
 from .screens.pilot import PilotScreen
 from .screens.group import GroupScreen
+from .screens.fishtank import FishScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -107,7 +108,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
-            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen):
+            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -471,6 +472,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                                lambda: "C" if self.setting("units") == "°C" else "F", pie=self.pie)
         self.weather.on_change = self.weather_drawn
         self.group_setup()                             # (Apps > Group chat: your Pietatos talking: screens/group.py)
+        self.fish_setup()                              # (Apps > Fish Tank: its fish lives on: screens/fishtank.py)
+        self.camera.on_fish = self.fish_heard          # (...and hears your others' where theirs are)
 
     # -- settings ------------------------------------------------------------
     def setting(self, key):
@@ -1541,6 +1544,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.pilot_on() or (self.view == "list" and self.tab_type() == "pilot"):
             self.pilot_tick(now)                       # (Home > Control another Pietato)
         self.group_tick(now)                           # (Apps > Group chat: your Pietatos talking, and its pop-ups)
+        self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:

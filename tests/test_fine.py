@@ -266,7 +266,7 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Forest Fire", "Mandelbrot Set", "Snake"):
+    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake"):
         try:
             tab(name)
             for _ in range(5):

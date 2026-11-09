@@ -413,6 +413,7 @@ class Camera:
         self.patterns = []
         self.cams = []               # [{"addr", "name"}]: this Pi's USB cameras ("usb": True), then camera.txt's
         self.own = OwnCameras()      # ...the USB ones: what answers for them
+        self.on_fish = lambda ip, msg: None   # ...and another Pietato's fish (media mode's: screens/fishtank.py)
         self.usb = []                # ...and them, as they were last looked for
         self.found = {}              # cam_key -> {"addr", "name", "server", "seen"}: heard on the network
         self.known = {}              # cam_key -> what answered there: {"kind", "url", "name", "server"}
@@ -930,6 +931,9 @@ class Camera:
         """One beacon: a PiE-ink, camera.py or another Pietato saying it's there."""
         msg = json.loads(data.decode())
         if not isinstance(msg, dict):
+            return
+        if msg.get("fishtank") == 1:                   # (another Pietato's fish, in your tanks joined up: fishtank.py)
+            self.on_fish(ip, msg)
             return
         if msg.get("pie") == 1 or msg.get("pietato") == 1:
             self.on_pie(ip, msg)

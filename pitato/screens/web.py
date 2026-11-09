@@ -809,6 +809,10 @@ class WebScreen:
             return self.web_peer_handoff(cmd)
         if c == "together":                            # (...or asks to play a game together)
             return self.web_together(cmd)
+        if c == "fishfeed":                            # (the web page's Fish Tank: food in a tank)
+            return self.web_fish_feed(cmd)
+        if c == "fishgrid":                            # (...or the tanks arranged)
+            return self.web_fish_grid(cmd)
         if c == "open":
             app = str(cmd.get("app") or "")
             app = RENAMED.get(app, app)                # (by what it was called before)

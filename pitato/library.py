@@ -28,7 +28,7 @@ LIBRARY = [
     {"name": "Finance", "type": "finance", "files": [settings_glob("finance.txt")], "empty": ""},
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
-     "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Forest Fire",
+     "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Fish Tank",
                   "Mandelbrot Set", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire", "htop"]},
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
@@ -78,8 +78,8 @@ LIBRARY = [
      "about": "Last team standing", "empty": ""},
     {"name": "Game of Life", "type": "sim", "sim": "life", "parent": "Apps", "badge": "LIFE",
      "about": "Cells live, die and are born", "empty": ""},
-    {"name": "Forest Fire", "type": "sim", "sim": "fire", "parent": "Apps", "badge": "FIRE",
-     "about": "Trees grow, fires spread", "empty": ""},
+    {"name": "Fish Tank", "type": "sim", "sim": "fish", "parent": "Apps", "badge": "FISH",   # (fishtank.py)
+     "about": "Your fish, and your other Pietatos'", "empty": ""},
     {"name": "Mandelbrot Set", "type": "sim", "sim": "mandel", "parent": "Apps", "badge": "ZOOM",
      "about": "Dives into the famous fractal", "empty": ""},
     {"name": "Konami code", "type": "konami", "parent": "Apps", "badge": "CHEAT",   # (screens/konami.py)

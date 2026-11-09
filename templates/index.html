@@ -647,6 +647,15 @@
   .dr-go { display: flex; align-items: center; gap: 8px; margin-left: auto; }
   .dr-go .chip { padding: 8px 14px; }
 
+  /* ---- the fish tank: your Pietatos' tanks, joined up in a grid ---- */
+  .ft { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .ft-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; min-width: 0; }
+  .ft-hint { flex: 1; min-width: 200px; margin: 0; font-size: 13.5px; color: var(--muted); }
+  .ft-stage { display: grid; justify-items: center; min-width: 0; }
+  .ft-stage canvas { display: block; max-width: 100%; cursor: pointer; touch-action: manipulation; }
+  .ft-stage canvas.arranging { cursor: grab; touch-action: none; }
+  .ft-stage canvas.dragging { cursor: grabbing; }
+
   /* ---- files ---- */
   .files { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 36px; align-items: start; }
   .add { position: sticky; top: calc(var(--top) + 28px); max-height: calc(100vh - var(--top) - 56px); display: flex; flex-direction: column; }
@@ -2592,9 +2601,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) btKi
 const TABS = [                  // (the Pi's apps are on its screen: tapped there)
   ["cartoons", "Cartoons"], ["films", "Films"], ["news", "News"],
   ["sports", "Sports"], ["radio", "Radio"], ["streams", "Your streams"], ["cameras", "Cameras"], ["friend", "Bot"],
-  ["draw", "Draw"],
+  ["draw", "Draw"], ["fish", "Fish Tank"],
 ];
-const OWN = new Set(["cameras", "friend", "draw"]);   // tabs that draw a page of their own
+const OWN = new Set(["cameras", "friend", "draw", "fish"]);   // tabs that draw a page of their own
 const WHERE = { cartoons: "Cartoons", films: "Free Movies", news: "News", sports: "Sports", radio: "Radio", streams: "Streams" };
 const PLEX = {
   cartoons: [["plex:anime", "Anime"], ["plex:toons", "Cartoon channels"]],
@@ -2677,6 +2686,7 @@ function drawLibrary() {
   if (tab === "cameras") return drawCameras();
   if (tab === "friend") return drawFriend();
   if (tab === "draw") return drawDraw();
+  if (tab === "fish") return drawFish();
   drawRows();
 }
 
@@ -4337,6 +4347,400 @@ async function drawDraw() {
   drBot(token);
 }
 
+// ---- the Fish Tank: your Pietatos' tanks joined up in a grid, each one's fish swimming through them all -------------
+// (pitato/fishtank.py: the Pi says where everything is a few times a second; this draws it, in between too)
+const FT = { data: null, got: 0, shown: {}, pics: {}, backs: {}, arrange: false, drag: null, last: 0, cv: null,
+             hint: null, btn: null, sub: null, gen: 0, held: 0 };
+const FT_ASPECT = 4 / 3, FT_SAND = 0.86, FT_EVERY = 0.35, FT_RISE = 0.22, FT_LEN = 0.17, FT_TURN = 0.45, FT_WAGS = 6;
+const FT_MOST = 6;              // cells across or down, at most
+const FT_WATER = { Day: [[58, 156, 200], [10, 52, 96]], Night: [[22, 56, 92], [4, 14, 30]] };
+const FT_SANDS = { Day: [[214, 192, 146], [168, 140, 96]], Night: [[84, 82, 78], [52, 50, 48]] };
+function ftHash(k, s) {         // (fishtank.py's hash32: the bubbles where the Pi has them)
+  let x = (Math.imul(k, 2654435761) ^ Math.imul(s, 2246822519)) >>> 0;
+  x ^= x >>> 15; x = Math.imul(x, 2246822507) >>> 0;
+  x ^= x >>> 13; x = Math.imul(x, 3266489909) >>> 0;
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+function ftSeed(name) { let h = 0; for (const ch of name) h = (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0; return h; }
+function ftRound(x, a, b, w, h, r) {   // (a rounded box; a plain one where the browser can't)
+  x.beginPath();
+  if (x.roundRect) x.roundRect(a, b, w, h, r); else x.rect(a, b, w, h);
+}
+const ftMix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const ftRgb = (c, a) => a === undefined ? `rgb(${c[0]},${c[1]},${c[2]})` : `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+function ftHex(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+function ftGrid(d) {            // who's where: {at: "c,r" -> tank}, and what's next to what
+  const at = {};
+  for (const t of d.tanks) at[t.c + "," + t.r] = t;
+  return { at, has: (c, r) => !!at[c + "," + r] };
+}
+function ftBubbles(sx, sy, seed, top, t) {   // (fishtank.py's stone_bubbles)
+  const out = [], most = (sy - top) / FT_RISE, k = Math.floor(t / FT_EVERY);
+  for (let i = k - Math.floor(most / FT_EVERY) - 2; i <= k; i++) {
+    const born = i * FT_EVERY + ftHash(i, seed) * FT_EVERY * 0.6, age = t - born;
+    if (age < 0 || age > most) continue;
+    const y = sy - FT_RISE * age;
+    if (y <= top + 0.03) continue;
+    out.push([sx + 0.012 * Math.sin(age * 3.1 + i), y, (0.007 + 0.009 * ftHash(i, seed + 7)) * (1 + 0.6 * age / Math.max(most, 0.1))]);
+  }
+  return out;
+}
+
+async function drawFish() {
+  const box = $("#content"), token = ++libToken;
+  box.textContent = "";
+  const h = head("Fish Tank", "");
+  FT.sub = h.querySelector(".src");
+  box.append(h);
+  const ft = el("div", "ft");
+  const bar = el("div", "ft-bar");
+  FT.hint = el("p", "ft-hint", "");
+  FT.btn = button("chip", "Arrange");
+  FT.btn.title = "Drag your tanks into a grid: the fish swim between the ones next to each other";
+  FT.btn.onclick = () => { FT.arrange = !FT.arrange; FT.drag = null; ftWords(); };
+  bar.append(FT.hint, FT.btn);
+  const stage = el("div", "ft-stage");
+  FT.cv = el("canvas");
+  FT.cv.setAttribute("role", "img");
+  FT.cv.setAttribute("aria-label", "Your Pietatos' fish tanks");
+  stage.append(FT.cv);
+  ft.append(bar, stage);
+  box.append(ft);
+  ftPointer(FT.cv);
+  ftWords();
+  ftStart(token);
+}
+function ftStart(token) {        // (again when the page is back from being hidden: the old ones stop)
+  const gen = ++FT.gen;
+  FT.last = 0;
+  ftPoll(token, gen);
+  requestAnimationFrame((t) => ftFrame(token, gen, t));
+}
+function ftWords() {
+  const d = FT.data;
+  FT.btn.textContent = FT.arrange ? "Done" : "Arrange";
+  FT.btn.setAttribute("aria-pressed", String(FT.arrange));
+  FT.cv.classList.toggle("arranging", FT.arrange);
+  const n = d ? d.tanks.length : 0;
+  FT.sub.textContent = !d ? "" : n === 1 ? "Just this one" : n + " tanks, joined up";
+  FT.hint.textContent = FT.arrange ? "Drag a tank to where you want it. Fish swim between tanks that touch."
+    : d && d.sharing === false ? "Sharing with your other Pietatos is off (Settings), so it's just this one."
+    : n > 1 ? "Tap a tank to feed it." : "Tap the tank to feed it. Your other Pietatos' tanks join it here.";
+}
+async function ftPoll(token, gen) {
+  while (ftLive(token, gen)) {
+    try {
+      const asked = performance.now();
+      const d = await api("/api/pi/fish");
+      if (!ftLive(token, gen)) return;
+      if (asked < FT.held) { await sleep(100); continue; }   // (asked before the grid you just made was in)
+      const was = FT.data;
+      FT.data = d; FT.got = performance.now();
+      if (!was || was.tanks.length !== d.tanks.length || was.sharing !== d.sharing) ftWords();
+    } catch (e) {}
+    await sleep(250);
+  }
+}
+function ftLive(token, gen) {
+  return gen === FT.gen && token === libToken && L.tab === "fish" && !!FT.cv && FT.cv.isConnected && !document.hidden;
+}
+
+// -- sizes: each tank as big as fits, the grid (and in Arrange, a ring of empty places round it) on the page ----------
+function ftLayout() {
+  const d = FT.data;
+  let cols = d ? d.cols : 1, rows = d ? d.rows : 1, off = 0;
+  if (FT.arrange) { off = 1; cols += 2; rows += 2; }   // (and a place free all round)
+  const room = FT.cv.parentElement.clientWidth || 600;
+  const tall = Math.max(240, window.innerHeight * 0.66);
+  const cw = Math.max(60, Math.floor(Math.min(room / cols, tall / rows * FT_ASPECT)));
+  return { cols, rows, off, cw, ch: Math.round(cw / FT_ASPECT) };
+}
+function ftSize(lay) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1), cv = FT.cv;
+  const w = lay.cols * lay.cw, h = lay.rows * lay.ch;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + "px"; cv.style.height = h + "px";
+    FT.backs = {};
+  }
+  return dpr;
+}
+
+// -- each tank's water, light, sand and rocks: drawn once, kept ----------------------------------------------------------
+function ftBack(t, d, g, cw, ch, dpr) {
+  const dec = t.decor || {}, light = dec.light === "Night" ? "Night" : "Day";
+  const top = !g.has(t.c, t.r - 1), low = !g.has(t.c, t.r + 1);
+  const key = [cw, ch, dpr, d.rows, t.r, top, low, JSON.stringify(dec)].join("|");
+  const kept = FT.backs[t.name];
+  if (kept && kept.key === key) return kept.c;
+  const c = document.createElement("canvas");
+  c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr);
+  const x = c.getContext("2d");
+  x.scale(dpr, dpr);
+  const [hi, deep] = FT_WATER[light];
+  const grad = x.createLinearGradient(0, 0, 0, ch);
+  for (let i = 0; i <= 6; i++) {
+    const v = (t.r + i / 6) / Math.max(1, d.rows);
+    grad.addColorStop(i / 6, ftRgb(ftMix(hi, deep, Math.pow(v, 0.8))));
+  }
+  x.fillStyle = grad; x.fillRect(0, 0, cw, ch);
+  const seed = ftSeed(t.name);
+  for (let i = 0; i < (top ? 4 : 0); i++) {      // (light from the surface, in soft beams, fading as it goes down)
+    const bx = (ftHash(i, seed) * 1.2 - 0.2) * cw, spread = (0.04 + 0.05 * ftHash(i, seed + 3)) * cw;
+    const lean = (0.15 + 0.25 * ftHash(i, seed + 5)) * ch;
+    const a = light === "Night" ? 0.08 : 0.15;
+    const beam = x.createLinearGradient(0, 0, 0, ch);
+    beam.addColorStop(0, `rgba(210,236,255,${a})`); beam.addColorStop(1, "rgba(210,236,255,0)");
+    x.fillStyle = beam;
+    x.beginPath(); x.moveTo(bx, 0); x.lineTo(bx + spread, 0); x.lineTo(bx + spread + lean, ch); x.lineTo(bx + lean, ch);
+    x.closePath(); x.fill();
+  }
+  if (top) { x.fillStyle = light === "Night" ? "rgb(60,90,130)" : "rgb(150,210,236)"; x.fillRect(0, 0, cw, Math.max(2, ch / 90)); }
+  if (low) {                                     // (the sand, its rocks, the air stone)
+    const sy = FT_SAND * ch, [st, sl] = FT_SANDS[light];
+    x.beginPath(); x.moveTo(0, ch);
+    for (let px = 0; px <= cw + 8; px += 8) x.lineTo(px, sy + Math.sin(px / cw * 9 + seed % 7) * ch * 0.012);
+    x.lineTo(cw, ch); x.closePath();
+    const sand = x.createLinearGradient(0, sy, 0, ch);
+    sand.addColorStop(0, ftRgb(st)); sand.addColorStop(1, ftRgb(sl));
+    x.fillStyle = sand; x.fill();
+    x.fillStyle = "rgba(90,70,40,.18)";
+    for (let i = 0; i < cw * 0.6; i++) x.fillRect(ftHash(i, seed + 11) * cw, sy + 3 + ftHash(i, seed + 13) * (ch - sy - 3), 1.2, 1.2);
+    for (const [u, size, l] of dec.rocks || []) {
+      const rr = size * ch, cx = u * cw, cy = sy + rr * 0.35;
+      let col = ftMix([96, 104, 116], [140, 146, 156], l);
+      if (light === "Night") col = ftMix(col, [20, 24, 32], 0.55);
+      x.fillStyle = ftRgb(col);
+      x.beginPath(); x.ellipse(cx, cy, rr * 1.3, rr, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = ftRgb(ftMix(col, [255, 255, 255], 0.18));
+      x.beginPath(); x.ellipse(cx - rr * 0.3, cy - rr * 0.5, rr * 0.5, rr * 0.3, 0, 0, Math.PI * 2); x.fill();
+    }
+    if (dec.stone !== null && dec.stone !== undefined) {
+      x.fillStyle = light === "Night" ? "rgb(40,42,48)" : "rgb(70,74,84)";
+      ftRound(x, dec.stone * cw - ch * 0.03, sy - ch * 0.012, ch * 0.06, ch * 0.026, 3); x.fill();
+    }
+  }
+  FT.backs[t.name] = { key, c };
+  return c;
+}
+
+// -- a frame ---------------------------------------------------------------------------------------------------------------
+function ftFrame(token, gen, now) {
+  if (!ftLive(token, gen)) return;
+  requestAnimationFrame((t) => ftFrame(token, gen, t));
+  const dt = FT.last ? Math.min(0.1, (now - FT.last) / 1000) : 0;
+  FT.last = now;
+  const d = FT.data, cv = FT.cv;
+  const lay = ftLayout(), dpr = ftSize(lay), x = cv.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, lay.cols * lay.cw, lay.rows * lay.ch);
+  if (!d) {
+    x.fillStyle = "#9a94a3"; x.font = "15px system-ui, sans-serif"; x.textAlign = "center";
+    x.fillText("Looking for your fish…", lay.cols * lay.cw / 2, lay.rows * lay.ch / 2);
+    return;
+  }
+  if (FT.arrange) return ftArrangeFrame(x, d, lay);
+  const g = ftGrid(d), wall = Date.now() / 1000, cw = lay.cw, ch = lay.ch;
+  for (const t of d.tanks) x.drawImage(ftBack(t, d, g, cw, ch, dpr), t.c * cw, t.r * ch, cw, ch);
+  x.save();
+  x.beginPath();                                   // (nothing drawn outside the tanks)
+  for (const t of d.tanks) x.rect(t.c * cw, t.r * ch, cw, ch);
+  x.clip();
+  for (const t of d.tanks) {                       // (plants, swaying, in a bottom tank)
+    if (g.has(t.c, t.r + 1)) continue;
+    const night = (t.decor || {}).light === "Night";
+    for (const [pu, ph, pw, phase, green, leafy] of (t.decor || {}).plants || []) {
+      let col = ftHex(green);
+      if (night) col = ftMix(col, [12, 40, 40], 0.55);
+      const pts = [];
+      for (let i = 0; i < 10; i++) {
+        const k = i / 9, sway = Math.sin(wall * 1.4 + phase + k * 2.4) * 0.05 * ch * Math.pow(k, 1.4);
+        pts.push([t.c * cw + pu * cw + sway, t.r * ch + (FT_SAND + 0.02 - k * ph) * ch]);
+      }
+      x.lineCap = "round";
+      for (let i = 0; i < 9; i++) {
+        x.strokeStyle = ftRgb(ftMix(col, [230, 255, 200], 0.12 * i / 9));
+        x.lineWidth = Math.max(1, pw * ch * (1 - 0.65 * i / 9));
+        x.beginPath(); x.moveTo(...pts[i]); x.lineTo(...pts[i + 1]); x.stroke();
+      }
+      if (leafy) {
+        x.fillStyle = ftRgb(ftMix(col, [180, 230, 120], 0.2));
+        for (let i = 2; i < 9; i += 2) {
+          const [lx, ly] = pts[i], sgn = i % 4 ? -1 : 1, leaf = ch * 0.05 * (1 - i / 18);
+          x.beginPath(); x.moveTo(lx, ly); x.lineTo(lx + sgn * leaf, ly - leaf * 0.5);
+          x.lineTo(lx + sgn * leaf * 1.6, ly - leaf * 0.2); x.lineTo(lx + sgn * leaf * 0.7, ly + leaf * 0.15); x.closePath(); x.fill();
+        }
+      }
+    }
+  }
+  x.fillStyle = "rgb(206,120,52)";                 // (the food)
+  for (const [fx, fy] of d.food) { const r = Math.max(1.2, ch * 0.006); x.fillRect(fx * cw - r, fy * ch - r, r * 2, r * 2); }
+  for (const t of d.tanks) {                       // (bubbles, from each air stone up to the surface over it)
+    const dec = t.decor || {};
+    if (g.has(t.c, t.r + 1) || dec.stone === null || dec.stone === undefined) continue;
+    let top = t.r;
+    while (g.has(t.c, top - 1)) top--;
+    for (const [bx, by, br] of ftBubbles(t.c + dec.stone, t.r + FT_SAND - 0.01, ftSeed(t.name), top, wall)) {
+      const r = Math.max(1.5, br * ch);
+      x.strokeStyle = "rgba(214,240,255,.9)"; x.lineWidth = 1;
+      x.beginPath(); x.arc(bx * cw, by * ch, r, 0, Math.PI * 2); x.stroke();
+      x.fillStyle = "rgba(240,252,255,.9)";
+      x.beginPath(); x.arc(bx * cw - r * 0.25, by * ch - r * 0.35, r * 0.22, 0, Math.PI * 2); x.fill();
+    }
+  }
+  ftFishes(x, d, dt, cw, ch);
+  x.restore();
+  x.strokeStyle = "rgba(190,226,250,.45)"; x.lineWidth = 2; x.lineCap = "square";   // (the glass round them all)
+  x.beginPath();
+  for (const t of d.tanks) {
+    const x0 = t.c * cw + 1, y0 = t.r * ch + 1, x1 = (t.c + 1) * cw - 1, y1 = (t.r + 1) * ch - 1;
+    if (!g.has(t.c, t.r - 1)) { x.moveTo(x0, y0); x.lineTo(x1, y0); }
+    if (!g.has(t.c, t.r + 1)) { x.moveTo(x0, y1); x.lineTo(x1, y1); }
+    if (!g.has(t.c - 1, t.r)) { x.moveTo(x0, y0); x.lineTo(x0, y1); }
+    if (!g.has(t.c + 1, t.r)) { x.moveTo(x1, y0); x.lineTo(x1, y1); }
+  }
+  x.stroke();
+  x.font = "600 12px system-ui, sans-serif"; x.textAlign = "left"; x.textBaseline = "top";
+  for (const t of d.tanks) {                       // (whose tank is whose)
+    x.fillStyle = "rgba(8,22,40,.55)";
+    const label = t.name + (t.me ? " (this one)" : ""), w = x.measureText(label).width + 14;
+    ftRound(x, t.c * cw + 8, t.r * ch + 8, w, 20, 10); x.fill();
+    x.fillStyle = t.colour || "#e4e8ee"; x.fillText(label, t.c * cw + 15, t.r * ch + 12);
+  }
+}
+function ftPic(kind, frame, size) {
+  const key = kind + "|" + frame + "|" + size;
+  let img = FT.pics[key];
+  if (!img) {
+    img = FT.pics[key] = new Image();
+    img.src = "/api/pi/fishpic?" + qs({ name: kind, id: frame, size });
+  }
+  return img.complete && img.naturalWidth ? img : null;
+}
+function ftFishes(x, d, dt, cw, ch) {
+  const age = Math.min(0.5, (performance.now() - FT.got) / 1000), k = Math.min(1, dt * 8);
+  const seen = new Set(), joined = d.tanks.length > 1;
+  const size = FT_LEN * ch * (window.devicePixelRatio || 1) > 100 ? 160 : 96;
+  for (const f of d.fish.slice().sort((a, b) => a.y - b.y)) {
+    const tx = f.x + f.vx * age, ty = f.y + f.vy * age;
+    let s = FT.shown[f.name];
+    if (!s || Math.abs(s.x - tx) + Math.abs(s.y - ty) > 0.8) s = FT.shown[f.name] = { x: tx, y: ty, face: f.face, turn: 0, wag: 0 };
+    s.x += (tx - s.x) * k; s.y += (ty - s.y) * k;
+    if (f.face !== s.face && s.turn <= 0) s.turn = FT_TURN;
+    if (s.turn > 0) { const was = s.turn; s.turn -= dt; if (s.turn <= FT_TURN / 2 && was > FT_TURN / 2) s.face = f.face; }
+    s.wag += dt * (2.5 + 9 * Math.hypot(f.vx, f.vy));
+    seen.add(f.name);
+    const img = ftPic(f.kind, Math.floor(s.wag) % FT_WAGS, size);
+    const px = s.x * cw, py = s.y * ch, len = FT_LEN * ch;
+    if (img) {
+      const sc = len / size, squash = s.turn > 0 ? Math.max(0.2, Math.abs(Math.cos(s.turn / FT_TURN * Math.PI))) : 1;
+      const tilt = Math.abs(f.vx) + Math.abs(f.vy) <= 0.02 ? 0       // (resting: level)
+        : Math.max(-0.35, Math.min(0.35, Math.atan2(f.vy * ch, Math.abs(f.vx) * cw + 1e-6) * 0.8));
+      x.save(); x.translate(px, py); x.scale(s.face * squash, 1); x.rotate(tilt);
+      x.drawImage(img, -img.naturalWidth * sc / 2, -img.naturalHeight * sc / 2, img.naturalWidth * sc, img.naturalHeight * sc);
+      x.restore();
+    }
+    if (joined) {                                  // (whose fish it is)
+      x.font = "600 11px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+      const w = x.measureText(f.name).width + 12;
+      x.fillStyle = "rgba(8,22,40,.6)";
+      ftRound(x, px - w / 2, py + len * 0.42, w, 17, 8.5); x.fill();
+      x.fillStyle = f.colour || "#e4e8ee"; x.fillText(f.name, px, py + len * 0.42 + 8.5);
+    }
+  }
+  for (const name of Object.keys(FT.shown)) if (!seen.has(name)) delete FT.shown[name];
+}
+
+// -- Arrange: the tanks as tiles, dragged to where they go ----------------------------------------------------------------
+function ftArrangeFrame(x, d, lay) {
+  const cw = lay.cw, ch = lay.ch, drag = FT.drag, css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue("--line-3").trim() || "rgba(128,128,128,.3)";   // (the page's, light or dark)
+  const accent = css.getPropertyValue("--accent-rgb").trim() || "96, 170, 228";
+  x.setLineDash([6, 6]); x.lineWidth = 1.5;
+  for (let r = 0; r < lay.rows; r++) for (let c = 0; c < lay.cols; c++) {
+    const hot = drag && drag.cell && drag.cell[0] === c && drag.cell[1] === r;
+    x.strokeStyle = hot ? `rgba(${accent}, .95)` : line;
+    x.strokeRect(c * cw + 6, r * ch + 6, cw - 12, ch - 12);
+  }
+  x.setLineDash([]);
+  for (const t of d.tanks) {
+    if (drag && drag.name === t.name) continue;
+    ftTile(x, t, (t.c + lay.off) * cw, (t.r + lay.off) * ch, cw, ch);
+  }
+  if (drag) {
+    const t = d.tanks.find((q) => q.name === drag.name);
+    if (t) ftTile(x, t, drag.x - cw / 2, drag.y - ch / 2, cw, ch, true);
+  }
+}
+function ftTile(x, t, x0, y0, cw, ch, lifted) {
+  const [hi, deep] = FT_WATER.Day, g = x.createLinearGradient(0, y0, 0, y0 + ch);
+  g.addColorStop(0, ftRgb(hi)); g.addColorStop(1, ftRgb(deep));
+  x.save();
+  if (lifted) { x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 24; x.shadowOffsetY = 10; x.globalAlpha = 0.92; }
+  x.fillStyle = g;
+  ftRound(x, x0 + 6, y0 + 6, cw - 12, ch - 12, 10); x.fill();
+  x.restore();
+  x.fillStyle = t.colour || "#e4e8ee";
+  x.beginPath(); x.arc(x0 + cw / 2, y0 + ch / 2 - 14, 6, 0, Math.PI * 2); x.fill();
+  x.fillStyle = "#f4f1f7"; x.font = "600 14px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(t.name, x0 + cw / 2, y0 + ch / 2 + 8, cw - 24);
+}
+function ftAt(e) {
+  const b = FT.cv.getBoundingClientRect();
+  return [e.clientX - b.left, e.clientY - b.top];
+}
+function ftPointer(cv) {
+  cv.addEventListener("pointerdown", (e) => {
+    const d = FT.data;
+    if (!d) return;
+    const lay = ftLayout(), [px, py] = ftAt(e);
+    const c = Math.floor(px / lay.cw) - lay.off, r = Math.floor(py / lay.ch) - lay.off;
+    const t = d.tanks.find((q) => q.c === c && q.r === r);
+    if (!FT.arrange) {
+      if (!t) return;
+      pi("fishfeed", { tank: t.name }).then(() => toast(t.me ? "Food in the tank" : "Food in " + t.name + "'s tank"),
+                                             (err) => toast(err.message));
+      return;
+    }
+    if (!t) return;
+    FT.drag = { name: t.name, x: px, y: py, cell: [c + lay.off, r + lay.off] };
+    cv.setPointerCapture(e.pointerId);
+    cv.classList.add("dragging");
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if (!FT.drag) return;
+    const lay = ftLayout(), [px, py] = ftAt(e);
+    FT.drag.x = px; FT.drag.y = py;
+    FT.drag.cell = [Math.max(0, Math.min(lay.cols - 1, Math.floor(px / lay.cw))), Math.max(0, Math.min(lay.rows - 1, Math.floor(py / lay.ch)))];
+  });
+  const drop = () => {
+    const drag = FT.drag, d = FT.data;
+    FT.drag = null;
+    cv.classList.remove("dragging");
+    if (!drag || !d) return;
+    const lay = ftLayout(), cells = {};
+    for (const t of d.tanks) cells[t.name] = [t.c + lay.off, t.r + lay.off];
+    const from = cells[drag.name], to = drag.cell;
+    const there = Object.keys(cells).find((n) => cells[n][0] === to[0] && cells[n][1] === to[1]);
+    if (there) cells[there] = from;              // (one there already: they swap)
+    cells[drag.name] = to;
+    const c0 = Math.min(...Object.values(cells).map((v) => v[0])), r0 = Math.min(...Object.values(cells).map((v) => v[1]));
+    for (const n of Object.keys(cells)) cells[n] = [cells[n][0] - c0, cells[n][1] - r0];
+    const cols = Math.max(...Object.values(cells).map((v) => v[0])) + 1;
+    const rows = Math.max(...Object.values(cells).map((v) => v[1])) + 1;
+    if (cols > FT_MOST || rows > FT_MOST) { toast("Six across or down, at most"); return; }
+    for (const t of d.tanks) { t.c = cells[t.name][0]; t.r = cells[t.name][1]; }   // (at once, here)
+    d.cols = cols; d.rows = rows;
+    FT.backs = {};
+    FT.held = performance.now() + 8000;
+    pi("fishgrid", { cells }).then(() => { FT.held = performance.now(); },
+                                   (err) => { FT.held = 0; toast(err.message); });
+  };
+  cv.addEventListener("pointerup", drop);
+  cv.addEventListener("pointercancel", () => { FT.drag = null; cv.classList.remove("dragging"); });
+}
+
 // ---- settings: everything the Pi's Settings has, and each app's own (passwords and tokens never come here) ---------
 const SET = { data: null, error: "", timer: 0, armed: {}, ask: {}, open: {}, typed: {}, places: null, placesQ: "",
               peerPw: {} };                             // (peerPw: another Pietato that wants its page's password)
@@ -5458,6 +5862,7 @@ document.addEventListener("visibilitychange", () => {
   if (S.view === "settings") setPoll();
   if (L.cat && L.tab === "cameras") drawLibrary();         // the pictures again
   if (L.cat && L.tab === "friend") friendPoll(libToken, 0);  // (what you were typing stays)
+  if (L.cat && L.tab === "fish" && FT.cv && FT.cv.isConnected) ftStart(libToken);   // (the fish again)
 });
 $("#mode").value = S.mode = store.get("mode", "rename");
 $("#mode").onchange = (e) => { S.mode = e.target.value; store.set("mode", S.mode); };

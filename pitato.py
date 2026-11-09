@@ -175,7 +175,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
     Rock Paper Scissors - pieces bounce around, and one hit by its counter switches sides until
                 one team is left; left and right pick a winner before the first capture
     Game of Life - Conway's rules (or HighLife, Day & Night, Seeds), cells coloured by age
-    Forest Fire - trees grow, lightning strikes, fire spreads and the forest grows back
+    Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
+                next; A calls it, X feeds it, Y moves the plants (the web page arranges the tanks)
     Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
                 of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
                 Y out, for as long as they're held

@@ -1,4 +1,4 @@
-"""Apps' other sims, each on its own (Game of Life, Forest Fire, the Mandelbrot Set),
+"""Apps' other sims, each on its own (Game of Life, the Mandelbrot Set; the Fish Tank: test_fishtank.py),
 then all of them in media mode: opened from the list, frames, START's options (live, or a new start
 when the card closes), X, Y, A, full screen for every sim, the box's round corners, and B back."""
 import math, os, random, shutil, sys, time
@@ -109,48 +109,6 @@ L.configure({"rules": "Life", "speed": "Fast"})
 g0 = L.gen
 run(L, 2)
 check(f"...Fast: about 25 generations a second ({L.gen - g0} in 2 s)", 40 <= L.gen - g0 <= 52 or L.ended)
-
-# ---- Forest Fire ---------------------------------------------------------------------------------------
-ff = g.ForestFire(440, 340, random.Random(1))
-check(f"Forest Fire: {ff.cols} x {ff.rows} cells, almost half of them trees",
-      (ff.cols, ff.rows) == (110, 85) and 0.4 < ff.counts()[0] / (110 * 85) < 0.5)
-ff.values.update(growth="Slow", lightning="Rare")
-ff.state[:] = ff.GROUND
-ff.state[10, 10:20] = ff.TREE
-ff.state[10, 10] = ff.FIRE
-g.FIRE_GROW["Slow"], keep = 0.0, g.FIRE_GROW["Slow"]
-g.FIRE_STRIKE["Rare"], keep2 = 0.0, g.FIRE_STRIKE["Rare"]
-ff.step()
-check("...fire spreads to the tree next to it; the fire itself turns to embers",
-      ff.state[10, 11] == ff.FIRE and ff.state[10, 10] == ff.EMBER and ff.state[10, 12] == ff.TREE)
-ff.step()
-check("...embers go out, leaving ash", ff.state[10, 10] == ff.GROUND and ff.ash[10, 10] > 0 and ff.state[10, 12] == ff.FIRE)
-for _ in range(20):
-    ff.step()
-check("...the row burns to the end", (ff.state[10, 10:20] == ff.GROUND).all())
-ff.state[:] = ff.GROUND
-ff.state[5, 0] = ff.FIRE
-ff.state[5, ff.cols - 1] = ff.TREE
-ff.step()
-check("...the edges don't meet: fire on one side doesn't jump to the other", ff.state[5, ff.cols - 1] == ff.TREE)
-g.FIRE_GROW["Slow"], g.FIRE_STRIKE["Rare"] = keep, keep2
-ff.values.update(growth="Fast")
-ff.state[:] = ff.GROUND
-for _ in range(20):
-    ff.step()
-share = ff.counts()[0] / (ff.cols * ff.rows)
-check(f"...trees grow back in empty ground ({share * 100:.0f}% in 20 generations)", 0.3 < share < 0.55)
-fires = ff.fires
-ff.poke()
-check("...X: lightning sets a tree alight", ff.fires == fires + 1 and (ff.state == ff.FIRE).sum() == 1)
-ff.restart()
-run(ff, 60)
-check(f"...an hour of it, in a minute: {ff.fires} fires, the forest at {ff.counts()[0] * 100 // (110 * 85)}%",
-      ff.fires >= 1 and ff.counts()[0] > 0 and len(ff.history) > 100)
-ff.state[40:45, 50:60] = ff.FIRE
-ff.refit(640, 480)
-check(f"...full screen: a bigger forest ({ff.cols} x {ff.rows}), the middle kept",
-      (ff.cols, ff.rows) == (160, 120) and (ff.state[57:62, 75:85] == ff.FIRE).all())
 
 # ---- Mandelbrot Set ------------------------------------------------------------------------------------
 import threading
@@ -462,8 +420,9 @@ corner = (g.SIM_BOX[0], g.SIM_BOX[1])
 for row, name in enumerate(g.LIBRARY[SIMI]["children"]):
     if row:
         m.press("down")
-    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors"):
-        continue                                   # (test_clock.py, test_notes.py, test_fortune.py, test_sim.py)
+    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank"):
+        continue                                   # (test_clock.py, test_notes.py, test_fortune.py, test_sim.py,
+                                                   #  test_fishtank.py)
     if next(t for t in g.LIBRARY if t["name"] == name)["type"] != "sim":
         continue                                   # (cmatrix, not a sim of its own: test_cmatrix.py)
     m.press("a")
@@ -534,7 +493,7 @@ m.press("select")
 m.press("b")
 m.press("down")
 m.press("a")
-check("full screen once is full screen for every sim", m.sim_full() and m.sim_game().key == "fire")
+check("full screen once is full screen for every sim", m.sim_full() and m.sim_game().key == "fish")
 m.press("select")
 m.press("b")
 gen = life.gen

@@ -1,6 +1,6 @@
 """Apps in the real main loop, in real time: opened with the d-pad from the home screen, Rock
 Paper Scissors runs at about SIM_FPS frames a second, mostly sending just its box; START's card stops
-the frames; leaving it stops them too; full screen; Forest Fire keeps up full screen too, and so does the
+the frames; leaving it stops them too; full screen; the Fish Tank keeps up full screen too, and so does the
 Mandelbrot Set while its own thread works out its pictures. Exploring it: buttons held down (no key
 repeat), and the web page's remote, a press at a time or held."""
 import os, sys, time, shutil, threading
@@ -197,14 +197,14 @@ press(e.BTN_EAST, 0.3)
 for _ in range(2):
     press(e.BTN_DPAD_DOWN)
 press(e.BTN_SOUTH, 0.5)
-check(f"B, down to Forest Fire, A: full screen too ({g.LIBRARY[m.tab]['name']})",
-      m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "fire" and m.sim_full())
+check(f"B, down to the Fish Tank, A: full screen too ({g.LIBRARY[m.tab]['name']})",
+      m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "fish" and m.sim_full())
 t0 = time.monotonic()
 time.sleep(2.0)
 fps = len(since(t0)) / 2.0
 check(f"...it keeps up: {fps:.1f} frames a second", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
 press(e.BTN_SELECT, 0.4)
-check("SELECT: back beside its numbers", not m.sim_full() and (m.sims["fire"].w, m.sims["fire"].h) == (436, 342))
+check("SELECT: back beside its numbers", not m.sim_full() and (m.sims["fish"].w, m.sims["fish"].h) == (436, 342))
 press(e.BTN_EAST, 0.3)
 press(e.BTN_DPAD_DOWN)
 press(e.BTN_SOUTH, 0.5)

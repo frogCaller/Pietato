@@ -1,4 +1,5 @@
-"""Apps' little worlds: Rock Paper Scissors, Game of Life and Forest Fire, and what they share."""
+"""Apps' little worlds: Rock Paper Scissors and the Game of Life, and what they share (the Fish Tank:
+fishtank.py)."""
 import math
 import random
 from collections import deque
@@ -11,8 +12,8 @@ from .fine import detail, made_fine
 # Each sim runs in a box beside its numbers, or on the whole screen (SELECT, or START's Full screen). A
 # pauses, X gives it a poke, Y starts it again, START has its options, B goes back to the list.
 # Rock Paper Scissors: pieces bounce around, and one hit by its counter switches sides until one team is
-# left (pick a winner before the first capture). Game of Life and Forest Fire: see their blurbs below, and
-# mandelbrot.py for the Mandelbrot Set.
+# left (pick a winner before the first capture). Game of Life: see its blurb below; fishtank.py for the Fish
+# Tank, mandelbrot.py for the Mandelbrot Set.
 SIM_FLOOR = (21, 27, 33)                      # the box
 SIM_BOX = (12, 78, 452, 424)                  # ...on the GPi Case's screen (a wider one: the box is wider)
 SIM_IN = 2                                    # pieces keep this far in from its wall
@@ -659,141 +660,3 @@ class Life(Sim):
             return None
         why, gen = self.ended
         return why, f"After {gen} generations. A new one in {max(1, math.ceil(self.wait))} s"
-
-
-# ---- Forest Fire -----------------------------------------------------------------------------------------
-FIRE_GROW = {"Slow": 0.004, "Normal": 0.01, "Fast": 0.025}            # a tree in empty ground, a generation
-FIRE_STRIKE = {"Rare": 0.000001, "Normal": 0.000004, "Often": 0.00002}   # lightning, a tree, a generation
-
-
-class ForestFire(Sim):
-    """Trees grow in empty ground; lightning sets one alight now and then; fire spreads to the trees
-    next to it, burns out, and the forest grows back."""
-    key = "fire"
-    blurb = "Trees grow in empty ground. Lightning starts fires that spread from tree to tree, and the forest grows back."
-    poke_label = "Lightning"
-    options = (("growth", "Growth", tuple(FIRE_GROW), "Normal"),
-               ("lightning", "Lightning", tuple(FIRE_STRIKE), "Normal"),
-               ("cells", "Cells", ("Small", "Large"), "Small"),
-               ("speed", "Speed", ("Slow", "Normal", "Fast"), "Normal"))
-    restart_for = ("cells",)
-    CELL = {"Small": 4, "Large": 7}
-    GENS = {"Slow": 6, "Normal": 14, "Fast": 28}
-    GROUND, TREE, FIRE, EMBER = 0, 1, 2, 3
-
-    def __init__(self, w, h, rng=None, values=None):
-        super().__init__(w, h, rng, values)
-        self.lut = self.colours()
-        self.restart()
-
-    @staticmethod
-    def colours():
-        """0..63 ground and ash, 64..127 trees by age, 128..131 fire, 132 embers."""
-        import numpy as np
-        lut = np.zeros((136, 3), np.uint8)
-        for k in range(64):
-            lut[k] = co_mix((30, 26, 22), (70, 66, 62), min(1.0, k / 12))   # ash, fading to ground
-        for k in range(64):
-            lut[64 + k] = co_mix((120, 196, 96), (34, 104, 62), min(1.0, k / 40))
-        for k, c in enumerate(((255, 232, 140), (255, 190, 80), (250, 140, 50), (236, 96, 40))):
-            lut[128 + k] = c
-        lut[132] = (140, 46, 30)
-        return lut
-
-    def restart(self):
-        import numpy as np
-        super().restart()
-        c = self.CELL[self.values["cells"]]
-        self.cols, self.rows = max(8, self.w // c), max(8, self.h // c)
-        self.rnd = self.np_rng()
-        self.state = np.where(self.rnd.random((self.rows, self.cols)) < 0.45, self.TREE,
-                              self.GROUND).astype(np.uint8)
-        self.age = self.rnd.integers(0, 40, (self.rows, self.cols)).astype(np.uint8)
-        self.ash = np.zeros((self.rows, self.cols), np.uint8)
-        self.fires, self.carry, self.gen = 0, 0.0, 0
-        self.sample(self.counts())
-
-    def refit(self, w, h):
-        """Full screen, and back: the forest grows or shrinks round its middle (new edges: new trees)."""
-        import numpy as np
-        c = self.CELL[self.values["cells"]]
-        rows, cols = max(8, h // c), max(8, w // c)
-        self.state = self.regrid(self.state, rows, cols,
-                                 lambda sh: np.where(self.rnd.random(sh) < 0.45, self.TREE, self.GROUND))
-        self.age = self.regrid(self.age, rows, cols, lambda sh: self.rnd.integers(0, 40, sh))
-        self.ash = self.regrid(self.ash, rows, cols, lambda sh: np.zeros(sh, np.uint8))
-        self.w, self.h, self.rows, self.cols = w, h, rows, cols
-
-    def counts(self):
-        st = self.state
-        return int((st == self.TREE).sum()), int(((st == self.FIRE) | (st == self.EMBER)).sum())
-
-    def update(self, dt):
-        if self.paused or dt <= 0:
-            return None
-        self.clock += dt
-        self.carry = min(self.carry + dt * self.GENS[self.values["speed"]], 4)
-        while self.carry >= 1:
-            self.carry -= 1
-            self.step()
-        self.sampled += dt
-        if self.sampled >= SIM_SAMPLE:
-            self.sampled = 0.0
-            self.sample(self.counts())
-        return None
-
-    def step(self):
-        import numpy as np
-        st = self.state
-        fire = st == self.FIRE
-        near = np.zeros_like(fire)                       # next to a fire (the edges don't meet)
-        near[1:, :] |= fire[:-1, :]
-        near[:-1, :] |= fire[1:, :]
-        near[:, 1:] |= fire[:, :-1]
-        near[:, :-1] |= fire[:, 1:]
-        near[1:, 1:] |= fire[:-1, :-1]
-        near[:-1, :-1] |= fire[1:, 1:]
-        near[1:, :-1] |= fire[:-1, 1:]
-        near[:-1, 1:] |= fire[1:, :-1]
-        tree = st == self.TREE
-        strike = tree & (self.rnd.random(st.shape) < FIRE_STRIKE[self.values["lightning"]])
-        self.fires += int((strike & ~near).sum())
-        catch = tree & (near | strike)
-        grow = (st == self.GROUND) & (self.rnd.random(st.shape) < FIRE_GROW[self.values["growth"]])
-        new = st.copy()
-        out = st == self.EMBER
-        new[out] = self.GROUND
-        self.ash = np.where(out, 12, np.where(self.ash > 0, self.ash - 1, 0)).astype(np.uint8)
-        new[fire] = self.EMBER
-        new[catch] = self.FIRE
-        new[grow] = self.TREE
-        self.age = np.where(grow, 0, np.minimum(self.age.astype(np.uint16) + 1, 63)).astype(np.uint8)
-        self.state = new
-        self.gen += 1
-
-    def poke(self):
-        """X: lightning hits a tree."""
-        import numpy as np
-        trees = np.flatnonzero(self.state == self.TREE)
-        if len(trees):
-            self.state.flat[int(trees[self.rng.randrange(len(trees))])] = self.FIRE
-            self.fires += 1
-
-    def draw(self, img, x0, y0):
-        import numpy as np
-        from PIL import Image
-        st = self.state
-        idx = np.where(st == self.TREE, 64 + self.age,
-                       np.where(st == self.FIRE, 128 + self.rnd.integers(0, 4, st.shape),    # (it flickers)
-                                np.where(st == self.EMBER, 132, self.ash))).astype(np.uint8)
-        c = self.CELL[self.values["cells"]]
-        pic = Image.fromarray(self.lut[idx], "RGB").resize((self.cols * c, self.rows * c), Image.NEAREST)
-        img.paste(pic, (x0 + (self.w - self.cols * c) // 2, y0 + (self.h - self.rows * c) // 2))
-
-    def stats(self):
-        trees, burning = self.counts()
-        return [("Trees", f"{100 * trees // max(1, self.rows * self.cols)}%"), ("Burning", str(burning)),
-                ("Fires", str(self.fires))]
-
-    def chart(self):
-        return self.history, [(120, 196, 96), (255, 170, 70)], max(1, self.rows * self.cols)

@@ -52,6 +52,9 @@ words or a photo, and press Show on the Pi: it stays on the screen until you pre
 in `~/Pictures/Drawings`, so you can open it again in Photos. With Live on, it goes to the screen as
 you draw. If you've set up a bot, Ask your bot has it say what it sees.
 
+**Fish Tank**, in Library, shows the fish tanks of all your Pietatos at once. Tap one to feed it, or
+press Arrange and drag the tanks into a grid. See [Fish Tank](apps.md#fish-tank).
+
 **Files** takes files or whole folders dropped on it. Music, videos, pictures, documents and games
 each go to their own folder, and settings files like `radio.txt` go to Settings. Each file can
 be shown on the Pi's screen, downloaded or deleted. The Computers tab has your other computers' files.

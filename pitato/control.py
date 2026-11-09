@@ -142,6 +142,11 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.coder_state())
                 if u.path == "/bluetooth":
                     return self.reply(200, media.web_bluetooth())
+                if u.path == "/fish":                  # (the web page's Fish Tank: the whole grid, now)
+                    return self.reply(200, media.web_fish())
+                if u.path == "/fishpic":               # (...and a fish's picture, to draw)
+                    png = media.web_fish_pic(q.get("name", ""), q.get("id", "0"), q.get("size", "96"))
+                    return self.reply(200, png, "image/png") if png else self.reply(404, {"error": "No such fish"})
                 if u.path == "/group":                 # (the group chat: what's been said, for another of yours)
                     return self.reply(200, media.web_group_since(q.get("since"), q.get("from")))
                 if u.path == "/peers":                 # (your other Pietatos on now: the web page renames one)

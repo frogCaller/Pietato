@@ -29,7 +29,7 @@ Pietato starts on a home screen of apps:
   a glow, a rainbow or a shadow, X reads it out loud in your Bot's voice, and L and R go through your notes,
   kept in Documents/Notes), a Fortune Cookie (A shows a new fortune, ▲▼ and ◀▶ pick its colours as in Notes,
   L and R its font, Y an effect, and X reads your fortune and lucky numbers out loud), Rock Paper Scissors (pick a
-  winner before the first capture), Game of Life, Forest Fire and the Mandelbrot set, which takes you on dives
+  winner before the first capture), Game of Life, a [Fish Tank](#fish-tank) and the Mandelbrot set, which takes you on dives
   (or press the d-pad to explore it, A to zoom in and Y to zoom out). Press SELECT to watch one full screen.
   It can also start cmatrix, hollywood, nyancat, cacafire and htop without a keyboard: in cmatrix, ◀▶ change
   its colour and ▲▼ its speed; in htop, ▲▼ move through what's running and X or Y sort it by CPU or memory;
@@ -82,3 +82,13 @@ during a game or a video.
 A says something, Y has them stop talking among themselves (they still answer you), and SELECT stops a USB camera
 from looking for you. Each talks the way its Bot does, with the Bot's model if it has one (Settings > Bot), and
 with words of its own if not. Settings > Share with other Pietatos needs to be on.
+
+## Fish Tank
+
+Each Pietato has a fish of its own in Apps > Fish Tank. With two or more on the same network, their tanks join up
+into one big tank, and the fish swim from one to the next. A calls your fish back, X feeds it, Y moves the plants
+and rocks, and START picks the fish, the bubbles and the light.
+
+The web page's Library has a Fish Tank too, with every tank at once. Tap a tank to feed it, or press Arrange and
+drag the tanks into a grid: side by side, one above another, or both. Fish swim between tanks that touch, the
+water's surface is along the top and the sand along the bottom. Settings > Share with other Pietatos needs to be on.

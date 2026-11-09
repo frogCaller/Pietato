@@ -63,7 +63,7 @@ def stop():
 
 
 m.prog_stop = stop
-SIMS = ["Rock Paper Scissors", "Game of Life", "Forest Fire", "Mandelbrot Set"]
+SIMS = ["Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set"]
 PROGS = ["cmatrix", "hollywood", "nyancat", "cacafire"]
 
 
@@ -113,10 +113,10 @@ check(f"...all eight in turn, never the Clock or htop ({sorted(set(seen))})", se
 again = set()
 for _ in range(20):
     started.append(None)
-    m.web_tab("Forest Fire"); m.cool_last = None
+    m.web_tab("Fish Tank"); m.cool_last = None
     m.assist_heard("show us something neat")
     again.add(showing())
-check(f"Forest Fire on: never Forest Fire again ({sorted(again)})", "Forest Fire" not in again and len(again) > 2)
+check(f"the Fish Tank on: never the Fish Tank again ({sorted(again)})", "Fish Tank" not in again and len(again) > 2)
 
 # one of Linux's on: it's stopped first, and it's not the one put on
 started.append(None)
@@ -149,7 +149,7 @@ for _ in range(30):
     m.assist_heard("show me something cool")
     picks.add(showing())
 check(f"nothing of Linux's here, the Mandelbrot Set on: the other three ({sorted(picks)})",
-      picks == {"Rock Paper Scissors", "Game of Life", "Forest Fire"})
+      picks == {"Rock Paper Scissors", "Game of Life", "Fish Tank"})
 
 # its model asking for it ("[[show me something cool]]"), in its own words
 m.cool_last = None

@@ -104,10 +104,10 @@ BAD_CHARS = re.compile(r"[\x00-\x1f\x7f/\\]")
 CONTROL = ("127.0.0.1", 5480)                   # pitato.py's media mode, on this Pi only
 CONTROL_KEY = "/run/pitato/control-key"       # ...and the key it asks for (made at its start)
 PI_GET = {"state", "screen", "catalog", "channels", "radio", "icon", "cameras", "camframe", "friend", "friendpic",
-          "computers", "bluetooth", "settings", "places"}
+          "computers", "bluetooth", "settings", "places", "fish", "fishpic"}
 PI_POST = {"press", "open", "play", "show", "here_move", "here_back", "player", "learn", "mode", "reset_pads", "pad_swap",
            "camera", "friend",
-           "computer", "bluetooth", "settings", "tap", "swipe", "scroll", "type", "term", "save"}
+           "computer", "bluetooth", "settings", "tap", "swipe", "scroll", "type", "term", "save", "fishfeed", "fishgrid"}
 PI_ARGS = ("what", "genre", "q", "name", "size", "addr", "id", "after", "wait", "w")
 FRAME_WAIT = 20                                 # seconds the page's request for the screen's next picture waits, at most
 PI_BODY_MOST = 1 << 20                          # bytes a request for media mode can be, at most (all it takes itself)
@@ -314,7 +314,7 @@ def host_ok():
 
 
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
-             "bluetooth", "settings", "places"}   # (pictures load without it)
+             "bluetooth", "settings", "places", "fish"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
@@ -1239,7 +1239,8 @@ def pi_get(what):
         return resp
     slow = what in ("channels", "radio", "camframe", "computers", "places")   # these ask the internet, a camera or
                                                                                # a computer
-    cache = "private, max-age=86400" if what in ("icon", "friendpic") else "no-store"   # (these never change)
+    cache = "private, max-age=86400" if what in ("icon", "friendpic", "fishpic") else "no-store"   # (these never
+                                                                                                   # change)
     return pi_reply(ask_pi("GET", path, timeout=40 if slow else 10), cache=cache)
 
 

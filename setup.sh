@@ -19,7 +19,7 @@
 #     a file browser for PDFs/documents/text, cameras on your other Pis (see
 #     --camera below) with OBSBOT steering and pictures, a bot (Ollama on another
 #     computer, a Piper voice on the Pi; at work it acts out your coding agent and sends
-#     it your prompts), Apps (rock paper scissors, the game of life, forest fire, the
+#     it your prompts), Apps (rock paper scissors, the game of life, a fish tank, the
 #     Mandelbrot set to tour or explore, cmatrix, hollywood, nyancat, cacafire, htop), Snake
 #     and your own Game Boy, Game Boy Advance, NES, SNES, Genesis, Master System, Game Gear,
 #     PlayStation and (on a Pi 4 or
