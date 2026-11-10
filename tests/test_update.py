@@ -8,7 +8,7 @@ owner, setup.sh --update (a stand-in: as root, no terminal, told who the user is
 systemctl), its screen saying how it's getting on, nothing else let on the screen meanwhile. Nothing newer: it says
 it's up to date, back on System, no restart; a newer version it hadn't looked for yet: put in all the same. When it
 doesn't work (changes here in the way, setup.sh failing, the job gone), System says why, and offers it again. GitHub's
-history written afresh (every id new, the same versions: git filter-repo): taken as it is, up to date if it's the same
+history written afresh (every id new, the same versions): taken as it is, up to date if it's the same
 version, put in if there's a newer one, but not over a version of its own here. A shallow clone (an SD card image's)
 goes on to main's newest as any does. Pietato renamed on GitHub: a folder cloned from its old name gets it from the new
 one once that answers (as the folder's owner). release.py (kept, though Update software doesn't ask it now): the newest
@@ -394,11 +394,12 @@ check("...pressed again: put in, and the Pi restarts", start_update()
 
 # ---- GitHub's history written afresh (a line taken out of its notes): the same versions, every id new ------------------
 def rewrite(old, new):
-    """GitHub's history written afresh, as git filter-repo does it: a word changed in a note, so every id from there on
-    is new, every version's files the same (the releases' tags moved with them); pushed over GitHub's main."""
-    sh(["git", "-C", T + "/work", "filter-repo", "--force", "--quiet", "--message-callback",
-        f"return message.replace({old.encode()!r}, {new.encode()!r})"])
-    sh(["git", "-C", T + "/work", "remote", "add", "origin", T + "/origin.git"])     # (filter-repo takes it away)
+    """GitHub's history written afresh, as git filter-repo does it (here with git's own filter-branch, which every
+    machine with git has: GitHub's own has no filter-repo): a word changed in a note, so every id from there on is
+    new, every version's files the same (the releases' tags moved with them); pushed over GitHub's main."""
+    assert all(c.isalnum() or c in " ," for c in old + new), (old, new)       # (plain words: they go in a sed script)
+    sh(["env", "FILTER_BRANCH_SQUELCH_WARNING=1", "git", "-C", T + "/work", "filter-branch", "-f", "--msg-filter",
+        f'sed "s/{old}/{new}/g"', "--tag-name-filter", "cat", "--", "--all"])
     sh(["git", "-C", T + "/work", "push", "-q", "--force", "origin", "main"])
     sh(["git", "-C", T + "/work", "push", "-q", "--force", "--tags", "origin"])
     return sh(["git", "-C", T + "/work", "rev-parse", "HEAD"]).stdout.strip()
@@ -591,5 +592,26 @@ check("why, in words", "GitHub didn't answer" in W("failed pull fatal: unable to
       and "changes of its own" in W("failed pull fatal: Not possible to fast-forward to main: this folder's history "
                                     "diverges from it")
       and W("failed install").startswith("The update didn't finish"))
+
+# ---- a Pi only just started (its clock still near nothing): System looks all the same ---------------------------------
+import types  # noqa: E402
+import pitato.update as U  # noqa: E402
+real_time = U.time
+U.time = types.SimpleNamespace(monotonic=lambda: 30.0, time=time.time, sleep=time.sleep)
+try:
+    un = g.Updater(folder=CLONE)
+    asked = []
+    un.start = lambda: asked.append("look")
+    un.poke()
+    first = asked == ["look"] and un.wake.is_set()
+    un.wake.clear()
+    un.poke()
+    once = asked == ["look"] and not un.wake.is_set()
+    un.done()
+    after = asked == ["look", "look"] and un.wake.is_set()
+finally:
+    U.time = real_time
+check(f"a Pi started half a minute ago: System opened, it looks ({first}), once ({once}); an update over, it looks again "
+      f"({after})", first and once and after)
 
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}", flush=True)

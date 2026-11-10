@@ -4,18 +4,21 @@ colour; anything else not taken); a picture's edges (RGB565, 0RGB1555 and XRGB88
 it); a hit from a game's rich presence (lives or health going down; not a timer or a score); beats in music, as they're
 heard (a kick drum, loud or quiet; none in a steady hum or silence); the LEDs' bits through SPI; the grid itself (only
 your Pietatos, the one it follows; a hit's red, an achievement's gold and a beat, when they're due by the sender's clock;
-dark once it's quiet; how bright; turned, mirrored and in zigzag rows; dark as it's shut), over real UDP too; and
-config.txt's lines for SPI. Then the emulator's part (a pretend screen): told where its colours go, each picture's edges
-sent (30 a second at most; one the graphics chip drew, from the screen), an achievement's gold, a controller shaken and
-lives going down: a hit. Then media mode: Settings > TV backlight (the grid on: SPI's lines into config.txt and a
-restart asked for; its settings applied), the beacon saying it's there, your grids found (where a game's colours go,
-said to its emulator), and music played through party mode's player for the beat: the grid pulsing as each kick drum's
-heard, music's colour between, pause and seek as mplayer takes them, and a station passed through here for its song's
-names. Pulse to music off, or no grid: music as ever (mplayer)."""
+dark once it's quiet; its own colour then, a game's taking over, a rainbow, following nobody; its picture; how
+bright; turned, mirrored and in zigzag rows; dark as it's shut), over real UDP too; and config.txt's lines for SPI.
+Then the emulator's part (a pretend screen): told where its colours go, each picture's edges sent (30 a second at
+most; one the graphics chip drew, from the screen), an achievement's gold, a controller shaken and lives going down: a
+hit. Then media mode: Apps > TV backlight, not Settings (A: the grid on, SPI's lines into config.txt and a restart
+asked for; ◀▶ its colour, ▲▼ how bright, START's card the rest; its picture of the LEDs), the beacon saying it's there
+(or not, following nobody), your grids found (where a game's colours go, said to its emulator), and music played
+through party mode's player for the beat: the grid pulsing as each kick drum's heard, music's colour between, pause and
+seek as mplayer takes them, and a station passed through here for its song's names. Pulse to music off, or no grid:
+music as ever (mplayer). The web page's Library: the LEDs as they're lit, and its settings. A Pi that can't have one:
+none of it."""
 import os, shutil, subprocess, sys, threading, time, wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 real_run = subprocess.run                              # (FFmpeg, to make a station's sound: the test stands in for the rest)
-from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
+from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 import numpy as np
 import pietato_all as g
@@ -173,6 +176,12 @@ OUT = S + "/spi"
 open(OUT, "wb").close()
 
 
+def writes(path=OUT):
+    """Each time the LEDs were sent their colours, as the bytes spi_bytes made it from (its 0s and 1s are never a
+    byte of zeros: RESET's zeros come between them)."""
+    return [G.from_spi(w) for w in open(path, "rb").read().split(b"\0") if w]
+
+
 def last_lit(path=OUT):
     """What the grid last sent the LEDs: (rows x cols x 3) green, red, blue, in the order they're wired."""
     data = open(path, "rb").read()
@@ -255,6 +264,83 @@ grid.take(music, "10.0.0.8", clk.t)
 img = settle(1.0)
 check(f"music: its colour, dimmer between beats ({img[2, 2].round().tolist()})",
       near(img[2, 2], np.array([96, 170, 228]) * G.MUSIC_BASE, 6))
+
+# its own colour, with nothing else lighting it
+OWN = np.array(G.colour_of("Blue"), dtype=float)
+grid.colour = G.colour_of("Blue")
+img = settle(G.FADE_AFTER + 6 * G.COLOUR_TAU)
+check(f"its own colour, with nothing lighting it ({img[3, 3].round().tolist()})", near(img[3, 3], OWN, 4)
+      and near(img[0, 7], OWN, 4))
+send(G.frame_packet, "10.0.0.8", red)
+img = settle(0.3)
+check(f"...a game on: its colours instead ({img[3, 3].round().tolist()})", near(img[3, 3], RED, 8))
+img = settle(G.FADE_AFTER + 6 * G.COLOUR_TAU)
+check(f"...the game gone: its own colour again ({img[3, 3].round().tolist()})", near(img[3, 3], OWN, 4))
+grid.follow = G.NOBODY
+check("following nobody: a game's not taken", not send(G.frame_packet, "10.0.0.8", red))
+img = settle(0.3)
+check(f"...just its own colour ({img[3, 3].round().tolist()})", near(img[3, 3], OWN, 4))
+grid.follow = G.ANY
+grid.colour = "rainbow"
+a = settle(1.0)
+b = settle(1.0)
+hues = {tuple((a[r, c] // 64).astype(int)) for r in range(8) for c in range(8)}
+check(f"a rainbow: colours all over, going round ({len(hues)}; {a[0, 0].round().tolist()} to "
+      f"{b[0, 0].round().tolist()})", len(hues) >= 6 and not near(a[0, 0], b[0, 0], 8))
+grid.colour = G.colour_of("Teal")
+for _ in range(3):
+    clk.t += 1 / 60
+    grid.frame(clk.t)
+check(f"its picture: as it's lit, and changing ({grid.picture()[2, 2].round().tolist()})",
+      grid.picture() is not None and grid.picture().shape == (8, 8, 3) and grid.lively(clk.t))
+for _ in range(int(3 / (1 / 60))):
+    clk.t += 1 / 60
+    grid.frame(clk.t)
+check(f"...a moment on: steady, its own colour ({grid.picture()[2, 2].round().tolist()})", not grid.lively(clk.t)
+      and near(grid.picture()[2, 2], G.colour_of("Teal"), 3))
+grid.colour = None
+img = settle(G.FADE_AFTER + 6 * G.FADE_TAU)
+check(f"...Off: dark again ({img.max():.1f})", img.max() < 10)
+
+# a strip round the TV, not the grid: each LED as the grid's edge nearest it
+pts = G.strip_points(50)
+check(f"a strip: its first LED at the bottom left, up the left side, along the top, down the right, along the bottom "
+      f"({np.round(pts[[0, 8, 20, 28, 40]], 2).tolist()})", pts[0, 0] == 0 and pts[0, 1] > 0.9 and pts[8, 0] == 0
+      and pts[8, 1] < 0.1 and pts[20, 1] == 0 and pts[28, 0] == 1 and pts[40, 1] == 1)
+pts = G.strip_points(30, "Bottom right", clockwise=False, bottom=False)
+check(f"...from the bottom right, anticlockwise, none along the bottom ({np.round(pts[[0, 15, -1]], 2).tolist()})",
+      pts[0, 0] == 1 and pts[0, 1] > 0.8 and pts[15, 1] == 0 and pts[-1, 0] == 0 and pts[-1, 1] > 0.8
+      and (pts[:, 1] < 1 - 1e-6).all())
+w = G.strip_weights(G.strip_points(40))
+check("...each LED's colour all from the grid's picture", w.shape == (40, 64) and np.allclose(w.sum(axis=1), 1))
+for _ in range(2):
+    clk.t += 0.6
+    grid.frame(clk.t)
+grid.set_strip(40, "Top left")
+grid.test()
+data = np.frombuffer(grid.leds(grid.render(clk.t)), dtype=np.uint8).reshape(-1, 3)[:, [1, 0, 2]]
+check(f"...40 LEDs; which way is up: its top red, its left side green ({data[5].tolist()}, {data[37].tolist()}; "
+      f"{data[25].tolist()}, {data[15].tolist()})", grid.count() == 40 and len(data) == 40 and data[5][0] > 40
+      and data[5][1] < 5 and data[37][1] > 40 and data[37][0] < 5 and data[25].max() < 5 and data[15].max() < 5)
+grid.frame(clk.t)
+sent = np.frombuffer(writes()[-1], dtype=np.uint8).reshape(-1, 3)
+check(f"...sent to them, and the grid's LEDs past its end dark ({len(sent)})", len(sent) == 64
+      and (sent[:40][:, [1, 0, 2]] == data).all() and sent[40:].max() == 0)
+clk.t += 0.6
+grid.frame(clk.t)
+check(f"...then just its own ({len(writes()[-1]) // 3})", len(writes()[-1]) == 40 * 3)
+grid.test_until = 0.0
+grid.colour = "rainbow"
+settle(6 * G.COLOUR_TAU)
+grid.frame(clk.t)
+where, cols = grid.lit()
+hues = {tuple((c // 64).astype(int)) for c in cols}
+check(f"...a rainbow: every colour once round the TV ({len(hues)}; {cols[0].round().tolist()}, "
+      f"{cols[20].round().tolist()})", len(where) == 40 and len(hues) >= 6 and not near(cols[0], cols[20], 60))
+grid.colour = None
+grid.set_grid()
+settle(G.FADE_AFTER + 6 * G.FADE_TAU)
+check("...back to the grid", grid.count() == 64 and grid.lit() is None)
 
 # its LEDs: as bright as it's set, evened out for the eye, as it's put up and wired
 grid.bright = 0.25
@@ -467,8 +553,9 @@ g.PlayerScreen.spawn = spawn
 
 class FB:
     w, h = 640, 480
-    def show(self, img): pass
-    def show_part(self, img, box): pass
+    last = None
+    def show(self, img): FB.last = img.copy()
+    def show_part(self, img, box): FB.last = img.copy()
     def invalidate(self): pass
     def close(self): pass
 
@@ -479,28 +566,113 @@ m.glow_can = lambda: True                             # (a Pi with its pins free
 m.glow_spi, m.glow_port, m.glow_configs = S + "/spi-m", 0, [S + "/m-config.txt"]
 open(m.glow_spi, "wb").close()
 open(S + "/m-config.txt", "w").write("dtparam=audio=on\n")
+APPS = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Apps")
+m.load_tab(APPS)
+check("Apps: TV backlight, on a Pi that can have a grid", "TV backlight" in [it["title"] for it in m.items[APPS]])
 m.view, m.tab = "list", next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.set_page = None
-keys = [k for k, _, _ in m.settings_rows()]
-check("Settings: TV backlight, on a Pi that can have a grid", "glow" in keys)
-m.set_sel = keys.index("glow")
+check("...not in Settings any more", "glow" not in [k for k, _, _ in m.settings_rows()])
+m.web_tab("TV backlight")
+s = m.sim_game()
+check(f"its page: the LEDs off, and said so; its buttons ({s.says}; {m.sim_hints(s)})", s.key == "glow"
+      and s.grid is None and s.says == ("The LEDs are off", "A turns them on")
+      and m.sim_hints(s) == [("A", "Turn on"), ("◀▶", "Colour"), ("▲▼", "Brightness"), ("START", "More")])
 m.press("a")
-rows = [k for k, _, _ in m.settings_rows()]
-check(f"...its page ({rows})", m.set_page == "glow" and rows == ["glow_on", "glow_follow", "glow_bright", "glow_beat",
-                                                                 "glow_turn", "glow_mirror", "glow_wiring", "glow_test"])
-m.render_settings()
-m.set_sel = 0
-m.press("right")
-check(f"LED grid on: lit, SPI's lines put in config.txt, and a restart asked for ({m.glow_status()!r})",
+check(f"A: LED grid on: lit, SPI's lines put in config.txt, and a restart asked for ({m.glow_status()!r})",
       m.glow_grid is not None and "dtparam=spi=on" in open(S + "/m-config.txt").read() and m.glow_restart
-      and [k for k, _, _ in m.settings_rows()][-1] == "glow_reboot")
-m.render_settings()
+      and m.setting("glow_on") == "On" and [k for k, _, _ in m.glow_card_rows()][-1] == "glow_reboot")
 grid = m.glow_grid
-m.set_sel = 2
+m.press("up")
+check(f"▲: brighter ({grid.bright}, {m.setting('glow_bright')})", grid.bright == 0.5 and m.setting("glow_bright") == "50%")
 m.press("right")
-m.set_sel = 5
+check(f"▶: its own colour, the next one ({m.setting('glow_colour')}, {grid.colour})",
+      m.setting("glow_colour") == "Warm white" and grid.colour == G.colour_of("Warm white"))
+m.press("left")
+m.press("left")
+check(f"◀ twice: round to the last, a rainbow ({m.setting('glow_colour')}, {grid.colour})",
+      m.setting("glow_colour") == "Rainbow" and grid.colour == "rainbow")
+m.press("start")
+card = [k for k, _, _ in m.glow_card_rows()]
+check(f"START: its card, the rest ({card}; {m.sim_hints(s)})", m.sim_opts == 0 and card == [
+    "glow_follow", "glow_beat", "glow_shape", "glow_turn", "glow_mirror", "glow_wiring", "glow_test", "glow_reboot"]
+    and m.sim_hints(s) == [("▲▼", "Choose"), ("◀▶", "Change"), ("B", "Done")])
+m.dirty = True
+m.flush()
+for _ in range(4):
+    m.press("down")
 m.press("right")
-check(f"...its settings, as they're set ({grid.bright}, {grid.mirror})", grid.bright == 0.5 and grid.mirror is False)
+check(f"...mirror off ({grid.mirror})", grid.mirror is False and m.setting("glow_mirror") == "Off")
+m.press("down")
+m.press("down")
+check(f"...which way is up: A shows it ({m.sim_hints(s)})", m.sim_hints(s)[1] == ("A", "Show"))
+m.press("a")
+check("...shown", grid.test_until > time.monotonic() and m.sim_opts is not None)
+grid.test_until = 0.0
+m.press("b")
+check("B: closed", m.sim_opts is None)
+m.press("left")
+m.press("left")
+m.press("left")
+check(f"its colour, Blue ({m.setting('glow_colour')})", m.setting("glow_colour") == "Blue")
+BLUE_OWN = np.array(G.colour_of("Blue"), dtype=float)
+until(lambda: grid.picture() is not None and near(grid.picture()[4, 4], BLUE_OWN, 1)
+      and not grid.lively(time.monotonic()), 4)
+m.dirty = True
+m.flush()
+shade = np.array(G.colour_of("Blue")) * m.glow_shade()
+box = FB.last.crop((g.SIM_BOX[0] + 4, g.SIM_BOX[1] + 4, g.SIM_BOX[2] - 4, g.SIM_BOX[3] - 4)).convert("RGB")
+blues = int((np.abs(np.asarray(box).astype(int) - shade.round().astype(int)).max(axis=2) < 6).sum())
+check(f"its picture: the LEDs, lit blue ({blues} pixels of them)", blues > 64 * 150)
+FB.last.convert("RGB").save(S + "/glow_page.png")
+check(f"...and beside it, how it's set ({s.stats()})", s.stats()[:4] == [("LEDs", "On"), ("Shape", "8x8 grid"),
+                                                                       ("Colour", "Blue"), ("Brightness", "50%")]
+      and s.stats()[5] == ("Lit by", "Your colour"))
+check(f"...drawn again only as the LEDs change ({s.frame_in(time.time())} s)", s.frame_in(time.time()) == 1.0)
+
+# a strip round the TV
+m.press("start")
+m.press("down")
+m.press("down")
+m.press("right")
+card = [k for k, _, _ in m.glow_card_rows()]
+check(f"Shape: a strip, 60 LEDs; the strip's rows, not the grid's ({card})", m.setting("glow_shape") == "Strip"
+      and grid.count() == 60 and card == ["glow_follow", "glow_beat", "glow_shape", "glow_count", "glow_start",
+                                          "glow_way", "glow_bottom", "glow_test", "glow_reboot"])
+m.press("down")
+m.press("right")
+m.press("right", repeat=True)
+check(f"...its LEDs: one more, then (held) five more ({m.setting('glow_count')}, {grid.count()})",
+      m.setting("glow_count") == "66" and grid.count() == 66)
+m.press("down")
+m.press("right")
+m.press("down")
+m.press("right")
+first = grid.on_strip[0][0]
+check(f"...starting at the top left, going anticlockwise: down the left side first ({first.round(2).tolist()})",
+      m.setting("glow_start") == "Top left" and m.setting("glow_way") == "Anticlockwise" and first[0] == 0
+      and 0 < first[1] < 0.2)
+m.dirty = True
+m.flush()
+FB.last.convert("RGB").save(S + "/glow_card_strip.png")
+m.press("b")
+until(lambda: grid.lit() is not None and len(grid.lit()[1]) == 66 and near(grid.lit()[1][30], BLUE_OWN, 1)
+      and not grid.lively(time.monotonic()), 4)
+m.dirty = True
+m.flush()
+tx, ty, tw, th = s.tv()
+box = np.asarray(FB.last.crop((g.SIM_BOX[0], g.SIM_BOX[1], g.SIM_BOX[2], g.SIM_BOX[3])).convert("RGB")).astype(int)
+blues = int((np.abs(box - shade.round().astype(int)).max(axis=2) < 6).sum())
+mid = box[int(ty + th / 2) + 2, int(tx + tw / 2) + 2].tolist()
+check(f"its picture: a TV, the strip round it lit blue ({blues} pixels of them; {mid} in the middle)",
+      blues > 66 * 30 and near(mid, (12, 14, 17), 3))
+FB.last.convert("RGB").save(S + "/glow_strip.png")
+m.press("start")
+m.press("down")
+m.press("down")
+m.press("left")
+m.press("b")
+check(f"...the grid again ({m.setting('glow_shape')}, {grid.count()})", m.setting("glow_shape") == "8x8 grid"
+      and grid.count() == 64)
 beacon = m.share_beacon("gpi", full=True)
 check(f"its beacon: there's a grid, following any of yours, pulsing to music ({beacon.get('glow')})",
       beacon.get("glow") == {"port": grid.port, "follow": "", "beat": True}
@@ -510,6 +682,15 @@ m.pie.heard[PEER] = {"host": "tv", "seen": time.time() + 3600, "peer": True,
                      "glow": {"port": 5448, "follow": "gpi", "beat": True}}
 check(f"your grids: this one's and the TV's ({m.glow_targets()})",
       m.glow_targets() == [("127.0.0.1", grid.port), ("10.0.0.7", 5448)])
+m.web_tab("TV backlight")
+m.press("start")
+m.press("left")
+check(f"following nobody (START's card): its beacon says nothing, nothing sent to it, no beat wanted "
+      f"({m.setting('glow_follow')}, {m.glow_targets()})", m.setting("glow_follow") == "Nobody" and grid.follow == "Nobody"
+      and "glow" not in m.share_beacon("gpi", full=True) and m.glow_targets() == [("10.0.0.7", 5448)])
+m.press("right")
+m.press("b")
+check("...any of yours again", grid.follow == G.ANY and "glow" in m.share_beacon("gpi", full=True))
 
 
 class Run:
@@ -641,32 +822,165 @@ while time.monotonic() < end and m.glow_station is not None:
 check("...let go of once it's not played", m.glow_station is None)
 
 # pulse to music off (and no other grid): as ever
-m.set_sel = [k for k, _, _ in m.settings_rows()].index("glow_beat")
+m.web_tab("TV backlight")
+m.press("start")
+m.press("down")
 m.press("right")
+m.press("b")
 check(f"pulse to music off: its beacon says so, and music's as ever, mplayer's ({spawned[-1:] and spawned[-1][0]})",
       m.share_beacon("gpi", full=True)["glow"]["beat"] is False and not m.glow_beats_wanted()
       and (m.play([item], 0), spawned and spawned[-1][0] == KICKS)[1])
 m.stop()
 
-# the web page's Settings
-sec = next((x for x in m.web_settings_now()["sections"] if x["id"] == "glow"), None)
-check(f"the web page's Settings: TV backlight ({[r['key'] for r in sec['rows']] if sec else None})",
-      sec is not None and [r["key"] for r in sec["rows"]][:3] == ["glow_on", "glow_follow", "glow_bright"]
-      and any(r["key"] == "glow_reboot" for r in sec["rows"]))
+# the web page's Library
+until(lambda: near(grid.picture()[3, 3], BLUE_OWN, 1) and not grid.lively(time.monotonic()), 6)   # (music gone)
+w = m.web_glow()
+keys = [r["key"] for r in w["rows"]]
+check(f"the web page's Library: TV backlight, its LEDs as they're lit, its settings ({keys})",
+      m.web_catalog()["glow"] is True and w["can"] and w["on"] and len(w["leds"]) == 64
+      and keys[:3] == ["glow_on", "glow_colour", "glow_bright"] and "glow_reboot" in keys
+      and w["rows"][1]["value"] == "Blue" and w["rows"][1]["colours"]["Blue"] == "#1450ff"
+      and w["rows"][1]["colours"]["Rainbow"].startswith("conic-gradient"))
+blue = tuple(int(w["leds"][27][i:i + 2], 16) for i in (1, 3, 5))
+check(f"...blue ({w['leds'][27]})", near(np.array(blue), shade, 3))
+check("...not in its Settings", not any(x["id"] == "glow" for x in m.web_settings_now()["sections"]))
 said = m.web_settings_do({"key": "glow_bright", "value": "100%"})
 check(f"...one changed there: on the grid ({said}, {grid.bright})", said == {"ok": True} and grid.bright == 1.0)
+said = m.web_settings_do({"key": "glow_colour", "value": "Pink"})
+check(f"...its colour ({said}, {grid.colour})", said == {"ok": True} and grid.colour == G.colour_of("Pink"))
 check("...which way is up, shown", m.web_settings_do({"key": "glow_test", "value": True}).get("ok")
       and grid.test_until > time.monotonic())
-check("...not one of its choices: not taken", "error" in m.web_settings_do({"key": "glow_turn", "value": "45°"}))
-m.set_sel = 0
-m.set_page = "glow"
-m.press("left")
-check("LED grid off: dark, and gone from the beacon", m.glow_grid is None and "glow" not in m.share_beacon("gpi", full=True)
-      and last_lit(m.glow_spi).max() == 0)
-m.press("b")
-check("B: back to Settings, on its row", m.set_page is None and [k for k, _, _ in m.settings_rows()][m.set_sel] == "glow")
+check("...not one of its choices: not taken", "error" in m.web_settings_do({"key": "glow_turn", "value": "45°"})
+      and "error" in m.web_settings_do({"key": "glow_colour", "value": "Plaid"}))
+grid.test_until = 0.0
+said = m.web_settings_do({"key": "glow_shape", "value": "Strip"})
+w = m.web_glow()
+keys = [r["key"] for r in w["rows"]]
+count = next((r for r in w["rows"] if r["key"] == "glow_count"), {})
+check(f"...a strip, from there: its rows, its LEDs round the TV ({keys}; {count})", said == {"ok": True}
+      and "glow_turn" not in keys and "glow_start" in keys and count.get("kind") == "count" and count.get("value") == 66
+      and (count.get("min"), count.get("max")) == (8, 300) and len(w["strip"]) == 66 and len(w["leds"]) == 66)
+said = m.web_settings_do({"key": "glow_count", "value": 120})
+check(f"...120 LEDs ({said}, {grid.count()})", said == {"ok": True} and grid.count() == 120
+      and m.setting("glow_count") == "120")
+check("...not a number of LEDs it can have: not taken", all("error" in m.web_settings_do({"key": "glow_count", "value": v})
+                                                          for v in (5, 301, "lots", None, 12.5)))
+m.web_settings_do({"key": "glow_shape", "value": "8x8 grid"})
+check("...the grid again: no LED count to set", grid.count() == 64
+      and "error" in m.web_settings_do({"key": "glow_count", "value": 50}) and m.web_glow()["strip"] is None)
+
+# ...in a real browser: Library > TV backlight, its LEDs as they're lit, a colour tapped
+import asyncio, logging
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
+from werkzeug.serving import make_server
+
+
+class UI:
+    def write(self, *a): pass
+    def syn(self): pass
+
+
+g.list_devices = lambda: []                            # (no controllers here)
+control = g.Control()
+server = g.serve_control(m, control, port=0, key="k" * 32)
+done = threading.Event()
+main = threading.Thread(target=lambda: g.run(UI(), m, control, stop=done.is_set), daemon=True)
+main.start()
+sys.path.append(ROOT + "/pitato")
+import webui
+webui.HOME = HOME; webui.STATIC = S + "/static"; os.makedirs(webui.STATIC + "/fonts")
+for f in os.listdir(ROOT + "/static/fonts"):
+    shutil.copy(ROOT + "/static/fonts/" + f, webui.STATIC + "/fonts/")
+webui.FONTS_DIR = webui.STATIC + "/fonts"
+open(S + "/control-key", "w").write("k" * 32)
+webui.STATE_FILE = g.STATE_FILE; webui.NET_ROOT = g.NET_ROOT
+webui.CONTROL = ("127.0.0.1", server.server_address[1]); webui.CONTROL_KEY = S + "/control-key"
+web = make_server("127.0.0.1", 0, webui.app, threaded=True)
+threading.Thread(target=web.serve_forever, daemon=True).start()
+PINK = np.array(G.colour_of("Pink")) * m.glow_shade()
+until(lambda: near(grid.picture()[3, 3], G.colour_of("Pink"), 1), 3)
+from playwright.async_api import async_playwright
+
+
+async def browse():
+    async with async_playwright() as pw:
+        b = await pw.chromium.launch()
+        pg = await b.new_page(viewport={"width": 1180, "height": 900})
+        oops = []
+        pg.on("pageerror", lambda e: oops.append(str(e)))
+        await pg.goto(f"http://127.0.0.1:{web.server_port}/#library")
+        await pg.wait_for_selector(".ltab", timeout=10000)
+        tabs = await pg.eval_on_selector_all(".ltab", "bs => bs.map((b) => b.textContent)")
+        await pg.click(".ltab:has-text('TV backlight')")
+        await pg.wait_for_function("document.querySelectorAll('.gl-led.lit').length === 64", timeout=5000)
+        await pg.wait_for_selector(".gl-set .swatch", timeout=5000)
+        got = await pg.evaluate("""(() => {
+          const led = document.querySelectorAll('.gl-led')[27];
+          return {c: getComputedStyle(led, '::before').backgroundColor, sub: document.querySelector('.content-h .src').textContent,
+                  rows: [...document.querySelectorAll('.gl-set .set-row')].map((r) => r.dataset.key),
+                  swatches: [...document.querySelectorAll('.gl-set .swatch')].map((x) => x.getAttribute('aria-label'))};
+        })()""")
+        rgb = [int(v) for v in got["c"][got["c"].index("(") + 1:-1].split(",")[:3]]
+        check(f"the page: Library has a TV backlight tab ({tabs})", "TV backlight" in tabs)
+        check(f"...the LEDs as they're lit, pink ({rgb}; {got['sub']})", near(rgb, PINK, 3)
+              and got["sub"] == "Pink, till a game or music comes on")
+        check(f"...its settings, a swatch for each colour ({got['rows']}; {got['swatches']})",
+              got["rows"][:3] == ["glow_on", "glow_colour", "glow_bright"]
+              and got["swatches"] == [n for n, _ in G.COLOURS])
+        await pg.screenshot(path=S + "/glow_web.png")
+        await pg.click(".gl-set .swatch[aria-label='Purple']")
+        took = await asyncio.to_thread(until, lambda: m.setting("glow_colour") == "Purple"
+                                       and grid.colour == G.colour_of("Purple"), 5)
+        purple = np.array(G.colour_of("Purple")) * m.glow_shade()
+        await pg.wait_for_function("""(want) => {
+          const c = getComputedStyle(document.querySelectorAll('.gl-led')[27], '::before').backgroundColor;
+          const v = c.slice(c.indexOf('(') + 1, -1).split(',').map(Number);
+          return v.slice(0, 3).every((x, i) => Math.abs(x - want[i]) <= 3);
+        }""", arg=[int(round(v)) for v in purple], timeout=5000)
+        check("...a colour tapped: on the LEDs, and on the page", took)
+        await pg.click(".set-row[data-key='glow_shape'] .seg button:has-text('Strip')")
+        await pg.wait_for_selector(".gl-board.is-strip canvas", timeout=5000)
+        await pg.wait_for_function("""(want) => {
+          const cv = document.querySelector('.gl-board.is-strip canvas');
+          if (!cv || !cv.width) return false;
+          const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4)
+            if (Math.abs(d[i] - want[0]) <= 4 && Math.abs(d[i + 1] - want[1]) <= 4 && Math.abs(d[i + 2] - want[2]) <= 4) n++;
+          return n > 120 * 4;
+        }""", arg=[int(round(v)) for v in purple], timeout=5000)
+        await pg.fill(".set-row[data-key='glow_count'] input", "80")
+        await pg.click(".set-row[data-key='glow_count'] button[type='submit']")
+        took = await asyncio.to_thread(until, lambda: grid.count() == 80 and m.setting("glow_count") == "80", 5)
+        check("...a strip, tapped: drawn round a TV, lit purple; 80 LEDs typed in", took
+              and m.setting("glow_shape") == "Strip")
+        await pg.screenshot(path=S + "/glow_web_strip.png")
+        await pg.click(".set-row[data-key='glow_shape'] .seg button:has-text('8x8 grid')")
+        await pg.wait_for_selector(".gl-board.is-grid .gl-led", timeout=5000)
+        took = await asyncio.to_thread(until, lambda: grid.count() == 64, 5)
+        check("...the grid again", took)
+        await pg.set_viewport_size({"width": 390, "height": 844})
+        await asyncio.sleep(0.3)
+        wide = await pg.evaluate("document.documentElement.scrollWidth")
+        check(f"...on a phone: nothing wider than it ({wide})", wide <= 390)
+        await pg.screenshot(path=S + "/glow_web_phone.png", full_page=True)
+        check(f"...no errors on the page ({oops})", not oops)
+        await b.close()
+
+
+asyncio.run(browse())
+done.set()
+main.join(5)
+web.shutdown()
+m.web_tab("TV backlight")
+m.press("a")
+check("A again: LED grid off, dark, and gone from the beacon", m.glow_grid is None
+      and "glow" not in m.share_beacon("gpi", full=True) and until(lambda: last_lit(m.glow_spi).max() == 0, 2)
+      and m.sim_game().says == ("The LEDs are off", "A turns them on") and m.web_glow()["leds"] is None)
 m.glow_can = lambda: False
-check("a Pi that can't have one (a PC, a GPi Case): no TV backlight in Settings",
-      "glow" not in [k for k, _, _ in m.settings_rows()]
-      and not any(x["id"] == "glow" for x in m.web_settings_now()["sections"]))
+m.load_tab(APPS)
+check("a Pi that can't have one (a PC, a GPi Case): no TV backlight in Apps, nor on the web page",
+      "TV backlight" not in [it["title"] for it in m.items[APPS]] and m.web_catalog()["glow"] is False
+      and m.web_glow()["rows"] == [] and "error" in m.web_settings_do({"key": "glow_colour", "value": "Blue"})
+      and "glow" not in [k for k, _, _ in m.settings_rows()])
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}")

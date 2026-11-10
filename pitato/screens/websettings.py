@@ -26,7 +26,7 @@ from ..games import system
 from ..cheevos import LoginError, ra_account, ra_forget, ra_login, ra_save
 from .weather import WX_UNITS
 from .games import DS_SCREENS, DS_TOUCH, GAME_PICTURES
-from .glow import GLOW_KEYS
+from .glow import GLOW_KEYS, STRIP_LEAST, STRIP_MOST
 
 ENTITY = re.compile(r"[a-z_]+\.[a-z0-9_]+")          # a Home Assistant entity: light.kitchen
 COIN = re.compile(r"[a-z0-9][a-z0-9-]{0,59}")         # a coin, as CoinGecko knows it: bitcoin, shiba-inu
@@ -128,10 +128,6 @@ class WebSettingsScreen:
             if self.setting("share") != "Off" else [])
             + self.web_peer_rows(), "Prices and the weather fetched once for them all, your game saves following "
             "you (a game picks up where you left it on whichever of them you played it on last), and Group chat.")
-        if "glow" in root:                             # (an LED grid behind the TV: a Pi with the pins for one)
-            sec("glow", "TV backlight", self.web_glow_rows(), "An 8 by 8 grid of LEDs behind the TV, lit with the "
-                "colours along the edges of the game on whichever of your Pietatos it follows, flashing red when "
-                "you're hit and gold for an achievement, and pulsing to music.")
 
         # WiFi
         w, went = self.wifi, self.wifi.get("said")
@@ -384,6 +380,13 @@ class WebSettingsScreen:
     def web_settings_do(self, cmd):
         key = str(cmd.get("key") or "")
         value = cmd.get("value")
+        if key == "glow_count":                        # (a strip's LEDs: a number, not one of a few choices)
+            ok = self.glow_can() and self.glow_strip() and isinstance(value, (int, float, str)) \
+                and str(value).strip().isdigit() and STRIP_LEAST <= int(str(value).strip()) <= STRIP_MOST
+            if not ok:
+                return {"error": f"From {STRIP_LEAST} to {STRIP_MOST} LEDs"}
+            self.glow_pick("glow_count", str(int(str(value).strip())))
+            return {"ok": True}
         if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "sound",
                    "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery", "share",
                    "attract") \
@@ -395,7 +398,10 @@ class WebSettingsScreen:
         return handler(value, cmd)
 
     def web_choices(self, key):
-        """What a setting may be, as web_settings says."""
+        """What a setting may be, as web_settings says (the TV backlight's: as the web page's Library has them)."""
+        if key in GLOW_KEYS:
+            return next((r.get("choices") for r in self.web_glow_rows() if r["key"] == key), None) \
+                if self.glow_can() else None
         for sec in self.web_settings_now()["sections"]:
             for row in sec["rows"]:
                 if row["key"] == key and row["kind"] == "choice":

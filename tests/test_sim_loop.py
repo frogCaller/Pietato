@@ -137,6 +137,13 @@ def since(t0):
     return [b for t, b in FB.log if t >= t0]
 
 
+def drawn(quiet=0.3, most=3.0):
+    """Once nothing's been drawn for a moment: a card just opened is one drawing, and a late one on a slow machine."""
+    end = time.monotonic() + most
+    while time.monotonic() < end and FB.log and time.monotonic() - FB.log[-1][0] < quiet:
+        time.sleep(0.02)
+
+
 check("the home screen at start-up", m.active and m.view == "home")
 apps = [a for a, _ in m.home_apps()]
 row, col = divmod(apps.index("Apps"), 5)
@@ -165,6 +172,7 @@ check(f"{fps:.1f} frames a second ({len(got)} in 2 s)", g.SIM_FPS - 3 <= fps <= 
 check(f"...{small} of them just the box, {got.count('whole')} whole", small >= 0.6 * len(got) and got.count("whole") <= 2)
 check(f"...it plays: {G.captures} captures by now", G.phase == "on" and G.clock > 1.5)
 press(e.BTN_START, 0.3)
+drawn()
 t0 = time.monotonic()
 time.sleep(1.0)
 check(f"START's card: no frames meanwhile ({len(since(t0))})", m.sim_opts == 0 and len(since(t0)) == 0)

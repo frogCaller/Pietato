@@ -636,7 +636,7 @@ class Screen:
 
 
 # ---- your services: checked as they're added, kept as Settings keeps them ---------------------------------------
-TITLE = "Pietato: Home screen, game console, remote and buddy for your TV"   # (the README's title)
+TITLE = "Pietato: Your Raspberry Pi Entertainment Hub"   # (the README's title)
 
 SERVICES = [
     ("ha", "Home Assistant", "the TV Remote and Lights"),

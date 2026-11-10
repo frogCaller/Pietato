@@ -23,7 +23,8 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type
-- **Apps**: [Group chat](#group-chat), a Clock with the time and the date (A switches between a dial and big
+- **Apps**: [Group chat](#group-chat), the [TV backlight](#tv-backlight) (on a Pi with LEDs behind the TV), a
+  Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
   (type with a USB or Bluetooth keyboard: ▲▼ change the words' colour, ◀▶ the background, A the font, Y adds
@@ -95,25 +96,39 @@ Pietatos needs to be on.
 
 ## TV backlight
 
-An 8x8 grid of WS2812B LEDs behind your TV can light up with the colours along the edges of the game you're
-playing, on whichever of your Pietatos it follows. It flashes red when you're hit, gold when you unlock an
-achievement, and pulses to music. A hit is a game's lives or health going down in its RetroAchievements rich
-presence, or a game shaking the controller, so it shows in the games those cover.
+An 8x8 grid of WS2812B LEDs behind your TV, or a strip of them round its edges, can light up with the colours
+along the edges of the game you're playing, on whichever of your Pietatos it follows. It flashes red when you're
+hit, gold when you unlock an achievement, and pulses to music. A hit is a game's lives or health going down in its
+RetroAchievements rich presence, or a game shaking the controller, so it shows in the games those cover.
 
 To wire it to the Pi behind the TV (not one in a GPi Case, whose screen uses those pins), connect DIN to GPIO 10
-(pin 19) and GND to a ground pin. Power it with 5 V from its own supply, since 64 LEDs can draw more than a Pi
-gives, and join that supply's ground to the Pi's. If the first LED flickers, a level shifter (a 74AHCT125) on DIN
-helps. Then turn it on in Settings > TV backlight. The first time, it turns on the Pi's SPI and asks you to
-restart. The same page sets which Pietato it follows (any of yours that's playing, by default), how bright it
-is, and whether it pulses to music. Turn, Mirror and Wiring match how it's put up: Show which way is up lights
-its top row red and its left side green.
+(pin 19) and GND to a ground pin. Power the LEDs with 5 V from their own supply, since they can draw more than a
+Pi gives, and join that supply's ground to the Pi's. Size the supply for a strip: each LED can draw up to 60 mA at
+full white, though the brightness setting keeps it well under that. If the first LED flickers, a level shifter (a
+74AHCT125) on DIN helps. Then open Apps > TV backlight and press A to turn it on. The first time, it turns on the
+Pi's SPI and asks you to restart.
+
+The page shows the LEDs as they're lit. ◀▶ pick their colour for whenever no game or music is lighting them:
+warm white, white, red, orange, yellow, green, teal, blue, purple, pink or a rainbow. Off keeps them dark. ▲▼
+set how bright they are. START has the rest: which Pietato it follows (any of yours that's playing, by default,
+or Nobody to keep it to your colour), and whether it pulses to music.
+
+Shape sets a grid or a strip. For a grid, Turn, Mirror and Wiring match how it's put up. For a strip, set how
+many LEDs it has (up to 300), where its first LED is, which way it goes round as you look at the TV, and whether
+it runs along the bottom too. Each LED then takes the colour of the edge of the screen nearest it. Show which way
+is up lights the top red and the left side green. The web page's Library has a TV backlight tab with all of this
+too.
 
 ## Fish Tank
 
 Each Pietato has a fish of its own in Apps > Fish Tank. With two or more on the same network, their tanks join up
-into one big tank, and the fish swim from one to the next. A calls your fish back, X feeds it, Y moves the plants
-and rocks, and START picks the fish, the bubbles and the light.
+into one big tank, and the fish swim from one to the next. A calls your fish back, X feeds it, and START picks the
+fish and the light.
 
 The web page's Library has a Fish Tank too, with every tank at once. Tap a tank to feed it, or press Arrange and
-drag the tanks into a grid: side by side, one above another, or both. Fish swim between tanks that touch, the
-water's surface is along the top and the sand along the bottom. Settings > Share with other Pietatos needs to be on.
+drag the tanks into a grid: side by side, one above another, or both. Fish swim between tanks that touch, with the
+water's surface along the top. Settings > Share with other Pietatos needs to be on.
+
+If your screens have frames, or space between them, Arrange's Space between screens sliders set how much, as a
+share of a screen's width (Across) and height (Down). A fish keeps swimming through that space unseen, so it comes
+out on the next screen where it would through real glass.

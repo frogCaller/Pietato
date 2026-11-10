@@ -1,11 +1,13 @@
-"""TV backlight: an 8x8 grid of WS2812B LEDs behind your TV, lit with the colours along the edges of the game you're
-playing, on another of your Pietatos (or this one). The one playing samples each picture's edges (Edges) and sends them
+"""TV backlight: an 8x8 grid of WS2812B LEDs behind your TV (or a strip of them round its edges: each LED takes the
+colour of the grid's edge nearest it), lit with the colours along the edges of the game you're playing, on another of
+your Pietatos (or this one). The one playing samples each picture's edges (Edges) and sends them
 over UDP about 30 times a second (GlowOut: a packet each, nothing waiting for an answer). What happens in the game goes
 the same way, a packet each: a hit (its rich presence says the lives or health went down: HitWatch; or it shook the
 controller), an achievement, and music's beats as they're heard (Beats: party.py's player finds them, as it plays).
 The one with the grid (Grid) takes them from your Pietatos only, follows one of them (or whichever's playing), smooths
 the colours, flashes red or gold or with the beat, and lights the LEDs through the Pi's SPI (Strip: GPIO 10, its MOSI,
-so nothing needs installing). screens/glow.py has its Settings page, and says where a game's colours go."""
+so nothing needs installing). With nothing lighting it, it shows a colour of your own (or a rainbow), or goes dark.
+screens/glow.py has its page in Apps (backlight.py draws it), and says where a game's colours go."""
 import collections
 import errno
 import fcntl
@@ -56,6 +58,17 @@ SPI_IOC_WR_MODE, SPI_IOC_WR_BITS_PER_WORD, SPI_IOC_WR_MAX_SPEED_HZ = 0x40016B01,
 RESET = bytes(100)           # (low for 330 µs after: the LEDs show what they've been sent)
 THIS_ONE = "This one"        # a grid following the Pietato it's on
 ANY = "Any of yours"         # ...or whichever of yours is playing
+NOBODY = "Nobody"            # ...or none of them: just its own colour
+COLOURS = (("Off", None), ("Warm white", (255, 194, 110)), ("White", (255, 255, 255)), ("Red", (255, 0, 0)),
+           ("Orange", (255, 142, 0)), ("Yellow", (255, 218, 0)), ("Green", (0, 255, 40)), ("Teal", (0, 230, 190)),
+           ("Blue", (20, 80, 255)), ("Purple", (182, 0, 255)), ("Pink", (255, 80, 167)), ("Rainbow", "rainbow"))
+                             # its own colour, with nothing else lighting it (as it's seen: LEDs' brightness evened out)
+COLOUR_TAU = 0.2             # seconds its own colour takes to come in
+RAINBOW_SECS = 12.0          # seconds a rainbow takes to go round once
+LIVELY = 0.3                 # seconds since its colours last changed: still changing (its picture drawn again soon)
+STRIP_LEAST, STRIP_MOST = 8, 300   # LEDs on a strip (at most: one SPI write, 9 bytes each)
+STARTS = ("Bottom left", "Top left", "Top right", "Bottom right", "Bottom middle")   # where a strip's first LED is
+TV_W, TV_H = 16.0, 9.0       # a TV's shape: a strip's LEDs shared out along its sides as long as they are
 
 
 # ---- a picture's edges -----------------------------------------------------------------------------------------------
@@ -80,6 +93,59 @@ def rgb_fields(fields):
         v = v.astype(np.uint32)
         return np.stack([((v >> off) & ((1 << ln) - 1)) * (255 / ((1 << ln) - 1)) for off, ln in fields[:3]], -1)
     return rgb
+
+
+def rainbow(rows, cols, t, wheel=False):
+    """A rainbow across the grid, corner to corner (or round its middle, a wheel: a strip round the TV has every colour
+    once), going round as time goes on (rows x cols x 3, 0 to 255)."""
+    if wheel:
+        y, x = np.mgrid[0:rows, 0:cols]
+        h = (np.arctan2(y - (rows - 1) / 2, x - (cols - 1) / 2) / (2 * np.pi) + t / RAINBOW_SECS) % 1.0
+    else:
+        h = ((np.arange(rows)[:, None] + np.arange(cols)[None, :]) / (rows + cols) + t / RAINBOW_SECS) % 1.0
+    k = (np.array([5.0, 3.0, 1.0]) + h[..., None] * 6) % 6
+    return 255.0 * (1 - np.clip(np.minimum(k, 4 - k), 0, 1))
+
+
+def colour_of(name):
+    """A colour's name (COLOURS'): what it is (an RGB, "rainbow"), or None for Off (or a name that isn't one)."""
+    return dict(COLOURS).get(name)
+
+
+def strip_points(n, start="Bottom left", clockwise=True, bottom=True):
+    """Where each of a strip's n LEDs is round the TV, as you look at it: (x, y) from its top left, 0 to 1 across and
+    down. Its first LED at `start`, the rest going round (clockwise as you look at it, or not), shared out evenly along
+    the sides with LEDs (the bottom too, or not: a TV on a stand)."""
+    loop = 2 * (TV_W + TV_H)                    # (round the TV clockwise from its top left: top, right, bottom, left)
+    at = {"Top left": 0.0, "Top right": TV_W, "Bottom right": TV_W + TV_H, "Bottom middle": 1.5 * TV_W + TV_H}.get(
+        start, 2 * TV_W + TV_H)
+    steps = 20000
+    d = (np.arange(steps) + 0.5) * loop / steps
+    u = (at + (d if clockwise else -d)) % loop
+    used = np.ones(steps, dtype=bool) if bottom else ~((u > TV_W + TV_H) & (u < 2 * TV_W + TV_H))
+    along = np.cumsum(used)                      # (how far along its LEDs, at each step)
+    k = np.searchsorted(along, (np.arange(n) + 0.5) * along[-1] / n).clip(0, steps - 1)
+    u = u[k]
+    sides = [u < TV_W, u < TV_W + TV_H, u < 2 * TV_W + TV_H]
+    x = np.select(sides, [u, np.full_like(u, TV_W), 2 * TV_W + TV_H - u], 0.0)
+    y = np.select(sides, [np.zeros_like(u), u - TV_W, np.full_like(u, TV_H)], loop - u)
+    return np.stack([x / TV_W, y / TV_H], axis=1)
+
+
+def strip_weights(points, cols=GLOW_W, rows=GLOW_H):
+    """How each strip LED's colour comes from the grid's picture (a row for each LED, a column for each of the
+    picture's LEDs): from the nearest ones on its edge, the nearer the more."""
+    cx = (points[:, 0] * cols - 0.5).clip(0, cols - 1)
+    cy = (points[:, 1] * rows - 0.5).clip(0, rows - 1)
+    x0 = np.floor(cx).astype(int).clip(0, cols - 2)
+    y0 = np.floor(cy).astype(int).clip(0, rows - 2)
+    fx, fy = cx - x0, cy - y0
+    w = np.zeros((len(points), rows * cols))
+    i = np.arange(len(points))
+    for dy, wy in ((0, 1 - fy), (1, fy)):
+        for dx, wx in ((0, 1 - fx), (1, fx)):
+            np.add.at(w, (i, (y0 + dy) * cols + x0 + dx), wy * wx)
+    return w
 
 
 def border_cells(cols=GLOW_W, rows=GLOW_H):
@@ -382,9 +448,11 @@ class Grid:
     """An LED grid behind the TV, lit by your Pietatos (by this one too): a game's colours, music's beats, a hit's red
     and an achievement's gold. named(address): who's there (one of yours, by name; THIS_ONE for this one; None: not
     one of yours, so not listened to). follow: ANY (whichever of yours is playing: the one it's following, till it's
-    quiet a moment), THIS_ONE, or one of yours by name. Lit RATE times a second, its colours smoothed, as bright as
-    `bright` lets them (and LEDs' brightness made to look even); turned, mirrored and in zigzag rows to suit how it's
-    put up and wired (test(): its top row red, its left side green, its top left white, so you can tell)."""
+    quiet a moment), THIS_ONE, one of yours by name, or NOBODY. With nothing lighting it: its own colour (an RGB, or
+    "rainbow"), or dark (None). Lit RATE times a second, its colours smoothed, as bright as `bright` lets them (and
+    LEDs' brightness made to look even); turned, mirrored and in zigzag rows to suit how it's put up and wired
+    (test(): its top row red, its left side green, its top left white, so you can tell). Or a strip round the TV
+    (set_strip): each of its LEDs lit as the grid's edge nearest it would be."""
 
     def __init__(self, strip, named, port=GLOW_PORT, clock=time.monotonic, cols=GLOW_W, rows=GLOW_H, listen=True,
                  run=True):
@@ -393,6 +461,7 @@ class Grid:
         self.lock = threading.Lock()
         self.writing = threading.Lock()               # (the LEDs written to by one at a time: never once it's shut)
         self.bright, self.turn, self.mirror, self.zigzag, self.follow, self.beat = 0.25, 0, True, False, ANY, True
+        self.colour = None                            # its own colour, with nothing else lighting it (None: dark)
         self.source = None                            # the address it follows now
         self.heard = {}                               # address -> when last heard (this one's clock)
         self.offsets = {}                             # address -> its packets' (heard - sent), lately
@@ -404,6 +473,10 @@ class Grid:
         self.test_until = 0.0
         self.last_t = None
         self.sent, self.sent_at = None, -1e9
+        self.seen, self.changed_at = None, -1e9       # its colours as last lit (as they're seen), and when they changed
+        self.on_strip = None                          # a strip's LEDs: (where each is round the TV, how its colour
+                                                      # comes from the grid's), or None: the grid itself
+        self.dark_to = STRIP_MOST                     # LEDs to send dark past its own (whatever was lit before it)
         self.closed = False
         self.sock = None
         if listen:
@@ -431,6 +504,8 @@ class Grid:
                 print(f"glow: {ex!r}", flush=True)
 
     def follows(self, who):
+        if self.follow == NOBODY:
+            return False
         if self.follow == ANY:
             return True
         return who == self.follow
@@ -483,10 +558,15 @@ class Grid:
                 return img
             dt = 0.0 if self.last_t is None else max(0.0, min(0.5, now - self.last_t))
             self.last_t = now
-            if now - self.frame_at < FADE_AFTER:
+            lit = self.follow != NOBODY                # (nobody's games: just its own colour)
+            if lit and now - self.frame_at < FADE_AFTER:
                 goal, tau = self.target, TAU
-            elif self.music is not None and now - self.music_at < FADE_AFTER:
+            elif lit and self.music is not None and now - self.music_at < FADE_AFTER:
                 goal, tau = np.broadcast_to(self.music * MUSIC_BASE, self.shown.shape), TAU * 3
+            elif isinstance(self.colour, str):
+                goal, tau = rainbow(self.rows, self.cols, now, wheel=self.on_strip is not None), COLOUR_TAU
+            elif self.colour is not None:
+                goal, tau = np.broadcast_to(np.array(self.colour, dtype=float), self.shown.shape), COLOUR_TAU
             else:
                 goal, tau = np.zeros_like(self.shown), FADE_TAU
             self.shown += (goal - self.shown) * (1 - math.exp(-dt / tau))
@@ -509,9 +589,39 @@ class Grid:
             self.events = [e for e in self.events if now - e[0] < 3.0]
         return img.clip(0, 255)
 
+    def set_strip(self, n, start="Bottom left", clockwise=True, bottom=True):
+        """A strip of n LEDs round the TV (strip_points), not the grid."""
+        points = strip_points(max(STRIP_LEAST, min(STRIP_MOST, int(n))), start, clockwise, bottom)
+        self.dark_to = max(self.dark_to, self.count())   # (the LEDs it had lit, past its new end: dark)
+        self.on_strip = (points, strip_weights(points, self.cols, self.rows))
+
+    def set_grid(self):
+        """The grid itself again."""
+        self.dark_to = max(self.dark_to, self.count())
+        self.on_strip = None
+
+    def count(self):
+        """Its LEDs."""
+        got = self.on_strip
+        return self.rows * self.cols if got is None else len(got[0])
+
+    def lit(self):
+        """A strip's LEDs as they're lit now, as they're seen (brightness aside): (where each is round the TV, n x 2,
+        0 to 1 across and down; their colours, n x 3, 0 to 255), or None (the grid: picture() is it as it's lit)."""
+        got, seen = self.on_strip, self.seen
+        if got is None or seen is None:
+            return None
+        return got[0], got[1] @ seen.reshape(-1, 3)
+
     def leds(self, img):
         """A picture of the grid (as seen from in front) as the LEDs take it: as bright as it's set, evened out for the
-        eye, turned and mirrored as it's put up, each LED's green, red and blue, in the order they're wired."""
+        eye, turned and mirrored as it's put up, each LED's green, red and blue, in the order they're wired (a strip's:
+        each of its LEDs as the grid's edge nearest it, in the order they go round)."""
+        got = self.on_strip
+        if got is not None:
+            a = got[1] @ img.reshape(-1, 3)
+            a = ((a / 255.0).clip(0, 1) ** GAMMA * 255.0 * self.bright).round().clip(0, 255).astype(np.uint8)
+            return a[:, [1, 0, 2]].tobytes()
         a = ((img / 255.0) ** GAMMA * 255.0 * self.bright).round().clip(0, 255).astype(np.uint8)
         if self.mirror:
             a = a[:, ::-1]
@@ -523,12 +633,20 @@ class Grid:
 
     def frame(self, now):
         """The grid lit as it is now (again now and then, even if it's the same: an LED that missed it gets it)."""
-        data = self.leds(self.render(now))
+        img = self.render(now)
+        if self.seen is None or np.abs(img - self.seen).max() >= 1.0:
+            self.changed_at = now
+        self.seen = img
+        data = self.leds(img)
+        n = len(data) // 3
+        if self.dark_to > n:                           # (LEDs past its end that were lit, by it or before it: dark)
+            data += bytes(3 * (self.dark_to - n))
         if data != self.sent or now - self.sent_at > 0.5:
             self.sent, self.sent_at = data, now
             with self.writing:
                 if not self.closed:
                     self.strip.show(data)
+                    self.dark_to = n
 
     def run(self):
         while not self.closed:
@@ -538,6 +656,15 @@ class Grid:
                 print(f"glow: the LEDs: {ex}", flush=True)
                 time.sleep(2.0)
             time.sleep(1 / RATE)
+
+    def picture(self):
+        """Its colours as last lit, as they're seen from in front (rows x cols x 3, 0 to 255; brightness aside), or
+        None before it's been lit: for its picture on the screen (Apps > TV backlight) and on the web page."""
+        return self.seen
+
+    def lively(self, now):
+        """Its colours are changing (a game, music, a rainbow, a colour coming in): its picture's drawn again soon."""
+        return now - self.changed_at < LIVELY or now < self.test_until
 
     def now_following(self):
         """Who it's showing now (an address), or None."""
@@ -556,7 +683,7 @@ class Grid:
                 pass
         with self.writing:
             try:
-                self.strip.show(bytes(self.rows * self.cols * 3))   # (dark, as it goes)
+                self.strip.show(bytes(max(self.dark_to, self.count()) * 3))   # (dark, as it goes)
             except OSError:
                 pass
             self.strip.close()

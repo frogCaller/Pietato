@@ -143,6 +143,7 @@ class Mandelbrot(Sim):
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
         self.lock = threading.Condition()
+        self.turn = threading.Lock()    # held by whoever is working a picture out (its thread, or finish())
         self.gen = 0                    # up by one whenever the pictures in hand are no use any more
         self.levels = {}                # touring: level -> {"nu", "maxit", "w", "h", "pic", "colours"}
         self.job = None                 # the picture being worked out
@@ -333,28 +334,29 @@ class Mandelbrot(Sim):
         """Pictures worked out for up to budget seconds. False when there's nothing left to do."""
         end = time.perf_counter() + budget
         while time.perf_counter() < end:
-            with self.lock:
-                job, gen = self.job, self.gen
-                spec = None if job else self.next_spec()
-                if job is None and spec is None:
-                    return False
-            if job is None:
-                size = spec["size"]
-                job = MandelLevel(spec["level"], spec["middle"], spec["width"], size[0], size[1],
-                                  self.maxit_for(spec["L"], spec["prev"]))
-                job.spec = spec
-                with self.lock:
-                    if self.gen != gen or self.job is not None:
-                        continue
-                    self.job = job
-            job.step()
-            if job.done:
-                got = {"nu": job.nu, "maxit": job.maxit, "w": job.w, "h": job.h, "pic": None, "colours": None}
-                self.paint(got, self.colours())
-                with self.lock:
-                    if self.gen == gen and self.job is job:
-                        self.publish(job.spec, got)
-                        self.job = None
+            with self.turn:                            # (one at a time: finish() beside its thread, the two would
+                with self.lock:                        #  work the same picture out at once, and spoil it)
+                    job, gen = self.job, self.gen
+                    spec = None if job else self.next_spec()
+                    if job is None and spec is None:
+                        return False
+                if job is None:
+                    size = spec["size"]
+                    job = MandelLevel(spec["level"], spec["middle"], spec["width"], size[0], size[1],
+                                      self.maxit_for(spec["L"], spec["prev"]))
+                    job.spec = spec
+                    with self.lock:
+                        if self.gen != gen or self.job is not None:
+                            continue
+                        self.job = job
+                job.step()
+                if job.done:
+                    got = {"nu": job.nu, "maxit": job.maxit, "w": job.w, "h": job.h, "pic": None, "colours": None}
+                    self.paint(got, self.colours())
+                    with self.lock:
+                        if self.gen == gen and self.job is job:
+                            self.publish(job.spec, got)
+                            self.job = None
         return True
 
     def publish(self, spec, got):

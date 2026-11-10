@@ -289,9 +289,15 @@ time.sleep(60)
     before = [x for x in hw_procs() if "new-session" in x[2]]
     f.prog_start("hollywood")
     time.sleep(4)
-    servers = [x for x in hw_procs() if "new-session" in x[2]]
+    end = time.monotonic() + 20                        # (on a slow or busy machine the new one is still starting, the
+    while True:                                        #  programs that set it up not yet gone: a while for it to settle)
+        servers = [x for x in hw_procs() if "new-session" in x[2]]
+        if (len(servers) == 1 and (not before or before[0][0] != servers[0][0])) or time.monotonic() > end:
+            break
+        time.sleep(0.5)
     check(f"one left by a Pitato killed outright ({len(before)} running): closed as the next starts "
-          f"({len(servers)} now)", len(servers) == 1 and (not before or before[0][0] != servers[0][0]))
+          f"({len(servers)} now{'' if len(servers) == 1 else ': ' + str([x[2][:70] for x in servers])})",
+          len(servers) == 1 and (not before or before[0][0] != servers[0][0]))
     p, took = stop_timed()
     time.sleep(0.5)
     check(f"...and that one closes as well ({hw_procs()})", not hw_procs() and not g.hw_up())

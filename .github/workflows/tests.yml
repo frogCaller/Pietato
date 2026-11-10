@@ -46,8 +46,14 @@ jobs:
       - name: The user setup.sh's tests set up for
         run: sudo useradd -m -G audio gpitest
 
+      # (GITHUB_ACTIONS and GITHUB_STEP_SUMMARY handed on, as sudo leaves them behind: run.py then says which tests
+      # failed on this run's own page, where it's read without signing in. A test that fails gets a second go on its
+      # own, and the page says which ones needed it: tests/README.md)
       - name: Tests
-        run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" python tests/run.py --offline --logs "$RUNNER_TEMP/logs"
+        run: >
+          sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"
+          "GITHUB_ACTIONS=$GITHUB_ACTIONS" "GITHUB_STEP_SUMMARY=$GITHUB_STEP_SUMMARY"
+          python tests/run.py --offline --logs "$RUNNER_TEMP/logs"
 
       - name: Their logs
         if: always()

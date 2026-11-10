@@ -29,7 +29,8 @@ LIBRARY = [
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
      "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Fish Tank",
-                  "Mandelbrot Set", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire", "htop"]},
+                  "TV backlight", "Mandelbrot Set", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire",
+                  "htop"]},                            # (TV backlight: on a Pi that can have one, screens/glow.py)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
     {"name": "Settings", "type": "settings", "empty": ""},
@@ -80,6 +81,8 @@ LIBRARY = [
      "about": "Cells live, die and are born", "empty": ""},
     {"name": "Fish Tank", "type": "sim", "sim": "fish", "parent": "Apps", "badge": "FISH",   # (fishtank.py)
      "about": "Your fish, and your other Pietatos'", "empty": ""},
+    {"name": "TV backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
+     "about": "The LEDs behind your TV", "empty": ""},
     {"name": "Mandelbrot Set", "type": "sim", "sim": "mandel", "parent": "Apps", "badge": "ZOOM",
      "about": "Dives into the famous fractal", "empty": ""},
     {"name": "Konami code", "type": "konami", "parent": "Apps", "badge": "CHEAT",   # (screens/konami.py)

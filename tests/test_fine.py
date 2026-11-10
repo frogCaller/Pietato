@@ -138,15 +138,18 @@ def tour(which):
             FB.s = s
             m.fine_scale()
             if ready is not None:                      # (what it works out for the screen's size, worked out first:
-                m.dirty = True                         #  the Mandelbrot's pictures, at each size anew)
-                try:
+                m.dirty = True                         #  the Mandelbrot's pictures, at each size anew; its dive not
+                m.sim_t = None                         #  a frame further on by the second drawing, as it was when
+                try:                                   #  its thread had the first picture ready in time)
                     m.flush()
                     ready()
                 except Exception:
                     pass
             m.dirty = True
-            try:
-                m.flush()
+            m.sim_t = None                             # (Apps' worlds stand still from one drawing to the next: on a
+            m.sim_panel = (None, None, 0.0)            #  slow machine a Game of Life's cells had moved on by then.
+            try:                                       #  The numbers beside them as they are now in both: they're
+                m.flush()                              #  drawn again only every quarter of a second)
             except Exception as ex:
                 import traceback
                 problems.append(f"{which} {name} at {s}: {ex!r}")
@@ -258,7 +261,14 @@ def tour(which):
         m.coder.ask("typing")
         m.press("right")
         time.sleep(1.0)
-        shot("bot_work")
+        import types                                   # (its coder stands still from one drawing to the next: on a
+        import pitato.screens.coder as CODER_PAGE      #  slow machine its hands had typed on by the second)
+        at, wall, clock = time.monotonic(), time.time(), CODER_PAGE.time
+        CODER_PAGE.time = types.SimpleNamespace(monotonic=lambda: at, time=lambda: wall, localtime=time.localtime)
+        try:
+            shot("bot_work")
+        finally:
+            CODER_PAGE.time = clock
         m.press("start")
         shot("bot_work_card")
         m.press("start")
@@ -266,17 +276,37 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake"):
+    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "TV backlight",
+                 "TV backlight strip"):
         try:
-            tab(name)
+            if name.startswith("TV backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
+                from types import SimpleNamespace
+                from pitato.glow import rainbow
+                from pitato.glow import strip_points, strip_weights
+                strip = name.endswith("strip")
+                m.set_setting("glow_shape", "Strip" if strip else "8x8 grid")
+                pts = strip_points(60)
+                m.glow_grid = SimpleNamespace(port=0, picture=lambda: rainbow(8, 8, 0.0), lively=lambda now: False,
+                                              now_following=lambda: None, close=lambda: None,
+                                              lit=lambda: (pts, strip_weights(pts) @ rainbow(8, 8, 0.0, True)
+                                                           .reshape(-1, 3)) if strip else None)
+            tab("TV backlight" if name.startswith("TV backlight") else name)
             for _ in range(5):
                 m.tick()
                 time.sleep(0.02)
+            if name == "Mandelbrot Set":               # (it's made as it's first drawn: drawn once, so it's there to
+                m.dirty = True                         #  be told to finish its pictures. Before, nothing waited for
+                m.sim_t = None                         #  them, and the two drawings were of an empty box, or of an
+                m.flush()                              #  empty box and its first picture when its thread was quick)
             mb = m.sims.get("mandel") if name == "Mandelbrot Set" else None
             shot("sim_" + name.lower().replace(" ", "_"), ready=mb.finish if mb is not None else None)
             m.press("b")
         except Exception as ex:
             problems.append(f"{which} sim {name}: {ex!r}")
+        finally:
+            if name.startswith("TV backlight"):
+                m.glow_grid = None
+                m.set_setting("glow_shape", "8x8 grid")
     # full screen (SELECT), one of them
     try:
         tab("Game of Life")

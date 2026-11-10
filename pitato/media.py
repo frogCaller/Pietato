@@ -642,6 +642,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         elif tab["type"] == "group":
             rows = []
             for name in tab["children"]:
+                if name == "TV backlight" and not self.glow_can():
+                    continue                           # (an LED grid: only a Pi with the pins free for one)
                 ci = next(k for k, t in enumerate(LIBRARY) if t["name"] == name)
                 rows.append(dict(item("grp:" + name, name, "child", str(ci),
                                       sub=LIBRARY[ci].get("about", "")),

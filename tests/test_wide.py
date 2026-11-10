@@ -233,9 +233,21 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake"):
+    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "TV backlight",
+                 "TV backlight strip"):
         try:
-            tab(name)
+            if name.startswith("TV backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
+                from types import SimpleNamespace
+                from pitato.glow import rainbow
+                from pitato.glow import strip_points, strip_weights
+                strip = name.endswith("strip")
+                m.set_setting("glow_shape", "Strip" if strip else "8x8 grid")
+                pts = strip_points(60)
+                m.glow_grid = SimpleNamespace(port=0, picture=lambda: rainbow(8, 8, 0.0), lively=lambda now: False,
+                                              now_following=lambda: None, close=lambda: None,
+                                              lit=lambda: (pts, strip_weights(pts) @ rainbow(8, 8, 0.0, True)
+                                                           .reshape(-1, 3)) if strip else None)
+            tab("TV backlight" if name.startswith("TV backlight") else name)
             for _ in range(5):
                 m.tick()
                 time.sleep(0.02)
@@ -243,6 +255,10 @@ def tour(which):
             m.press("b")
         except Exception as ex:
             problems.append(f"{which} sim {name}: {ex!r}")
+        finally:
+            if name.startswith("TV backlight"):
+                m.glow_grid = None
+                m.set_setting("glow_shape", "8x8 grid")
     # full screen (SELECT), one of them
     try:
         tab("Game of Life")

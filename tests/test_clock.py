@@ -312,7 +312,11 @@ for font in g.CLOCK_FONTS[1:]:                     # (each font: drawn its own w
     if s.values["font"] != font:
         m.press("right")
     m.msg = None                                   # (its name, said: not over the page for this)
-    m.dirty = True; m.flush()
+    g.time.time = lambda: T + 0.5                  # (5:40:13 PM in each, as above: at 9:10 in the morning, say, the
+    try:                                           #  figures as Handwriting writes them sit off the middle)
+        m.dirty = True; m.flush()
+    finally:
+        g.time.time = real_time
     page = np.asarray(m.fb.last)[78:424].astype(int)
     pics.add(page.tobytes())
     lit = np.argwhere(np.abs(page - np.array(g.BG)).sum(axis=2) > 60)   # (all of it: the figures, the date...)

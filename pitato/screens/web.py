@@ -714,7 +714,8 @@ class WebScreen:
                           "stations": [list(x) for x in RADIO_STATIONS],
                           "genres": [g[0] for g in RADIO_GENRES]},
                 "streams": [[it["title"], it.get("sub", ""), it["src"]] for it in read_streams(streams["files"])],
-                "plex": self.plex.signed_in}
+                "plex": self.plex.signed_in, "glow": self.glow_can()}   # (glow: Library's TV backlight, on a Pi that
+                                                                        # can have one)
 
     def web_channels(self, what):
         """Plex's free Live TV channels of a kind (anime, toons, movies, news, sports)."""

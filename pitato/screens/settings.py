@@ -62,8 +62,6 @@ class SettingsScreen:
             fr = self.friend
             rows = [("f_pick", m, m) for m in fr.models]
             return rows or [("f_wait", fr.models_status or "Asking for its models…", None)]
-        if self.set_page == "glow":
-            return self.glow_rows()
         if self.set_page == "resolution":
             info = self.res_info()
             return [("res", "Auto", None)] + [("res", res_name(s), s) for s in info[1]] if info else \
@@ -82,8 +80,6 @@ class SettingsScreen:
                 continue
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
                     and self.setting("turn") in (None, "Off"):
-                continue
-            elif key == "glow" and not self.glow_can():   # (an LED grid: only a Pi with the pins free)
                 continue
             rows.append((key, label, choices))
         return rows
@@ -171,8 +167,6 @@ class SettingsScreen:
             return self.press_friend_settings(name, repeat, key, extra)
         elif self.set_page == "resolution":
             self.press_resolution(name, repeat, key, extra)
-        elif self.set_page == "glow":
-            return self.press_glow_settings(name, repeat, key, extra)
         elif name == "b":
             return "pass"
         elif key == "pad_swap" and name in ("left", "right", "a"):
@@ -196,8 +190,6 @@ class SettingsScreen:
                 self.set_sel = next((k for k, (_, _, s) in enumerate(self.settings_rows()) if s == boot), 0)
             elif key == "homeassistant":
                 self.ha_open()
-            elif key == "glow":
-                self.set_page, self.set_sel = "glow", 0
             elif key == "friend":
                 self.friend_page()
                 if self.friend.server and self.friend.models_at != self.friend.server:
@@ -554,8 +546,7 @@ class SettingsScreen:
         crumb = {"wifi": "Settings  ›  WiFi",
                  "friend": "Bot  ›  Settings" if self.bot_settings else "Settings  ›  Bot",
                  "f_models": "Bot  ›  Model", "f_voices": "Bot  ›  Voice",
-                 "resolution": "Settings  ›  Resolution",
-                 "glow": "Settings  ›  TV backlight"}.get(self.set_page, "Settings")
+                 "resolution": "Settings  ›  Resolution"}.get(self.set_page, "Settings")
         d.text((20, self.LIST_TOP + 10), crumb, font=F["small"], fill=MUTED, anchor="lm")
         boot = boot_resolution() if self.set_page == "resolution" else None
         if self.set_page == "resolution":
@@ -578,10 +569,6 @@ class SettingsScreen:
         top, rh = self.LIST_TOP + 26, 46
         rows_fit = (H - self.FOOTER - top) // rh
         first = max(0, min(sel - rows_fit + 1, len(rows) - rows_fit))
-        if self.set_page == "glow":
-            note = self.glow_status()
-            d.text((W - 20, self.LIST_TOP + 10), self.fit(d, note, F["small"], 330), font=F["small"],
-                   fill=WARN if self.glow_note else MUTED, anchor="rm")
         if self.set_page == "wifi":
             here = self.current_ssid()
             d.text((W - 20, self.LIST_TOP + 10), self.fit(d, f"Connected to {here}" if here else "Not connected",
@@ -632,9 +619,9 @@ class SettingsScreen:
                 if key == "f_pick" and extra == fr.model:
                     d.text((W - 28, mid), "Using", font=F["small"], fill=ACCENT, anchor="rm")
                 continue
-            if self.set_page in ("friend", "glow"):
+            if self.set_page == "friend":
                 d.text((30, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
-                value = self.friend_value(key) if self.set_page == "friend" else self.glow_value(key)
+                value = self.friend_value(key)
                 x1 = W - 28
                 if extra and on:
                     d.text((x1, mid), "▶", font=F["small"], fill=ACCENT, anchor="rm")
@@ -658,7 +645,6 @@ class SettingsScreen:
                      self.pad_swap_value() if key == "pad_swap" else
                      self.friend_summary() if key == "friend" else
                      self.ha_value() if key == "homeassistant" else
-                     self.glow_value("glow_on") if key == "glow" else
                      self.sound_value() if key == "sound" else
                      self.saver_value() if key == "battery" else
                      self.res_value() if key == "resolution" else self.setting(key))
@@ -708,16 +694,11 @@ class SettingsScreen:
             hints = ([("A", "Use this")] if rows[sel][0] == "f_pick" else []) + [("X", "Ask again"), ("B", "Back")]
         elif self.set_page == "resolution":
             hints = ([("A", "Use this")] if rows[sel][0] == "res" else []) + [("B", "Back")]
-        elif self.set_page == "glow":
-            k = rows[sel][0]
-            hints = [("A", "Show")] if k == "glow_test" else [("A", "Restart")] if k == "glow_reboot" else \
-                [("◀▶", "Change")]
-            hints += [("B", "Back")]
         else:
             key = rows[sel][0]
             hints = [("◀▶", "Change"), ("L R", "Tabs"), ("B", "Home")]
-            if key in ("wifi", "bluetooth", "friend", "resolution", "homeassistant", "glow"):
-                hints = [("A", {"friend": "Set up", "homeassistant": "Set up", "glow": "Set up", "wifi": "Networks",
+            if key in ("wifi", "bluetooth", "friend", "resolution", "homeassistant"):
+                hints = [("A", {"friend": "Set up", "homeassistant": "Set up", "wifi": "Networks",
                                 "bluetooth": "Devices"}.get(key, "Change")),
                          ("L R", "Tabs"), ("B", "Home")]
             elif key == "pad":

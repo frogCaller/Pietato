@@ -6,7 +6,6 @@ import collections
 import io
 import json
 import math
-import random
 import socket
 import time
 import urllib.parse
@@ -15,10 +14,13 @@ from ..cameras import CAM_BEACON
 from ..config import clean_name
 from ..library import LIBRARY
 from ..theme import ACCENTS
-from ..fishtank import Aquarium, FISH_KINDS, FISH_WAGS, FOOD_MOST, GRID_MOST, LOOKS, fish_picture, FishTank
+from ..fishtank import (Aquarium, FISH_KINDS, FOOD_MOST, GAP_MOST, GRID_MOST, FishTank, name_seed, tail_frame,
+                        tail_wag)
 
-FISH_TICK = 0.1              # seconds between moves of this one's fish (media mode's main loop)
-FISH_SAYS = (0.25, 2.0)      # seconds between telling your others where it is: while anyone's watching, or not
+FISH_TICK = (0.0, 0.1)       # seconds between moves of this one's fish (media mode's main loop): with its Fish Tank on
+                             # the screen, each time round (each picture: it swims smoothly), and otherwise
+FISH_SAYS = (0.1, 2.0)       # seconds between telling your others where it is: while anyone's watching, or not
+FISH_CLOCKS = 40             # what each of your others said lately, to work out its clock against this one's
 FISH_GONE = 4.5              # another not heard from for this long: its tank's gone from the grid
 FISH_WATCHED = 10.0          # the web page's Fish Tank asked this lately: someone's watching
 FISH_HEARD = 64              # what's heard from your others, waiting for the main loop, at most
@@ -34,26 +36,11 @@ def num(v, lo, hi):
 
 
 def clean_decor(d):
-    """Another tank's decorations, kept to what's expected (or {} when they aren't)."""
+    """Another tank's look, kept to what's expected (or {} when it isn't): its light. (One that hasn't been updated
+    says more, its plants, rocks and bubbles: left out.)"""
     if not isinstance(d, dict):
         return {}
-    plants = []
-    for p in (d.get("plants") or [])[:8] if isinstance(d.get("plants"), list) else []:
-        if not (isinstance(p, list) and len(p) == 6 and isinstance(p[4], str) and len(p[4]) == 7
-                and p[4][0] == "#" and all(ch in "0123456789abcdefABCDEF" for ch in p[4][1:])):
-            continue
-        u, h, w, ph = num(p[0], 0, 1), num(p[1], 0, 1), num(p[2], 0, 0.1), num(p[3], -10, 10)
-        if None not in (u, h, w, ph):
-            plants.append([u, h, w, ph, p[4].lower(), p[5] is True])
-    rocks = []
-    for r in (d.get("rocks") or [])[:4] if isinstance(d.get("rocks"), list) else []:
-        if isinstance(r, list) and len(r) == 3:
-            u, size, light = num(r[0], 0, 1), num(r[1], 0, 0.2), num(r[2], 0, 1)
-            if None not in (u, size, light):
-                rocks.append([u, size, light])
-    stone = num(d.get("stone"), 0, 1)
-    return {"plants": plants, "rocks": rocks, "stone": stone,
-            "light": d.get("light") if d.get("light") in ("Day", "Night") else "Day"}
+    return {"light": d.get("light") if d.get("light") in ("Day", "Night") else "Day"}
 
 
 def hex_colour(rgb):
@@ -65,29 +52,28 @@ class FishScreen:
 
     def fish_setup(self):
         self.aquarium = aq = Aquarium()
-        self.fish_next = self.fish_said = 0.0
+        self.fish_next = self.fish_said = self.fish_last = 0.0
+        self.fish_clocks = {}        # another's id -> (its clock against this one's, lately: when heard less when said)
         self.fish_web_at = -1e9      # when the web page's Fish Tank last asked (monotonic)
         self.fish_sock = None
         self.fish_heard_q = collections.deque(maxlen=FISH_HEARD)   # (from the beacons' listener: the main loop's)
         self.fish_pics = {}          # (kind, tail, size) -> a PNG, for the web page
         self.fish_snap = None        # the whole grid now, for the web page (made on the main loop)
-        seed = self.setting("fish_seed")
-        if isinstance(seed, int) and not isinstance(seed, bool):
-            aq.seed = seed
         grid = self.setting("fish_grid")
         if isinstance(grid, dict):
             cells = self.fish_cells(grid.get("cells"))
             t = num(grid.get("t"), 0, 1e11)
             if cells is not None and t is not None:
-                aq.arrange(cells, t)
+                aq.arrange(cells, t, self.fish_gap(grid.get("gap")))
         self.fish_prefs()
+        seed = self.setting("fish_seed")              # (its light's beams: as before, or by its name)
+        aq.seed = seed if isinstance(seed, int) and not isinstance(seed, bool) else name_seed(aq.me) & 0x3FFFFFFF
 
     def fish_prefs(self):
-        """Its name, colour, fish, bubbles and light, as they are now (START's card on its Fish Tank sets them)."""
+        """Its name, colour, fish and light, as they are now (START's card on its Fish Tank sets them)."""
         aq = self.aquarium
         aq.me, aq.accent = self.own_name(), self.setting("accent") or ""
         aq.kind = self.sim_value(FishTank, "kind")
-        aq.bubbles_on = self.sim_value(FishTank, "bubbles") != "Off"
         aq.light = self.sim_value(FishTank, "light") or "Day"
 
     @staticmethod
@@ -105,6 +91,15 @@ class FishScreen:
             out[clean_name(name, 40)] = (c, r)
         return out
 
+    @staticmethod
+    def fish_gap(gap):
+        """The gaps between tanks (across, down), from the web page or another Pietato: or (0, 0) when they aren't."""
+        if isinstance(gap, (list, tuple)) and len(gap) == 2:
+            vals = [num(v, 0, GAP_MOST) for v in gap]
+            if None not in vals:
+                return tuple(vals)
+        return (0.0, 0.0)
+
     def on_fish_page(self):
         return self.on_sim_page() and LIBRARY[self.tab].get("sim") == "fish"
 
@@ -118,8 +113,9 @@ class FishScreen:
         """(Media mode's main loop.) What's been heard, put in; this one's fish moved on; your others told."""
         if now < self.fish_next:
             return
-        dt = min(0.5, now - (self.fish_next - FISH_TICK)) if self.fish_next else FISH_TICK
-        self.fish_next = now + FISH_TICK
+        dt = min(0.5, now - self.fish_last) if self.fish_last else FISH_TICK[1]
+        self.fish_last = now
+        self.fish_next = now + FISH_TICK[0 if self.on_fish_page() else 1]
         aq = self.aquarium
         sharing = self.setting("share") != "Off"
         while self.fish_heard_q:
@@ -193,7 +189,13 @@ class FishScreen:
             if None not in vals and f.get("face") in (1, -1):
                 got["fish"] = {"tank": clean_name(f["tank"], 40), "u": vals[0], "v": vals[1], "vx": vals[2],
                                "vy": vals[3], "face": f["face"],
-                               "kind": f.get("kind") if f.get("kind") in LOOKS else FISH_KINDS[0]}
+                               "kind": f.get("kind") if f.get("kind") in FISH_KINDS else FISH_KINDS[0]}
+                ts = num(f.get("ts"), 0, 1e11)
+                if ts is not None:                     # (when it said it: its clock against this one's, the quickest
+                    said = self.fish_clocks.setdefault(oid, collections.deque(maxlen=FISH_CLOCKS))   # word the
+                    heard = time.time() - (time.monotonic() - at)                                     # nearest)
+                    said.append(heard - ts)
+                    got["sent"] = at - ((heard - ts) - min(said))
         for fl in (msg.get("food") or [])[:FOOD_MOST] if isinstance(msg.get("food"), list) else []:
             if isinstance(fl, list) and len(fl) == 4 and isinstance(fl[0], int) and isinstance(fl[1], str):
                 u, v = num(fl[2], -0.5, 1.5), num(fl[3], -0.5, 1.5)
@@ -205,8 +207,10 @@ class FishScreen:
         grid = msg.get("grid")
         if isinstance(grid, dict):
             cells, t = self.fish_cells(grid.get("cells")), num(grid.get("t"), 0, time.time() + 300)
-            if cells is not None and t is not None and aq.arrange(cells, t):
-                self.set_setting("fish_grid", {"t": t, "cells": {n: list(v) for n, v in cells.items()}})
+            gap = self.fish_gap(grid.get("gap"))
+            if cells is not None and t is not None and aq.arrange(cells, t, gap):
+                self.set_setting("fish_grid", {"t": t, "cells": {n: list(v) for n, v in cells.items()},
+                                               "gap": list(gap)})
         aq.others[oid] = got
 
     # -- the web page (the control server's thread: it only reads what the main loop made) -----------------------------
@@ -232,19 +236,20 @@ class FishScreen:
 
     def web_fish_pic(self, kind, tail, size):
         """GET /api/pi/fishpic: a fish's picture (a PNG, facing right), for the web page to draw."""
-        if kind not in LOOKS:
+        if kind not in FISH_KINDS:
             return None
         try:
             tail, size = int(tail), int(size)
         except (TypeError, ValueError):
             return None
-        tail = max(0, min(FISH_WAGS - 1, tail))
+        tail = tail_frame(max(0, tail))
         size = max(FISH_PIC_SIZES[0], min(FISH_PIC_SIZES[1], size))
         key = (kind, tail, size)
         png = self.fish_pics.get(key)
         if png is None:
+            from ..fishlook import fish_picture
             buf = io.BytesIO()
-            fish_picture(kind, size, math.sin(tail / FISH_WAGS * 2 * math.pi)).save(buf, "PNG")
+            fish_picture(kind, size, tail_wag(tail)).save(buf, "PNG")
             png = buf.getvalue()
             if len(self.fish_pics) >= FISH_PICS:
                 self.fish_pics.clear()
@@ -264,18 +269,13 @@ class FishScreen:
         cells = self.fish_cells(cmd.get("cells"))
         if cells is None:
             return {"error": "That isn't a grid"}
+        gap = self.fish_gap(cmd["gap"]) if "gap" in cmd else self.aquarium.gap   # (the page's: as it is, if not said)
         t = time.time()
-        if not self.aquarium.arrange(cells, max(t, self.aquarium.stored_t + 0.001)):
+        if not self.aquarium.arrange(cells, max(t, self.aquarium.stored_t + 0.001), gap):
             return {"error": "That isn't a grid"}
-        self.set_setting("fish_grid", {"t": self.aquarium.stored_t, "cells": {n: list(v) for n, v in cells.items()}})
+        self.set_setting("fish_grid", {"t": self.aquarium.stored_t, "cells": {n: list(v) for n, v in cells.items()},
+                                       "gap": list(self.aquarium.gap)})
         self.aquarium.regrid()
         self.fish_said = 0.0
         self.fish_snap = None
         return {"ok": True}
-
-    # -- its buttons, on its Fish Tank ----------------------------------------------------------------------------------
-    def fish_new_look(self):
-        """Y: the plants and rocks somewhere new (kept, and the others see it too)."""
-        self.aquarium.seed = random.randrange(1 << 30)
-        self.set_setting("fish_seed", self.aquarium.seed)
-        self.fish_said = 0.0

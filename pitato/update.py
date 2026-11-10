@@ -24,6 +24,7 @@ from .config import STATE_FILE, STATIC
 UPDATE_FIRST = 120          # seconds after it starts that it first looks (the network's up by then)
 UPDATE_EVERY = 6 * 3600     # ...and then between looks
 UPDATE_STALE = 600          # System opened: it looks again if it last looked longer ago than this
+NOT_LOOKED = -1e9           # ...and it hasn't looked yet (long ago, by a clock that starts at nothing when the Pi does)
 UPDATE_GRACE = 8            # seconds an update may seem stopped (it's just starting) before that's believed
 UPDATE_RUN = "/run/pitato"  # the update's script, and how it's getting on (gone once the Pi restarts)
 UPDATE_SCRIPT = UPDATE_RUN + "/update.sh"
@@ -168,7 +169,7 @@ class Updater:
         self.behind = False        # one got, but not put in yet (an update that didn't finish)
         self.fetched = False       # the last look got main's newest (nothing newer then: it's up to date)
         self.branch = None         # ...main: the branch the repository goes by (another, if it goes by that)
-        self.looked = 0.0          # when it last looked (monotonic)
+        self.looked = NOT_LOOKED   # when it last looked (monotonic)
         self.looking = False
         self.started = 0.0         # an update under way since then (monotonic)
         self.unit_seen = (0.0, False)  # (when systemd was last asked, whether the update was still going then)
@@ -405,5 +406,5 @@ class Updater:
         """The update's over (it didn't work, or there was nothing newer): System looks again, to show what's left
         to do."""
         self.started = 0.0
-        self.looked = 0.0
+        self.looked = NOT_LOOKED
         self.poke()

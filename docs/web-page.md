@@ -5,6 +5,8 @@ can open it, so if you share your WiFi, give it a password in the page's Setting
 it to your home screen (Share, then Add to Home Screen on an iPhone, or Add to Home screen in Chrome's menu)
 and it opens like an app.
 
+![The web page: the Pi's screen, with the remote beside it](webui.png)
+
 **Screen** is the Pi's screen in media mode, and it works like the Pi: tap something on it to open
 it, and swipe or scroll to move along a list. Back and Home are under it, and the whole remote is
 behind Remote. Its Hotkey is the controller's HOME (a game's menu, say), while Home under the screen
@@ -45,7 +47,11 @@ If Sound here or Mic here says to run setup.sh again, run `sudo bash setup.sh` o
 the sound card they use.
 
 **Library** puts cartoons, films, news, sports, radio or a camera on the Pi, and you can talk to your
-bot there.
+bot there. All it has is listed down its left. On a phone it's a page of buttons instead: tap one to
+open it, and Library again to come back to them.
+
+While something plays on the Pi, its name stays at the top of the page with Pause and Stop (above the
+bottom bar on a phone), wherever you are. Tap the name for the screen and the rest of its buttons.
 
 **Draw**, in Library, is paper the shape of the Pi's screen. Draw with your finger or the mouse, add
 words or a photo, and press Show on the Pi: it stays on the screen until you press B, and it's kept
@@ -53,7 +59,12 @@ in `~/Pictures/Drawings`, so you can open it again in Photos. With Live on, it g
 you draw. If you've set up a bot, Ask your bot has it say what it sees.
 
 **Fish Tank**, in Library, shows the fish tanks of all your Pietatos at once. Tap one to feed it, or
-press Arrange and drag the tanks into a grid. See [Fish Tank](apps.md#fish-tank).
+press Arrange and drag the tanks into a grid, and set the space between your screens. See
+[Fish Tank](apps.md#fish-tank).
+
+**TV backlight**, in Library on a Pi with LEDs behind the TV, shows them as they're lit, as a grid or a
+strip round the TV. Tap a colour for them, or change how bright they are, which Pietato they follow, the
+strip's LEDs and the rest. See [TV backlight](apps.md#tv-backlight).
 
 **Files** takes files or whole folders dropped on it. Music, videos, pictures, documents and games
 each go to their own folder, and settings files like `radio.txt` go to Settings. Each file can

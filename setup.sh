@@ -160,8 +160,9 @@ working() {        # working WHAT LOG COMMAND...: COMMAND's exit status
 spin() {           # (working's moving line, while its file is there)
   set +e
   local what="$1" log="$2" on="$3" t0=$SECONDS t i=0 next=60 p pct="" cols line marks='|/-\'
-  if [ -t 1 ]; then trap 'printf "\r\033[K"; exit 0' TERM; else trap 'exit 0' TERM; fi
-  trap '' INT                                               # (Ctrl+C: setup.sh stops this itself, line wiped)
+  trap - TERM                                               # (stopped at once, wherever it's got to, with nothing of
+  trap '' INT                                               #  its own to run then: bash can trip over that, in the
+                                                            #  middle of a $( ). Ctrl+C: setup.sh stops this itself)
   exec 3>&1
   while [ -e "$on" ] && kill -0 "$$" 2> /dev/null; do       # (setup.sh: if it's gone, this goes too)
     t=$((SECONDS - t0))
@@ -189,6 +190,7 @@ stop_spin() {
     kill "$SPIN" 2> /dev/null || true       #  as it can when it's only just started; this stops it at once)
     wait "$SPIN" 2> /dev/null || true
     SPIN=""
+    if [ -t 1 ]; then printf '\r\033[K'; fi # (its line wiped)
   fi
 }
 elapsed() {        # elapsed SECONDS: 4:05, or 1:02:05

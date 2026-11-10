@@ -4,6 +4,7 @@ shape, the iPhone's), all of them there before any password is asked for (they'v
 saying where they are, and its top bar below a phone's clock and battery when it's opened from the home screen."""
 import io, json, os, re, shutil, socket, sys
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
+import numpy as np
 from PIL import Image
 
 S = SP + "/t_phone_app"
@@ -42,11 +43,14 @@ for path, size, mode in (("/icon-192.png", 192, "RGBA"), ("/icon-512.png", 512, 
     r = c.get(path, **NET)
     im = Image.open(io.BytesIO(r.data)) if r.status_code == 200 else None
     corner = im.getpixel((0, 0)) if im else None
-    middle = im.convert("RGB").getpixel((size * 15 // 32, size * 15 // 32)) if im else None   # (in the play sign)
-    check(f"{path}: {size} x {size}, {'its corners see-through' if mode == 'RGBA' else 'to its edges'}, the play sign "
-          f"white in the middle ({im and im.size}, {im and im.mode}, {corner}, {middle})",
+    px = np.asarray(im.convert("RGB")).astype(int) if im else np.zeros((1, 1, 3), int)   # (the potato: its body, the
+    potato = all(np.abs(px - c).max(axis=2).min() <= 24                                  #  screen on its face, its eyes,
+                 for c in ((0xE7, 0xBE, 0x84), webui.APP_SCREEN, webui.APP_MINT, webui.APP_INK))   # its line of ink)
+    edge = im.convert("RGB").getpixel((size // 2, size // 20)) if im else None            # (...well inside its tile)
+    check(f"{path}: {size} x {size}, {'its corners see-through' if mode == 'RGBA' else 'to its edges'}, the potato "
+          f"on its tile ({im and im.size}, {im and im.mode}, {corner}, {potato}, {edge})",
           im is not None and im.size == (size, size) and im.mode == mode
-          and (corner[3] == 0 if mode == "RGBA" else corner == webui.APP_BLUE) and min(middle) > 230)
+          and (corner[3] == 0 if mode == "RGBA" else corner == webui.APP_TILE) and potato and edge == webui.APP_TILE)
 open(webui.STATIC + "/webui.txt", "w").write("password = hunter2\n")
 check("with a password: its manifest and icons all the same (nothing private), the page itself not",
       c.get("/manifest.webmanifest", **NET).status_code == 200 and c.get("/icon-192.png", **NET).status_code == 200

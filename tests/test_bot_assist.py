@@ -193,8 +193,10 @@ m.tick()
 check(f"a reminder: said ({said()[0][2]!r})", said()[0][2] == "Reminder: take the pizza out." and not A.reminders)
 m.alarm_until = 0
 m.assist_heard("wake me up at 7")
-check(f"an alarm ({said()[0][2]!r})", said()[0][2].endswith("Alarm set for tomorrow at 7:00 AM.")
-      and A.reminders[0].get("alarm") and time.localtime(A.reminders[0]["at"]).tm_hour == 7)
+at = A.reminders[0]["at"]                        # (the next 7 in the morning: today's, when the test runs before it)
+day = "" if time.localtime(at).tm_mday == time.localtime().tm_mday else "tomorrow at "
+check(f"an alarm ({said()[0][2]!r})", said()[0][2].endswith(f"Alarm set for {day}7:00 AM.")
+      and A.reminders[0].get("alarm") and time.localtime(at).tm_hour == 7 and 0 < at - time.time() < 26 * 3600)
 A.reminders[0]["at"] = time.time() - 1
 m.assist_next = 0
 m.tick()

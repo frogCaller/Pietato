@@ -14,6 +14,10 @@ Run them as root, as Pietato runs on a Pi (some mount things or start servers of
 Each test gets a folder of its own, with `fixtures` copied in, and its output goes to a log. A failing test's last
 lines are shown.
 
+A test that fails is run once more on its own, and counts as failed when it fails both times. The tests start real
+programs and wait for them, so a busy machine can make one late now and then. The run says which ones needed a second
+go (on GitHub, on the run's page too). `--once` turns the second go off.
+
 What they need: Python 3.11 or newer with Pillow, numpy, Flask and Playwright (evdev too, or the stand-in in `stub`
 is used), the programs in `.github/workflows/tests.yml`, and a user for setup.sh's tests to set up Pietato for:
 `sudo useradd -m -G audio gpitest`.

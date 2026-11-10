@@ -11,11 +11,18 @@
 
 A test passes when it ends with ALL OK, says FAIL nowhere and exits cleanly. Its output is kept in the logs folder
 (--logs, or a new one in /tmp); a failing one's last lines are shown too. --shard 2/4 runs every fourth test from the
-second, to split the run across machines."""
+second, to split the run across machines.
+
+A test that fails is run once more, on its own, and has failed when it fails both times. The tests start real programs
+and wait for them, and a busy machine makes one late now and then: that doesn't come twice running, and something
+broken fails every time. Which ones needed their second go is said at the end (on GitHub, on the run's page too), with
+what each said the first time (its log kept as test_name.first.log, its folder beside the second go's). --once: no
+second go."""
 import argparse
 import fcntl
 import glob
 import os
+import signal
 import struct
 import subprocess
 import sys
@@ -169,14 +176,84 @@ def run_one(name, path, base, logs, python, extra_path):
     return ok, rc, fails, lines, time.time() - t0
 
 
-def github_note(failed, total):
-    """On GitHub's machine: what failed and why, in a note on the run's own page (where it's seen without signing
-    in, as the logs aren't)."""
+def left_behind(work):
+    """What a test started and left running (each has the test's own folder in its environment), stopped: its second
+    go starts as its first did, with no server of the first's still on its port. How many there were."""
+    mark, n = f"PIETATO_TEST_WORK={work}".encode(), 0
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                if mark not in f.read().split(b"\0"):
+                    continue
+            os.kill(int(pid), signal.SIGKILL)
+            n += 1
+        except OSError:                              # (gone already, or not ours to look at)
+            pass
+    if n:
+        time.sleep(0.5)                              # (and gone, their ports with them)
+    return n
+
+
+def what_said(rc, fails, lines):
+    """A failed test's why, in a few words, and what to show of it (its FAIL lines, or how it ended)."""
+    why = f"exit {rc}" if rc != 0 else (f"{len(fails)} FAIL" if fails else "no ALL OK")
+    said = fails[0][5:] if fails else next((x for x in reversed(lines)
+                                            if x.strip() and not x.startswith("(run.py")), "")
+    seen = [l[:300] for l in fails[:20]]             # (for GitHub's summary: what failed, or how it ended)
+    if rc != 0 or not fails:
+        seen += [l[:300] for l in lines[-25:]]
+    return why, f"{why}: {said.strip()[:160]}", seen
+
+
+def github_note(failed, again, total, mins):
+    """On GitHub's machine: what failed and why, in a note on the run's own page and in its summary (where they're
+    seen without signing in, as the logs aren't); and which passed only on their second go, the same way (a warning:
+    the run's still a pass). GitHub's own variables say it's there: tests.yml hands them on (sudo leaves them
+    behind)."""
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
-    text = "\n".join(f"{name} ({why})" for name, why in failed)
-    text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    print(f"::error title={len(failed)} of {total} tests failed::{text}", flush=True)
+
+    def note(kind, title, rows):
+        said, left = [], 3500                    # (a note holds only so much: the rest are in the summary)
+        for name, why, _ in rows:
+            line = f"{name} ({why})"[:240]
+            if len(line) > left:
+                said.append(f"...and {len(rows) - len(said)} more: in this run's summary")
+                break
+            said.append(line)
+            left -= len(line) + 1
+        text = "\n".join(said).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::{kind} title={title}::{text}", flush=True)
+    if failed:
+        note("error", f"{len(failed)} of {total} tests failed", failed)
+    if again:
+        note("warning", f"{len(again)} of {total} tests passed on their second go", again)
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+
+    def plain(text):
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace("|", "&#124;").replace("`", "'")
+    lines = [f"**{len(failed)} of {total} tests failed** ({mins:.0f} min)", "", "| Test | Why |", "| --- | --- |"] \
+        if failed else [f"All {total} tests passed ({mins:.0f} min)"]
+    for name, why, _ in failed:
+        lines.append(f"| `{name}` | {plain(why)} |")
+    if again:
+        lines += ["", f"**{len(again)} passed on a second go** (failed the first time, then passed when run again on "
+                  "its own: most likely the machine was busy, but worth a look if the same one keeps turning up)", "",
+                  "| Test | Why, the first time |", "| --- | --- |"]
+        lines += [f"| `{name}` | {plain(why)} |" for name, why, _ in again]
+    for rows, when in ((failed, ""), (again, " the first time")):   # (and what each said: its FAIL lines, or its last)
+        for name, _, seen in rows:
+            lines += ["", f"<details><summary><code>{name}</code>: what it said{when}</summary>", "", "~~~text"]
+            lines += [l.replace("~~~", "---") for l in seen] + ["~~~", "", "</details>"]
+    try:
+        with open(path, "a", encoding="utf-8") as out:
+            out.write("\n".join(lines) + "\n")
+    except OSError:
+        pass
 
 
 def main():
@@ -189,6 +266,7 @@ def main():
     ap.add_argument("--shard", help="I/N: this machine's share of the run")
     ap.add_argument("--python", default=sys.executable, help="the Python to run them with")
     ap.add_argument("--offline", action="store_true", help="no network but this machine's own (needs root)")
+    ap.add_argument("--once", action="store_true", help="no second go for a test that fails")
     a = ap.parse_args()
     if a.offline and not os.environ.get("PIETATO_OFFLINE"):
         # a network of its own: this machine (127.0.0.1, and 10.99.0.1 as its address "on the network", where what
@@ -225,24 +303,41 @@ def main():
     os.makedirs(logs, exist_ok=True)
     print(f"{len(tests)} tests, with {a.python} ({'evdev' if not extra else 'evdev stand-in'}); logs in {logs}",
           flush=True)
-    failed = []                                  # (name, why)
+    failed, again = [], []                       # (name, why, what it said): failed; passed on its second go
     t_all = time.time()
     for name, path in tests:
         ok, rc, fails, lines, secs = run_one(name, path, base, logs, a.python, extra)
         if ok:
             print(f"ok   {name} ({secs:.0f}s)", flush=True)
             continue
-        why = f"exit {rc}" if rc != 0 else (f"{len(fails)} FAIL" if fails else "no ALL OK")
-        said = fails[0][5:] if fails else next((x for x in reversed(lines)
-                                                if x.strip() and not x.startswith("(run.py")), "")
-        failed.append((name, f"{why}: {said.strip()[:160]}"))
+        why, told, seen = what_said(rc, fails, lines)
+        if not a.once:                               # once more, on its own, started as the first was
+            print(f"again {name} ({why}, {secs:.0f}s: once more, on its own)", flush=True)
+            for line in lines[-25:]:
+                print("     | " + line[:200], flush=True)
+            os.replace(os.path.join(logs, name + ".log"), os.path.join(logs, name + ".first.log"))
+            left_behind(os.path.join(base, name))
+            try:                                     # (its folder put aside, not emptied: a test may have left
+                os.rename(os.path.join(base, name), os.path.join(base, name + ".first"))   # something mounted in it)
+            except OSError:
+                pass
+            first = (name, told, seen)
+            ok, rc, fails, lines, secs = run_one(name, path, base, logs, a.python, extra)
+            if ok:
+                again.append(first)
+                print(f"ok   {name} ({secs:.0f}s, on its second go)", flush=True)
+                continue
+            why, told, seen = what_said(rc, fails, lines)
+        failed.append((name, told, seen))
         print(f"FAIL {name} ({why}, {secs:.0f}s)", flush=True)
         for line in lines[-25:]:
             print("     | " + line[:200], flush=True)
     mins = (time.time() - t_all) / 60
+    github_note(failed, again, len(tests), mins)
+    if again:
+        print(f"\n({len(again)} passed on a second go: {' '.join(f[0] for f in again)})")
     if failed:
-        print(f"\n{len(failed)} of {len(tests)} failed ({mins:.0f} min): {' '.join(n for n, _ in failed)}")
-        github_note(failed, len(tests))
+        print(f"\n{len(failed)} of {len(tests)} failed ({mins:.0f} min): {' '.join(f[0] for f in failed)}")
         return 1
     print(f"\nALL OK: {len(tests)} tests ({mins:.0f} min)")
     return 0

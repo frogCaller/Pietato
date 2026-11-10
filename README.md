@@ -1,4 +1,4 @@
-# Pietato: Home screen, game console, remote and buddy for your TV
+# Pietato: Your Raspberry Pi Entertainment Hub
 
 Pietato turns a Raspberry Pi and a game controller into a media center for live TV, videos, music, radio,
 photos, smart home controls and the games you own. It also works on a PC with Ubuntu or Debian, and in a

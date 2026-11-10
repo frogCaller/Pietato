@@ -38,11 +38,17 @@ def console(rows, cols, cx, cy, text, attrs=None, unicode=True, vt=1):
             a = (attrs or {}).get((r, c), 0x07)
             cells += bytes([ord(ch) if ord(ch) < 256 else 0x3F, a])
             letters.append(ord(ch))
-    open(S + f"/vcsa{vt}", "wb").write(bytes([rows, cols, cx, cy]) + bytes(cells))
-    if unicode:
-        open(S + f"/vcsu{vt}", "wb").write(struct.pack(f"<{rows * cols}I", *letters))
-    elif os.path.exists(S + f"/vcsu{vt}"):
+    if unicode:                                # (each put there whole, its letters first: a look taken as it changes
+        put(S + f"/vcsu{vt}", struct.pack(f"<{rows * cols}I", *letters))    # reads a console, as from a real one,
+    elif os.path.exists(S + f"/vcsu{vt}"):                                  # never half of one)
         os.remove(S + f"/vcsu{vt}")
+    put(S + f"/vcsa{vt}", bytes([rows, cols, cx, cy]) + bytes(cells))
+
+
+def put(path, data):
+    with open(path + ".new", "wb") as f:
+        f.write(data)
+    os.replace(path + ".new", path)
 
 
 # ---- the console, read ------------------------------------------------------------------------------------------------

@@ -8,6 +8,7 @@ from ..sims import (
     Life, RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
     SIM_FLOOR, SIM_FULL, SIM_IN, SIM_PANEL)
 from ..fishtank import FishTank, fish_default
+from ..backlight import Backlight
 from ..clock import Clock
 from ..mandelbrot import Mandelbrot
 from ..notes import Notes
@@ -15,7 +16,7 @@ from ..fortune import Fortune
 from ..snake import Snake
 
 
-SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Mandelbrot, Snake)}
+SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Backlight, Mandelbrot, Snake)}
 CLOCK_KEYS = {"a": "look", "up": "colour", "down": "colour", "left": "font", "right": "font",
               "x": "background", "y": "date"}    # the Clock's buttons: the option each changes (its seconds: START's)
 
@@ -98,6 +99,8 @@ class SimScreen:
             s.full = self.sim_full()                           # (full screen: its dial a little smaller)
         if kind is FishTank:
             s.aq = self.aquarium                               # (the fish live on, here and on your others)
+        if kind is Backlight:
+            self.glow_page(s)                                  # (the LEDs, as they're lit and set: screens/glow.py)
         return s
 
     def sim_set_full(self, on):
@@ -129,6 +132,10 @@ class SimScreen:
             got = (self.press_notes if s.key == "notes" else self.press_fortune)(s, name, repeat)
             if got is not False:
                 return got
+        if s.key == "glow":                            # (the TV backlight: its own buttons, screens/glow.py)
+            got = self.press_glow(s, name, repeat)
+            if got is not False:
+                return got
         if name in ("b", "l", "r"):
             return "pass"
         if s.key == "mandel" and name in Mandelbrot.MOVES and self.press_mandel(s, name, repeat):
@@ -146,13 +153,11 @@ class SimScreen:
         if repeat:
             return None
         full, rps = self.sim_full(), s.key == "rps"
-        if s.key == "fish" and name in ("a", "y"):     # (the Fish Tank: A calls your fish, Y a new look)
+        if s.key == "fish" and name in ("a", "y"):     # (the Fish Tank: A calls your fish; Y's nothing there)
             if name == "a":
                 self.aquarium.call()
                 self.toast("Here, fish!", 2)
-            else:
-                self.fish_new_look()
-            self.dirty = True
+                self.dirty = True
             return None
         if name in ("left", "right") and rps:
             if s.is_open():
@@ -237,6 +242,8 @@ class SimScreen:
 
     def press_sim_opts(self, s, name, repeat):
         """START's card: up and down pick a row, left and right change it, A or B closes it."""
+        if s.key == "glow":                                # (the TV backlight's: screens/glow.py)
+            return self.press_glow_opts(s, name, repeat)
         rows = self.sim_rows(type(s))
         if name in ("l", "r"):
             return "pass"                                  # (switching apps closes it)
@@ -261,7 +268,7 @@ class SimScreen:
 
     def sim_hints(self, s):
         if self.sim_opts is not None:
-            return [("▲▼", "Choose"), ("◀▶", "Change"), ("B", "Done")]
+            return self.glow_card_hints() if s.key == "glow" else [("▲▼", "Choose"), ("◀▶", "Change"), ("B", "Done")]
         own = s.hints()
         if own is not None:
             return own
@@ -426,7 +433,9 @@ class SimScreen:
         """The card over the box, if there's one, as (picture, where): START's options; Paused; a sim's
         note (Life when it settles); in Rock Paper Scissors the moment to pick a winner, and who won.
         Full screen: just START's options."""
-        if self.sim_opts is not None:
+        if self.sim_opts is not None and s.key == "glow":   # (the TV backlight's card: screens/glow.py)
+            key = self.glow_card_key()
+        elif self.sim_opts is not None:
             key = ("opts", s.key, self.sim_opts, tuple(self.sim_value(type(s), k) for k, _, _, _ in self.sim_rows(type(s))),
                    self.sim_box(), ACCENT)
         elif self.sim_full():
@@ -442,7 +451,8 @@ class SimScreen:
         else:
             return None
         if key != self.sim_card[0]:
-            self.sim_card = (key, self.sim_opts_card(s) if key[0] == "opts" else self.sim_note(s, key))
+            self.sim_card = (key, self.glow_opts_card(s) if key[:2] == ("opts", "glow") else
+                             self.sim_opts_card(s) if key[0] == "opts" else self.sim_note(s, key))
         return self.sim_card[1]
 
     def sim_note(self, s, key):

@@ -417,12 +417,15 @@ m.home_sel = [a for a, _ in m.home_apps()].index("Apps")
 m.press("a")
 SIMI = m.tab
 corner = (g.SIM_BOX[0], g.SIM_BOX[1])
-for row, name in enumerate(g.LIBRARY[SIMI]["children"]):
+SHOWN = [it["title"] for it in m.tab_items()]          # (Apps' list as it is here: TV backlight only on a Pi with LEDs)
+check(f"Apps' list here: all of them but the TV backlight ({len(SHOWN)})",
+      SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n != "TV backlight"])
+for row, name in enumerate(SHOWN):
     if row:
         m.press("down")
-    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank"):
+    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "TV backlight"):
         continue                                   # (test_clock.py, test_notes.py, test_fortune.py, test_sim.py,
-                                                   #  test_fishtank.py)
+                                                   #  test_fishtank.py, test_glow.py)
     if next(t for t in g.LIBRARY if t["name"] == name)["type"] != "sim":
         continue                                   # (cmatrix, not a sim of its own: test_cmatrix.py)
     m.press("a")
@@ -486,7 +489,7 @@ m.press("down")
 check("down from the last goes round to the first", m.sels[SIMI] == 0)
 
 # full screen is for every sim; each sim waits while you're elsewhere
-m.sels[SIMI] = g.LIBRARY[SIMI]["children"].index("Game of Life")
+m.sels[SIMI] = SHOWN.index("Game of Life")
 m.press("a")
 life = m.sim_game()
 m.press("select")
@@ -497,7 +500,7 @@ check("full screen once is full screen for every sim", m.sim_full() and m.sim_ga
 m.press("select")
 m.press("b")
 gen = life.gen
-m.sels[SIMI] = g.LIBRARY[SIMI]["children"].index("Game of Life")
+m.sels[SIMI] = SHOWN.index("Game of Life")
 m.press("a")
 frames(0.05)
 check(f"each sim waits while you're elsewhere (generation {gen}, now {life.gen})", life.gen - gen <= 2
@@ -505,7 +508,7 @@ check(f"each sim waits while you're elsewhere (generation {gen}, now {life.gen})
 m.press("b")
 
 # the Mandelbrot Set's own buttons, in media mode
-m.sels[SIMI] = g.LIBRARY[SIMI]["children"].index("Mandelbrot Set")
+m.sels[SIMI] = SHOWN.index("Mandelbrot Set")
 m.press("a")
 mb = m.sim_game()
 m.set_setting("sim_mandel_mode", "Tour")

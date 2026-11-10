@@ -182,7 +182,17 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 one team is left; left and right pick a winner before the first capture
     Game of Life - Conway's rules (or HighLife, Day & Night, Seeds), cells coloured by age
     Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
-                next; A calls it, X feeds it, Y moves the plants (the web page arranges the tanks)
+                next; A calls it, X feeds it (the web page arranges the tanks)
+    TV backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
+                TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
+                the edges of the game on whichever of your Pietatos it follows (pitato/glow.py: a UDP
+                packet each picture), red for a hit (lives or health going down, in its RetroAchievements
+                rich presence; or the controller shaken), gold for an achievement, and pulsing to music
+                (party mode's player finds the beats); the rest of the time, a colour you pick (or a
+                rainbow, or dark). A turns it on or off, left and right pick its colour, up and down its
+                brightness, START has the rest (Follows: Nobody keeps it to your colour; Shape: a grid, or
+                a strip: how many LEDs, where it starts, which way it goes, along the bottom or not); the
+                web page's Library has it too
     Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
                 of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
                 Y out, for as long as they're held
@@ -219,11 +229,6 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 the Pi's own; or HDMI, headphones, a USB speaker...; a microphone isn't listed),
                 controller, swap A and B, start-up, and a random song at start-up. Bluetooth headphones
                 gone while something plays: it pauses (A plays on through the Pi), a game's menu comes up.
-                TV backlight (a Pi with its pins free): an 8x8 grid of WS2812B LEDs on GPIO 10 (SPI: the
-                first time, config.txt's lines for it, then a restart), lit with the edges of the game on
-                whichever of your Pietatos it follows (pitato/glow.py: a UDP packet each picture), red for a
-                hit (lives or health going down, in its RetroAchievements rich presence; or the controller
-                shaken), gold for an achievement, and pulsing to music (party mode's player finds the beats)
 
 Your settings files (radio.txt, bot.txt...) are in the static folder of the Pietato folder.
 setup.sh tells the service where that is; run by hand, it's the static folder next to this script.

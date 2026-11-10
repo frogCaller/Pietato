@@ -1,6 +1,9 @@
 Atkinson Hyperlegible Next (next-latin.woff2, next-latin-ext.woff2):
 Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)
 
+Fredoka (fredoka-latin.woff2, fredoka-latin-ext.woff2):
+Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
+
 Inter 4.1 (Inter-Regular.otf, Inter-SemiBold.otf, InterDisplay-Light.otf, InterDisplay-ExtraLight.otf):
 Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
 

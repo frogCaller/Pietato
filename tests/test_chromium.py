@@ -246,6 +246,13 @@ def put_back():
             fcntl.ioctl(fd, KDSETMODE, KD_TEXT)
         finally:
             os.close(fd)
+    front = fg()                                   # (another console in front, left in graphics mode with nobody
+    if front not in (1, MV, CV) and kd(front) != KD_TEXT and vtmode(front) == 0:   # looking after it: the kernel won't
+        fd = os.open(f"/dev/tty{front}", os.O_RDWR | os.O_NOCTTY)                   # switch from it, and chvt would
+        try:                                                                        # wait for ever. To text first:
+            fcntl.ioctl(fd, KDSETMODE, KD_TEXT)                                     # run.py puts it back as it was)
+        finally:
+            os.close(fd)
     subprocess.run(["chvt", "1"])
 
 

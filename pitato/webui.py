@@ -104,7 +104,7 @@ BAD_CHARS = re.compile(r"[\x00-\x1f\x7f/\\]")
 CONTROL = ("127.0.0.1", 5480)                   # pitato.py's media mode, on this Pi only
 CONTROL_KEY = "/run/pitato/control-key"       # ...and the key it asks for (made at its start)
 PI_GET = {"state", "screen", "catalog", "channels", "radio", "icon", "cameras", "camframe", "friend", "friendpic",
-          "computers", "bluetooth", "settings", "places", "fish", "fishpic"}
+          "computers", "bluetooth", "settings", "places", "fish", "fishpic", "glow"}
 PI_POST = {"press", "open", "play", "show", "here_move", "here_back", "player", "learn", "mode", "reset_pads", "pad_swap",
            "camera", "friend",
            "computer", "bluetooth", "settings", "tap", "swipe", "scroll", "type", "term", "save", "fishfeed", "fishgrid"}
@@ -314,7 +314,7 @@ def host_ok():
 
 
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
-             "bluetooth", "settings", "places", "fish"}   # (pictures load without it)
+             "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
@@ -481,30 +481,96 @@ def index():
 
 # ---- the page as an app: on a phone's home screen (Share > Add to Home Screen, or Add to Home screen), its own name
 # and icon, opening on the whole screen without the browser's bars --------------------------------------------------
-APP_BLUE = (0x60, 0xAA, 0xE4)        # (the page's own icon's, as in its tab)
+APP_TILE = (0x24, 0x48, 0x4D)        # (what the potato stands on, on a phone's home screen)
+APP_INK = (0x2E, 0x26, 0x21)
+APP_SCREEN, APP_MINT = (0x24, 0x34, 0x3A), (0xA8, 0xF0, 0xCF)   # (the screen on its face, and its eyes)
 APP_ICONS = {"/apple-touch-icon.png": (180, "square"), "/icon-192.png": (192, "round"), "/icon-512.png": (512, "round"),
              "/icon-maskable.png": (512, "square")}
 APP_FILES = ("/manifest.webmanifest",) + tuple(APP_ICONS)
 _app_icons = {}
 
 
+def _curves(start, *curves):
+    """A closed shape of cubic curves (each: two control points and its end), as its points."""
+    pts, at = [], start
+    for c1, c2, end in curves:
+        for i in range(24):
+            t = i / 24
+            a, b, c, d = (1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3
+            pts.append((a * at[0] + b * c1[0] + c * c2[0] + d * end[0], a * at[1] + b * c1[1] + c * c2[1] + d * end[1]))
+        at = end
+    return pts
+
+
+# the potato, on a sheet 240 across and 250 down: its body, the shade down its right side, and its two leaves
+POTATO = _curves((120, 40), ((163, 38), (195, 66), (197, 114)), ((199, 152), (191, 190), (167, 212)),
+                 ((147, 230), (95, 232), (73, 214)), ((49, 194), (41, 158), (43, 118)), ((45, 72), (79, 42), (120, 40)))
+POTATO_SHADE = _curves((197, 114), ((199, 152), (191, 190), (167, 212)), ((147, 230), (95, 232), (73, 214)),
+                       ((96, 222), (140, 217), (162, 195)), ((181, 175), (191, 146), (197, 114)))
+POTATO_LEAVES = ((_curves((119, 44), ((108, 28), (90, 24), (82, 33)), ((90, 46), (107, 50), (119, 44))), (0x5D, 0xB3, 0x6A)),
+                 (_curves((121, 44), ((127, 24), (145, 15), (158, 21)), ((155, 37), (138, 48), (121, 44))), (0x7C, 0xCB, 0x7E)))
+
+
 def app_icon(size, shape):
-    """The page's icon (a screen with a play sign on it, as in its tab), size pixels across, as a PNG: round, its
-    corners rounded off; square, to the edges (a phone rounds it itself, or cuts it to its own shape: what's on it
-    is well inside)."""
+    """The page's icon (Pietato's potato: a screen for a face, a d-pad and two buttons), size pixels across, as a PNG:
+    round, its corners rounded off; square, to the edges (a phone rounds it itself, or cuts it to its own shape:
+    the potato is well inside)."""
     key = (size, shape)
     if key not in _app_icons:
         import io
         from PIL import Image, ImageDraw
-        k = size * 4 / 32                              # (drawn 4 times bigger, then made smaller: smooth edges)
+        k = size * 4 / 512                             # (drawn 4 times bigger, then made smaller: smooth edges)
         big = Image.new("RGBA", (size * 4, size * 4), (0, 0, 0, 0))
         d = ImageDraw.Draw(big)
         if shape == "round":
-            d.rounded_rectangle((0, 0, size * 4 - 1, size * 4 - 1), radius=int(9 * k), fill=APP_BLUE)
+            d.rounded_rectangle((0, 0, size * 4 - 1, size * 4 - 1), radius=int(112 * k), fill=APP_TILE)
         else:
-            d.rectangle((0, 0, size * 4, size * 4), fill=APP_BLUE)
-        d.rounded_rectangle((7 * k, 9 * k, 25 * k, 21 * k), radius=int(2.5 * k), outline="white", width=int(2 * k))
-        d.polygon([(14 * k, 12.5 * k), (18 * k, 15 * k), (14 * k, 17.5 * k)], fill="white")
+            d.rectangle((0, 0, size * 4, size * 4), fill=APP_TILE)
+        s = (1.5 if shape == "round" else 1.22) * k    # (its sheet's size on the tile)
+        ox, oy = size * 2 - 120 * s, size * 2 - 125 * s + 6 * k
+
+        def at(pts):
+            return [(ox + x * s, oy + y * s) for x, y in pts]
+
+        def box(x0, y0, x1, y1):
+            return (ox + x0 * s, oy + y0 * s, ox + x1 * s, oy + y1 * s)
+
+        def oval(cx, cy, rx, ry, fill):
+            d.ellipse(box(cx - rx, cy - ry, cx + rx, cy + ry), fill=fill)
+
+        def edge(pts, w):                              # (its line of ink, joined up round the corner it starts at)
+            pts = at(pts)
+            d.line(pts + pts[:2], fill=APP_INK, width=max(1, round(w * s)), joint="curve")
+
+        oval(120, 238, 62, 7, tuple(round(c * 0.82) for c in APP_TILE))        # its shadow on the tile
+        for leaf, fill in POTATO_LEAVES:
+            d.polygon(at(leaf), fill=fill)
+            edge(leaf, 5)
+        d.polygon(at(POTATO), fill=(0xE7, 0xBE, 0x84))
+        d.polygon(at(POTATO_SHADE), fill=(0xD4, 0xA2, 0x66))
+        light = [(60 + 7 * math.cos(a) * math.cos(0.21) - 15 * math.sin(a) * math.sin(0.21),
+                  124 + 7 * math.cos(a) * math.sin(0.21) + 15 * math.sin(a) * math.cos(0.21))
+                 for a in (i * math.tau / 40 for i in range(40))]
+        d.polygon(at(light), fill=(0xF2, 0xDC, 0xBB))                          # the light on its side, and its spots
+        for cx, cy, rx, ry, fill in ((66, 186, 4.5, 3, (0xC0, 0x8F, 0x55)), (180, 138, 3.5, 2.5, (0xC0, 0x8F, 0x55)),
+                                     (124, 212, 4, 2.5, (0xB9, 0x87, 0x4E))):
+            oval(cx, cy, rx, ry, fill)
+        edge(POTATO, 6)
+        d.rounded_rectangle(box(76, 76, 164, 140), radius=16 * s, fill=APP_SCREEN, outline=APP_INK,
+                            width=max(1, round(5 * s)))
+        oval(104, 104, 6, 8, APP_MINT)                                         # its eyes, its smile, its cheeks
+        oval(136, 104, 6, 8, APP_MINT)
+        smile = [(113 + 14 * t, 119 + 14 * t * (1 - t)) for t in (i / 16 for i in range(17))]
+        d.line(at(smile), fill=APP_MINT, width=max(1, round(4 * s)), joint="curve")
+        for x, y in (smile[0], smile[-1]):
+            oval(x, y, 2, 2, APP_MINT)
+        oval(91, 120, 6, 3.5, (0xDE, 0x81, 0x9A))
+        oval(149, 120, 6, 3.5, (0xDE, 0x81, 0x9A))
+        d.rounded_rectangle(box(87, 171, 113, 181), radius=3 * s, fill=APP_INK)   # its d-pad, and its two buttons
+        d.rounded_rectangle(box(95, 163, 105, 189), radius=3 * s, fill=APP_INK)
+        for cx, cy, fill in ((146, 182, (0xD9, 0x43, 0x68)), (161, 168, (0x4F, 0xB7, 0xA5))):
+            oval(cx, cy, 9.25, 9.25, APP_INK)
+            oval(cx, cy, 5.75, 5.75, fill)
         out = io.BytesIO()
         img = big.resize((size, size), Image.LANCZOS)
         (img if shape == "round" else img.convert("RGB")).save(out, "PNG")
@@ -518,7 +584,7 @@ def app_manifest():
                                                                        else {})}
              for path, (n, _) in APP_ICONS.items() if path != "/apple-touch-icon.png"]
     body = {"id": "/", "name": "Pietato", "short_name": "Pietato", "start_url": "/", "scope": "/",
-            "display": "standalone", "background_color": "#0b0d12", "theme_color": "#0b0d12", "icons": icons}
+            "display": "standalone", "background_color": "#192124", "theme_color": "#192124", "icons": icons}
     resp = Response(json.dumps(body), mimetype="application/manifest+json")
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
@@ -535,13 +601,13 @@ def app_icon_file():
     return resp
 
 
-FONTS = {"next-latin.woff2", "next-latin-ext.woff2"}
+FONTS = {"next-latin.woff2", "next-latin-ext.woff2", "fredoka-latin.woff2", "fredoka-latin-ext.woff2"}
 
 
 @app.get("/static/fonts/<name>")
 def font(name):
-    """The page's typeface (Atkinson Hyperlegible, OFL), kept for a year: the only thing handed
-    out from a static folder."""
+    """The page's typefaces (Atkinson Hyperlegible, and Fredoka for its headings: both OFL), kept for a year: the
+    only thing handed out from a static folder."""
     if name not in FONTS:
         abort(404)
     resp = send_file(os.path.join(FONTS_DIR, name), mimetype="font/woff2", conditional=True)
