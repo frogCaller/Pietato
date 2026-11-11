@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pietato: a media center for your Raspberry Pi</title>
+<meta name="description" content="Turn a Raspberry Pi and a controller into a media center: live TV, videos, music, radio, photos, your smart home and your games on one home screen. Free and open source.">
+<meta property="og:title" content="Pietato">
+<meta property="og:description" content="Turn a Raspberry Pi and a controller into a media center.">
+<meta property="og:image" content="landing/tv-home.webp">
+<link rel="icon" href="landing/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&amp;family=Atkinson+Hyperlegible+Mono:wght@400;500&amp;family=Fredoka:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#DDEFE6}
+a{color:#2E2621}a:hover{color:#C8284F}
+a:focus-visible,button:focus-visible{outline:3px solid #2F6FA8;outline-offset:3px}
+.key{transition:transform .06s}
+.key:hover{filter:brightness(.97)}
+.key:active{transform:translateY(2px);box-shadow:0 0 0 2px #2E2621,0 1px 0 2px #2E2621 !important}
+.tab:hover{color:#2E2621 !important}
+.navlink:hover{color:#2E2621 !important}
+.tvimg{transition:opacity .16s}
+@media (prefers-reduced-motion: reduce){.tvimg,.key{transition:none}}
+::selection{background:#2E2621;color:#DDEFE6}
+</style>
+</head>
+<body>
+<div id="top" style="background: #DDEFE6; color: #2E2621; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased">
+
+<header style="padding: 0 24px">
+<nav aria-label="Main" style="max-width: 1240px; margin: 0 auto; padding: 18px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px">
+<a href="#top" style="display: flex; align-items: center; gap: 12px; min-height: 44px; text-decoration: none">
+<svg viewBox="34 10 172 230" width="33" height="44" aria-hidden="true">
+<path d="M119 44 C108 28 90 24 82 33 C90 46 107 50 119 44 Z" fill="#5DB36A" stroke="#2E2621" stroke-width="8" stroke-linejoin="round"></path>
+<path d="M121 44 C127 24 145 15 158 21 C155 37 138 48 121 44 Z" fill="#7CCB7E" stroke="#2E2621" stroke-width="8" stroke-linejoin="round"></path>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="#E7BE84"></path>
+<path d="M197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C96 222 140 217 162 195 C181 175 191 146 197 114 Z" fill="#D4A266"></path>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="none" stroke="#2E2621" stroke-width="9" stroke-linejoin="round"></path>
+<rect x="72" y="80" width="96" height="70" rx="18" fill="#24343A" stroke="#2E2621" stroke-width="8"></rect>
+<ellipse cx="102" cy="110" rx="9" ry="11" fill="#A8F0CF"></ellipse>
+<ellipse cx="138" cy="110" rx="9" ry="11" fill="#A8F0CF"></ellipse>
+</svg>
+<span style="font-family: 'Fredoka', system-ui, sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; color: #2E2621"><span style="color: #D94368">Pie</span>tato</span>
+</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0 24px; font-family: 'Fredoka', system-ui, sans-serif; font-weight: 500; font-size: 18px">
+<a class="navlink" href="#apps" style="color: #5F5852; text-decoration: none; padding: 10px 2px">Apps</a>
+<a class="navlink" href="#bot" style="color: #5F5852; text-decoration: none; padding: 10px 2px">Bot</a>
+<a class="navlink" href="#web" style="color: #5F5852; text-decoration: none; padding: 10px 2px">Web page</a>
+<a class="navlink" href="#gpi" style="color: #5F5852; text-decoration: none; padding: 10px 2px">GPi Case</a>
+<a class="navlink" href="#install" style="color: #5F5852; text-decoration: none; padding: 10px 2px">Install</a>
+<a class="key" href="https://github.com/frogCaller/Pietato" style="margin: 4px 2px 7px 4px; color: #2E2621; text-decoration: none; background: #FFFFFF; border-radius: 12px; padding: 8px 18px; box-shadow: 0 0 0 2px #2E2621, 0 3px 0 2px #2E2621">GitHub</a>
+</div>
+</nav>
+</header>
+
+<section style="padding: 0 24px">
+<div style="max-width: 1240px; margin: 0 auto; padding: 64px 0 80px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px 64px">
+<div style="flex: 1 1 380px; min-width: 0; max-width: 520px">
+<p style="margin: 0 0 22px"><span style="display: inline-flex; align-items: center; gap: 10px; padding: 6px 15px 6px 9px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 0 0 2px #2E2621; font-family: 'Fredoka', system-ui, sans-serif; font-size: 16px; font-weight: 600; line-height: 1.2; color: #2E2621"><svg viewBox="0 0 34 24" width="34" height="24" aria-hidden="true"><rect x="1.5" y="1.5" width="31" height="21" rx="3.5" fill="#5DB36A" stroke="#2E2621" stroke-width="2.5"></rect><rect x="5" y="4.6" width="15" height="3" rx="1" fill="#2E2621"></rect><rect x="7.5" y="11" width="8" height="7" rx="1.2" fill="#2E2621"></rect><rect x="23.5" y="8.5" width="9" height="4.5" fill="#E4E9E6" stroke="#2E2621" stroke-width="1.5"></rect><rect x="23.5" y="14.5" width="9" height="4.5" fill="#E4E9E6" stroke="#2E2621" stroke-width="1.5"></rect><circle cx="19.5" cy="18" r="1.3" fill="#F2CB63"></circle></svg><span>A Raspberry Pi project</span></span></p>
+<h1 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(40px, 4.5vw, 62px); line-height: 1.05; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">Turn a Raspberry Pi and a controller into a media center.</h1>
+<p style="margin: 24px 0 0; font-size: 19px; line-height: 1.55; color: #4B433D">If you have a Pi and a controller, Pietato puts live TV, videos, music, radio, photos, your smart home and the games you own on one home screen. It works on a PC with Ubuntu or Debian too, and in a GPi Case.</p>
+<div style="margin-top: 34px; display: flex; flex-wrap: wrap; gap: 18px 16px">
+<a class="key" href="https://github.com/frogCaller/Pietato/releases/latest" style="display: inline-flex; align-items: center; gap: 12px; min-height: 52px; box-sizing: border-box; padding: 9px 22px 9px 10px; border-radius: 16px; background: #C8284F; color: #FFFFFF; font-family: 'Fredoka', system-ui, sans-serif; font-size: 19px; font-weight: 600; text-decoration: none; box-shadow: 0 0 0 2px #2E2621, 0 4px 0 2px #2E2621"><span aria-hidden="true" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #FFFFFF; color: #2E2621; font-size: 16px; font-weight: 700">A</span><span>Get the SD card image</span></a>
+<a class="key" href="https://github.com/frogCaller/Pietato" style="display: inline-flex; align-items: center; gap: 12px; min-height: 52px; box-sizing: border-box; padding: 9px 22px 9px 10px; border-radius: 16px; background: #FFFFFF; color: #2E2621; font-family: 'Fredoka', system-ui, sans-serif; font-size: 19px; font-weight: 600; text-decoration: none; box-shadow: 0 0 0 2px #2E2621, 0 4px 0 2px #2E2621"><span aria-hidden="true" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #2E2621; color: #FFFFFF; font-size: 16px; font-weight: 700">Y</span><span>See the code</span></a>
+</div>
+<p style="margin: 22px 0 0; font-size: 15px; color: #5F5852">Free and open source, MIT licensed.</p>
+</div>
+
+<div style="flex: 1.5 1 480px; min-width: 0">
+<div style="position: relative; padding-top: 56px">
+<svg viewBox="0 0 240 232" width="92" height="89" aria-hidden="true" style="position: absolute; top: 0; right: 9%">
+<path d="M119 44 C108 28 90 24 82 33 C90 46 107 50 119 44 Z" fill="#5DB36A" stroke="#2E2621" stroke-width="5" stroke-linejoin="round"></path>
+<path d="M121 44 C127 24 145 15 158 21 C155 37 138 48 121 44 Z" fill="#7CCB7E" stroke="#2E2621" stroke-width="5" stroke-linejoin="round"></path>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="#E7BE84"></path>
+<path d="M197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C96 222 140 217 162 195 C181 175 191 146 197 114 Z" fill="#D4A266"></path>
+<ellipse cx="60" cy="124" rx="7" ry="15" fill="#FFFFFF" opacity="0.45" transform="rotate(12 60 124)"></ellipse>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="none" stroke="#2E2621" stroke-width="6" stroke-linejoin="round"></path>
+<rect x="76" y="76" width="88" height="64" rx="16" fill="#24343A" stroke="#2E2621" stroke-width="5"></rect>
+<ellipse cx="104" cy="104" rx="6" ry="8" fill="#A8F0CF"></ellipse>
+<ellipse cx="136" cy="104" rx="6" ry="8" fill="#A8F0CF"></ellipse>
+<path d="M113 119 Q120 126 127 119" fill="none" stroke="#A8F0CF" stroke-width="4" stroke-linecap="round"></path>
+<ellipse cx="91" cy="120" rx="6" ry="3.5" fill="#FF8FAB" opacity="0.85"></ellipse>
+<ellipse cx="149" cy="120" rx="6" ry="3.5" fill="#FF8FAB" opacity="0.85"></ellipse>
+</svg>
+<div style="position: relative; padding: 12px; border-radius: 24px; background: #2E2621; box-shadow: 0 6px 0 #1A1512">
+<div style="position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 13px; background: #0F141C">
+<img class="tvimg" data-shot="0" src="landing/tv-home.webp" aria-hidden="false" alt="Pietato's home screen on a TV: the time and weather, and fifteen apps from Home and TV to System and Settings" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 1">
+<img class="tvimg" data-shot="1" src="landing/tv-tv.webp" aria-hidden="true" alt="The TV app, listing Plex, Jellyfin, Cartoons, Free Movies, News, Sports and Streams" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+<img class="tvimg" data-shot="2" src="landing/tv-radio.webp" aria-hidden="true" alt="The Radio app, with a station search and stations by kind of music" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+<img class="tvimg" data-shot="3" src="landing/tv-games.webp" aria-hidden="true" alt="Snake, about to start" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+<img class="tvimg" data-shot="4" src="landing/tv-weather.webp" aria-hidden="true" alt="The Weather app, with the temperature now, the next hours and the week" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+<img class="tvimg" data-shot="5" src="landing/tv-bot.webp" aria-hidden="true" alt="The Bot app, with the bot's face and a short conversation" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+<img class="tvimg" data-shot="6" src="landing/tv-apps.webp" aria-hidden="true" alt="The Apps app, listing Group chat, Clock, Notes, Fortune Cookie, Rock Paper Scissors, Game of Life, Fish Tank and the Mandelbrot Set" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0">
+</div>
+</div>
+<div aria-hidden="true" style="display: flex; flex-direction: column; align-items: center">
+<div style="width: 96px; height: 16px; background: #2E2621"></div>
+<div style="width: 250px; max-width: 60%; height: 10px; border-radius: 6px; background: #2E2621"></div>
+</div>
+</div>
+<div style="margin-top: 22px; display: flex; align-items: center; gap: 14px">
+<button class="key" type="button" aria-label="Previous app" data-step="-1" style="flex: none; width: 60px; height: 46px; border: 0; border-radius: 14px 14px 14px 22px; background: #FFFFFF; color: #2E2621; font-family: 'Fredoka', system-ui, sans-serif; font-size: 19px; font-weight: 700; cursor: pointer; box-shadow: 0 0 0 2px #2E2621, 0 3px 0 2px #2E2621">L</button>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 4px; font-family: 'Fredoka', system-ui, sans-serif">
+<button class="tab" type="button" aria-pressed="true" data-tab="0" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #2E2621; box-shadow: inset 0 -3px 0 #2E2621">Home</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="1" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">TV</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="2" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">Radio</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="3" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">Games</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="4" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">Weather</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="5" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">Bot</button>
+<button class="tab" type="button" aria-pressed="false" data-tab="6" style="min-height: 44px; padding: 6px 11px; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; color: #5F5852; box-shadow: inset 0 -3px 0 transparent">Apps</button>
+</div>
+<button class="key" type="button" aria-label="Next app" data-step="1" style="flex: none; width: 60px; height: 46px; border: 0; border-radius: 14px 14px 22px 14px; background: #FFFFFF; color: #2E2621; font-family: 'Fredoka', system-ui, sans-serif; font-size: 19px; font-weight: 700; cursor: pointer; box-shadow: 0 0 0 2px #2E2621, 0 3px 0 2px #2E2621">R</button>
+</div>
+<p style="margin: 12px 0 0; text-align: center; font-size: 15px; color: #5F5852">Press L or R to switch apps, the same as on your controller.</p>
+</div>
+</div>
+</section>
+
+<section aria-label="What you need" style="padding: 0 24px">
+<div style="max-width: 1240px; margin: 0 auto; padding: 36px 0 0; border-top: 2px solid #2E2621; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px 56px">
+<div>
+<h2 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 22px; font-weight: 600">A Raspberry Pi</h2>
+<p style="margin: 0; color: #4B433D">A Zero 2 W, 3, 4, 5 or Compute Module 4. A PC with Ubuntu 24.04 or Debian 12 or 13 works too, and so does an R36S.</p>
+</div>
+<div>
+<h2 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 22px; font-weight: 600">A controller</h2>
+<p style="margin: 0; color: #4B433D">Any USB or Bluetooth one. A keyboard works too, and two can play on two controllers.</p>
+</div>
+<div>
+<h2 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 22px; font-weight: 600">A screen</h2>
+<p style="margin: 0; color: #4B433D">Any TV or monitor on HDMI. In a GPi Case 2W or GPi Case 2, it uses the case's own screen and buttons.</p>
+</div>
+</div>
+</section>
+
+<section id="apps" style="padding: 112px 24px 0">
+<div style="max-width: 1240px; margin: 0 auto">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 64px">
+<h2 style="margin: 0; flex: 1 1 380px; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">Fifteen apps on one home screen.</h2>
+<p style="margin: 0 0 6px; flex: 1 1 380px; max-width: 30em; font-size: 18px; color: #4B433D">Move with the d-pad and press A to open. Here they are, in the order they sit on the home screen.</p>
+</div>
+
+<div style="margin-top: 44px; padding: clamp(24px, 3.4vw, 44px) clamp(18px, 3vw, 40px); border-radius: 28px; background: #FBFDFB; box-shadow: 0 0 0 2px #2E2621; display: grid; grid-template-columns: repeat(auto-fit, minmax(max(138px, 18%), 1fr)); gap: 36px 22px">
+<div>
+<img src="landing/icon-home.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Home</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">A remote for your TVs and lights through Home Assistant, your Pi-hole's stats, and the web.</p>
+</div>
+<div>
+<img src="landing/icon-tv.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">TV</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Plex and Jellyfin, about 250 old cartoons and 150 old films, and your own streams.</p>
+</div>
+<div>
+<img src="landing/icon-music.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Music</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Your songs, with a quiet lofi scene for the whole screen while they play.</p>
+</div>
+<div>
+<img src="landing/icon-radio.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Radio</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Internet radio by kind of music, or search for a station by name.</p>
+</div>
+<div>
+<img src="landing/icon-camera.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Camera</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">A USB camera, any camera on your network, or the ones on your other Pis. The d-pad steers an OBSBOT.</p>
+</div>
+<div>
+<img src="landing/icon-photos.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Photos</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Your pictures, with filters and a slideshow.</p>
+</div>
+<div>
+<img src="landing/icon-videos.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Videos</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Your videos, picking up where you left off.</p>
+</div>
+<div>
+<img src="landing/icon-games.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Games</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Snake, and the games you own, from Game Boy and NES to PlayStation.</p>
+</div>
+<div>
+<img src="landing/icon-weather.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Weather</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Now, the next hours and the week, in °F or °C.</p>
+</div>
+<div>
+<img src="landing/icon-finance.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Finance</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Stock and coin prices, with their charts.</p>
+</div>
+<div>
+<img src="landing/icon-bot.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Bot</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Sets timers, keeps your list and plays music when you ask.</p>
+</div>
+<div>
+<img src="landing/icon-apps.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Apps</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">A clock, notes, a fish tank, Game of Life and more to leave running.</p>
+</div>
+<div>
+<img src="landing/icon-files.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Files</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">PDFs, documents, pictures, video and music, on the Pi or on your other computers.</p>
+</div>
+<div>
+<img src="landing/icon-system.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">System</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">Temperature, memory, storage and network at a glance, and Update software.</p>
+</div>
+<div>
+<img src="landing/icon-settings.webp" alt="" width="60" height="60" style="display: block">
+<h3 style="margin: 14px 0 4px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 21px; font-weight: 600">Settings</h3>
+<p style="margin: 0; font-size: 16px; color: #4B433D">WiFi, Bluetooth, sound, and the home screen's style, background and colours.</p>
+</div>
+</div>
+
+<div style="margin-top: 48px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px 56px">
+<div>
+<h3 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 20px; font-weight: 600">Bigger consoles on a bigger Pi</h3>
+<p style="margin: 0; color: #4B433D">N64, PSP, DS and Dreamcast games play on a Pi 4 or 5 or a PC, and PlayStation 2, GameCube and Wii games on a PC.</p>
+</div>
+<div>
+<h3 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 20px; font-weight: 600">More than one Pietato</h3>
+<p style="margin: 0; color: #4B433D">Join a game on another as player 2, link two Game Boy games to trade Pokémon, or work one with another's buttons. Your saves follow you.</p>
+</div>
+<div>
+<h3 style="margin: 0 0 6px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 20px; font-weight: 600">Button codes</h3>
+<p style="margin: 0; color: #4B433D">Hold Home and press a code of your own to turn the TV on, the lights off, or start your last game.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section id="gpi" style="padding: 112px 24px 0">
+<div style="max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 56px 80px">
+<div style="flex: 1 1 400px; min-width: 0; max-width: 620px">
+<h2 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">It runs in a GPi Case too.</h2>
+<p style="margin: 20px 0 0; font-size: 18px; color: #4B433D">If you have a RetroFlag GPi Case 2W or GPi Case 2, Pietato uses the case's own screen and buttons, so it's a media center you can carry around.</p>
+<ul style="list-style: none; margin: 28px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px">
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D">There's an SD card image for each case: write it, put it in, and turn the case on.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D">Turn the SAFE SHUTDOWN switch behind the cartridge to ON, and switching the case off shuts the Pi down safely.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D">In the GPi Case 2's dock, the picture moves to your TV. Use a controller there.</span></li>
+</ul>
+<div style="margin-top: 34px">
+<a class="key" href="https://github.com/frogCaller/Pietato/releases/latest" style="display: inline-flex; align-items: center; gap: 12px; min-height: 52px; box-sizing: border-box; padding: 9px 22px 9px 10px; border-radius: 16px; background: #FFFFFF; color: #2E2621; font-family: 'Fredoka', system-ui, sans-serif; font-size: 19px; font-weight: 600; text-decoration: none; box-shadow: 0 0 0 2px #2E2621, 0 4px 0 2px #2E2621"><span aria-hidden="true" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #2E2621; color: #FFFFFF; font-size: 16px; font-weight: 700">A</span><span>Get the GPi Case image</span></a>
+</div>
+</div>
+
+<div style="flex: 1 1 320px; min-width: 0; display: flex; justify-content: center; padding: 18px 0 26px">
+<div style="width: 100%; max-width: min(340px, 86%); box-sizing: border-box; padding: 22px 20px 34px; border-radius: 30px 30px 46px 46px; background: #60AAE4; box-shadow: 0 0 0 3px #2E2621, 0 9px 0 3px #2E2621; transform: rotate(-4deg)">
+<div style="padding: 12px 12px 14px; border-radius: 16px; background: #2E2621">
+<img src="landing/gpi-home.webp" alt="Pietato's home screen on a handheld's small screen, with its fifteen apps" style="display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 6px">
+</div>
+<p aria-hidden="true" style="margin: 12px 0 0; text-align: center; font-family: 'Fredoka', system-ui, sans-serif; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; line-height: 1; color: #2E2621"><span style="color: #FFFFFF">Pie</span>tato</p>
+<div aria-hidden="true" style="margin-top: 22px; padding: 0 4px; display: flex; align-items: center; justify-content: space-between">
+<div style="position: relative; width: 92px; height: 92px">
+<div style="position: absolute; left: 0; top: 31px; width: 92px; height: 30px; border-radius: 8px; background: #F3EEE8; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38)"></div>
+<div style="position: absolute; left: 31px; top: 0; width: 30px; height: 92px; border-radius: 8px; background: #F3EEE8; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38)"></div>
+<div style="position: absolute; left: 31px; top: 31px; width: 30px; height: 30px; background: #F3EEE8"></div>
+</div>
+<div style="position: relative; width: 104px; height: 104px; font-family: 'Fredoka', system-ui, sans-serif; font-size: 14px; font-weight: 700">
+<div style="position: absolute; left: 35px; top: 0; width: 34px; height: 34px; border-radius: 50%; background: #F3EEE8; color: #2E2621; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38); display: flex; align-items: center; justify-content: center">X</div>
+<div style="position: absolute; left: 0; top: 35px; width: 34px; height: 34px; border-radius: 50%; background: #F3EEE8; color: #2E2621; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38); display: flex; align-items: center; justify-content: center">Y</div>
+<div style="position: absolute; left: 70px; top: 35px; width: 34px; height: 34px; border-radius: 50%; background: #FF7C9A; color: #2E2621; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38); display: flex; align-items: center; justify-content: center">A</div>
+<div style="position: absolute; left: 35px; top: 70px; width: 34px; height: 34px; border-radius: 50%; background: #4FB7A5; color: #2E2621; box-shadow: 0 3px 0 rgba(46, 38, 33, 0.38); display: flex; align-items: center; justify-content: center">B</div>
+</div>
+</div>
+<div aria-hidden="true" style="margin-top: 24px; display: flex; justify-content: center; gap: 14px">
+<div style="width: 40px; height: 10px; border-radius: 6px; background: rgba(46, 38, 33, 0.38)"></div>
+<div style="width: 40px; height: 10px; border-radius: 6px; background: rgba(46, 38, 33, 0.38)"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="bot" style="margin-top: 112px; padding: 96px 24px; background: #192124; color: #F3EEE8">
+<div style="max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 48px 72px">
+<div style="flex: 1.4 1 460px; min-width: 0">
+<div style="padding: 10px; border-radius: 20px; background: #0C1214"><img src="landing/bot-work.webp" alt="The bot at work: a little robot typing at a desk, with a mug and a bell" style="display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 11px"></div>
+</div>
+<div style="flex: 1 1 360px; min-width: 0">
+<h2 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">Say “hey potato”.</h2>
+<p style="margin: 20px 0 0; font-size: 18px; color: #C8D0CB">Ask it to set a timer, add milk to your list or play some music. Type it, or say it into a USB mic. With Ollama on another computer, it chats too.</p>
+<ul style="list-style: none; margin: 28px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px">
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #4FB7A5"></span><span style="color: #C8D0CB">Make it your own in its Character: its name, face, colours, voice and personality, from Butler to Pirate.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #4FB7A5"></span><span style="color: #C8D0CB">It looks through your camera, takes pictures and says what it sees.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #4FB7A5"></span><span style="color: #C8D0CB">Give it a voice and it says its replies out loud.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #4FB7A5"></span><span style="color: #C8D0CB">At work, it sits at a desk and acts out what your coding agent is doing, then rings a bell when it's done.</span></li>
+</ul>
+</div>
+</div>
+</section>
+
+<section id="web" style="padding: 112px 24px 0">
+<div style="max-width: 1240px; margin: 0 auto">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 28px 72px">
+<div style="flex: 1 1 400px; min-width: 0; max-width: 560px">
+<h2 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">Use it from your phone or computer.</h2>
+<p style="margin: 20px 0 0; font-size: 18px; color: #4B433D">Open <code style="font-family: 'Atkinson Hyperlegible Mono', ui-monospace, monospace; font-size: 15px; padding: 2px 7px; border-radius: 7px; background: #FBFDFB; box-shadow: 0 0 0 1px rgba(46, 38, 33, 0.28); white-space: nowrap">your-pi-address:5432</code> in a browser on your WiFi. You get the Pi's screen to tap, a remote beside it, and a place to add files and change any setting. On a phone, add it to your home screen and it opens like an app.</p>
+</div>
+<ul style="flex: 1 1 400px; min-width: 0; max-width: 560px; list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px">
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D"><strong style="color: #2E2621; font-weight: 700">Play here</strong> plays your videos, music and many games on your phone instead of the Pi.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D"><strong style="color: #2E2621; font-weight: 700">Sound here</strong> sends the Pi's sound to your phone, and <strong style="color: #2E2621; font-weight: 700">Mic here</strong> lets the Bot hear you through it.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D"><strong style="color: #2E2621; font-weight: 700">Library</strong> puts cartoons, films, radio or a camera on the Pi, and <strong style="color: #2E2621; font-weight: 700">Draw</strong> shows a picture on its screen as you draw it.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 14px"><span aria-hidden="true" style="flex: none; margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #2E2621"></span><span style="color: #4B433D"><strong style="color: #2E2621; font-weight: 700">Terminal</strong>: when the Pi is at its terminal, type into it from here with your Pi password.</span></li>
+</ul>
+</div>
+<div style="margin-top: 56px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 32px">
+<div style="flex: 3 1 520px; min-width: 0">
+<div style="padding: 10px; border-radius: 22px; background: #2E2621; box-shadow: 0 6px 0 #1A1512"><img src="landing/web-desktop.webp" alt="Pietato's web page on a computer: the Pi's screen on the left, and on the right a remote, the Play here, Sound here and Mic here switches, controllers and Bluetooth" style="display: block; width: 100%; aspect-ratio: 32 / 19; border-radius: 13px"></div>
+</div>
+<div style="flex: 1 1 200px; min-width: 0; max-width: 248px">
+<div style="padding: 9px; border-radius: 34px; background: #2E2621; box-shadow: 0 6px 0 #1A1512"><img src="landing/web-phone.webp" alt="The same page on a phone, in its light colours: the Pi's screen on top, with Screen, Library, Files and Settings along the bottom" style="display: block; width: 100%; aspect-ratio: 390 / 844; border-radius: 26px"></div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="install" style="padding: 120px 24px 112px">
+<div style="max-width: 1240px; margin: 0 auto">
+<h2 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">Get it running.</h2>
+<p style="margin: 16px 0 0; max-width: 36em; font-size: 18px; color: #4B433D">Pick the way that suits you. To update later, press Update software at the top of System.</p>
+<div style="margin-top: 44px; display: flex; flex-wrap: wrap; gap: 28px">
+
+<div style="flex: 1 1 420px; min-width: 0; box-sizing: border-box; padding: 36px; border-radius: 28px; background: #FBFDFB; box-shadow: 0 0 0 2px #2E2621">
+<h3 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: 25px; font-weight: 600">The easy way: an SD card image</h3>
+<ol style="list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-direction: column; gap: 20px">
+<li style="display: flex; align-items: flex-start; gap: 16px"><span aria-hidden="true" style="flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #2E2621; color: #FFFFFF; font-family: 'Fredoka', system-ui, sans-serif; font-size: 16px; font-weight: 600">1</span><span style="color: #4B433D">Download the image for your setup from the <a href="https://github.com/frogCaller/Pietato/releases/latest">latest release</a>: the one ending in <code style="font-family: 'Atkinson Hyperlegible Mono', ui-monospace, monospace; font-size: 14px; padding: 1px 6px; border-radius: 6px; background: #E9F3EE; color: #2E2621">hdmi</code> for a TV or monitor, or <code style="font-family: 'Atkinson Hyperlegible Mono', ui-monospace, monospace; font-size: 14px; padding: 1px 6px; border-radius: 6px; background: #E9F3EE; color: #2E2621">gpi-case-2w</code> or <code style="font-family: 'Atkinson Hyperlegible Mono', ui-monospace, monospace; font-size: 14px; padding: 1px 6px; border-radius: 6px; background: #E9F3EE; color: #2E2621">gpi-case-2</code> for a GPi Case.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 16px"><span aria-hidden="true" style="flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #2E2621; color: #FFFFFF; font-family: 'Fredoka', system-ui, sans-serif; font-size: 16px; font-weight: 600">2</span><span style="color: #4B433D">Write it to a microSD card (8 GB or more) with <a href="https://www.raspberrypi.com/software/">Raspberry Pi Imager</a>, under Use custom. Add your WiFi there if you like, or later in Settings.</span></li>
+<li style="display: flex; align-items: flex-start; gap: 16px"><span aria-hidden="true" style="flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #2E2621; color: #FFFFFF; font-family: 'Fredoka', system-ui, sans-serif; font-size: 16px; font-weight: 600">3</span><span style="color: #4B433D">Put the card in your Pi and turn it on.</span></li>
+</ol>
+</div>
+
+<div style="flex: 1 1 420px; min-width: 0; box-sizing: border-box; padding: 36px; border-radius: 28px; background: #FBFDFB; box-shadow: 0 0 0 2px #2E2621">
+<h3 style="margin: 0; font-family: 'Fredoka', system-ui, sans-serif; font-size: 25px; font-weight: 600">Or set it up yourself</h3>
+<p style="margin: 12px 0 0; color: #4B433D">On Raspberry Pi OS Lite, a PC with Ubuntu 24.04 or Debian 12 or 13, or an R36S:</p>
+<pre style="margin: 18px 0 0; padding: 20px 22px; border-radius: 16px; background: #192124; overflow-x: auto; font-family: 'Atkinson Hyperlegible Mono', ui-monospace, monospace; font-size: 15px; line-height: 1.75; color: #F3EEE8">git clone https://github.com/frogCaller/Pietato.git
+cd Pietato
+sudo bash setup.sh</pre>
+<p style="margin: 18px 0 0; color: #4B433D">It asks a few questions first, then Default puts in everything your Pi can run, or Custom lets you pick. The first time takes a while (an hour or more on a Pi 4 with everything in), so leave it on until it says All set.</p>
+</div>
+
+</div>
+</div>
+</section>
+
+<footer style="padding: 0 24px">
+<div style="max-width: 1240px; margin: 0 auto; padding: 28px 0 44px; border-top: 2px solid #2E2621; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px">
+<svg viewBox="34 10 172 230" width="24" height="32" aria-hidden="true">
+<path d="M119 44 C108 28 90 24 82 33 C90 46 107 50 119 44 Z" fill="#5DB36A" stroke="#2E2621" stroke-width="8" stroke-linejoin="round"></path>
+<path d="M121 44 C127 24 145 15 158 21 C155 37 138 48 121 44 Z" fill="#7CCB7E" stroke="#2E2621" stroke-width="8" stroke-linejoin="round"></path>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="#E7BE84"></path>
+<path d="M197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C96 222 140 217 162 195 C181 175 191 146 197 114 Z" fill="#D4A266"></path>
+<path d="M120 40 C163 38 195 66 197 114 C199 152 191 190 167 212 C147 230 95 232 73 214 C49 194 41 158 43 118 C45 72 79 42 120 40 Z" fill="none" stroke="#2E2621" stroke-width="10" stroke-linejoin="round"></path>
+<rect x="72" y="80" width="96" height="70" rx="18" fill="#24343A" stroke="#2E2621" stroke-width="8"></rect>
+<ellipse cx="102" cy="110" rx="10" ry="12" fill="#A8F0CF"></ellipse>
+<ellipse cx="138" cy="110" rx="10" ry="12" fill="#A8F0CF"></ellipse>
+</svg>
+<span style="font-family: 'Fredoka', system-ui, sans-serif; font-size: 24px; font-weight: 700; letter-spacing: -0.4px; line-height: 1; color: #2E2621"><span style="color: #D94368">Pie</span>tato</span>
+<span style="font-size: 15px; color: #5F5852">MIT licensed</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 16px">
+<a href="https://github.com/frogCaller/Pietato" style="padding: 10px 0">GitHub</a>
+<a href="https://github.com/frogCaller/Pietato/releases/latest" style="padding: 10px 0">Releases</a>
+<a href="https://github.com/frogCaller/Pietato#readme" style="padding: 10px 0">README</a>
+</div>
+</div>
+</footer>
+
+</div>
+<script>
+(function () {
+  var shots = document.querySelectorAll('[data-shot]'), tabs = document.querySelectorAll('[data-tab]'), now = 0;
+  function show(i) {
+    now = (i + shots.length) % shots.length;
+    shots.forEach(function (im, k) { im.style.opacity = k === now ? 1 : 0; im.setAttribute('aria-hidden', k === now ? 'false' : 'true'); });
+    tabs.forEach(function (b, k) { var on = k === now; b.setAttribute('aria-pressed', on); b.style.color = on ? '#2E2621' : '#5F5852';
+      b.style.boxShadow = 'inset 0 -3px 0 ' + (on ? '#2E2621' : 'transparent'); });
+  }
+  tabs.forEach(function (b) { b.addEventListener('click', function () { show(+b.dataset.tab); }); });
+  document.querySelectorAll('[data-step]').forEach(function (b) { b.addEventListener('click', function () { show(now + +b.dataset.step); }); });
+})();
+</script>
+</body>
+</html>
