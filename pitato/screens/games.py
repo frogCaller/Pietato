@@ -9,6 +9,7 @@ import threading
 import time
 import unicodedata
 import urllib.parse
+import uuid
 
 from ..asyou import read_theirs, shm_path
 from ..theme import ACCENT, BG, BODY, LINE, MUTED, ROW, TEXT
@@ -120,6 +121,23 @@ def peer_labels(peers):
             h = f"{h} ({end})"
         out.append((u, h))
     return out
+
+
+GUEST_WAITS = (1.0, 2.0, 3.0, 5.0, 8.0)   # seconds between looks at whether a guest played here has gone home
+GUESTS_TOLD = 20              # guests here said to another of yours as it comes on: no more than this
+
+
+def how_long_ago(secs):
+    """How long ago, in a few words: just now, 5 minutes ago, 2 hours ago, yesterday, 3 days ago."""
+    if secs is None or secs < 90:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)} minutes ago"
+    if secs < 86400:
+        n = int(secs // 3600)
+        return "an hour ago" if n == 1 else f"{n} hours ago"
+    n = int(secs // 86400)
+    return "yesterday" if n == 1 else f"{n} days ago"
 
 
 class GameScreen:
@@ -421,13 +439,26 @@ class GameScreen:
 
     # -- playing ---------------------------------------------------------------------
     def game_open(self, it):
-        if self.here_take_game(it):                    # (picked on the web page, with Play here on: played there)
-            return
+        """A game, opened. it: its file, title and console, and whose game ("whose": "" this Pietato's own; another
+        of yours', here as a guest, its saves apart; not said: this one's own, unless a guest of it's here, when
+        it's asked)."""
+        if not it.get("whose") and self.here_take_game(it):   # (picked on the web page, with Play here on: played
+            return                                             #  there, from this one's own save)
         g = {"path": it["src"], "title": it["title"], "system": it.get("system", "")}
         why = self.game_cant(g)
         if why:
             self.toast(*why)
             return
+        name = save_name(g["path"])
+        whose = it.get("whose")                        # (whose game: "" this Pietato's own; another's, its guest)
+        if whose is None:                              # (not said: this one's own, unless a guest of it's here: asked)
+            guests = self.guests_here(name)
+            if guests:
+                return self.whose_ask(it, guests)
+        elif whose and whose not in savesync.guests_of(self.saves_folder(), name):
+            whose = ""                                 # (a guest that's gone home since: this one's own)
+        if whose:
+            g["whose"] = whose
         core = find_core(g["system"])
         self.stop()                                    # (music, a video, another game: the game has the speaker)
         self.game_menu = None
@@ -441,15 +472,22 @@ class GameScreen:
         self.view = "game"
         hints = [("HOME", "Its menu")] + ([("SELECT", "Coin")] if g["system"] == "neogeo" else [])
         self.render_curtain(g["title"], "Starting…", hints=hints)   # (the game draws over it)
-        came = self.saves_follow(g, lambda words: self.render_curtain(g["title"], words, hints=hints))
-        if came:
-            self.render_curtain(g["title"], f"Carrying on from {came}", hints=hints)
+        more = {}
+        if whose:                                      # (another's game, here as a guest: its saves apart from yours)
+            more["saves"] = savesync.guest_dir(self.saves_folder(), whose)
+        else:                                          # (this one's own: played on on another of yours since? Home)
+            came = self.saves_home(name, say=lambda words: self.render_curtain(g["title"], words, hints=hints))
+            if came:
+                self.render_curtain(g["title"], f"Carrying on from where you left it on {came}", hints=hints)
+        self.whose_note(name, whose or "")
         run = GameRun(g, on_change=self.game_changed)
         place = sound_place(self.setting("sound"))     # (Bluetooth headphones, if they're on: sound_tick moves it)
         try:
             turn = screen_turn()                       # (a screen on its side: the game's turned too)
+            if turn:
+                more["turn"] = turn
             run.start(core, sound=aplay_device(None, place[0]), volume=self.volume, picture=picture, options=options,
-                      **({"turn": turn} if turn else {}))
+                      **more)
         except OSError as ex:
             print(f"game: couldn't start {g['path']}: {ex}", flush=True)
             self.view = "list"
@@ -474,7 +512,8 @@ class GameScreen:
             self.toast("Play a game first: the Pi starts in the one you played last", 4)
             return
         print(f"start-up: {g['title']}, the game played last", flush=True)
-        self.game_open({"src": g["path"], "title": g["title"], "system": g["system"]})
+        self.game_open({"src": g["path"], "title": g["title"], "system": g["system"],
+                        "whose": self.whose_last(save_name(g["path"]))})   # (as it was played last: nobody's asked)
 
     @staticmethod
     def game_cant(g):
@@ -515,8 +554,8 @@ class GameScreen:
     def game_restart(self):
         """The game started again where it was (an N64 game drawn wide, or not: it takes that as it starts)."""
         g = self.game.game
-        it = {"src": g["path"], "title": g["title"], "system": g.get("system", "")}
-        self.game_end()                                # (where you are, kept)
+        it = {"src": g["path"], "title": g["title"], "system": g.get("system", ""), "whose": g.get("whose") or ""}
+        self.game_end(tell=False)                      # (where you are, kept)
         self.game_open(it)                             # (...and picked up again)
 
     # -- its players: each controller its own (the one that started it player 1, the next to press player 2...) -----
@@ -574,7 +613,7 @@ class GameScreen:
             self.watched_tick(run)                     # (watched by your others: who's come)
         if self.together_of(run) is not None:          # (played together: the other joined, left...)
             self.together_tick(run, now)
-        self.glow_game_tick(run, now)                  # (your TV backlights: where its colours go)
+        self.glow_game_tick(run, now)                  # (your LED backlights: where its colours go)
         if run.ended or (run.state == "starting" and now - self.game_since > 15):
             why = run.error or ("The game didn't start" if run.state == "starting" else "The game stopped")
             self.game_end()
@@ -866,8 +905,9 @@ class GameScreen:
             if port is not None:
                 self.game.release(self.game_button(name), port)
 
-    def game_end(self):
-        """The game ends, its saves kept (where you are, too: it picks up there next time)."""
+    def game_end(self, tell=True):
+        """The game ends, its saves kept (where you are, too: it picks up there next time). tell: a guest's Pietato
+        is told, so it takes its game home (not when it's on its way to another of yours: screens/handoff.py)."""
         run, self.game = self.game, None
         if run is None:
             return
@@ -888,8 +928,8 @@ class GameScreen:
         t = self.together_of(run)
         if t is not None:
             self.together_end(run)                     # (a link cable's save, back with yours)
-        if (t is None or t.get("host") or t.get("link")) and not self.watching_of(run):
-            self.saves_tell(run)                       # (its saves written: your other Pietatos take them)
+        if tell and (t is None or t.get("host") or t.get("link")) and not self.watching_of(run):
+            self.saves_tell(run)                       # (its saves written: a guest's Pietato takes it home)
         self.share_news()                              # (your others' lobbies: not playing it any more)
         gi = self.tab_index("games")
         if gi is not None:
@@ -901,7 +941,7 @@ class GameScreen:
                 self.sels[gi] = at
         self.dirty = True
 
-    # -- saves that follow you: your other Pietatos' (savesync.py) ------------------------------------------
+    # -- saves: each Pietato's own, and the guests' (savesync.py) ---------------------------------------------
     def saves_peers(self, addr=None):
         """Your other Pietatos heard lately ([(address, name)]), with Settings > Share with other Pietatos on, by name
         (a steady order, not who said they're there last): two of the same name with the end of their addresses
@@ -914,12 +954,25 @@ class GameScreen:
             peers = [(u, h) for u, h in peers if urllib.parse.urlsplit(u).hostname == addr]
         return peers
 
+    def saves_folder(self):
+        return os.path.join(games_dir(), SAVES_FOLDER)
+
+    def saves_id(self):
+        """This Pietato's word for itself, for whose a game's saves are: made once, and kept."""
+        with self.lock:
+            sid = savesync.whose_id(self.state.get("saves_id"))
+            if sid is not None:
+                return sid
+            sid = self.state["saves_id"] = uuid.uuid4().hex[:16]
+        self.save_state()
+        return sid
+
     def saves_playing(self):
-        """The game being played here now, by its saves' name (None: none)."""
+        """The game being played here now: (its saves' name, whose they are: "" for this one's own), or None."""
         run = self.game
         if run is None or run.ended:
             return None
-        return save_name(run.game["path"])
+        return save_name(run.game["path"]), run.game.get("whose") or ""
 
     def saves_owner(self):
         """Whose the Games folder is (the saves are theirs too): (uid, gid), or None."""
@@ -929,74 +982,263 @@ class GameScreen:
         except OSError:
             return None
 
-    def saves_follow(self, g, say=None):
-        """Before a game starts: its saves from whichever of your other Pietatos played it last, if that was later
-        than here (asked quickly: a moment at most when none has it). The name of the one they came from, or None."""
-        peers = self.saves_peers()
-        if not peers:
+    def saves_home(self, name, peers=None, say=None):
+        """This Pietato's own game, played on on another of yours (as its guest) since it was left here: its saves
+        from there, home (savesync.home: only on from where this one left it; a moment at most when none has it).
+        Before the game starts here, and when one of your others says it's played it. The name of the one they came
+        from (it's told: it lets go of them), or None."""
+        peers = self.saves_peers() if peers is None else peers
+        if not peers or not os.path.isdir(games_dir()):
             return None
-        saves, owner = os.path.join(games_dir(), SAVES_FOLDER), self.saves_owner()
+        saves, owner, me = self.saves_folder(), self.saves_owner(), self.saves_id()
         try:
             os.makedirs(saves, exist_ok=True)
             if owner:
                 os.chown(saves, *owner)
             with self.saves_lock:
-                came = savesync.pull(saves, save_name(g["path"]), peers, owner=owner,
-                                     on_fetch=(lambda host: say(f"Getting your save from {host}…")) if say else None)
+                if self.saves_playing() == (name, ""):
+                    return None                        # (being played here: as it is)
+                came = savesync.home(saves, name, me, peers, owner=owner,
+                                     on_fetch=(lambda host: say(f"Getting your game from {host}…")) if say else None)
         except Exception as ex:                        # (whatever happens, the game still starts)
             print(f"saves: {ex!r}", flush=True)
             return None
         if came:
-            print(f"saves: {save_name(g['path'])} from {came}", flush=True)
+            print(f"saves: {name}, home from {came}", flush=True)
+            there = [(u, h) for u, h in peers if h == came]
+            threading.Thread(target=self.saves_say_home, args=(name, me, there), daemon=True,
+                             name="saves-home").start()
         return came
 
+    @staticmethod
+    def saves_say_home(name, me, peers):
+        for url, _ in peers:                           # (the one it came from: it's home, so it's let go of there)
+            try:
+                savesync.post_json(f"{url}/api/saves/home", {"game": name, "whose": me, "home": True})
+            except (OSError, ValueError):
+                pass
+
     def saves_tell(self, run):
-        """A game just played here: your other Pietatos told, so they take its saves (on a thread of its own)."""
-        path = (getattr(run, "game", None) or {}).get("path")
-        peers = self.saves_peers() if path else []
-        if peers:
-            threading.Thread(target=savesync.tell, args=(save_name(path), peers), daemon=True,
+        """A game just played here. One that's another Pietato's (its guest here): your others told, so the one whose
+        it is takes it home, and it's let go of here once that one has it (on a thread of its own). This Pietato's
+        own: nothing's said (its saves are its own, and nobody else's change)."""
+        g = getattr(run, "game", None) or {}
+        if g.get("whose") and g.get("path"):
+            threading.Thread(target=self.guest_home, args=(save_name(g["path"]), g["whose"]), daemon=True,
                              name="saves-tell").start()
 
+    def guest_home(self, name, whose, there=None, waits=GUEST_WAITS):
+        """(A thread of its own.) A guest played here: your others told (the one whose game it is asks for it), then
+        looked at a few times: once that one has it as its own (or `there`, the one it was sent on to, has it), it's
+        let go of here. Till then it stays: Games asks whose game, when it's started here."""
+        for k, wait in enumerate(waits):
+            peers = self.saves_peers()
+            if not peers:
+                return
+            if k == 0 and there is None:
+                savesync.tell_home(name, whose, peers)
+            time.sleep(wait)
+            if self.guest_settle(name, whose, self.saves_peers(), there):
+                return
+
+    def guest_settle(self, name, whose, peers, there=None):
+        """A guest here that's gone home (its Pietato's own saves are just these, now), or that the one it was sent
+        on to (there: its address) has: let go of here (its saves kept, in .replaced beside them). True once it's
+        not here any more."""
+        saves = self.saves_folder()
+        with self.saves_lock:
+            gst = savesync.guests_of(saves, name).get(whose)
+        if gst is None:
+            return True
+        if self.saves_playing() == (name, whose) or not peers:
+            return False
+        for (url, host), got in savesync.ask_all(peers, name):
+            said = savesync.clean_answer(got)
+            if not (savesync.is_home(gst["files"], said, whose)
+                    or (url == there and savesync.is_there(gst["files"], said, whose))):
+                continue
+            with self.saves_lock:
+                now = savesync.guests_of(saves, name).get(whose)
+                if now is None:
+                    return True
+                if savesync.sums(now["files"]) != savesync.sums(gst["files"]) \
+                        or self.saves_playing() == (name, whose):
+                    return False                       # (played on here meanwhile: still here)
+                savesync.guest_gone(saves, whose, name)
+            print(f"saves: {name}, with {host} now", flush=True)
+            return True
+        return False
+
+    def guests_here(self, name):
+        """A game's guests here (savesync.guests_of), less the ones gone home since (your others are asked, a moment
+        at most): {whose: {"from", "via", "base", "files"}}."""
+        saves = self.saves_folder()
+        guests = savesync.guests_of(saves, name)
+        peers = self.saves_peers() if guests else []
+        if peers:
+            for whose in list(guests):
+                self.guest_settle(name, whose, peers)
+            guests = savesync.guests_of(saves, name)
+        return guests
+
+    def guests_tell(self, addr):
+        """(Another of yours, just come on.) The guests here, said to it: one that's its own game, it takes home."""
+        held = savesync.guests_held(self.saves_folder()) if os.path.isdir(games_dir()) else []
+        peers = self.saves_peers(addr) if held else []
+        if not peers:
+            return
+
+        def tell():
+            for whose, name in held[:GUESTS_TOLD]:
+                savesync.tell_home(name, whose, peers)
+        threading.Thread(target=tell, daemon=True, name="saves-tell").start()
+
     def web_saves(self, name):
-        """GET /api/saves (another of your Pietatos asking, from your network: webui.py): a game's saves here, and
-        whether it's being played here now (its saves still changing). (The control server's thread.)"""
+        """GET /api/saves (another of your Pietatos asking, from your network: webui.py): this one's word for itself,
+        a game's saves here (its own, and each guest's: whose, what it came on from), and whether each is being
+        played here now (its saves still changing). (The control server's thread.)"""
         name = savesync.game_name(name)
         if name is None:
             return {"ok": False, "error": "Which game?"}
         if self.setting("share") == "Off":
             return {"ok": True, "on": False}
-        files = savesync.save_files(os.path.join(games_dir(), SAVES_FOLDER), name)
-        return {"ok": True, "on": True, "playing": self.saves_playing() == name, "files": files,
-                "folder": os.path.join(games_dir(), SAVES_FOLDER)}
+        saves, on = self.saves_folder(), self.saves_playing()
+        guests = {whose: {"from": gst["from"], "base": gst["base"], "files": gst["files"],
+                          "playing": on == (name, whose), "folder": savesync.guest_dir(saves, whose)}
+                  for whose, gst in savesync.guests_of(saves, name).items()}
+        return {"ok": True, "on": True, "id": self.saves_id(), "name": self.own_name(), "playing": on == (name, ""),
+                "files": {},                           # (for one from before saves were each Pietato's own: none
+                "own": savesync.save_files(saves, name), "guests": guests, "folder": saves}   # of them to take)
 
     def web_saves_news(self, cmd):
-        """POST /api/saves/news: another of your Pietatos has just played a game: its saves, taken from it (on a
-        thread of its own), unless the game's being played here now."""
-        name = savesync.game_name(cmd.get("game"))
-        if name is None:
+        """POST /api/saves/news (a Pietato from before saves were each one's own, saying it's played a game): nothing
+        of its is taken."""
+        return {"ok": True}
+
+    def web_saves_home(self, cmd):
+        """POST /api/saves/home: another of your Pietatos has played a game on as a guest (whose: the Pietato whose
+        game it is): this one's own, and it's taken home, on from where this one left it (on a thread of its own);
+        or (home) says it's taken its own game home from here: the guest's let go of."""
+        name, whose = savesync.game_name(cmd.get("game")), savesync.whose_id(cmd.get("whose"))
+        if name is None or whose is None:
             return {"ok": False, "error": "Which game?"}
         peers = self.saves_peers(str(cmd.get("from") or ""))
         if not peers or not os.path.isdir(games_dir()):
             return {"ok": False, "error": "Not one of your Pietatos"}
-
-        def take():
-            if self.saves_playing() == name:
-                return
-            saves, owner = os.path.join(games_dir(), SAVES_FOLDER), self.saves_owner()
-            try:
-                os.makedirs(saves, exist_ok=True)
-                if owner:
-                    os.chown(saves, *owner)
-                with self.saves_lock:
-                    if self.saves_playing() != name:
-                        came = savesync.pull(saves, name, peers, owner=owner)
-                        if came:
-                            print(f"saves: {name} from {came}", flush=True)
-            except Exception as ex:
-                print(f"saves: {ex!r}", flush=True)
-        threading.Thread(target=take, daemon=True, name="saves-take").start()
+        if cmd.get("home") is True:
+            threading.Thread(target=self.guest_settle, args=(name, whose, peers), daemon=True,
+                             name="saves-settle").start()
+        elif whose == self.saves_id():
+            threading.Thread(target=self.saves_home, args=(name, peers), daemon=True, name="saves-home").start()
         return {"ok": True}
+
+    # -- whose game: a guest of it is here (asked as it's started) ---------------------------------------------
+    def whose_last(self, name):
+        """Whose a game was played as here, last ("": this one's own)."""
+        with self.lock:
+            last = (self.state.get("game_whose") or {}).get(name)
+        return last if savesync.whose_id(last) else ""
+
+    def whose_note(self, name, whose):
+        with self.lock:
+            kept = self.state.get("game_whose")
+            kept = dict(kept) if isinstance(kept, dict) else {}
+            if (kept.get(name) or "") == whose:
+                return
+            if whose:
+                kept[name] = whose
+            else:
+                kept.pop(name, None)
+            self.state["game_whose"] = kept
+        self.save_state()
+
+    def whose_rows(self, name, guests):
+        """What to pick from: each guest (whose, its words, when it was played here), then this Pietato's own."""
+        me = self.saves_id()
+        rows = []
+        for whose, gst in guests.items():
+            who = gst["from"] or "Another Pietato"
+            title = f"As you left it on {gst['via'] or 'another Pietato'}" if whose == me else f"{who}'s game"
+            rows.append((whose, title, f"Played here {how_long_ago(savesync.newest(gst['files']))}"))
+        own = savesync.newest(savesync.save_files(self.saves_folder(), name))
+        rows.append(("", "This Pietato's own game", "Not played here yet" if own is None
+                     else f"Played here {how_long_ago(own)}"))
+        return rows
+
+    def whose_ask(self, it, guests):
+        """A game started that has a guest here: whose game, asked (◀▶, A; X lets go of a guest)."""
+        name = save_name(it["src"])
+        rows = self.whose_rows(name, guests)
+        last = self.whose_last(name)
+        sel = next((k for k, r in enumerate(rows) if r[0] == last), 0)
+        self.whose = {"it": dict(it), "name": name, "rows": rows, "sel": sel, "from": self.view,
+                      "confirm": (None, 0.0)}
+        self.view = "whose"
+        self.dirty = True
+
+    def press_whose(self, name, repeat):
+        w = getattr(self, "whose", None)
+        if w is None:
+            self.view = "list"
+            self.dirty = True
+            return None
+        rows = w["rows"]
+        whose = rows[w["sel"]][0]
+        waiting, until = w["confirm"]
+        if name != "x":
+            w["confirm"] = (None, 0.0)
+        if name in ("left", "right", "up", "down"):
+            w["sel"] = (w["sel"] + (1 if name in ("right", "down") else -1)) % len(rows)
+        elif name in ("a", "start") and not repeat:
+            self.whose, self.view = None, w["from"]
+            self.game_open(dict(w["it"], whose=whose))
+        elif name == "x" and not repeat and whose:
+            if waiting == whose and time.monotonic() < until:
+                with self.saves_lock:
+                    savesync.guest_gone(self.saves_folder(), whose, w["name"])
+                self.toast("Forgotten here", 3)
+                guests = savesync.guests_of(self.saves_folder(), w["name"])
+                if guests:
+                    w["rows"], w["sel"], w["confirm"] = self.whose_rows(w["name"], guests), 0, (None, 0.0)
+                else:
+                    self.whose, self.view = None, w["from"]
+            else:
+                w["confirm"] = (whose, time.monotonic() + 4)
+        elif name == "b" and not repeat:
+            self.whose, self.view = None, w["from"]
+        self.dirty = True
+        return None
+
+    def render_whose(self):
+        """Whose game: the guest (or guests) of it here, and this Pietato's own, one at a time (◀▶)."""
+        w = getattr(self, "whose", None) or {"it": {"title": ""}, "rows": [("", "", "")], "sel": 0,
+                                               "confirm": (None, 0.0)}
+        F = self.fonts
+        img, d = self.canvas()
+        W, H = self.fb.w, self.fb.h
+        self.status_bar(d)
+        whose, title, sub = w["rows"][w["sel"]]
+        sure = w["confirm"][0] == whose and whose and time.monotonic() < w["confirm"][1]
+        rows = [(w["it"].get("title", ""), F["big"], TEXT),
+                ("Whose game?", F["small"], MUTED),
+                (f"◀  {title}  ▶", F["row_b"], TEXT),
+                ("X again lets go of it here" if sure else sub, F["small"], BODY),
+                ("It's apart from this Pietato's own, and goes back where it came from" if whose
+                 else "Its own save, as it was left here", F["small"], MUTED)]
+        gaps = {id(F["big"]): 44, id(F["row_b"]): 34}
+        total = sum(gaps.get(id(f), 26) for _, f, _ in rows)
+        cw = min(W - 40, 560)
+        x0, y0 = (W - cw) / 2, max(self.LIST_TOP, (H - self.FOOTER - total - 36) / 2)
+        d.rounded_rectangle((x0 - 1, y0 - 1, x0 + cw + 1, y0 + total + 37), radius=17, fill=LINE)
+        d.rounded_rectangle((x0, y0, x0 + cw, y0 + total + 36), radius=16, fill=ROW)
+        y = y0 + 18
+        for text, font, colour in rows:
+            h = gaps.get(id(font), 26)
+            d.text((W / 2, y + h / 2), self.fit(d, text, font, cw - 40), font=font, fill=colour, anchor="mm")
+            y += h
+        self.footer(d, [("A", "Play"), ("◀▶", "Whose")] + ([("X", "Forget it")] if whose else []) + [("B", "Back")],
+                    always=True)
+        self.fb.show(img)
 
     # -- its menu (HOME) -------------------------------------------------------------------
     def game_home(self):

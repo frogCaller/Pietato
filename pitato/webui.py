@@ -104,7 +104,7 @@ BAD_CHARS = re.compile(r"[\x00-\x1f\x7f/\\]")
 CONTROL = ("127.0.0.1", 5480)                   # pitato.py's media mode, on this Pi only
 CONTROL_KEY = "/run/pitato/control-key"       # ...and the key it asks for (made at its start)
 PI_GET = {"state", "screen", "catalog", "channels", "radio", "icon", "cameras", "camframe", "friend", "friendpic",
-          "computers", "bluetooth", "settings", "places", "fish", "fishpic", "glow"}
+          "computers", "bluetooth", "settings", "places", "fish", "fishpic", "glow", "wall"}
 PI_POST = {"press", "open", "play", "show", "here_move", "here_back", "player", "learn", "mode", "reset_pads", "pad_swap",
            "camera", "friend",
            "computer", "bluetooth", "settings", "tap", "swipe", "scroll", "type", "term", "save", "fishfeed", "fishgrid"}
@@ -315,8 +315,8 @@ def host_ok():
 
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
-PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news",   # your other Pietatos ask these
-              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party")
+PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
+              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party")     # Pietatos ask these
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1076,8 +1076,9 @@ def shared():
     return resp
 
 
-# ---- game saves that follow you from Pi to Pi (pitato/savesync.py asks these of your other Pietatos) -----------
+# ---- game saves: each Pietato's own, and its guests' (pitato/savesync.py asks these of your other Pietatos) -----
 SAVE_EXTS = (".srm", ".rtc", ".state", ".state.cheevos", ".state.auto", ".state.auto.cheevos")   # (savesync.py's)
+SAVE_WHOSE = re.compile(r"[a-z0-9]{6,32}")     # (savesync.py's WHOSE: a Pietato's word for itself)
 GAME_SAVES = "Saves"           # (games.py's SAVES_FOLDER: in the Games folder)
 SAVES_REPLACED = ".replaced"   # (savesync.py's REPLACED: in it, what a newer save took the place of)
 
@@ -1110,11 +1111,14 @@ def saves_here(game):
 
 @app.get("/api/saves")
 def saves():
-    """A game's saves here, for your other Pietatos: how big, how old, and their sums."""
+    """A game's saves here, for your other Pietatos: this one's own and each guest's (how big, how old, their sums)."""
     st = saves_here(request.args.get("game", "")[:300])
     if st is None:
         return jsonify(ok=False, error="Pietato isn't answering"), 503
     st.pop("folder", None)
+    for gst in (st.get("guests") or {}).values() if isinstance(st.get("guests"), dict) else ():
+        if isinstance(gst, dict):
+            gst.pop("folder", None)
     resp = jsonify(st)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -1122,13 +1126,20 @@ def saves():
 
 @app.get("/api/saves/file")
 def saves_file():
-    """One of a game's saves, for another of your Pietatos: only one media mode has just listed."""
-    game, ext = request.args.get("game", "")[:300], request.args.get("ext", "")
+    """One of a game's saves, for another of your Pietatos (whose: a guest's here; this one's own without it): only
+    one media mode has just listed, and not while it's being played."""
+    game, ext, whose = request.args.get("game", "")[:300], request.args.get("ext", ""), request.args.get("whose", "")
     st = saves_here(game)
     if st is None:
         return jsonify(ok=False, error="Pietato isn't answering"), 503
-    files, folder = st.get("files"), st.get("folder")
-    if (not st.get("on") or st.get("playing") or ext not in SAVE_EXTS or not isinstance(files, dict)
+    lot = st
+    if whose:
+        guests = st.get("guests")
+        lot = guests.get(whose) if isinstance(guests, dict) and SAVE_WHOSE.fullmatch(whose) else None
+    if not isinstance(lot, dict):
+        lot = {}
+    files, folder = lot.get("files" if whose else "own"), lot.get("folder")
+    if (not st.get("on") or lot.get("playing") or ext not in SAVE_EXTS or not isinstance(files, dict)
             or ext not in files or not isinstance(folder, str)):
         return jsonify(ok=False, error="No such save"), 404
     path = os.path.join(folder, game + ext)
@@ -1139,7 +1150,7 @@ def saves_file():
 
 @app.post("/api/saves/news")
 def saves_news():
-    """Another of your Pietatos has just played a game: this one takes its saves."""
+    """(A Pietato from before saves were each one's own, saying it's played a game: nothing's taken.)"""
     body = request.get_json(silent=True)
     game = body.get("game") if isinstance(body, dict) else None
     if not isinstance(game, str) or len(game) > 300:
@@ -1147,9 +1158,21 @@ def saves_news():
     return pi_reply(ask_pi("POST", "/savenews", {"game": game, "from": request.remote_addr}, timeout=10))
 
 
+@app.post("/api/saves/home")
+def saves_home():
+    """Another of your Pietatos has played a game on as a guest (whose: the Pietato whose game it is; this one takes
+    its own home), or says it's taken its own game home from here."""
+    body = request.get_json(silent=True)
+    game, whose = (body.get("game"), body.get("whose")) if isinstance(body, dict) else (None, None)
+    if not isinstance(game, str) or len(game) > 300 or not isinstance(whose, str) or not SAVE_WHOSE.fullmatch(whose):
+        return jsonify(ok=False, error="Which game?"), 400
+    return pi_reply(ask_pi("POST", "/savehome", {"game": game, "whose": whose, "home": body.get("home") is True,
+                                                  "from": request.remote_addr}, timeout=10))
+
+
 # ---- what you're playing, sent from one of your Pietatos to another (pitato/handoff.py) -----------------------------
 HANDOFF_KEYS = ("kind", "check", "file", "system", "rel", "name", "title", "size", "sum", "media", "src", "pos",
-                "view", "page", "fit", "zoom", "at", "sx", "first", "frac", "big", "rot", "keep")
+                "view", "page", "fit", "zoom", "at", "sx", "first", "frac", "big", "rot", "keep", "whose", "who", "base")
 
 
 @app.post("/api/handoff")
@@ -1322,8 +1345,9 @@ def pi_get(what):
         return resp
     slow = what in ("channels", "radio", "camframe", "computers", "places")   # these ask the internet, a camera or
                                                                                # a computer
-    cache = "private, max-age=86400" if what in ("icon", "friendpic", "fishpic") else "no-store"   # (these never
-                                                                                                   # change)
+    cache = "private, max-age=86400" if what in ("icon", "friendpic", "fishpic") else \
+        "private, max-age=3600" if what == "wall" else "no-store"   # (those never change; a background's little
+                                                                    # picture might, with new software)
     return pi_reply(ask_pi("GET", path, timeout=40 if slow else 10), cache=cache)
 
 
@@ -1673,6 +1697,10 @@ LOOPBACK = "/proc/asound/Loopback"
 SOUND_FROM = "hw:Loopback,1,0"                  # the Pi's sound, out of the card
 MIC_TO = "hw:Loopback,0,1"                      # a page's microphone, into it (the bot hears it at 1,1)
 SOUND_RATE, SOUND_CHUNK = 48000, 3840           # two 16-bit channels at 48 kHz: 20 ms a chunk
+SOUND_PIECE = (20000, 200000)                   # ...as arecord hands it over (its period and its buffer, in microseconds:
+                                                # left to itself, it'd be an eighth of a second at a time, each as late)
+SOUND_OWN = 0.03                                # seconds from the Pi playing a sound to a page having it, near enough
+SOUND_LATE_MOST = 2.0                           # ...and from then to its being heard there, as the page says: at most
 MIC_RATE, MIC_MOST = 16000, 64 << 10            # one 16-bit channel at 16 kHz (the bot's ears' own); bytes a request
 SAY_EVERY = 5.0                                 # seconds between telling media mode a page is still there
 SOUND_HEARD = 6.0                               # seconds without a page saying it's playing the sound (a phone that
@@ -1681,9 +1709,10 @@ MIC_QUIET = 3.0                                 # seconds without a page's micro
 NO_LOOPBACK = "Run sudo bash setup.sh again on the Pi to add this"
 
 
-def tell_pi(what, on):
-    """Media mode told Sound here (or Mic here) is on or off: its answer, or {} when it isn't answering."""
-    got = ask_pi("POST", "/" + what, {"on": on}, timeout=5)
+def tell_pi(what, on, **more):
+    """Media mode told Sound here (or Mic here) is on or off (more: how late a page hears the sound): its answer, or
+    {} when it isn't answering."""
+    got = ask_pi("POST", "/" + what, dict(more, on=on), timeout=5)
     try:
         return json.loads(got[1]) if got and got[0] == 200 else {}
     except ValueError:
@@ -1692,16 +1721,30 @@ def tell_pi(what, on):
 
 class SoundOut:
     """arecord on the Loopback card while a page listens, every chunk to every page listening (one that falls behind
-    loses the oldest)."""
+    loses the oldest). Media mode's told a page is playing it, and how late it's heard there (the latest of them, with
+    more than one listening): an LED grid's beats come with the sound."""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.pages = set()
         self.proc = None
         self.heard = 0.0                             # when a page last said it's playing what it gets
+        self.lates = {}                              # ...and how late it hears it: who -> (seconds, when it said)
 
-    def playing(self):
-        self.heard = time.monotonic()
+    def playing(self, late=None, who=""):
+        now = time.monotonic()
+        self.heard = now
+        if isinstance(late, (int, float)) and not isinstance(late, bool) and 0 <= late <= SOUND_LATE_MOST:
+            with self.lock:
+                self.lates = {w: v for w, v in self.lates.items() if now - v[1] < SOUND_HEARD}
+                self.lates[who] = (float(late), now)
+
+    def late(self):
+        """How late the page that hears it last hears it (seconds after the Pi plays it), or None before one's said."""
+        now = time.monotonic()
+        with self.lock:
+            lates = [v[0] for v in self.lates.values() if now - v[1] < SOUND_HEARD]
+        return max(lates) + SOUND_OWN if lates else None
 
     def join(self):
         q = queue.Queue(maxsize=50)                  # (a second)
@@ -1711,7 +1754,8 @@ class SoundOut:
             if self.proc is None:
                 try:
                     self.proc = subprocess.Popen(["arecord", "-q", "-D", SOUND_FROM, "-f", "S16_LE", "-r", str(SOUND_RATE),
-                                                  "-c", "2", "-t", "raw"], stdout=subprocess.PIPE,
+                                                  "-c", "2", "-t", "raw", f"--period-time={SOUND_PIECE[0]}",
+                                                  f"--buffer-time={SOUND_PIECE[1]}"], stdout=subprocess.PIPE,
                                                  stderr=subprocess.DEVNULL)
                 except OSError:
                     self.pages.discard(q)
@@ -1752,12 +1796,15 @@ class SoundOut:
         proc.wait()
 
     def say(self, proc):
-        told, at = None, 0.0
+        told, at, late_told = None, 0.0, None
         while self.proc is proc and proc.poll() is None:
-            on = time.monotonic() - self.heard < SOUND_HEARD
-            if on != told or time.monotonic() - at >= SAY_EVERY:
-                tell_pi("websound", on)                # (off while no page is playing it: the Pi plays it)
-                told, at = on, time.monotonic()
+            now = time.monotonic()
+            on = now - self.heard < SOUND_HEARD
+            late = self.late() if on else None
+            news = late is not None and now - at >= 1.0 and (late_told is None or abs(late - late_told) > 0.03)
+            if on != told or news or now - at >= SAY_EVERY:   # (off while no page is playing it: the Pi plays it)
+                tell_pi("websound", on, **({"late": round(late, 3)} if late is not None else {}))
+                told, at, late_told = on, time.monotonic(), late
             time.sleep(0.25)
         if self.proc is None:                          # (not if another page started listening meanwhile)
             tell_pi("websound", False)
@@ -1827,6 +1874,10 @@ def sound_out():
     q = SOUND.join()
     if q is None:
         return jsonify(error="The Pi couldn't start sending its sound"), 503
+    try:                                               # (each piece sent as it comes, not kept for the next one)
+        request.environ["werkzeug.socket"].setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except (KeyError, OSError, AttributeError):
+        pass
 
     def chunks():
         try:
@@ -1846,8 +1897,9 @@ def sound_out():
 @app.post("/api/sound")
 def sound_playing():
     """A page playing the Pi's sound says so every couple of seconds (one that's stopped, a phone that locked, doesn't:
-    then the Pi plays it again)."""
-    SOUND.playing()
+    then the Pi plays it again), and how long after it comes it's heard there."""
+    body = request.get_json(silent=True)
+    SOUND.playing((body if isinstance(body, dict) else {}).get("late"), request.remote_addr or "")
     return jsonify(ok=True)
 
 

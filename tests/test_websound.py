@@ -1,6 +1,7 @@
 """Sound here and Mic here, on the Pi's side: with a web page listening (webui.py says so every few seconds), the Pi's
 sound goes to it through the Loopback card (pietato_web, mixed): mplayer's, aplay's, a game's, the bot's voice; what's
 playing moves there and back as it does to Bluetooth headphones; it goes back by itself when webui.py stops saying so.
+How late the page's listener hears it (webui.py says, once the page has) is kept while it's on, for an LED grid's beats.
 The Loopback card is never a speaker in Settings > Sound, nor a microphone in Settings > Bot. With a page's microphone
 coming in, the bot listens to it instead of the Pi's, and to the Pi's again after it."""
 import json, os, shutil, sys, time
@@ -95,17 +96,25 @@ m.active = True
 song = g.item(S + "/home/u/a.mp3", "a.mp3", "audio", S + "/home/u/a.mp3")
 m.play([song], 0)
 check("a song plays through the Pi", spawned and "alsa:device=pietato_web,alsa" not in spawned[-1])
+check("how late a page hears it, with none listening: no later", SC.web_late() == 0.0)
 out = m.web_command({"cmd": "websound", "on": True})
 check(f"webui.py: a page listens ({out})", out == {"ok": True} and SC.web_sound())
+check(f"...how late it hears it, before it's said: a fifth of a second, likely ({SC.web_late()})", SC.web_late() == 0.2)
+m.web_command({"cmd": "websound", "on": True, "late": 0.31})
+check(f"...said: that ({SC.web_late()})", SC.web_late() == 0.31)
+for junk in (True, -0.1, 9, "0.5", None, [0.1]):
+    m.web_command({"cmd": "websound", "on": True, "late": junk})
+check(f"...nonsense said: as it was ({SC.web_late()})", SC.web_late() == 0.31)
 m.pos = 40.0
 m.sound_tick(time.monotonic())
 check(f"...the song moves to it, playing on ({spawned[-1][spawned[-1].index('-ao') + 1]}, {toasts[-1:]})",
       len(spawned) == 2 and "alsa:device=pietato_web,alsa" in spawned[-1] and "Sound through the web page" in toasts
       and not m.paused)
-m.web_command({"cmd": "websound", "on": False})
+m.web_command({"cmd": "websound", "on": False, "late": 0.5})
 m.sound_tick(time.monotonic())
 check(f"...the page stops: back to the Pi, playing on, not paused ({toasts[-1:]})", len(spawned) == 3
       and "alsa:device=pietato_web,alsa" not in spawned[-1] and not m.start_paused and not m.paused)
+check(f"...and no later than the Pi plays it ({SC.web_late()})", SC.web_late() == 0.0 and SC.WEB_SOUND["late"] == 0.31)
 m.web_command({"cmd": "websound", "on": True})
 check("...again", SC.web_sound())
 SC.WEB_SOUND["until"] = time.monotonic() - 1          # (webui.py stopped saying so)

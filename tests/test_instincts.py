@@ -1,18 +1,20 @@
-"""The AI player's instincts (pitato/instincts.py) and its live play (pitato/anygame.py), on pretend games made here:
-a pseudo-3D racing game (a road with bends, grass, rumble strips, the car at the bottom; off the road it's slow, and
-there's a wall), the same with the view on the top half of a split screen and a dirt road, and on an N64 (the stick);
-a side-scrolling platformer (pipes to jump, pits, enemies; the camera follows); a fighting game's and a shooter's
-buttons. Checked: what kind of game it is from its name, and what its buttons do from what's said of them; the racer
-keeps on the road through the bends and goes much further than holding the gas alone; the platformer gets much
-further than running alone; and the live loop: the decision model asked on its own thread while it plays (the game
-not held up), its picks followed (Start on the title screen, then Drive), the kind of game the coach says taken up,
-and a model that doesn't answer: it plays on, pressing on through a still screen."""
-import math, os, random, sys, threading, time
+"""The AI player's instincts (pitato/instincts.py) and its live play (pitato/anygame.py), on pretend games
+(tests/pretend_games.py): a pseudo-3D racing game (a road with bends, grass, rumble strips, the car at the bottom;
+off the road it's slow, and there's a wall), the same with the view on the top half of a split screen and a dirt
+road, and on an N64 (the stick); a side-scrolling platformer (pipes to jump, pits, enemies; the camera follows); a
+fighting game's and a shooter's buttons. Checked: what kind of game it is from its name, and what its buttons do
+from what's said of them; the racer keeps on the road through the bends and goes much further than holding the gas
+alone; the platformer gets much further than running alone; and the live loop: the decision model asked on its own
+thread while it plays (the game not held up), Start pressed on the title screen and then the race driven, the kind of
+game the coach says taken up, a model that doesn't answer (it gets the game going and plays on by itself), and a
+game from its start whose title screen looks like a level. (tests/test_start_screens.py has the ways games start.)"""
+import os, random, sys, threading, time
 import numpy as np
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, ROOT)
 from PIL import Image
 from pitato import anygame as AG, gameai as A, instincts as I
+from pretend_games import PLAYS, Level, Race, always, play_on, silent as silent_model
 
 ok_all = []
 
@@ -29,7 +31,15 @@ for title, kind in (("Super Mario Kart", "racing"), ("F-Zero", "racing"), ("Rad 
                     ("Mortal Kombat II", "fighting"), ("Gradius III", "shooter"), ("Contra", "shooter"),
                     ("Tetris", "puzzle"), ("Dr. Mario", "puzzle"), ("Pokemon - Emerald Version", "rpg"),
                     ("Final Fantasy VI", "rpg"), ("The Legend of Zelda - A Link to the Past", "adventure"),
-                    ("Mario Tennis", "sports"), ("Mario Party 2", "other"), ("nestest", "other")):
+                    ("Mario Tennis", "sports"), ("Mario Party 2", "other"), ("nestest", "other"),
+                    ("Shrek 2", "platformer"), ("Speedy Gonzales - Los Gatos Bandidos", "platformer"),
+                    ("Crash Team Racing", "racing"), ("Diddy Kong Racing", "racing"), ("Sonic R", "racing"),
+                    ("Sonic Rush", "platformer"), ("Streets of Rage 2", "fighting"), ("Bionic Commando", "platformer"),
+                    ("Batman Returns", "platformer"), ("X-Men vs. Street Fighter", "fighting"),
+                    ("Secret of Mana", "rpg"), ("Castle of Illusion Starring Mickey Mouse", "platformer"),
+                    ("Space Harrier", "shooter"), ("Golden Axe", "fighting"), ("Golden Axe Warrior", "adventure"),
+                    ("Adventures of Lolo", "puzzle"), ("Kirby's Pinball Land", "other"), ("Deadpool", "other"),
+                    ("Tails Adventure", "platformer"), ("Tales of Phantasia", "rpg"), ("Lunar Pool", "sports")):
     got = I.guess_kind(title.lower())
     check(f"{title}: {got}", got == kind)
 SNES = ["A", "B", "X", "Y", "L", "R", "Start", "Select"]
@@ -56,117 +66,7 @@ check(f"the kind, from what a model says ({I.kind_of('A 2D side-scrolling platfo
       == "platformer" and I.kind_of("Kart racing") == "racing" and I.kind_of("turn-based RPG") == "rpg")
 
 
-# ---- a racing game -------------------------------------------------------------------------------------------------
-class Race:
-    """A pseudo-3D racing game: the road's middle bends by its curvature, the camera behind the car; the car's
-    across the road (px, metres from the middle), its speed, how far it's gone. Off the road it's slow; the wall
-    stops it."""
-    W, H, HORIZON, CAM, F = 256, 224, 90, 1.5, 160.0
-    R, WALL = 4.0, 6.5                               # the road's half-width, and the wall from the middle
-    VMAX = 50.0
-
-    def __init__(self, split=False, dirt=False, curves=None):
-        self.split, self.dirt = split, dirt
-        self.curves = curves or [(300, 0.0), (400, 0.004), (200, 0.0), (400, -0.005), (200, 0.0), (300, 0.006),
-                                 (300, -0.006), (250, 0.0), (350, 0.005), (300, -0.004)]
-        self.z, self.px, self.v = 0.0, 0.0, 0.0
-        self.held, self.sticks = set(), {}
-        self.gas, self.brake = "b", "y"
-        self.on_road = self.frames = self.crashes = 0
-        self.title = False
-        self.view_h = 112 if split else self.H
-
-    def k(self, z):
-        z %= sum(n for n, _ in self.curves)
-        for n, k in self.curves:
-            if z < n:
-                return k
-            z -= n
-        return 0.0
-
-    def steer(self):
-        if "lx" in self.sticks:
-            return self.sticks["lx"] / 127.0
-        return ("right" in self.held) - ("left" in self.held)
-
-    def step(self, dt=1 / 60):
-        self.frames += 1
-        if self.title:
-            self.title = "start" not in self.held
-            return
-        gas, brake = self.gas in self.held, self.brake in self.held
-        v = self.v + (12.0 if gas else -3.0) * dt - (20.0 if brake else 0.0) * dt
-        off = abs(self.px) > self.R
-        if off and v > 18.0:
-            v -= 25.0 * dt
-        self.v = max(-5.0, min(self.VMAX, v))
-        self.px += (self.steer() * (3.0 + 0.25 * abs(self.v)) - self.k(self.z) * self.v * self.v * 0.6) * dt
-        if abs(self.px) > self.WALL:
-            self.px = math.copysign(self.WALL, self.px)
-            if abs(self.v) > 5:
-                self.crashes += 1
-            self.v = 0.0
-        self.z += self.v * dt
-        self.on_road += not off
-
-    def frame(self):
-        W, H = self.W, self.view_h
-        img = np.zeros((self.H, W, 3), np.uint8)
-        if self.title:
-            img[:] = (20, 20, 80)
-            img[60:90, 60:196] = (220, 200, 40)
-            if (self.frames // 30) % 2:
-                img[150:160, 90:166] = (255, 255, 255)
-            return Image.fromarray(img)
-        horizon = self.HORIZON * H // self.H
-        img[:horizon] = (100, 150, 255)
-        xs = np.arange(W)
-        cum, step_d = [], 1.0                                 # the road's middle, ahead: where it's bent to
-        off, slope, d = 0.0, 0.0, 0.0
-        for i in range(400):
-            cum.append(off)
-            slope += self.k(self.z + d) * step_d
-            off += slope * step_d
-            d += step_d
-        for y in range(horizon + 1, H):
-            D = self.CAM * self.F / (y - horizon) * (H / self.H)
-            if D > 399:
-                D = 399
-            cx = W / 2 + (cum[int(D)] - self.px) * self.F / D
-            half = self.R * self.F / D
-            rum = 0.4 * self.F / D
-            band = int((self.z + D) / 8) % 2
-            if self.dirt:
-                grass, road = ((70, 150, 50) if band else (60, 135, 45)), ((150, 110, 60) if band else (140, 102, 55))
-            else:
-                grass, road = ((40, 160, 40) if band else (30, 140, 30)), ((110, 110, 110) if band else (100, 100, 100))
-            row = np.empty((W, 3), np.uint8)
-            row[:] = grass
-            dist = np.abs(xs - cx)
-            row[dist < half] = road
-            if not self.dirt:
-                row[(dist >= half) & (dist < half + rum)] = (200, 30, 30) if band else (230, 230, 230)
-                if band and D < 60:
-                    row[dist < 0.12 * self.F / D] = (240, 240, 240)
-            img[y] = row
-        cy = H - 46 * H // self.H                              # the car, at the bottom in the middle
-        img[cy:cy + 22, 112:144] = (200, 20, 20)
-        img[cy + 14:cy + 22, 108:116] = img[cy + 14:cy + 22, 140:148] = (10, 10, 10)
-        img[cy + 2:cy + 8, 118:138] = (60, 60, 90)
-        if self.split:                                         # a black bar, then a map of the track below
-            img[H:H + 4] = (0, 0, 0)
-            img[H + 4:] = (30, 90, 30)
-            for t in range(0, 360, 3):
-                x = int(128 + 90 * math.cos(math.radians(t)))
-                yy = int(H + 4 + 50 + 40 * math.sin(math.radians(t)))
-                if H + 4 <= yy < self.H:
-                    img[yy, max(0, x - 2):x + 2] = (160, 160, 160)
-            a = (self.z / 1000.0) % 1 * 2 * math.pi
-            img[int(H + 54 + 40 * math.sin(a)) - 2:int(H + 54 + 40 * math.sin(a)) + 2,
-                int(128 + 90 * math.cos(a)) - 2:int(128 + 90 * math.cos(a)) + 2] = (255, 0, 0)
-        return Image.fromarray(img)
-
-
+# ---- a racing game (tests/pretend_games.py's Race) ----------------------------------------------------------------
 def drive(race, secs, inst=None, gas_only=False):
     """Plays the race for so many seconds of its time: the instinct's steps (or just the gas)."""
     t = 0.0
@@ -237,104 +137,7 @@ check(f"hit the wall: it backs up (the brake held) and steers back onto the road
       f"the middle, {wall.z:.0f} m on)", backed and abs(wall.px) < wall.R and wall.z > 50)
 
 
-# ---- a platformer -----------------------------------------------------------------------------------------------------
-class Level:
-    """A side-scrolling platformer: 16-pixel tiles, the floor two tiles deep, pipes to jump over, pits, enemies
-    walking at you (jump on them, or they get you); the camera follows. Falling in a pit, or into an enemy: back to
-    the last checkpoint."""
-    W, H, T = 256, 224, 16
-
-    def __init__(self, length=200):
-        self.length = length
-        self.pipes = {20: 2, 42: 3, 68: 2, 72: 3, 96: 4, 120: 2, 150: 3, 175: 4}
-        self.pits = [(30, 3), (58, 2), (85, 4), (108, 3), (135, 3), (162, 4)]
-        self.enemies = [[50 * 16.0, 1], [115 * 16.0, 1], [140 * 16.0, 1], [185 * 16.0, 1]]
-        self.x, self.y, self.vx, self.vy = 3 * 16.0, 12 * 16.0 - 24, 0.0, 0.0
-        self.ground = True
-        self.held = set()
-        self.deaths, self.best, self.frames = 0, 0.0, 0
-        self.jumped = False
-        self.frozen = 0
-
-    def solid(self, tx, ty):
-        if tx < 0:
-            return True
-        if ty >= 12:
-            return not any(s <= tx < s + w for s, w in self.pits)
-        h = self.pipes.get(tx) or self.pipes.get(tx - 1)
-        return bool(h) and ty >= 12 - h
-
-    def die(self):
-        self.deaths += 1
-        cp = max(3, (int(self.x // 16) // 25) * 25 + 3)
-        while not self.solid(cp, 12) or self.solid(cp, 11):
-            cp += 1
-        self.x, self.y, self.vx, self.vy = cp * 16.0, 12 * 16.0 - 24, 0.0, 0.0
-        self.frozen = 40
-
-    def step(self):
-        self.frames += 1
-        if self.frozen:
-            self.frozen -= 1
-            return
-        run, jump = "y" in self.held, "b" in self.held
-        want = ("right" in self.held) - ("left" in self.held)
-        self.vx = want * (2.5 if run else 1.5)
-        if jump and self.ground and not self.jumped:
-            self.vy, self.ground, self.jumped = -6.0, False, True
-        if not jump:
-            self.jumped = False
-        self.vy += 0.22 if (jump and self.vy < 0) else 0.6
-        self.vy = min(self.vy, 8.0)
-        nx = self.x + self.vx                                   # across: pipes stop it
-        top, bottom = int(self.y // 16), int((self.y + 23) // 16)
-        lead = int((nx + 13) // 16) if self.vx > 0 else int(nx // 16)
-        if not any(self.solid(lead, ty) for ty in range(top, bottom + 1)):
-            self.x = nx
-        ny = self.y + self.vy                                   # up and down: floors and pipe tops
-        self.ground = False
-        if self.vy > 0:
-            feet = int((ny + 24) // 16)
-            if any(self.solid(tx, feet) for tx in (int(self.x // 16), int((self.x + 13) // 16))):
-                ny, self.vy, self.ground = feet * 16 - 24.0, 0.0, True
-        self.y = ny
-        if self.y > self.H + 40:
-            return self.die()
-        for e in self.enemies:                                  # enemies: walk at you; jumped on, they're gone
-            if e[1]:
-                e[0] -= 0.6
-                if abs(e[0] - self.x) < 14 and 12 * 16 - 14 - 24 <= self.y <= 12 * 16 - 14 + 4:
-                    if self.vy > 0 and self.y < 12 * 16 - 14 - 12:
-                        e[1], self.vy = 0, -4.0
-                    else:
-                        return self.die()
-        self.best = max(self.best, self.x)
-
-    def frame(self):
-        W, H = self.W, self.H
-        cam = max(0.0, self.x - 112)
-        img = np.zeros((H, W, 3), np.uint8)
-        img[:] = (100, 150, 255)
-        img[8:16, 8:80] = (255, 255, 255)                       # (a score along the top)
-        for sx in range(W):
-            tx = int((sx + cam) // 16)
-            if self.solid(tx, 12):
-                img[192:, sx] = (180, 100, 40) if (tx % 2) else (160, 88, 36)
-            h = self.pipes.get(tx) or self.pipes.get(tx - 1)
-            if h:
-                img[192 - 16 * h:192, sx] = (40, 180, 60)
-        for e in self.enemies:
-            if e[1]:
-                ex = int(e[0] - cam)
-                if -16 < ex < W:
-                    img[178:192, max(0, ex):max(0, ex + 14)] = (120, 30, 20)
-        px, py = int(self.x - cam), int(self.y)
-        if py < H:
-            img[max(0, py):max(0, py + 12), px:px + 14] = (220, 40, 40)
-            img[max(0, py + 12):max(0, min(H, py + 24)), px:px + 14] = (40, 40, 200)
-        return Image.fromarray(img)
-
-
+# ---- a platformer (tests/pretend_games.py's Level) ----------------------------------------------------------------
 def play_level(level, secs, inst=None, hold=None):
     t = 0.0
     while t < secs:
@@ -449,18 +252,19 @@ class Owner:
 
 
 class LiveIO:
-    """What anygame needs of gameai's GameIO, on a pretend game (real time: the game moves on as it waits)."""
+    """What anygame needs of gameai's GameIO, on a pretend game (real time: the game moves on as it waits). pressed:
+    every button as it went down. A game with a title screen (title): Start gets past it."""
 
     def __init__(self, game, model):
         self.g, self.model = game, model
         self.ai = Owner()
         self.held, self.pushed, self.sticks = set(), set(), {}
         self.blind, self.last_by = False, "model"
-        self.asked, self.logged, self.statuses, self.taps = [], [], [], []
+        self.asked, self.logged, self.statuses, self.pressed, self.was = [], [], [], [], set()
         self.lock = threading.Lock()
         self.looks = 0
         self.t0 = time.monotonic()
-        self.most = 8.0
+        self.most = 10.0
 
     def live(self):
         if self.ai.stopping.is_set() or time.monotonic() - self.t0 > self.most:
@@ -480,6 +284,10 @@ class LiveIO:
                 break
             time.sleep(min(left, 1 / 60))
             with self.lock:
+                new, self.was = self.held - self.was, set(self.held)
+                self.pressed += sorted(new)
+                if "start" in new and getattr(self.g, "title", False):
+                    self.g.title = False
                 self.g.held, self.g.sticks = set(self.held), dict(self.sticks)
                 self.g.step()
 
@@ -503,9 +311,6 @@ class LiveIO:
         self.held, self.sticks = set(), {}
 
     def tap(self, b):
-        self.taps.append(b)
-        if b == "start" and getattr(self.g, "title", False):
-            self.g.title = False
         self.held.add(b)
         self.advance(0.05)
         self.held.discard(b)
@@ -522,6 +327,9 @@ class LiveIO:
 
     def log(self, **e):
         self.logged.append(e)
+
+    def said(self, words):
+        return any(words in str(e.get("event")) for e in self.logged)
 
 
 def racer(game, choices, fallback):
@@ -549,9 +357,9 @@ ch = asked[0]["choices"] if asked else {}
 check(f"...its choices: Drive, and the buttons for a menu ({len(ch)}); told it's a racing game, what's going on now "
       f"({asked[-1]['state'].get('now') if asked else None!r})", "drive" in ch and "start" in ch and "a" in ch
       and asked[-1]["state"].get("kind of game") == "racing" and "Drive" in asked[-1]["says"])
-check(f"...Start pressed on the title screen ({io.taps}), then it drove: {race.z:.0f} m, on the road "
-      f"{100 * race.on_road / max(1, race.frames):.0f}% of the time", io.taps.count("start") >= 1 and not race.title
-      and race.z > 150 and race.on_road / max(1, race.frames) > 0.85)
+check(f"...Start pressed on the title screen ({io.pressed[:4]}...), then it drove: {race.z:.0f} m, on the road "
+      f"{100 * race.on_road / max(1, race.frames):.0f}% of the time", io.pressed.count("start") >= 1
+      and not race.title and race.z > 150 and race.on_road / max(1, race.frames) > 0.85)
 
 
 class Coach:
@@ -613,7 +421,7 @@ def silent(game, choices, fallback):
 race = Race()
 race.title = True
 io = LiveIO(race, silent)
-io.most = 9.0
+io.most = 12.0
 p = AG.AnyGame({"title": "F-Zero (USA)", "system": "snes"}, io)
 try:
     p.play()
@@ -621,7 +429,7 @@ except A.emerald.Stop:
     pass
 check(f"the model not answering: the title screen sat still, so it pressed on (Start), then raced by "
       f"instinct ({race.z:.0f} m; {[e['event'] for e in io.logged if 'answering' in str(e.get('event'))][:1]})",
-      not race.title and race.z > 100 and any("isn't answering" in str(e.get("event")) for e in io.logged))
+      not race.title and race.z > 100 and io.said("isn't answering") and p.presser.going)
 
 # ---- a game from its start: past its title screen (Start), whatever the model says ---------------------------------------
 class TitledLevel(Level):
@@ -637,6 +445,7 @@ class TitledLevel(Level):
         start = "start" in self.held
         edge, self.was = start and not self.was, start
         if self.title:
+            self.title = not edge                        # (Start: into the game)
             self.demo += 1
             self.frames += 1
             return
@@ -670,50 +479,45 @@ class TitledLevel(Level):
         return super().frame()
 
 
-def sure_its_playing(game, choices, fallback):
-    time.sleep(0.2)                                   # (a level, it thinks: the title screen looks like one)
-    return ("go_right" if "go_right" in choices else fallback), "model"
-
-
+sure_its_playing = always(PLAYS, latency=0.2)        # (a level, it thinks: the title screen looks like one)
+MARIO = ("Super Mario World (USA)", "snes")          # (the pretend level's buttons are a Super Nintendo's)
 lvl = TitledLevel()
-io = LiveIO(lvl, sure_its_playing)
-io.most = 12.0
-p = AG.AnyGame({"title": "Super Mario Bros. (World)", "system": "nes"}, io)
-try:
-    p.play()
-except A.emerald.Stop:
-    pass
-said = [e["event"] for e in io.logged if "Start" in str(e.get("event")) or "went somewhere" in str(e.get("event"))]
+io, p = play_on(lvl, *MARIO, sure_its_playing, 25.0)
+starts = [t for t, b in io.pressed if b == "start"]
 check(f"a game from its start, its title screen like a level with a demo of its own, the model sure it's playing: "
-      f"Start pressed a few seconds in ({io.taps}), into the game, and on through the level ({lvl.best:.0f} px; "
-      f"{said[:2]})", io.taps[:1] == ["start"] and not lvl.title and not lvl.paused and lvl.best > 3 * 16 + 150
-      and any("went somewhere" in e for e in said))
+      f"Start pressed a few seconds in ({starts[:1]}), into the game, and on through the level ({lvl.best:.0f} px); "
+      f"it's found to be the game for sure (Start paused it, so Start again: {lvl.pauses} pauses), and left playing",
+      starts and starts[0] <= 5 and not lvl.title and not lvl.paused and lvl.best > 3 * 16 + 1200
+      and io.said("another screen") and io.said("paused the game") and p.presser.going and p.presser.sure
+      and lvl.pauses % 2 == 0)
 
 lvl = TitledLevel()
 lvl.title = False                                     # (going already: Start pauses it)
-io = LiveIO(lvl, sure_its_playing)
-io.most = 10.0
-p = AG.AnyGame({"title": "Super Mario Bros. (World)", "system": "nes"}, io)
-try:
-    p.play()
-except A.emerald.Stop:
-    pass
-check(f"...a game going already: Start paused it, so it pressed Start again, and played on ({io.taps}, "
-      f"{lvl.pauses} pauses, {lvl.best:.0f} px)", io.taps == ["start", "start"] and lvl.pauses == 2
-      and not lvl.paused and lvl.best > 3 * 16 + 100)
+io, p = play_on(lvl, *MARIO, sure_its_playing, 20.0)
+check(f"...a game going already when it's turned on: it plays on; Start paused it, so Start again ({lvl.pauses} "
+      f"pauses, {lvl.best:.0f} px)", lvl.pauses >= 2 and lvl.pauses % 2 == 0 and not lvl.paused
+      and lvl.best > 3 * 16 + 1000 and io.said("paused the game") and p.presser.sure)
 
 lvl = TitledLevel()
 lvl.title = False
-io = LiveIO(lvl, sure_its_playing)
-io.run = type("Run", (), {"resumed": True})()        # (from where you were in it: a save of yours)
-io.most = 7.0
-p = AG.AnyGame({"title": "Super Mario Bros. (World)", "system": "nes"}, io)
-try:
-    p.play()
-except A.emerald.Stop:
-    pass
-check(f"...a game it carries on from where you were: no Start ({io.taps})", "start" not in io.taps
-      and lvl.pauses == 0)
+io, p = play_on(lvl, *MARIO, silent_model, 12.0)
+check(f"...the same with no model answering: it walks a moment, the screen moves with it, so it's the game: no "
+      f"Start at all ({[b for _, b in io.pressed if b == 'start']}), and on by instinct ({lvl.best:.0f} px)",
+      not any(b == "start" for _, b in io.pressed) and lvl.pauses == 0 and lvl.best > 3 * 16 + 800
+      and io.said("moves as it's walked") and p.presser.sure)
+
+lvl = TitledLevel()
+io, p = play_on(lvl, *MARIO, silent_model, 25.0)
+check(f"...from its start with no model answering: taken for the game when its own demo moved (wrongly), Start "
+      f"pressed to see, and then into the game ({lvl.best:.0f} px)", not lvl.title and not lvl.paused
+      and lvl.best > 3 * 16 + 1000 and io.said("It wasn't going yet") and p.presser.sure)
+
+lvl = TitledLevel()
+lvl.title = False
+io, p = play_on(lvl, *MARIO, sure_its_playing, 12.0, resumed=True)
+check(f"...a game it carries on from where you were (a save of yours): no Start "
+      f"({[b for _, b in io.pressed if b == 'start']})", not any(b == "start" for _, b in io.pressed)
+      and lvl.pauses == 0 and lvl.best > 3 * 16 + 800)
 
 
 # ---- the decision model's thread: an answer that's no longer wanted; a pick from another kind's choices ----------------
@@ -748,6 +552,7 @@ p = AG.AnyGame({"title": "Super Mario Kart (USA)", "system": "snes"}, io)
 p.make_instinct()
 check(f"...and a pick that isn't one of this kind's: passed over, no error ({p.follow(('go_right', 'model'), None)}, "
       f"{p.mode})", p.mode == "menu")
+io.ai.stopping.set()
 
 
 class Run:                                           # (a game that won't give its picture)

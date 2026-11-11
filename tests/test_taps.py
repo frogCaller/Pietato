@@ -188,6 +188,25 @@ touch("scroll", y=50)                                  # (twice: more rows than 
 check(f"the wheel down a long way: the last row, never round to the top ({m.set_sel} of {len(srows)})",
       m.set_sel == len(srows) - 1)
 
+# ---- Settings > Background: its page of little pictures, each one tappable ----------------------------------------
+m.set_page = "root"; m.set_sel = next(i for i, r in enumerate(srows) if r[0] == "wallpaper")
+m.press("a")
+draw()
+walls = [w for _, w in m.taps if w[:3] == ("sel", "attr", "set_sel")]
+check(f"Settings > Background: each one on its page tappable ({len(walls)} of {len(g.WALLPAPERS)})",
+      m.set_page == "wallpaper" and len(walls) == len(g.WALLPAPERS))
+mint = g.WALLPAPERS.index("Mint")
+x, y = spot(lambda w: w == ("sel", "attr", "set_sel", mint))
+names, _ = tap(x, y)
+check(f"...a tap on Mint: picked and used, in one tap ({names}, {m.setting('wallpaper')})", names == ["a"]
+      and m.setting("wallpaper") == "Mint" and m.set_page == "wallpaper" and m.set_sel == mint)
+x, y = spot(lambda w: w == ("keys", "b"))
+tap(x, y)
+check("...Back, along the bottom: Settings' rows again", m.set_page == "root" and m.view == "list")
+m.set_setting("wallpaper", "Midnight")
+m.set_sel = len(srows) - 1
+draw()
+
 # ---- the keyboard on the screen, and typing from the web page -----------------------------------------------------
 got = []
 m.open_keyboard("Search", "", lambda text: got.append(text), local=True)

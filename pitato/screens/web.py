@@ -12,12 +12,12 @@ from ..nearby import PEER_KEPT
 from ..util import classify, IMAGE_EXTS, item, title_of
 from ..net import cam_address, cam_host, cam_is_local, cam_key
 from ..fine import detail
-from ..screen import fine_scale, grab_screen, screen_size, slow_pi, web_sound, WEB_SOUND
+from ..screen import fine_scale, grab_screen, screen_size, slow_pi, web_sound, WEB_LATE_MOST, WEB_SOUND
 from ..term import console_vt
 from ..radio import RADIO_GENRES, RADIO_STATIONS, RADIO_TTL, rb_stations
 from ..tv import CLASSIC, FILM_BADGES, FILMS, live_pick, TOON_BADGES
 from ..library import LIBRARY, LISTEN_KINDS, read_streams, RENAMED, SCREEN_KINDS, VOLUME_STEP
-from ..home import draw_icon, HOME_ICONS
+from ..home import draw_icon, HOME_ICONS, WALLS, wallpaper
 from ..cameras import CAM_FOUND_FOR, edit_cameras, read_cameras
 from ..voice import BOT_VOICES, VOICE_MB, voices_here
 from ..listen import LISTEN_MB, have_vosk, supported as listen_supported
@@ -648,6 +648,8 @@ class WebScreen:
         if self.game_ai_on():
             return {"ok": True, "note": "The AI player is playing it on the Pi"}
         g = run.game
+        if g.get("whose"):                             # (its saves aren't this one's own: the browser plays those)
+            return {"ok": True, "note": "Another Pietato's game stays on the Pi"}
         it = {"src": g["path"], "title": g["title"], "system": g.get("system", "")}
         self.here_begin(True)
         out = {"ok": True}
@@ -680,6 +682,19 @@ class WebScreen:
             return {"error": why[0]}
         self.game_open({"src": path, "title": title, "system": system})
         return {"ok": True} if self.game is not None else {"error": "The game didn't start on the Pi"}
+
+    def web_wall(self, name):
+        """One of the home screen's backgrounds as a little picture, for the web page's Settings > Background (None:
+        no such one, or Picture: that's yours)."""
+        if not isinstance(name, str) or name not in WALLS:
+            return None
+        kept = self.web_walls
+        if name not in kept:
+            from PIL import Image
+            buf = io.BytesIO()
+            wallpaper(name, (384, 216)).resize((192, 108), Image.LANCZOS).save(buf, "PNG")
+            kept[name] = buf.getvalue()
+        return kept[name]
 
     def web_icon(self, name, size=96):
         """The home screen's icon for an app, for the web page (None: no such app)."""
@@ -714,7 +729,7 @@ class WebScreen:
                           "stations": [list(x) for x in RADIO_STATIONS],
                           "genres": [g[0] for g in RADIO_GENRES]},
                 "streams": [[it["title"], it.get("sub", ""), it["src"]] for it in read_streams(streams["files"])],
-                "plex": self.plex.signed_in, "glow": self.glow_can()}   # (glow: Library's TV backlight, on a Pi that
+                "plex": self.plex.signed_in, "glow": self.glow_can()}   # (glow: Library's LED backlight, on a Pi that
                                                                         # can have one)
 
     def web_channels(self, what):
@@ -902,17 +917,20 @@ class WebScreen:
         if c == "sketch":                              # (opened already, by the control server)
             return self.web_sketch(cmd.get("image"))
         if c == "websound":                            # (webui.py: a page plays the Pi's sound, still; or stopped)
-            return self.web_sound_set(cmd.get("on") is True)
+            return self.web_sound_set(cmd.get("on") is True, cmd.get("late"))
         if c == "webmic":                              # (...a page's microphone is coming in, still; or stopped)
             return self.web_mic_set(cmd.get("on") is True)
         return {"error": "Unknown request"}
 
     # -- Sound here and Mic here: a web page's speaker and microphone, the Pi's (webui.py keeps saying so) ------------
-    def web_sound_set(self, on):
+    def web_sound_set(self, on, late=None):
         """Sound here, on for a while more (or off): the Pi's sound goes to the web page, through the Loopback card. What's
-        playing moves there, and back, as it does to Bluetooth headphones (sound_tick)."""
+        playing moves there, and back, as it does to Bluetooth headphones (sound_tick). late: how much later than the
+        Pi plays it the page's listener hears it (seconds), once the page has said."""
         was = web_sound()
         WEB_SOUND["until"] = time.monotonic() + WEB_HOLD if on else 0.0
+        if on and type(late) in (int, float) and 0 <= late <= WEB_LATE_MOST:
+            WEB_SOUND["late"] = float(late)
         if was != on:
             self.sound_look = 0.0                      # (sound_tick: now)
             if self.active and not self.proc_owns_screen():

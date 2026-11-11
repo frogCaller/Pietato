@@ -866,7 +866,7 @@ class Core:
         self.gpu, self.hw, self.gpu_error = None, None, ""   # (a game drawn in 3D: the graphics chip)
         self.log_cb = LOG(self.log)
         self.logged = 0                                # (lines it's put in the log)
-        self.on_rumble = None                          # a game shaking a controller: said (the TV backlight's red)
+        self.on_rumble = None                          # a game shaking a controller: said (the LED backlight's red)
         self.rumble_cb = RUMBLE(self.rumble)
         self.missing = []                              # the chips an arcade game's zip hasn't got, as its emulator says
         self.disk, self.disk_ext = None, False         # (a game on discs: changing them)
@@ -985,7 +985,7 @@ class Core:
         C.cast(data, C.POINTER(C.c_char_p))[0] = value
 
     def rumble(self, port, effect, strength):
-        """A game shaking a controller (it's been hit, mostly): passed on (glow.py: the TV backlight flashes red)."""
+        """A game shaking a controller (it's been hit, mostly): passed on (glow.py: the LED backlight flashes red)."""
         try:
             if self.on_rumble is not None:
                 self.on_rumble(int(port), int(effect), int(strength))
@@ -1373,7 +1373,7 @@ class Session:
             self.screen.close()
             raise
         self.sound = Sound(args.sound, self.core.av.timing.sample_rate, args.volume)
-        self.core.on_rumble = self.glow_rumble        # (a hit: your TV backlight flashes red)
+        self.core.on_rumble = self.glow_rumble        # (a hit: your LED backlight flashes red)
         self.ra = None                                # its achievements (RetroAchievements), if you're signed in
         self.ra_said = None                           # ...how many are yours, as media mode was last told
         self.cheevos_start()
@@ -1417,14 +1417,14 @@ class Session:
             self.glow_frame(a, fmt)
         self.stats[3] += time.perf_counter() - t
 
-    # -- your TV backlight (glow.py: an LED grid behind the TV, on another of your Pietatos or this one) -------------
+    # -- your LED backlight (glow.py: an LED grid behind the TV, on another of your Pietatos or this one) -------------
     def glow_aim(self, words):
         """Where the picture's colours go now (glow ADDRESS:PORT ...; glow -: nowhere)."""
         to = glow.targets(words)
         if to and self.glow is None:
             self.glow, self.edges, self.hits = glow.GlowOut(), glow.Edges(), glow.HitWatch()
         if self.glow is not None:
-            self.glow.aim(to)
+            self.glow.aim(to, glow.lamp_targets(words))   # (lights of your own: a picture to a few at a time)
 
     def glow_frame(self, a, fmt):
         """The picture's edges, to the LEDs (GLOW_EVERY at most; one the graphics chip drew: from the screen)."""
@@ -1444,7 +1444,7 @@ class Session:
                 colours = self.edges.colours(view, glow.rgb_fields(self.screen.fields))
             self.glow.frame(colours)
         except Exception as ex:                       # (never the game's end: just no colours)
-            print(f"game: the TV backlight stopped ({ex!r})", file=sys.stderr, flush=True)
+            print(f"game: the LED backlight stopped ({ex!r})", file=sys.stderr, flush=True)
             self.glow.aim(())
 
     def glow_hit(self, strength):
@@ -2022,7 +2022,7 @@ class Session:
         self.cheevos_tell(*self.cheevos_counts())
         self.say("cheevo", (ach.get("title") or "").replace("\n", " "))
         if self.glow is not None:
-            self.glow.event("cheevo")                 # (your TV backlight: gold)
+            self.glow.event("cheevo")                 # (your LED backlight: gold)
 
     def cheevos_login(self, result, message):
         """Signed in, or not: its key turned down (or too old), or RetroAchievements not reached (no word of it
@@ -2137,7 +2137,7 @@ class Session:
         elif what == "watchstop":
             self.watch_stop()
             self.say("watchstopped")
-        elif what == "glow":                           # where the picture's colours go: your TV backlight's grids
+        elif what == "glow":                           # where the picture's colours go: your LED backlight's grids
             self.glow_aim(words[1:])
         elif what == "notice":                         # a few words over the picture, for a few seconds
             self.screen.notice([" ".join(words[1:])[:80]])
@@ -2380,7 +2380,7 @@ class Session:
         self.net_stop()                               # (the other's told: it's left)
         self.watch_stop()                             # (...and so are the ones watching)
         if self.glow is not None:
-            self.glow.close()                         # (your TV backlight: it goes dark by itself)
+            self.glow.close()                         # (your LED backlight: it goes dark by itself)
         if self.watch is not None:
             self.watch.bye()
         try:

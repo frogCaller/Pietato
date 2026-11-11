@@ -2,8 +2,9 @@
 looks at the game's screen and picks what to do. Any game (pitato/anygame.py), coached by your Bot's model
 (pitato/coach.py: what kind of game it is and how it's played, what to aim for and how, worked out from what it knows
 and from the screen now and then, and kept for next time beside the game's saves, with your tips: Games/Saves/<game>
-.ai-notes.txt): an action game (racing, a platformer, fighting, a shooter) is played by instinct, many times a second
-(pitato/instincts.py), the model saying when and which way; any other, a move at a time, the model picking each.
+.ai-notes.txt): it gets the game going by itself (Start, then A, through its title screen, menus and text); an
+action game (racing, a platformer, fighting, a shooter) is then played by instinct, many times a second
+(pitato/instincts.py), the model saying which way; any other, a move at a time, the model picking each.
 Pokémon Emerald has a player of its own (pitato/emerald.py): it knows the story, and does what it can from the game's
 memory, a button at a time; the model picks at each moment that needs a decision. The model is assumed to see (the
 game's screen goes with each pick); one that turns out not to is asked without it from then on. It plays on a thread

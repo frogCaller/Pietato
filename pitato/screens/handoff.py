@@ -13,6 +13,7 @@ import shutil
 import threading
 import time
 import urllib.error
+import urllib.parse
 
 from ..config import CACHE_DIR, web_private
 from ..fine import detail, made_fine, scale
@@ -120,7 +121,9 @@ class HandoffScreen:
     # -- sending a game ------------------------------------------------------------------------------------
     def game_send(self):
         """The game, to the one picked: asked whether it can, then ended here (its saves kept) and picked up there
-        from the same moment. A cartridge it hasn't got goes too."""
+        from the same moment, as that one's guest (its own save of the game stays as it is). A cartridge it hasn't
+        got goes too. A game that's a guest here goes on (or back) as whose it is, and is let go of here once the
+        other has it."""
         run, target = self.game, self.handoff_target()
         if run is None:
             return
@@ -143,17 +146,31 @@ class HandoffScreen:
         if not said.get("ok"):
             self.toast(f"{host}: {said.get('error') or 'it can’t play it'}", 5)
             return
+        if said.get("guest") is not True:              # (one from before saves were each Pietato's own: it'd put
+            self.toast(f"{host} needs updating first: System > Update software there", 6)   # this over its own)
+            return
         copy = not said.get("have")
         if copy and (ident["size"] > GAME_COPY_MOST or g["path"].lower().endswith(ONE_FILE)):
             self.toast(f"{host} doesn't have this game. Put it in its Games folder too", 5)
             return
         key = self.handoff_keys().issue(g["path"]) if copy else ""
-        self.game_end()                                # (where you are, kept: it's what it picks up)
-        said = handoff_post(url, dict(ident, kind="game", file=key), HANDOFF_GO)
+        self.game_end(tell=False)                      # (where you are, kept: it's what it picks up)
+        saves, name, guest = self.saves_folder(), ident["name"], g.get("whose") or ""
+        note = savesync.guest_note(saves, guest, name) if guest else None
+        if note is not None:                           # (another's game, a guest here: on as whose it is)
+            whose, who, base = guest, note["from"], note["base"]
+        else:                                          # (this one's own: on from its saves as they are now)
+            whose, who = self.saves_id(), self.own_name()
+            base = savesync.sums(savesync.save_files(saves, name))
+        said = handoff_post(url, dict(ident, kind="game", file=key, whose=whose, who=who, base=base), HANDOFF_GO)
         if said is not None and said.get("ok"):
             self.toast(f"Playing on {host} now. Its menu there sends it back", 5)
+            if note is not None:                       # (let go of here, once that one has it)
+                threading.Thread(target=self.guest_home, args=(name, guest, url), daemon=True,
+                                 name="saves-sent").start()
         else:
             self.toast(f"{not_sent(host, said)}. It picks up here next time", 6)
+            self.saves_tell(run)                       # (a guest that stays, then: its Pietato may take it home)
 
     # -- sending a video, a song or a station --------------------------------------------------------------------
     def media_sendable(self):
@@ -816,14 +833,18 @@ class HandoffScreen:
         games = games_dir()
         mine = None if why else local_game(games, ident, [g["path"] for g in find_games()
                                                           if g["system"] == ident["system"]], save_name)
-        if cmd.get("check") is True:
-            return {"ok": True, "have": bool(mine)} if why is None else {"ok": False, "error": why}
+        if cmd.get("check") is True:                   # (guest: it's kept apart from this one's own save here)
+            return {"ok": True, "have": bool(mine), "guest": True} if why is None else {"ok": False, "error": why}
         if why:
             return {"ok": False, "error": why}
         if not self.web_ready():
             return {"ok": False, "error": "There's no screen to show it on"}
+        whose = savesync.whose_id(cmd.get("whose"))
+        if whose is None:                              # (one from before saves were each Pietato's own)
+            return {"ok": False, "error": "This Pietato needs updating first (System > Update software)"}
+        guest = (whose, savesync.clean_who(cmd.get("who")), savesync.clean_base(cmd.get("base")))
         if mine:
-            self.soon_jobs.append(lambda: self.handoff_open(mine, ident, url, host))
+            self.soon_jobs.append(lambda: self.handoff_open(mine, ident, url, host, guest))
             return {"ok": True}
         key = cmd.get("file")
         if not isinstance(key, str) or not TOKEN.fullmatch(key) or ident["size"] > GAME_COPY_MOST:
@@ -841,26 +862,63 @@ class HandoffScreen:
                 print(f"handoff: {ident['title']} from {host}: {ex}", flush=True)
                 self.soon_jobs.append(lambda: self.toast(f"Couldn't copy {ident['title']} from {host}", 5))
             else:
-                self.soon_jobs.append(lambda: self.handoff_open(dest, ident, url, host))
+                self.soon_jobs.append(lambda: self.handoff_open(dest, ident, url, host, guest))
             self.wake()
         threading.Thread(target=copy, daemon=True, name="handoff-game").start()
         return {"ok": True}
 
-    def handoff_open(self, path, ident, url, host):
-        """A game sent from another of your Pietatos, opened: its saves first, from that one (where you were there,
-        even if this one's played it since: what's playing here ends first, its own saves kept as ever)."""
+    def handoff_saves(self, name, url, host, guest):
+        """A game sent from another of your Pietatos: its saves, from that one (guest: whose game it is, that one's
+        name, what it came on from). Another's game: into a folder of its own here, as this one's guest (this one's
+        own save of the game stays as it is). This one's own game, back from where it was sent: its own saves, on
+        from where they were left (played here since: a guest too, and this one's own stay). (Whose it's to be played
+        as here: "" this one's own; whether its saves came), or None when they should have and didn't. That one has
+        none to send (a game with no save yet, or one too big to carry): this one's own, as ever."""
+        whose, who, base = guest
+        saves, owner, me = self.saves_folder(), self.saves_owner(), self.saves_id()
+        os.makedirs(saves, exist_ok=True)
+        with self.saves_lock:
+            said = savesync.clean_answer(savesync.ask_json(f"{url}/api/saves?game={urllib.parse.quote(name)}"))
+            if said is None:
+                return None
+            theirs = said["own"] if said["id"] == whose else (said["guests"].get(whose) or {}).get("files")
+            if not theirs:
+                return "", False
+            ask = "" if said["id"] == whose else whose   # (that one's own saves, or its guest's)
+            mine = savesync.sums(savesync.save_files(saves, name))
+            if whose == me and mine in (base, savesync.sums(theirs)):   # (home, on from where this one left it)
+                return ("", True) if savesync.take(saves, name, url, theirs, whose=ask, owner=owner) else None
+            if not savesync.take(savesync.guest_dir(saves, whose), name, url, theirs, whose=ask, owner=owner):
+                return None
+            savesync.guest_keep(saves, whose, name, who, host, base, owner=owner)
+            return whose, True
+
+    def handoff_open(self, path, ident, url, host, guest):
+        """A game sent from another of your Pietatos, opened where it was there: as this one's guest, its saves apart
+        from this one's own (handoff_saves). What's playing here ends first, its own saves kept as ever. Its saves
+        didn't come: said, and nothing's opened (it's as it was left there). It had none to send: this one's own
+        game, and said."""
         if not self.web_ready():
             return
         self.stir()
         self.stop()
-        saves, owner = os.path.join(games_dir(), SAVES_FOLDER), self.saves_owner()
         try:
-            os.makedirs(saves, exist_ok=True)
-            with self.saves_lock:
-                savesync.pull(saves, ident["name"], [(url, host)], owner=owner, force=True)
-        except Exception as ex:                        # (it starts all the same: from here's)
+            got = self.handoff_saves(ident["name"], url, host, guest)
+        except Exception as ex:
             print(f"handoff: {ident['title']}'s saves from {host}: {ex!r}", flush=True)
-        self.game_open({"src": path, "title": ident["title"], "system": ident["system"]})
+            got = None
+        if got is None:
+            self.toast(f"Couldn't get {ident['title']} from {host}. It's as you left it there", 6)
+            return
+        whose, came = got
+        self.game_open({"src": path, "title": ident["title"], "system": ident["system"], "whose": whose})
+        if self.game is None:
+            pass
+        elif not came:                                 # (none there to bring: from this one's own)
+            self.toast(f"{host} had no save of it to send. This Pietato's own game", 6)
+        elif whose:                                    # (its own, played here since it left: both kept)
+            self.toast((f"As you left it on {host}" if whose == self.saves_id() else f"{guest[1] or host}'s game")
+                       + ". This Pietato's own save stays as it is", 6)
         self.handoff_to = url                          # (its menu here sends it back: that one's picked)
 
     def handoff_take_media(self, cmd, url, host):

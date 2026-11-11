@@ -5,7 +5,8 @@ sound, and kept; each one that takes it gets the same bytes from the same one on
 sound cards (aplay here logs when each bit is heard): two started for the same time play the same sound at the same
 moment, one told late or whose sound card's clock runs fast or slow too, they pause and play on together, and a
 song's end is known; and kept in step without a click (a tone through it, a sound card taking it a period at a time
-as ALSA does, one running fast and kept waiting a moment, a pause faded out and in). Then two Pietatos: this one
+as ALSA does, one running fast and kept waiting a moment, a pause faded out and in; a jump into silence at a piece's
+end, its fade out going on into the next piece). Then two Pietatos: this one
 ("gpi") and the TV's in a process of its own (peer_pietato.py, "tv"). A song plays here; HOME's menu has Party mode;
 the TV's asked, sets its clock against this one's, and from then on plays what this one plays, in step (taken from
 this one's web page): A here pauses both, A on the TV plays both on, R on the TV skips both to the next song. A song
@@ -348,6 +349,30 @@ for speed, pause in (("1.0", True), ("1.001", False)):
           f"{', paused and on again' if pause else ', kept waiting a moment'}: kept in step ({drift:+.1f} ms) without "
           f"a click ({clicks})",
           clicks == 0 and abs(drift) < P.PARTY_SLACK * 1000 + 1)
+# a jump into silence (it's ahead of the clock) just as a piece ends, with room for only some of its fade out: the rest
+# of the fade goes into the next piece (cut short there, it'd click)
+os.environ["FAKE_OUT"] = f"{S}/tone-cut.raw"
+open(os.environ["FAKE_OUT"], "wb").close()
+pl = P.PartyPlayer(TONE, time.monotonic() + 600, volume=100)   # (not for ten minutes: none of it's played meanwhile)
+for _ in range(200):
+    if pl.decoded:
+        break
+    time.sleep(0.05)
+pl.closed = True                                       # (its own feeding stops: its pieces made by hand, from here)
+time.sleep(0.3)
+pl.anchor = (100.0, 0)
+pieces = [pl.next_out(100.0, RATE)]                    # (a second of it, from its start)
+pl.drift = -0.2 * RATE                                 # (a fifth of a second ahead of the clock, and known to be)
+pieces.append(pl.next_out(100.8, 100))                 # (the jump, in a piece of 100 samples: its fade out is 240)
+left = None if pl.tail is None else len(pl.tail)
+pieces.append(pl.next_out(100.8 + 100 / RATE, 4800))
+pl.close()
+cut = np.frombuffer(b"".join(pieces), dtype="<i2").reshape(-1, 2)[:, 0].astype(np.float64)[240:]   # (past its fade in)
+clicks = int(np.sum(np.abs(np.diff(cut, 2)) > LIMIT))
+check(f"a jump into silence with room for only some of its fade out: the rest of it in the next piece ({left} samples "
+      f"of it), no click ({clicks}), then silence ({int(np.abs(cut[-2400:]).max())})",
+      left == int(P.PARTY_FADE * RATE) - 100 and clicks == 0 and np.abs(cut[RATE - 240:RATE - 140]).max() > 1000
+      and np.abs(cut[-2400:]).max() == 0 and pl.tail is None)
 os.environ["PATH"] = was_path
 
 # ---- two Pietatos ------------------------------------------------------------------------------------------------------

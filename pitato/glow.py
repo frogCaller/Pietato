@@ -1,4 +1,4 @@
-"""TV backlight: an 8x8 grid of WS2812B LEDs behind your TV (or a strip of them round its edges: each LED takes the
+"""LED backlight: an 8x8 grid of WS2812B LEDs behind your TV (or a strip of them round its edges: each LED takes the
 colour of the grid's edge nearest it), lit with the colours along the edges of the game you're playing, on another of
 your Pietatos (or this one). The one playing samples each picture's edges (Edges) and sends them
 over UDP about 30 times a second (GlowOut: a packet each, nothing waiting for an answer). What happens in the game goes
@@ -7,10 +7,13 @@ controller), an achievement, and music's beats as they're heard (Beats: party.py
 The one with the grid (Grid) takes them from your Pietatos only, follows one of them (or whichever's playing), smooths
 the colours, flashes red or gold or with the beat, and lights the LEDs through the Pi's SPI (Strip: GPIO 10, its MOSI,
 so nothing needs installing). With nothing lighting it, it shows a colour of your own (or a rainbow), or goes dark.
-screens/glow.py has its page in Apps (backlight.py draws it), and says where a game's colours go."""
+A light of your own on the network (an ESP32 board's LED: esp32/pietato_led) is sent the same packets: it says it's
+there (Lamps), and keeps time itself. screens/glow.py has its page in Apps (backlight.py draws it), and says where a
+game's colours go."""
 import collections
 import errno
 import fcntl
+import ipaddress
 import math
 import os
 import random
@@ -31,6 +34,13 @@ INSIDE = 0.8                 # the LEDs behind the middle of the TV: as bright a
 MAGIC, VERSION = b"PG", 1
 HEAD = struct.Struct(">2sBcd")   # magic, version, kind (F: a picture's colours; E: something happening; M: music),
 EVENT = struct.Struct(">dB")     # when it was sent (the sender's clock). E: when it shows (its clock too), how hard
+LAMP_PORT = 5449             # a light of your own on the network (an ESP32's LED) says it's there, here (UDP: kind L,
+LAMP = struct.Struct(">H")   # then how many LEDs it has, and its name), every couple of seconds
+LAMP_HEARD = 8.0             # ...and is lit, as a grid is, for this long after it last said so
+LAMPS_MOST = 64              # no more of them than this
+LAMPS_EACH = 2               # a game's picture goes to this many of them, in turn (30 pictures a second: so 60 packets
+                             # a second in all, however many there are; a beat or a hit goes to every one at once)
+LAMP_NAME = 24               # bytes of a light's name
 EVENTS = ("hit", "cheevo", "beat")
 HIT_GAP = 0.4                # seconds: one hit at a time (a game shaking the controller does it again and again)
 RUMBLE_HIT = 0x3000          # how hard a game shakes player 1's controller before it's a hit
@@ -250,15 +260,112 @@ def read_packet(data):
     return None
 
 
+def lamp_packet(name, count, sent):
+    """What a light of your own says, to say it's there (esp32/pietato_led says it; this is for the tests)."""
+    return HEAD.pack(MAGIC, VERSION, b"L", sent) + LAMP.pack(max(1, min(0xFFFF, int(count)))) \
+        + name.encode("utf-8", "replace")[:LAMP_NAME]
+
+
+def read_lamp(data):
+    """A light's word that it's there ({"name", "count": its LEDs}), or None: not one, or not right."""
+    if not HEAD.size + LAMP.size <= len(data) <= HEAD.size + LAMP.size + LAMP_NAME:
+        return None
+    magic, version, kind, sent = HEAD.unpack_from(data)
+    (count,) = LAMP.unpack_from(data, HEAD.size)
+    if magic != MAGIC or version != VERSION or kind != b"L" or not count:
+        return None
+    name = "".join(c for c in data[HEAD.size + LAMP.size:].decode("utf-8", "replace") if c.isprintable()).strip()
+    return {"name": name or "light", "count": count}
+
+
+def on_your_network(ip):
+    """An address on your own network (a private one, or this Pi's own)."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return a.is_private or a.is_link_local or a.is_loopback
+
+
+class Lamps:
+    """Lights of your own on the network (an ESP32's own LED, or a strip on one: esp32/pietato_led), found by
+    themselves: each says it's there every couple of seconds (UDP, to everyone on your network), and is lit as your
+    grids are for as long as it does: music's beats, a game's colours, a hit, an achievement. Each takes those at
+    GLOW_PORT, as a grid does, and keeps time itself: a beat is one small packet to each. Only ones on your network."""
+
+    def __init__(self, port=LAMP_PORT, clock=time.monotonic):
+        self.clock = clock
+        self.lock = threading.Lock()
+        self.heard = {}                                # address -> (when it last said it's there, its name, its LEDs)
+        self.closed = False
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            self.sock.bind(("", port))
+        except OSError:
+            self.sock.close()
+            raise
+        self.port = self.sock.getsockname()[1]
+        threading.Thread(target=self.listen, daemon=True, name="lamps").start()
+
+    def listen(self):
+        while not self.closed:
+            try:
+                data, addr = self.sock.recvfrom(256)
+            except OSError:
+                if self.closed:
+                    return
+                time.sleep(0.5)
+                continue
+            self.take(data, addr[0], self.clock())
+
+    def take(self, data, ip, now):
+        """A packet from ip, heard at now: True if it's a light of yours saying it's there."""
+        p = read_lamp(data)
+        if p is None or not on_your_network(ip):
+            return False
+        with self.lock:
+            if ip not in self.heard and len(self.heard) >= LAMPS_MOST:
+                self.heard = {k: v for k, v in self.heard.items() if now - v[0] <= LAMP_HEARD}
+                if len(self.heard) >= LAMPS_MOST:
+                    return False
+            self.heard[ip] = (now, p["name"], p["count"])
+        return True
+
+    def on(self, now=None):
+        """The lights there now: [(address, name, its LEDs)], by address."""
+        now = self.clock() if now is None else now
+        with self.lock:
+            self.heard = {k: v for k, v in self.heard.items() if now - v[0] <= LAMP_HEARD}
+            return [(ip, v[1], v[2]) for ip, v in sorted(self.heard.items())]
+
+    def close(self):
+        self.closed = True
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
 def targets(words):
     """Where a game's colours go, as media mode says them ("10.0.0.7:5448 127.0.0.1:5448", or "-" for nowhere):
-    [(address, port)]."""
+    [(address, port)]. A light of your own has a + before it ("+10.0.0.9:5448": lamp_targets() has just those)."""
     out = []
     for w in words:
-        host, _, port = w.rpartition(":")
+        host, _, port = w[1:].rpartition(":") if w.startswith("+") else w.rpartition(":")
         if re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host or "") and port.isdigit() and 0 < int(port) < 65536:
             out.append((host, int(port)))
     return out
+
+
+def lamp_targets(words):
+    """Those of them that are lights of your own (a + before each): a picture's colours go to them a few at a time."""
+    return targets([w for w in words if w.startswith("+")])
+
+
+def target_words(to, lamps=()):
+    """...and how media mode says them, for these [(address, port)] (the ones in lamps: lights of your own)."""
+    return " ".join(("+" if a in lamps else "") + f"{a[0]}:{a[1]}" for a in to) or "-"
 
 
 class GlowOut:
@@ -269,33 +376,52 @@ class GlowOut:
         self.clock = clock
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setblocking(False)
-        self.to = ()
+        self.to = ()                                   # everywhere it goes
+        self.grids = ()                                # ...the grids among them: every picture
+        self.lamps = ()                                # ...and the lights of your own: a few each picture, in turn
+        self.turn = 0
 
-    def aim(self, to):
+    def aim(self, to, lamps=()):
+        """Where it goes: [(address, port)]. Those also in lamps are lights of your own (an ESP32's LED: there can be
+        a lot of them, each showing one colour): a picture goes to LAMPS_EACH of them at a time, in turn, so a game
+        sends no more for sixty of them than for two. What happens (a beat, a hit) goes to all of them at once."""
+        lamps = set(lamps)
         self.to = tuple(to)
+        self.grids = tuple(a for a in self.to if a not in lamps)
+        self.lamps = tuple(a for a in self.to if a in lamps)
 
-    def send(self, data):
-        for addr in self.to:
+    def send(self, data, to=None):
+        for addr in self.to if to is None else to:
             try:
                 self.sock.sendto(data, addr)
             except OSError:
                 pass
 
     def frame(self, colours):
-        if self.to:
-            self.send(frame_packet(colours, self.clock()))
+        if not self.to:
+            return
+        data = frame_packet(colours, self.clock())
+        self.send(data, self.grids)
+        n = len(self.lamps)
+        if n:
+            self.turn %= n
+            each = min(n, LAMPS_EACH)
+            self.send(data, [self.lamps[(self.turn + k) % n] for k in range(each)])
+            self.turn += each
 
-    def event(self, name, strength=1.0, at=None):
-        if self.to:
+    def event(self, name, strength=1.0, at=None, lamps=True):
+        """Something happening (now, or at): to all of them (lamps False: just the grids, not the lights of your own)."""
+        to = self.to if lamps else self.grids
+        if to:
             now = self.clock()
-            self.send(event_packet(name, strength, now if at is None else at, now))
+            self.send(event_packet(name, strength, now if at is None else at, now), to)
 
     def music(self, rgb):
         if self.to:
             self.send(music_packet(rgb, self.clock()))
 
     def close(self):
-        self.to = ()
+        self.to = self.grids = self.lamps = ()
         try:
             self.sock.close()
         except OSError:
@@ -659,7 +785,7 @@ class Grid:
 
     def picture(self):
         """Its colours as last lit, as they're seen from in front (rows x cols x 3, 0 to 255; brightness aside), or
-        None before it's been lit: for its picture on the screen (Apps > TV backlight) and on the web page."""
+        None before it's been lit: for its picture on the screen (Apps > LED backlight) and on the web page."""
         return self.seen
 
     def lively(self, now):

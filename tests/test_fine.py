@@ -176,7 +176,14 @@ def tour(which):
         m.home_base = (None, None)
         m.view = "home"
         shot("home_" + style.lower())
+    for style, wall in (("Glass", "Sky"), ("Cards", "Peach"), ("Bright", "Candy"), ("Cards", "Arcade")):
+        m.set_setting("home_style", style)             # (brighter backgrounds: a pale one's light tiles and dark
+        m.set_setting("wallpaper", wall)               #  words, a strong colour's white ones with their shadows,
+        m.home_base = (None, None)                     #  and the shapes on them: clouds, bubbles, a sun)
+        m.view = "home"
+        shot(f"home_{style.lower()}_{wall.lower()}")
     m.set_setting("home_style", "Glass")
+    m.set_setting("wallpaper", "Midnight")
 
     def tab(name):
         i = m.tab_index(name) if name not in [t["name"] for t in g.LIBRARY] else [t["name"] for t in g.LIBRARY].index(name)
@@ -215,6 +222,9 @@ def tour(which):
     m.press("a")
     shot("settings_res_page")
     m.set_page = "root"
+    m.set_sel = m.settings_root_index("wallpaper"); m.press("a")   # (every background, a little picture each)
+    shot("settings_backgrounds")
+    m.press("b")
     m.set_sel = m.settings_root_index("friend"); m.press("a")
     shot("settings_bot")
     m.press("b")
@@ -276,10 +286,10 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "TV backlight",
-                 "TV backlight strip"):
+    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "LED backlight",
+                 "LED backlight strip"):
         try:
-            if name.startswith("TV backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
+            if name.startswith("LED backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
                 from types import SimpleNamespace
                 from pitato.glow import rainbow
                 from pitato.glow import strip_points, strip_weights
@@ -290,7 +300,7 @@ def tour(which):
                                               now_following=lambda: None, close=lambda: None,
                                               lit=lambda: (pts, strip_weights(pts) @ rainbow(8, 8, 0.0, True)
                                                            .reshape(-1, 3)) if strip else None)
-            tab("TV backlight" if name.startswith("TV backlight") else name)
+            tab("LED backlight" if name.startswith("LED backlight") else name)
             for _ in range(5):
                 m.tick()
                 time.sleep(0.02)
@@ -304,7 +314,7 @@ def tour(which):
         except Exception as ex:
             problems.append(f"{which} sim {name}: {ex!r}")
         finally:
-            if name.startswith("TV backlight"):
+            if name.startswith("LED backlight"):
                 m.glow_grid = None
                 m.set_setting("glow_shape", "8x8 grid")
     # full screen (SELECT), one of them

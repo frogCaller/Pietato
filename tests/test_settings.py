@@ -149,17 +149,38 @@ print("found:", g.place_text(m.setting("location")))
 m.set_setting("location", {"name": "Portland", "admin": "Oregon", "country": "US", "lat": 45.5152, "lon": -122.6784})
 m.weather_changed(); assert wait_for(lambda: m.weather.data and not m.weather.busy)
 
-# background: a picture
+# background: A on its row opens a page of them all, a little picture each; A there uses one
 open_app("Settings")
 m.set_sel = [k for k, _, _ in g.SETTINGS].index("wallpaper")
-for _ in range(10):
-    if m.setting("wallpaper") == "Picture":
-        break
+m.press("a")
+assert m.set_page == "wallpaper" and g.WALLPAPERS[m.set_sel] == m.setting("wallpaper") == "Dusk", (m.set_page, m.set_sel)
+snap("settings_backgrounds")
+m.press("down"); m.press("a")                      # (the one under it: Candy, a bright one)
+print("background, from the page:", m.setting("wallpaper"))
+assert m.setting("wallpaper") == "Candy" == g.WALLPAPERS[m.set_sel] and m.set_page == "wallpaper", m.setting("wallpaper")
+for _ in range(len(g.WALLPAPERS)):                 # (round them all with ▶, and back where it was)
     m.press("right")
+assert g.WALLPAPERS[m.set_sel] == "Candy" and m.setting("wallpaper") == "Candy"   # (looking doesn't change it)
+m.press("up"); m.press("up"); assert g.WALLPAPERS[m.set_sel] == "Dusk"             # (the top row: no further up)
+for _ in range(5):
+    m.press("down")
+assert m.set_sel // 5 == (len(g.WALLPAPERS) - 1) // 5                              # (the last row: no further down)
+# ...a picture of yours: the last of them, picked in Photos
+m.set_sel = g.WALLPAPERS.index("Picture")
+snap("settings_backgrounds_picture")
 m.press("a"); print("picking:", m.picking, g.LIBRARY[m.tab]["name"], m.list_hints())
+assert m.picking == "wallpaper" and g.LIBRARY[m.tab]["name"] == "Photos" and m.setting("wallpaper") == "Candy"
 m.press("a"); print("after pick:", g.LIBRARY[m.tab]["name"], m.setting("wallpaper"), os.path.basename(m.setting("picture")))
+assert (g.LIBRARY[m.tab]["name"], m.setting("wallpaper"), os.path.basename(m.setting("picture")), m.picking) \
+    == ("Settings", "Picture", "mountains.jpg", None)
+assert m.set_page == "wallpaper" and g.WALLPAPERS[m.set_sel] == "Picture"          # (back on the page, yours on it)
 snap("settings_picture")
-m.press("b"); snap("home_picture")
+m.press("b")
+assert m.set_page == "root" and m.settings_rows()[m.set_sel][0] == "wallpaper"     # (B: back on its row)
+m.press("right"); assert m.setting("wallpaper") == "Midnight"                      # (▶ on the row, as ever: the next)
+m.press("left"); assert m.setting("wallpaper") == "Picture"
+m.press("b"); assert m.view == "home", m.view
+snap("home_picture")
 
 # Weather app
 m.set_setting("clock", "12-hour")
@@ -185,16 +206,17 @@ m2 = g.Media(); print("reloaded:", m2.setting("units"), m2.setting("wallpaper"),
                       g.place_text(m2.setting("location")), "| boot to home:", m2.boot_media)
 
 # all wallpapers
-sheet = Image.new("RGB", (7 * 170 + 10, 120), (80, 80, 80))
+sheet = Image.new("RGB", (5 * 170 + 10, -(-len(g.WALLPAPERS) // 5) * 130 + 10), (80, 80, 80))
 for k, name in enumerate(g.WALLPAPERS):
     w = g.wallpaper(name, (640, 480), HOME + "/Pictures/mountains.jpg").resize((160, 120))
-    sheet.paste(w, (10 + k * 170, 0))
+    assert w.size == (160, 120) and w.mode == "RGB", name
+    sheet.paste(w, (10 + (k % 5) * 170, 10 + (k // 5) * 130))
 sheet.save(SP + "/out/wallpapers.png")
 
 W, H = 640, 480
 order = ["home_plain", "settings", "settings_changed", "home_dusk_24h", "keyboard", "location_results",
-         "settings_picture", "home_picture", "home_aurora", "weather_now", "weather_week", "weather_words",
-         "weather_c", "weather_none"]
+         "settings_backgrounds", "settings_backgrounds_picture", "settings_picture", "home_picture", "home_aurora",
+         "weather_now", "weather_week", "weather_words", "weather_c", "weather_none"]
 cols = 2
 rows = (len(order) + 1) // 2
 out = Image.new("RGB", (W * cols + 10, (H + 10) * rows - 10), (80, 80, 80))

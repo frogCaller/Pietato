@@ -43,6 +43,7 @@ UPDATE_SH = """#!/bin/bash
 # the last one wasn't put in), setup.sh --update puts it in, and the Pi restarts. Nothing newer (main's newest, or a
 # newer version, here already): it's up to date, and that's all.
 DIR="$1" OWNER="$2"
+cd "$DIR" 2> /dev/null || cd /       # (git looks at where it's run from: somewhere its owner can go into)
 STATUS={status}
 INSTALLED={installed}
 exec > {log} 2>&1
@@ -195,15 +196,17 @@ class Updater:
         return pwd.getpwuid(os.stat(self.folder).st_uid)
 
     def git(self, *args, timeout=60):
-        """git in the Pietato folder, as its owner: (ok, what it said, its error)."""
+        """git in the Pietato folder, as its owner: (ok, what it said, its error). Run from that folder too (wherever
+        this was started from may be one its owner can't go into, and git looks at where it's run from)."""
         try:
             u = self.owner()
             env = dict(os.environ, HOME=u.pw_dir, **GIT_QUIET)
+            env.pop("XDG_CONFIG_HOME", None)           # (root's settings folder, if that's set: not the owner's)
             kw = {}
             if os.geteuid() == 0 and u.pw_uid != 0:
                 kw = {"user": u.pw_uid, "group": u.pw_gid, "extra_groups": os.getgrouplist(u.pw_name, u.pw_gid)}
             r = subprocess.run(["git", "-C", self.folder] + list(args), capture_output=True, text=True,
-                               timeout=timeout, env=env, stdin=subprocess.DEVNULL, **kw)
+                               timeout=timeout, env=env, stdin=subprocess.DEVNULL, cwd=self.folder, **kw)
         except (OSError, KeyError, ValueError, subprocess.TimeoutExpired) as ex:
             return False, "", str(ex)
         return r.returncode == 0, r.stdout.strip(), (r.stderr or "").strip()

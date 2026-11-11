@@ -220,6 +220,9 @@ for _ in range(8):
     m.press("right", True)
 check(f"...held: on and on, but never past 10 ({m.bot_steps()['eye_size']})", m.bot_steps()["eye_size"] == 10)
 m.dirty = True; m.flush(); bigger = m.fb.last
+if lit(bigger.crop((16, 102, 284, 420))) <= lit(page.crop((16, 102, 284, 420))):   # (it blinks now and then: if it
+    time.sleep(0.8)                                                                #  just did, looked at once more)
+    m.dirty = True; m.flush(); bigger = m.fb.last
 check("...its face bigger for it", lit(bigger.crop((16, 102, 284, 420))) > lit(page.crop((16, 102, 284, 420))))
 for _ in range(14):
     m.press("left")

@@ -211,11 +211,45 @@ class Done(Exception):
     pass
 
 
+class AtOnce:
+    """The decision model, asked, its pick there at once (no thread of its own: the test's own pace)."""
+
+    def __init__(self, io):
+        self.io, self.got = io, None
+
+    def idle(self):
+        return True
+
+    def ask(self, says, state, choices, fallback, picture, kind="live", quiet=True):
+        self.got = (self.io.decide(kind, says, state, choices, fallback, picture=picture), self.io.last_by)
+
+    def take(self):
+        got, self.got = self.got, None
+        return got
+
+    def forget(self):
+        self.got = None
+
+
 class FakeIO:
+    """A game that's going already (nothing to get past first), its clock standing still: only the model's moves are
+    made, one after another."""
+    run = type("Run", (), {"resumed": True})()
+
     def __init__(self, world, pick, most=60):
         self.world, self.pick, self.most = world, pick, most
         self.asked, self.logged, self.statuses, self.held = [], [], [], set()
         self.blind, self.last_by = False, "model"
+
+    def now(self):
+        return 0.0
+
+    def decider(self):
+        return AtOnce(self)
+
+    def hold_only(self, buttons, sticks=None):
+        if buttons:
+            self.world.act(set(buttons))
 
     def look(self):
         return A.Look(self.world.render())
@@ -283,7 +317,8 @@ def jumper(state, choices):
 
 world, coach = World(), FakeCoach()
 fio = FakeIO(world, jumper, most=14)
-player = AG.AnyGame({"title": "Shrek 2 (USA)", "system": "gba"}, fio, coach)
+player = AG.AnyGame({"title": "Ledge and Crate (USA)", "system": "gba"}, fio, coach)   # (a game it doesn't know
+                                                                                      # the kind of: a move at a time)
 try:
     player.play()
 except Done:
@@ -317,8 +352,8 @@ check(f"...so it tries B, which picks the crate up ({picks[AG.STUCK_AFTER + 1]!r
 check(f"...not stuck now, and jumping's back on its list ({after.get('note')!r}, {coach.seen[k][1]['stale']} moves "
       f"with nothing new)", "note" not in after and "right_a" in choices_after and coach.seen[k][1]["stale"] == 0)
 check(f"...the coach was started with the game, its system and its buttons ({coach.started})",
-      coach.started == ("Shrek 2", "Game Boy Advance", "A, B, L, R, Start, Select and the d-pad (Up, Down, Left, "
-                                                       "Right)"))
+      coach.started == ("Ledge and Crate", "Game Boy Advance", "A, B, L, R, Start, Select and the d-pad (Up, Down, "
+                                                               "Left, Right)"))
 coach.advice = {"screen": "A ledge.", "goal": "Get onto the ledge", "plan": "Pick up the crate with B.",
                 "controls": "A jumps; B picks things up."}
 coach.tips = "Stack crates to climb."

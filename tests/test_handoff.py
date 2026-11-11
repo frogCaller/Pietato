@@ -1,7 +1,12 @@
 """What you're playing, sent to another of your Pietatos (handoff.py, screens/handoff.py): two Pietatos, this one (the
 handheld, "gpi") and another in a process of its own (the TV's, "tv": peer_pietato.py), each with its web page.
 A game's menu: Play on another Pietato, the TV's name beside it (only while one's on). A: the TV's asked first; the
-game ends here (its saves kept) and the TV picks it up from the same moment, its saves from here; a cartridge the TV
+game ends here (its saves kept) and the TV picks it up from the same moment, as its guest: this one's saves in a
+folder of their own there, the TV's own save of the game as it was. Done on the TV: this one takes its game home (on
+from where it left it), and the TV lets go of it. This one played it itself meanwhile: its own save stays, the guest
+stays on the TV, and the TV asks whose game when it's started there (its own: just as it was left). Sent back from the
+TV's menu: this one's own again, or (played here meanwhile) a guest here too, this one's own kept. One of them from
+before saves were each Pietato's own: said, and nothing's sent. A cartridge the TV
 hasn't got goes too (with a key that opens just that file, its sum checked); a disc game it hasn't got, or a console
 it can't play: said, and the game plays on here. A video: X once says X again sends it; X again: it carries on on the TV
 at the same place, from this one's web page (a key for that file only, read from anywhere in it); a station: the
@@ -86,19 +91,26 @@ g.subprocess.run = lambda *a, **k: type("R", (), {"stdout": "", "returncode": 0,
 g.find_core = lambda key: f"/fake/{key}_libretro.so"
 g.bios_missing = lambda core, game=None: ""
 g.built_for_other_pi = lambda core: False
-quits = []
+quits, starts = [], []
 
 
 def game_quit(self, timeout=0):
-    base = os.path.join(g.games_dir(), g.SAVES_FOLDER, g.save_name(self.game["path"]))
+    """(Its saves written as it ends, in its own folder of them: each time, different.)"""
+    saves = getattr(self, "kw", {}).get("saves") or os.path.join(g.games_dir(), g.SAVES_FOLDER)
+    base = os.path.join(saves, g.save_name(self.game["path"]))
     for ext in (".srm", ".state.auto"):
         with open(base + ext, "w") as fh:
-            fh.write(f"gpi's {ext}")
+            fh.write(f"gpi's {ext} {len(quits) + 1}")
     quits.append(self.game["path"])
     self.ended = True
 
 
-g.GameRun.start = lambda self, core, **kw: setattr(self, "state", "on")
+def game_start(self, core, **kw):
+    self.state, self.kw = "on", kw
+    starts.append((self.game["path"], kw.get("saves")))
+
+
+g.GameRun.start = game_start
 g.GameRun.quit = game_quit
 g.GameRun.pause = lambda self: True
 g.GameRun.resume = lambda self: None
@@ -133,6 +145,7 @@ class FB:
 
 
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
+m.set_setting("name", "gpi")                           # (what this one calls itself, to the TV)
 toasts, osds = [], []
 was_toast = m.toast
 m.toast = lambda text, secs=4: (toasts.append(text), was_toast(text, secs))[1]
@@ -187,6 +200,11 @@ def tv_lines():
 def tv_state():
     tv.stdin.write("state\n")
     return json.loads(tv.stdout.readline())
+
+
+def tv_do(line):
+    tv.stdin.write(line + "\n")
+    tv.stdout.readline()
 
 
 def opened(path, system="gba"):
@@ -258,21 +276,202 @@ try:
     check(f"...one again: its name alone ({m.saves_peers()})", [h for _, h in m.saves_peers()] == ["tv"])
     m.dirty = True; m.flush()
 
-    # ---- sent: the TV has it -----------------------------------------------------------------------------------------
+    # ---- sent: the TV has it, as its guest ---------------------------------------------------------------------------
+    from pitato import savesync as SS
+    ME = m.saves_id()
+    MINE_SAVES, TV_SAVES = HOME + "/Games/Saves", TV + "/Games/Saves"
+    TV_GUEST = SS.guest_dir(TV_SAVES, ME)
+
+    def text(path):
+        try:
+            return open(path).read()
+        except OSError:
+            return None
+
+    def wait(cond, secs=10.0):
+        end = time.time() + secs
+        while time.time() < end:
+            if cond():
+                return True
+            time.sleep(0.1)
+        return cond()
+
     n = tv_lines()
     toasts.clear()
     m.game_send()
     started = tv_said("started", n)
-    check(f"A: the game ends here, its saves kept ({quits}, {m.game is None})", quits == [ROM] and m.game is None)
-    check(f"...the TV picks it up: its own copy ({started})", started is not None
-          and started["started"] == TV + "/Games/gba/" + GAME + ".gba" and started["resume"] is True)
-    check("...from the same moment: where you were here, and the in-game save",
-          open(TV + "/Games/Saves/" + GAME + ".state.auto").read() == "gpi's .state.auto"
-          and open(TV + "/Games/Saves/" + GAME + ".srm").read() == "gpi's .srm")
+    check(f"A: the game ends here, its saves kept ({quits}, {m.game is None})", quits == [ROM] and m.game is None
+          and text(f"{MINE_SAVES}/{GAME}.srm") == "gpi's .srm 1")
+    check(f"...the TV picks it up: its own copy of the game, as its guest (its saves in a folder of their own there) "
+          f"({started})", started is not None and started["started"] == TV + "/Games/gba/" + GAME + ".gba"
+          and started["resume"] is True and started["saves"] == TV_GUEST)
+    check("...from the same moment: where you were here, and the in-game save, in that folder",
+          text(f"{TV_GUEST}/{GAME}.state.auto") == "gpi's .state.auto 1"
+          and text(f"{TV_GUEST}/{GAME}.srm") == "gpi's .srm 1")
+    note = SS.guest_note(TV_SAVES, ME, GAME)
+    check(f"...with a note of whose game it is, and what it came on from ({note})", note is not None
+          and note["from"] == "gpi" and note["via"] == "gpi"
+          and note["base"] == SS.sums(SS.save_files(MINE_SAVES, GAME)))
+    check("...the TV's own save of the game: just as it was (and no more of its own than it had)",
+          text(f"{TV_SAVES}/{GAME}.state.auto") == "the tv's old place"
+          and not os.path.exists(f"{TV_SAVES}/{GAME}.srm"))
     check(f"...and it says so here ({toasts[-1:]})", toasts[-1:] == ["Playing on tv now. Its menu there sends it back"])
+    said = tv_said("toast", n)
+    check(f"...and there ({said})", said == {"toast": "gpi's game. This Pietato's own save stays as it is"})
     st = tv_state()
     check(f"...the TV's menu sends it back: Play on another Pietato, gpi ({st['menu'][-2:]}, {st['send']})",
-          st["menu"][-2:] == ["send", "quit"] and st["send"] == "gpi")
+          st["menu"][-2:] == ["send", "quit"] and st["send"] == "gpi" and st["whose"] == ME)
+    check("...a guest's menu has no Play together, nor Link cable (its save isn't the TV's to link up)",
+          "together" not in st["menu"])
+
+    # ---- done on the TV: this one takes its game home ----------------------------------------------------------------
+    tv_do("endgame")
+    wait(lambda: (text(f"{MINE_SAVES}/{GAME}.srm") or "").startswith("tv's .srm"))
+    check(f"quit on the TV: this one takes its game home, on from where it left it ({text(f'{MINE_SAVES}/{GAME}.srm')!r})",
+          (text(f"{MINE_SAVES}/{GAME}.srm") or "").startswith("tv's .srm")
+          and (text(f"{MINE_SAVES}/{GAME}.state.auto") or "").startswith("tv's .state.auto")
+          and text(f"{MINE_SAVES}/.replaced/{GAME}.srm") == "gpi's .srm 1")
+    wait(lambda: SS.guests_of(TV_SAVES, GAME) == {})
+    check("...and the TV lets go of it (its saves kept beside), its own save still as it was",
+          SS.guests_of(TV_SAVES, GAME) == {} and os.path.isfile(f"{TV_GUEST}/.replaced/{GAME}.srm")
+          and text(f"{TV_SAVES}/{GAME}.state.auto") == "the tv's old place")
+
+    # ---- sent again, and played here meanwhile: both kept ------------------------------------------------------------
+    opened(ROM)
+    check(f"started here again: this one's own, nobody asked ({starts[-1]})", starts[-1] == (ROM, None)
+          and m.view == "gamemenu")
+    n = tv_lines()
+    m.game_send()
+    tv_said("started", n)
+    sent = text(f"{TV_GUEST}/{GAME}.srm")
+    opened(ROM)                                        # (played here too, while it's on the TV)
+    m.game_end()
+    mine_now = text(f"{MINE_SAVES}/{GAME}.srm")
+    tv_do("endgame")
+    time.sleep(2.5)
+    check(f"sent again, then played here too while it's on the TV; done on the TV: this one's own save stays "
+          f"({mine_now!r}), and the guest stays on the TV", sent == "gpi's .srm 2" and mine_now == "gpi's .srm 3"
+          and text(f"{MINE_SAVES}/{GAME}.srm") == mine_now and list(SS.guests_of(TV_SAVES, GAME)) == [ME]
+          and (text(f"{TV_GUEST}/{GAME}.srm") or "").startswith("tv's .srm"))
+    tv_game = TV + "/Games/gba/" + GAME + ".gba|" + GAME + "|gba"
+    tv_do("game " + tv_game)
+    st = tv_state()
+    check(f"the game started on the TV, from its own list: whose game, asked ({st['view']}, {st['asking']})",
+          st["view"] == "whose" and st["game"] is None and [r[0] for r in st["asking"]] == [ME, ""]
+          and st["asking"][0][1] == "gpi's game" and st["asking"][1][1] == "This Pietato's own game")
+    n = tv_lines()
+    tv_do("press right")
+    tv_do("press a")
+    started = tv_said("started", n)
+    check(f"...its own: from its own save, just as it was left there ({started and started['saves']})",
+          started is not None and started["saves"] is None
+          and text(f"{TV_SAVES}/{GAME}.state.auto") == "the tv's old place")
+    tv_do("endgame")
+    check("...played and done: its own save's its own, the guest's as it was",
+          (text(f"{TV_SAVES}/{GAME}.srm") or "").startswith("tv's .srm")
+          and list(SS.guests_of(TV_SAVES, GAME)) == [ME] and text(f"{MINE_SAVES}/{GAME}.srm") == mine_now)
+
+    # ---- sent back from the TV's menu ----------------------------------------------------------------------------------
+    going = threading.Event()
+
+    def loop():
+        """(This one's main loop, as far as the TV needs it: what its web page's asked, and what's set aside to do.)"""
+        while not going.is_set():
+            for job in control.take():
+                out = {"error": "Something went wrong on the Pi"}
+                try:
+                    out = m.web_command(job["cmd"])
+                finally:
+                    control.done(job, out)
+            while m.soon_jobs:
+                m.soon_jobs.popleft()()
+            time.sleep(0.02)
+    pump = threading.Thread(target=loop, daemon=True)
+    pump.start()
+    n = tv_lines()
+    tv_do("game " + tv_game)
+    tv_do("press left")
+    tv_do("press a")
+    started = tv_said("started", n)
+    check(f"the TV started again, and gpi's game picked: its guest's folder ({started and started['saves']})",
+          started is not None and started["saves"] == TV_GUEST and tv_state()["whose"] == ME)
+    toasts.clear(); starts.clear()
+    tv_do("send")
+    wait(lambda: m.game is not None)
+    here_guest = SS.guest_dir(MINE_SAVES, ME)
+    check(f"sent back from the TV's menu, to this one that's played it since: it plays here as it was left on the TV, "
+          f"apart from this one's own ({starts}, {toasts[-1:]})", m.game is not None
+          and starts == [(ROM, here_guest)] and m.game.game.get("whose") == ME
+          and (text(f"{here_guest}/{GAME}.srm") or "").startswith("tv's .srm")
+          and text(f"{MINE_SAVES}/{GAME}.srm") == mine_now
+          and toasts[-1:] == ["As you left it on tv. This Pietato's own save stays as it is"])
+    wait(lambda: SS.guests_of(TV_SAVES, GAME) == {})
+    check("...and the TV lets go of it (this one has it now)", SS.guests_of(TV_SAVES, GAME) == {})
+    m.game_end(tell=False)
+    m.view = "list"
+    m.game_open({"src": ROM, "title": GAME, "system": "gba"})
+    rows = (m.whose or {}).get("rows") or []
+    check(f"started here: whose game, asked ({[r[1] for r in rows]})", m.view == "whose"
+          and [r[1] for r in rows] == ["As you left it on tv", "This Pietato's own game"])
+    m.press("b")
+    with m.saves_lock:
+        SS.guest_gone(MINE_SAVES, ME, GAME)            # (forgotten: X twice there)
+    opened(ROM)
+    n = tv_lines()
+    m.game_send()
+    tv_said("started", n)
+    toasts.clear(); starts.clear()
+    tv_do("send")
+    wait(lambda: m.game is not None)
+    check(f"sent to the TV and straight back (not played here meanwhile): this one's own again, on from the TV "
+          f"({starts}, {text(f'{MINE_SAVES}/{GAME}.srm')!r})", m.game is not None and starts == [(ROM, None)]
+          and not m.game.game.get("whose") and (text(f"{MINE_SAVES}/{GAME}.srm") or "").startswith("tv's .srm")
+          and SS.guests_of(MINE_SAVES, GAME) == {} and not any("stays as it is" in t for t in toasts))
+    wait(lambda: SS.guests_of(TV_SAVES, GAME) == {})
+    check("...and the TV lets go of it", SS.guests_of(TV_SAVES, GAME) == {})
+    going.set()
+    pump.join(2)
+    m.game_end()
+
+    # ---- a game with no save to send (none yet, or one too big to carry): this one's own, and said ------------------
+    FRESH = "Fresh Game (World)"
+    ROM2 = HOME + "/Games/gba/" + FRESH + ".gba"
+    shutil.copy(ROM, ROM2)
+    open(f"{MINE_SAVES}/{FRESH}.srm", "w").write("this one's own")
+    ident2 = HO.game_ident(ROM2, HOME + "/Games", "gba", FRESH, FRESH)
+    toasts.clear(); starts.clear()
+    m.handoff_open(ROM2, ident2, THEIRS, "tv", ("f" * 16, "tv", {}))
+    check(f"a game sent with no save of it there to bring: played here as this one's own, and said "
+          f"({starts}, {toasts[-1:]})", starts == [(ROM2, None)] and m.game is not None
+          and not m.game.game.get("whose") and SS.guests_of(MINE_SAVES, FRESH) == {}
+          and text(f"{MINE_SAVES}/{FRESH}.srm") == "this one's own"
+          and toasts[-1:] == ["tv had no save of it to send. This Pietato's own game"])
+    m.game_end()
+    toasts.clear(); starts.clear()
+    m.handoff_open(ROM2, ident2, "http://127.0.0.1:9", "tv", ("f" * 16, "tv", {}))
+    check(f"...and one whose saves should have come and didn't (the other gone): not opened, and said "
+          f"({starts}, {toasts[-1:]})", starts == [] and m.game is None
+          and toasts[-1:] == [f"Couldn't get {FRESH} from tv. It's as you left it there"])
+
+    # ---- one of them from before saves were each Pietato's own: nothing's sent ---------------------------------------
+    import pitato.screens.handoff as HS
+    was_post = HS.handoff_post
+    HS.handoff_post = lambda url, body, timeout: {"ok": True, "have": True}   # (it'd put this over its own save)
+    opened(ROM)
+    quits.clear(); toasts.clear()
+    m.game_send()
+    check(f"the other one from before saves were each Pietato's own: said, and the game plays on here ({toasts[-1:]})",
+          toasts[-1:] == ["tv needs updating first: System > Update software there"] and quits == []
+          and m.game is not None)
+    HS.handoff_post = was_post
+    m.game_end()
+    ident = HO.game_ident(ROM, HOME + "/Games", "gba", GAME, GAME)
+    out = m.web_peer_handoff(dict(ident, kind="game", check=True, **{"from": "127.0.0.1"}))
+    check(f"asked whether it can take a game: yes, as a guest ({out})", out == {"ok": True, "have": True, "guest": True})
+    out = m.web_peer_handoff(dict(ident, kind="game", **{"from": "127.0.0.1"}))
+    check(f"...one sent without whose game it is (from one from before): not taken ({out})", out.get("ok") is False
+          and "updating" in out.get("error", "") and not m.soon_jobs)
+    quits.clear()
 
     # ---- a cartridge the TV hasn't got: it goes too ------------------------------------------------------------------
     os.remove(TV + "/Games/gba/" + GAME + ".gba")
@@ -456,10 +655,6 @@ try:
             if st["view"] == view or time.time() > end:
                 return st
             time.sleep(0.2)
-
-    def tv_do(line):
-        tv.stdin.write(line + "\n")
-        tv.stdout.readline()
 
     def home_send():
         """HOME, then View on another Pietato, A."""

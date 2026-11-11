@@ -2,7 +2,9 @@
 left in two lots (what there is to watch and listen to, then the rest), each by its name; on a phone it's a page of
 buttons instead: one tapped opens it with the way back, and Library again brings the page of them back. While
 something plays on the Pi (a stand-in says so), its name is on the page's bar wherever you are but at the screen,
-with Pause and Stop: the Pi is asked for each, and the name tapped is the screen. The page's own letters come from
+with Pause and Stop: the Pi is asked for each, and the name tapped is the screen. In Settings, the part picked in its
+index is the one lit (the last ones too, that can't reach the top of the page), and then whichever you scroll to. The
+page's own letters come from
 the Pi (Fredoka for its headings, Atkinson Hyperlegible for the rest) and nothing else in its fonts folder does;
 nothing's wider than a phone, and nothing goes wrong on the page. Media mode's main loop, its control server and
 the web page, as a Pi has them."""
@@ -45,7 +47,7 @@ class FB:
 
 g.Framebuffer = FB
 m = g.Media(); m.enter()
-m.glow_can = lambda: False                             # (no LEDs on this one: no TV backlight in its library)
+m.glow_can = lambda: False                             # (no LEDs on this one: no LED backlight in its library)
 
 # something playing, as far as the page is told: its name, paused or not; what the page asks of it, noted
 PLAY = {"on": False, "paused": False, "asked": []}
@@ -125,7 +127,7 @@ try:
 except ImportError:                                    # (not on the Pi's Python here: the Pi's side is tested)
     async_playwright = None
 WATCH = ["Cartoons", "Films", "News", "Sports", "Radio"]          # (Your streams: once there are some)
-MORE = ["Cameras", "Bot", "Draw", "Fish Tank"]                    # (TV backlight: on a Pi with LEDs)
+MORE = ["Cameras", "Bot", "Draw", "Fish Tank"]                    # (LED backlight: on a Pi with LEDs)
 
 
 async def web():
@@ -173,6 +175,61 @@ async def web():
         await pg.click(".vbtn[data-view='settings']")
         await pg.wait_for_selector("#setList .set-sec", timeout=8000)
         check("...in Settings, in Files: still there", await pg.is_visible("#mini"))
+
+        # Settings' index: the part picked is the one lit
+        async def lit():
+            return await pg.evaluate("""(document.querySelector('#setIndex button[aria-current="true"]') || {})
+              .textContent || null""")
+        parts = await pg.evaluate("""Array.from(document.querySelectorAll("#setIndex button"), (b) => b.textContent)""")
+        first = await lit()
+        await pg.click("#setIndex button:last-child")
+        await asyncio.sleep(1.5)
+        last = await lit()
+        check(f"Settings' index: its first part lit to start with, and the last one once it's picked, though it "
+              f"can't reach the top of the page ({first!r}, then {last!r}, of {len(parts)})",
+              len(parts) >= 5 and first == parts[0] and last == parts[-1])
+        await pg.click("#setIndex button:nth-child(3)")
+        await asyncio.sleep(1.5)
+        third = await lit()
+        top = await pg.evaluate("""document.querySelectorAll("#setList > .set-sec")[2].getBoundingClientRect().top""")
+        check(f"...the third picked: lit, and at the top of the page ({third!r}, {top:.0f} px down)",
+              third == parts[2] and 0 < top < 200)
+        await pg.mouse.move(700, 500)
+        await pg.mouse.wheel(0, -30000)
+        await asyncio.sleep(0.8)
+        up = await lit()
+        await pg.mouse.wheel(0, 30000)
+        await asyncio.sleep(0.8)
+        down = await lit()
+        check(f"...scrolled by hand, to the top and to the bottom: the part you've come to ({up!r}, {down!r})",
+              up == parts[0] and down in parts[2:])
+        await pg.mouse.wheel(0, -30000)
+
+        # Settings > Background: a little picture of each, in full rows; one clicked is the Pi's background
+        await pg.wait_for_function("""(() => { const p = document.querySelectorAll(".set-walls img.wall-pic");
+          return p.length > 5 && Array.from(p).every((i) => i.complete && i.naturalWidth > 0); })()""", timeout=15000)
+        walls = await pg.evaluate("""Array.from(document.querySelectorAll(".set-walls .wall-sw"), (b) => {
+          const r = b.getBoundingClientRect(), i = b.querySelector("img");
+          return [b.textContent.trim(), b.getAttribute("aria-pressed"), i ? i.naturalWidth : 0, Math.round(r.top)]; })""")
+        tops = sorted(set(w[3] for w in walls))
+        check(f"Settings > Background: a little picture of each ({len(walls)}), the one in use marked, in rows of five "
+              f"({len(tops)} rows)", [w[0] for w in walls] == g.WALLPAPERS[:-1] + ["Your picture"]
+              and [w[0] for w in walls if w[1] == "true"] == [m.setting("wallpaper")] == ["Midnight"]
+              and all(w[2] == 192 for w in walls[:-1]) and [sum(w[3] == t for w in walls) for t in tops] == [5, 5, 5, 5])
+        await pg.click('.set-walls .wall-sw:has-text("Candy")')
+        await pg.wait_for_function("""(() => { const b = document.querySelector('.set-walls .wall-sw[aria-pressed="true"]');
+          return b && b.textContent.trim() === "Candy"; })()""", timeout=8000)
+        check(f"...one clicked: the Pi's background, and marked ({m.setting('wallpaper')})",
+              m.setting("wallpaper") == "Candy")
+        await pg.click('.set-walls .wall-sw:has-text("Your picture")')
+        await asyncio.sleep(0.6)
+        check("...Your picture: its pictures to pick from, under them; nothing changed until one's picked",
+              await pg.evaluate("""!!document.querySelector(".set-walls ~ *")""") and m.setting("wallpaper") == "Candy")
+        await pg.click('.set-walls .wall-sw:has-text("Midnight")')
+        await pg.wait_for_function("""(() => { const b = document.querySelector('.set-walls .wall-sw[aria-pressed="true"]');
+          return b && b.textContent.trim() === "Midnight"; })()""", timeout=8000)
+        check("...another clicked: that one, the pictures put away", m.setting("wallpaper") == "Midnight"
+              and not await pg.evaluate("""!!document.querySelector(".set-walls ~ *")"""))
         await pg.click(".vbtn[data-view='files']")
         await asyncio.sleep(0.3)
         here = await pg.is_visible("#mini")
@@ -225,6 +282,14 @@ async def web():
         check(f"what's playing, on a phone: over the bottom bar, clear of it ({spot})", spot[0] <= spot[1] and spot[0] > spot[2] - 200)
         wide = await ph.evaluate("document.documentElement.scrollWidth")
         check(f"...nothing wider than the phone ({wide})", wide <= 390)
+        await ph.tap(".dock button[data-view='settings']")
+        await ph.wait_for_selector(".set-walls .wall-sw", timeout=8000)
+        rows = await ph.evaluate("""(() => { const t = Array.from(document.querySelectorAll(".set-walls .wall-sw"),
+          (b) => Math.round(b.getBoundingClientRect().top)); return Array.from(new Set(t), (y) => t.filter((v) => v === y).length); })()""")
+        wide = await ph.evaluate("document.documentElement.scrollWidth")
+        check(f"...Settings > Background on a phone: four across, nothing wider than it ({rows}, {wide})",
+              rows == [4] * 5 and wide <= 390)
+        await ph.screenshot(path=S + "/settings_phone.png")
         PLAY["on"] = False
         check(f"nothing went wrong on the page ({oops})", not oops)
         await b.close()

@@ -183,7 +183,7 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
     Game of Life - Conway's rules (or HighLife, Day & Night, Seeds), cells coloured by age
     Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
                 next; A calls it, X feeds it (the web page arranges the tanks)
-    TV backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
+    LED backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
                 TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
                 the edges of the game on whichever of your Pietatos it follows (pitato/glow.py: a UDP
                 packet each picture), red for a hit (lives or health going down, in its RetroAchievements
@@ -192,7 +192,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 rainbow, or dark). A turns it on or off, left and right pick its colour, up and down its
                 brightness, START has the rest (Follows: Nobody keeps it to your colour; Shape: a grid, or
                 a strip: how many LEDs, where it starts, which way it goes, along the bottom or not); the
-                web page's Library has it too
+                web page's Library has it too. An ESP32 board's own LED joins in over WiFi, on any Pietato
+                (esp32/pietato_led: it says it's there, and is lit as a grid is; one with no LEDs of its
+                own has this page for them while a board's on: A is their pulse to music)
     Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
                 of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
                 Y out, for as long as they're held
@@ -219,7 +221,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 to date
   Settings    - WiFi (scan, connect, forget), Bluetooth (look, pair, connect, forget: a keyboard shows
                 its code to type), the home screen's style (Bright, Glass or Cards: the weather on it
-                once Weather knows where you are), background and colours, clock, full screen apps (just the
+                once Weather knows where you are), background (dark, colourful or pale ones, or a picture
+                of yours: ◀▶ go through them, A shows them all) and colours, clock, full screen apps (just the
                 app's name along the top, no bars or buttons), video size, rotate screen (a screen on its
                 side: the menus, games, videos and the terminal turned 90°, 180° or 270°), battery saver
                 (Auto: on its battery, in a GPi Case or a laptop, the screen goes dark after three minutes with

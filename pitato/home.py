@@ -16,14 +16,196 @@ def bayer(n=8):
     return ((m + 0.5) / (n * n) - 0.5).astype(np.float32)
 
 
-def wallpaper(name, size, picture="", depth=8):
-    """The home screen's background: a picture (darkened so the icons read), or a soft gradient with a glow, worked out
-    small (so it costs little) and scaled up, both in fractions of a colour's steps; then each step's edge spread over
-    a fine, even pattern (ordered dithering), so a big TV shows a smooth sweep, not bands or blocks. (A pattern, not
-    grain: the web page's pictures of the screen stay small.) depth: the bits a colour has on this screen, 8, or
-    (5, 6, 5) on a 16-bit one (the GPi Case's), whose few steps it's dithered to instead."""
+# ---- the backgrounds -------------------------------------------------------------------------------------------
+# A background: its sky (colours from the top down, or across it at a tilt), soft glows over that, and a few plain
+# shapes (hills, waves, bubbles, clouds, stars), all in shares of the screen; and the ink the home screen's words
+# take over it: light on a dark one, white on a strong colour, dark on a pale one. Its shapes keep clear of the
+# words: between the time and the weather, or behind the rows of tiles. (Settings > Background's list is
+# config.py's WALLPAPERS: each of its names is here.)
+GLOW = 110 / 255          # how much of a glow's colour shows at its middle, unless it says
+WALLS = {
+    "Midnight": {"sky": [(0, (19, 23, 31)), (1, (11, 14, 19))]},
+    "Dusk": {"sky": [(0, (52, 36, 86)), (1, (14, 14, 30))], "glows": [(0.85, 0.05, 0.55, (150, 84, 120))]},
+    "Ocean": {"sky": [(0, (8, 66, 100)), (1, (6, 18, 32))], "glows": [(0.15, 0.0, 0.6, (40, 140, 170))]},
+    "Forest": {"sky": [(0, (22, 72, 52)), (1, (8, 20, 16))], "glows": [(0.8, 0.1, 0.5, (70, 130, 80))]},
+    "Aurora": {"sky": [(0, (10, 16, 30)), (1, (8, 14, 22))],
+               "glows": [(0.2, 0.15, 0.45, (40, 170, 140)), (0.65, 0.05, 0.5, (100, 80, 200)),
+                         (0.95, 0.35, 0.35, (40, 110, 190))]},
+    "Black": {"sky": [(0, (0, 0, 0)), (1, (0, 0, 0))]},
+    # strong colours: the words go white, a soft shadow under them
+    "Sunset": {"sky": [(0, (54, 38, 128)), (0.34, (150, 52, 140)), (0.62, (214, 78, 106)), (0.84, (236, 118, 78)),
+                       (1, (236, 118, 78))],
+               "glows": [(0.5, 1.02, 0.2, (255, 190, 110), 0.6)],
+               "shapes": [("wave", 0.835, 0.02, 1.3, 0.1, (96, 40, 108), 1.0),
+                          ("wave", 0.905, 0.018, 1.7, 0.55, (58, 28, 84), 1.0)],
+               "ink": "white"},
+    "Candy": {"sky": [(0, (236, 72, 148)), (0.55, (168, 82, 238)), (1, (96, 98, 236))], "tilt": 38,
+              "shapes": [("discs", [(0.1, 0.78, 0.2), (0.86, 0.2, 0.26), (0.58, 1.02, 0.16)], (255, 255, 255), 0.09),
+                         ("discs", [(0.32, 0.12, 0.07), (0.93, 0.74, 0.1), (0.72, 0.5, 0.045)], (255, 255, 255), 0.12),
+                         ("rings", [(0.22, 0.42, 0.11), (0.43, 0.105, 0.05), (0.45, 0.8, 0.07)], 0.006,
+                          (255, 255, 255), 0.22)],
+              "ink": "white"},
+    "Lagoon": {"sky": [(0, (14, 84, 150)), (0.5, (10, 128, 170)), (1, (14, 146, 146))],
+               "glows": [(0.8, 0.0, 0.5, (90, 220, 230), 0.3)],
+               "shapes": [("wave", 0.80, 0.02, 2.0, 0.0, (10, 116, 150), 0.55),
+                          ("wave", 0.86, 0.02, 1.6, 0.35, (10, 100, 140), 0.6),
+                          ("wave", 0.92, 0.018, 2.3, 0.7, (12, 84, 128), 0.7)],
+               "ink": "white"},
+    "Jungle": {"sky": [(0, (12, 98, 64)), (0.55, (20, 138, 70)), (1, (54, 150, 54))],
+               "glows": [(0.15, 0.05, 0.5, (150, 220, 80), 0.24)],
+               "shapes": [("wave", 0.84, 0.03, 1.2, 0.3, (16, 104, 66), 1.0),
+                          ("wave", 0.91, 0.025, 1.6, 0.8, (12, 82, 58), 1.0)],
+               "ink": "white"},
+    "Arcade": {"sky": [(0, (22, 10, 58)), (0.45, (92, 22, 118)), (0.72, (226, 62, 132)), (1, (226, 62, 132))],
+               "shapes": [("sun", 0.5, 0.6, 0.14, (255, 150, 90), (240, 56, 128), 5),
+                          ("band", 0.72, 1.0, (18, 8, 40), 1.0),
+                          ("grid", 0.72, (236, 72, 190), 0.42)],
+               "ink": "white"},
+    "Space": {"sky": [(0, (10, 12, 36)), (1, (24, 14, 50))],
+              "glows": [(0.2, 0.25, 0.4, (120, 60, 200), 0.4), (0.85, 0.7, 0.45, (40, 110, 220), 0.35),
+                        (0.6, 0.1, 0.25, (230, 80, 160), 0.25)],
+              "shapes": [("stars", 150, 7, (255, 255, 255), 0.9),
+                         ("rings", [(0.42, 0.105, 0.052)], 0.006, (250, 214, 170), 0.5),
+                         ("discs", [(0.42, 0.105, 0.033)], (244, 176, 110), 1.0),
+                         ("discs", [(0.43, 0.093, 0.033)], (20, 14, 46), 0.25)]},
+    # pale ones: the words go dark
+    "Sky": {"sky": [(0, (96, 170, 250)), (1, (188, 226, 255))],
+            "shapes": [("clouds", [(0.43, 0.105, 0.04), (0.805, 0.33, 0.055), (0.226, 0.565, 0.05),
+                                   (0.61, 0.785, 0.06), (1.0, 0.56, 0.07)], (255, 255, 255), 0.82)],
+            "ink": "dark"},
+    "Peach": {"sky": [(0, (255, 198, 150)), (1, (255, 160, 172))],
+              "glows": [(0.85, 0.1, 0.5, (255, 236, 190), 0.6)],
+              "shapes": [("discs", [(0.08, 0.9, 0.24), (0.9, 0.62, 0.14)], (255, 255, 255), 0.16)],
+              "ink": "dark"},
+    "Mint": {"sky": [(0, (166, 238, 206)), (1, (136, 216, 230))],
+             "glows": [(0.1, 0.1, 0.5, (220, 255, 220), 0.55)],
+             "shapes": [("wave", 0.86, 0.02, 1.5, 0.2, (255, 255, 255), 0.22),
+                        ("wave", 0.92, 0.02, 2.1, 0.6, (255, 255, 255), 0.25)],
+             "ink": "dark"},
+    "Lemon": {"sky": [(0, (255, 234, 128)), (1, (255, 196, 116))],
+              "glows": [(0.82, 0.12, 0.42, (255, 250, 200), 0.7)],
+              "shapes": [("discs", [(0.06, 0.62, 0.17), (0.94, 0.94, 0.22)], (255, 255, 255), 0.18),
+                         ("rings", [(0.42, 0.777, 0.065), (0.805, 0.335, 0.05)], 0.007, (255, 255, 255), 0.45)],
+              "ink": "dark"},
+    "Bubblegum": {"sky": [(0, (255, 172, 214)), (0.5, (206, 186, 255)), (1, (160, 220, 255))], "tilt": 40,
+                  "shapes": [("discs", [(0.12, 0.2, 0.16), (0.9, 0.85, 0.22), (0.61, 0.56, 0.06)],
+                              (255, 255, 255), 0.2),
+                             ("rings", [(0.42, 0.335, 0.055), (0.226, 0.777, 0.05)], 0.007, (255, 255, 255), 0.5)],
+                  "ink": "dark"},
+    "Rainbow": {"sky": [(0, (255, 158, 170)), (0.25, (255, 200, 150)), (0.5, (255, 240, 160)),
+                        (0.75, (160, 232, 190)), (1, (150, 200, 255))], "tilt": 50, "ink": "dark"},
+    "Snow": {"sky": [(0, (246, 245, 242)), (1, (228, 230, 236))], "ink": "dark"},
+}
+
+
+def wall_ink(name):
+    """The ink the home screen's words take over a background: "light" (a dark one, as ever; a picture of yours:
+    that's darkened), "white" (a strong colour: a soft shadow under them too) or "dark" (a pale one)."""
+    return WALLS.get(name, {}).get("ink", "light")
+
+
+def sky_small(look, sw, sh):
+    """A background's sky, worked out small (so it costs little): its colours from the top down (tilt: across it,
+    that many degrees round), then its glows. (sh, sw, 3), in fractions of a colour's steps."""
     import numpy as np
-    from PIL import Image, ImageDraw, ImageFilter, ImageOps
+    from PIL import Image, ImageDraw, ImageFilter
+    a = math.radians(look.get("tilt", 0))
+    ys, xs = np.mgrid[0:sh, 0:sw].astype(np.float32)
+    t = xs / max(sw - 1, 1) * math.sin(a) + ys / max(sh - 1, 1) * math.cos(a)
+    lo = min(0.0, math.sin(a)) + min(0.0, math.cos(a))
+    hi = max(0.0, math.sin(a)) + max(0.0, math.cos(a))
+    t = (t - lo) / max(hi - lo, 1e-6)
+    at, ramp = [p for p, _ in look["sky"]], np.array([c for _, c in look["sky"]], np.float64)
+    if len(at) > 2:                                    # (more than two colours: each turn from one to the next
+        fine, soft = np.linspace(0.0, 1.0, 257), 16    #  rounded off, a sixteenth of the way either side: no crease)
+        ramp = np.stack([np.interp(fine, at, ramp[:, k]) for k in range(3)], axis=-1)
+        ramp = np.concatenate([np.repeat(ramp[:1], soft, 0), ramp, np.repeat(ramp[-1:], soft, 0)])
+        bell = np.hanning(2 * soft + 3)[1:-1]
+        ramp = np.stack([np.convolve(ramp[:, k], bell / bell.sum(), mode="valid") for k in range(3)], axis=-1)
+        at = fine
+    small = np.stack([np.interp(t, at, ramp[:, k]) for k in range(3)], axis=-1).astype(np.float32)
+    for g in look.get("glows", ()):
+        gx, gy, gr, col = g[:4]
+        glow = Image.new("L", (sw, sh), 0)
+        r = gr * sw
+        ImageDraw.Draw(glow).ellipse((gx * sw - r, gy * sh - r, gx * sw + r, gy * sh + r), fill=255)
+        m = np.asarray(glow.filter(ImageFilter.GaussianBlur(r / 2)), np.float32)[..., None]
+        small += (np.array(col, np.float32) - small) * (m * ((g[4] if len(g) > 4 else GLOW) / 255))
+    return small
+
+
+def wall_shapes(look, w, h):
+    """A background's plain shapes, as masks the size of the screen, in the order they go on: [(mask, its colour,
+    its colour at its foot or None, how much of it shows)]. Drawn twice the size and made smaller, so their edges
+    come out smooth; shapes of one colour share a mask. Where they are is in shares of the screen's width and
+    height, how big in shares of its height (round ones stay round on a wide screen)."""
+    import random
+    from PIL import Image, ImageDraw
+    out = []
+    W, H = w * 2, h * 2
+    for shape in look.get("shapes", ()):
+        kind = shape[0]
+        im = Image.new("L", (W, H), 0)
+        d = ImageDraw.Draw(im)
+        colour, alpha, foot = shape[-2], shape[-1], None
+        if kind == "discs":                            # ("discs", [(x, y, r)...], colour, how much)
+            for x, y, r in shape[1]:
+                d.ellipse((x * W - r * H, y * H - r * H, x * W + r * H, y * H + r * H), fill=255)
+        elif kind == "rings":                          # ("rings", [(x, y, r)...], how thick, colour, how much)
+            for x, y, r in shape[1]:
+                d.ellipse((x * W - r * H, y * H - r * H, x * W + r * H, y * H + r * H), outline=255,
+                          width=max(1, round(shape[2] * H)))
+        elif kind == "wave":                           # ("wave", y, how high, how many, where it starts, colour,
+            _, y0, amp, waves, phase = shape[:5]       #  how much): a hill or a wave, from its line to the bottom
+            pts = [(x, (y0 + amp * math.sin(2 * math.pi * (waves * x / W + phase))) * H)
+                   for x in range(0, W + 8, 8)]
+            d.polygon(pts + [(W, H), (0, H)], fill=255)
+        elif kind == "stars":                          # ("stars", how many, which, colour, how much): the same
+            rnd = random.Random(shape[2])              #  ones every time
+            for _ in range(shape[1]):
+                x, y, r = rnd.random() * W, rnd.random() * H, rnd.choice((0.0012, 0.0012, 0.002, 0.003)) * H
+                d.ellipse((x - r, y - r, x + r, y + r), fill=rnd.choice((120, 170, 255)))
+        elif kind == "clouds":                         # ("clouds", [(x, y, how big)...], colour, how much)
+            for x, y, big in shape[1]:
+                cx, cy, u = x * W, y * H, big * H
+                for dx, dy, r in ((-0.55, 0.02, 0.36), (0.05, -0.22, 0.52), (0.68, 0.05, 0.34)):   # (three bumps, on
+                    d.ellipse((cx + (dx - r) * u, cy + (dy - r) * u, cx + (dx + r) * u, cy + (dy + r) * u), fill=255)
+                d.rounded_rectangle((cx - 1.25 * u, cy + 0.05 * u, cx + 1.25 * u, cy + 0.55 * u),     # a flat foot)
+                                    radius=0.25 * u, fill=255)
+        elif kind == "sun":                            # ("sun", x, y, r, colour, its foot's, stripes): an arcade's
+            _, x, y, r, colour, foot, stripes = shape  #  setting sun, gaps across its lower half
+            alpha = 1.0
+            cx, cy, rr = x * W, y * H, r * H
+            d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=255)
+            for k in range(stripes):
+                yy = cy + rr * (0.1 + 0.16 * k)
+                gap = rr * (0.018 + 0.012 * k)
+                d.rectangle((cx - rr, yy - gap, cx + rr, yy + gap), fill=0)
+        elif kind == "grid":                           # ("grid", its horizon's y, colour, how much): a floor of
+            hy = shape[1] * H                          #  lines, going away (as thick on a screen drawn finely)
+            wide = 2 * max(1, round(0.002 * H))
+            for k in range(1, 9):
+                yy = hy + (H - hy) * (k / 8) ** 2.2
+                d.line((0, yy, W, yy), fill=255, width=wide)
+            for k in range(-12, 13):
+                d.line((W / 2 + k * W * 0.022, hy, W / 2 + k * W * 0.24, H), fill=255, width=wide)
+        elif kind == "band":                           # ("band", y0, y1, colour, how much): straight across
+            d.rectangle((0, shape[1] * H, W, shape[2] * H), fill=255)
+        else:
+            continue
+        out.append((im.resize((w, h), Image.BOX), colour, foot, alpha))
+    return out
+
+
+def wallpaper(name, size, picture="", depth=8):
+    """The home screen's background: a picture (darkened so the icons read), or one of WALLS: its sky, worked out
+    small (so it costs little) and scaled up, and its shapes over that, both in fractions of a colour's steps; then
+    each step's edge spread over a fine, even pattern (ordered dithering), so a big TV shows a smooth sweep, not
+    bands or blocks. (A pattern, not grain: the web page's pictures of the screen stay small.) depth: the bits a
+    colour has on this screen, 8, or (5, 6, 5) on a 16-bit one (the GPi Case's), whose few steps it's dithered to
+    instead."""
+    import numpy as np
+    from PIL import Image, ImageOps
     w, h = size
     if name == "Picture" and picture:
         try:
@@ -32,33 +214,24 @@ def wallpaper(name, size, picture="", depth=8):
             return Image.blend(im, Image.new("RGB", size, (0, 0, 0)), 0.45)
         except Exception:
             name = "Midnight"
-    looks = {   # top colour, bottom colour, glows: (x, y, radius, colour) as fractions of the screen
-        "Midnight": ((19, 23, 31), (11, 14, 19), []),
-        "Black": ((0, 0, 0), (0, 0, 0), []),
-        "Dusk": ((52, 36, 86), (14, 14, 30), [(0.85, 0.05, 0.55, (150, 84, 120))]),
-        "Ocean": ((8, 66, 100), (6, 18, 32), [(0.15, 0.0, 0.6, (40, 140, 170))]),
-        "Forest": ((22, 72, 52), (8, 20, 16), [(0.8, 0.1, 0.5, (70, 130, 80))]),
-        "Aurora": ((10, 16, 30), (8, 14, 22), [(0.2, 0.15, 0.45, (40, 170, 140)),
-                                               (0.65, 0.05, 0.5, (100, 80, 200)),
-                                               (0.95, 0.35, 0.35, (40, 110, 190))]),
-    }
-    top, bottom, glows = looks.get(name, looks["Midnight"])
-    sw, sh = max(w // 4, 1), max(h // 4, 1)
-    top, bottom = np.array(top, np.float32), np.array(bottom, np.float32)
-    t = np.linspace(0.0, 1.0, sh, dtype=np.float32)[:, None, None]
-    small = np.repeat(top + (bottom - top) * t, sw, axis=1)          # (sh, sw, 3): top to bottom
-    for gx, gy, gr, col in glows:
-        glow = Image.new("L", (sw, sh), 0)
-        r = gr * sw
-        ImageDraw.Draw(glow).ellipse((gx * sw - r, gy * sh - r, gx * sw + r, gy * sh + r), fill=255)
-        m = np.asarray(glow.filter(ImageFilter.GaussianBlur(r / 2)), np.float32)[..., None] * (110 / 255 / 255)
-        small += (np.array(col, np.float32) - small) * m             # (at most 110/255 of its colour, as it was)
+    look = WALLS.get(name, WALLS["Midnight"])
+    small = sky_small(look, max(w // 4, 1), max(h // 4, 1))
+    shapes = [(np.asarray(mask, np.float32) * (alpha / 255), colour, foot, np.asarray(mask).any(axis=1))
+              for mask, colour, foot, alpha in wall_shapes(look, w, h)]
     bits = (depth,) * 3 if isinstance(depth, int) else tuple(depth)
     grain = np.tile(bayer(8), (h // 8 + 1, w // 8 + 1))[:h, :w]  # (half a step either way, in 64 even turns)
     out = np.empty((h, w, 3), np.uint8)
     for c, b in enumerate(bits):
         steps = (1 << min(max(int(b), 1), 8)) - 1
         ch = np.array(Image.fromarray(np.ascontiguousarray(small[..., c])).resize(size, Image.BICUBIC), np.float32)
+        for m, colour, foot, rows in shapes:
+            if foot is None:
+                ch += (colour[c] - ch) * m
+            else:                                      # (its colour changing down it, from its top to its foot)
+                ys = np.nonzero(rows)[0]
+                y0, y1 = (int(ys[0]), int(ys[-1])) if len(ys) else (0, h - 1)
+                t = np.clip((np.arange(h, dtype=np.float32)[:, None] - y0) / max(y1 - y0, 1), 0, 1)
+                ch += (colour[c] + (foot[c] - colour[c]) * t - ch) * m
         ch *= steps / 255.0
         ch += grain
         np.clip(np.rint(ch, out=ch), 0, steps, out=ch)
@@ -113,6 +286,8 @@ HOME_ICONS = {    # tab name -> (its colour: its tile's tint, a line about it)
 HOME_LABELS = {}   # a name -> a shorter one, for a name that doesn't fit under its tile (none, now)
 TILE_TOP, TILE_BOTTOM = (40, 45, 55), (23, 27, 34)   # a tile's dark glass, before its tint
 GLYPH_TOP, GLYPH_BOTTOM = (238, 240, 244), (176, 182, 192)   # the glyphs: light grey, lit from above
+PALE_TOP, PALE_BOTTOM = (255, 255, 255), (240, 243, 248)   # ...over a pale background: light glass,
+PALE_GLYPH = (34, 40, 54)                                    # and its glyphs dark, in the tile's own colour
 AMBER = (238, 166, 72)
 
 
@@ -172,12 +347,12 @@ def paste_console(target, pic, S, box, ink=255):
     target.paste(fill, (round((x0 + x1 - w) / 2), round((y0 + y1 - h) / 2)), pic.resize((w, h), Image.LANCZOS))
 
 
-def draw_icon(name, size=84, card=True, lit=False, fine=1, face=None):
+def draw_icon(name, size=84, card=True, lit=False, fine=1, face=None, pale=False):
     """An app's tile: dark glass tinted with its colour, a thin edge, and its glyph in light grey (a few parts in
     colour: a lit window, the sun, the bot's eyes), drawn three times bigger and scaled down so the edges come out
     smooth. lit: picked (brighter, a bright edge). (card: always, now; the web page's are the same.) fine: size is
     that many times the tile's, for a screen drawn finely (fine.py): its edge as much thicker. face: for Games, a
-    console (its picture, in its colour)."""
+    console (its picture, in its colour). pale: for a pale background: light glass, its glyph dark, in its colour."""
     from .fine import ImageDraw
     from PIL import Image, ImageFilter, ImageFont
     import math
@@ -322,14 +497,22 @@ def draw_icon(name, size=84, card=True, lit=False, fine=1, face=None):
     ImageDraw.Draw(shape).rounded_rectangle((0, 0, S - 1, S - 1), radius=int(S * 0.23), fill=255)
     depth = 0.12 if lit else 0.0
     grad = Image.linear_gradient("L").resize((S, S))
-    tile = Image.composite(Image.new("RGBA", (S, S), mix(TILE_BOTTOM, tint, 0.17 + depth) + (255,)),
-                           Image.new("RGBA", (S, S), mix(TILE_TOP, tint, 0.30 + depth) + (255,)), grad)
+    if pale:                                         # (light glass: its tint stronger towards its foot)
+        tile = Image.composite(Image.new("RGBA", (S, S), mix(PALE_BOTTOM, tint, 0.30 - depth) + (255,)),
+                               Image.new("RGBA", (S, S), mix(PALE_TOP, tint, 0.12 - depth) + (255,)), grad)
+    else:
+        tile = Image.composite(Image.new("RGBA", (S, S), mix(TILE_BOTTOM, tint, 0.17 + depth) + (255,)),
+                               Image.new("RGBA", (S, S), mix(TILE_TOP, tint, 0.30 + depth) + (255,)), grad)
     out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     out.paste(tile, (0, 0), shape)
-    sheen = Image.new("RGBA", (S, S), (255, 255, 255, 0))       # glass: a little light along the top
-    sheen.putalpha(grad.transpose(Image.FLIP_TOP_BOTTOM).point(lambda v: max(0, v - 150) // 6))
-    out.alpha_composite(Image.composite(sheen, Image.new("RGBA", (S, S), (0, 0, 0, 0)), shape))
-    edge = mix(tint, (255, 246, 200), 0.5) if lit else mix((66, 72, 84), tint, 0.5)
+    if not pale:
+        sheen = Image.new("RGBA", (S, S), (255, 255, 255, 0))       # glass: a little light along the top
+        sheen.putalpha(grad.transpose(Image.FLIP_TOP_BOTTOM).point(lambda v: max(0, v - 150) // 6))
+        out.alpha_composite(Image.composite(sheen, Image.new("RGBA", (S, S), (0, 0, 0, 0)), shape))
+    if pale:
+        edge = mix(tint, PALE_GLYPH, 0.25) if lit else mix((255, 255, 255), tint, 0.45)
+    else:
+        edge = mix(tint, (255, 246, 200), 0.5) if lit else mix((66, 72, 84), tint, 0.5)
     ImageDraw.Draw(out).rounded_rectangle((1, 1, S - 2, S - 2), radius=int(S * 0.23), outline=edge + (255,),
                                           width=(6 if lit else 3) * fine)
 
@@ -337,11 +520,12 @@ def draw_icon(name, size=84, card=True, lit=False, fine=1, face=None):
     solid = Image.composite(Image.new("L", (S, S), 255), mask, under.getchannel("A"))
     solid = Image.composite(Image.new("L", (S, S), 255), solid, over.getchannel("A"))
     shadow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    shadow.putalpha(solid.point(lambda v: v * 120 // 255).filter(ImageFilter.GaussianBlur(S / 60)))
+    shadow.putalpha(solid.point(lambda v: v * (36 if pale else 120) // 255).filter(ImageFilter.GaussianBlur(S / 60)))
     out.alpha_composite(shadow, (0, int(S / 60)))
     out.alpha_composite(under)
-    grey = Image.composite(Image.new("RGBA", (S, S), GLYPH_BOTTOM + (255,)),
-                           Image.new("RGBA", (S, S), GLYPH_TOP + (255,)), grad)
+    grey = Image.composite(Image.new("RGBA", (S, S), (mix(tint, PALE_GLYPH, 0.62) if pale else GLYPH_BOTTOM) + (255,)),
+                           Image.new("RGBA", (S, S), (mix(tint, PALE_GLYPH, 0.40) if pale else GLYPH_TOP) + (255,)),
+                           grad)
     grey.putalpha(mask)
     out.alpha_composite(grey)
     out.alpha_composite(over)
@@ -360,10 +544,14 @@ CARD = (26, 30, 37)          # the cards the glyphs sit on (and the dark parts o
 CARD_LINE = (44, 50, 61)     # ...their edge
 
 
-def draw_glyph(name, size=52, face=None):
+PALE_CARD = (250, 251, 253)   # Cards over a pale background: white cards (their glyphs' dark parts too)
+PALE_CARD_LINE = (255, 255, 255)
+
+
+def draw_glyph(name, size=52, face=None, pale=False):
     """Cards's icon for an app: a glyph in its own colours (its dark parts the colour of the card it sits on),
     drawn three times bigger and scaled down so the edges come out smooth. face: for Games, a console (its picture,
-    in its colour, lighter if it's a dark one: it's on a dark card)."""
+    in its colour, lighter if it's a dark one: it's on a dark card). pale: on a white card (a pale background's)."""
     from .fine import ImageDraw
     from PIL import Image, ImageFont
     import math
@@ -373,10 +561,11 @@ def draw_glyph(name, size=52, face=None):
     colour = GLYPH_COLOURS.get(name, (200, 206, 214))
     if look:
         lum = 0.299 * look[1][0] + 0.587 * look[1][1] + 0.114 * look[1][2]
-        colour = mix(look[1], (255, 255, 255), 0.45) if lum < 110 else look[1]
+        colour = look[1] if pale and lum < 200 else mix(look[1], (0, 0, 0), 0.3) if pale else \
+            mix(look[1], (255, 255, 255), 0.45) if lum < 110 else look[1]
     im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    dark = CARD
+    dark = PALE_CARD if pale else CARD
 
     def P(*pts):
         return [(x * k, y * k) for x, y in pts]

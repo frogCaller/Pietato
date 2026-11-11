@@ -2,7 +2,8 @@
 Glass now), each drawn its own way, and each with every app's line along the bottom, what's playing popping up, and
 the weather there once Weather knows where you are (and not before). Cards on a bigger screen: a TV's as far
 apart across as down; an ultrawide's in two rows of taller cards (▶, ▼ and ▲ going through them); the GPi
-Case's as ever."""
+Case's as ever. Settings > Background: the dark ones as ever, and brighter ones with them (strong colours, pale
+ones), the home screen's words in the ink each needs; A on its row opens a page of them all."""
 import io, json, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -43,14 +44,16 @@ class FB:
 
 g.Framebuffer = FB
 said = []
+inked = {}                                           # what's said: the colour it's in (the last, if said twice)
 real_text = ImageDraw.ImageDraw.text
 
 
 def drawn(m):
     """What the home screen says (and with which font), drawn afresh."""
-    said.clear()
+    said.clear(); inked.clear()
     ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (said.append((str(text), k.get("font"), xy)),
-                                                              real_text(self, xy, text, *a, **k))[1]
+                                                              inked.__setitem__(str(text), k.get("fill")),
+                                                              real_text(self, xy, text, *a, **k))[2]
     try:
         m.home_base = (None, None)
         m.dirty = True; m.flush()
@@ -113,12 +116,15 @@ for style in ["Bright", "Glass", "Cards"]:
     fonts = {t: f for t, f, _ in said}
     clock = next(t for t, f, _ in said if ":" in t and len(t) <= 8)
     if style == "Bright":
-        check("...the time big and bold, the date under it", fonts[clock] is F["clock"]
-              and any(t.startswith("Thursday") or t.endswith(("day, October 22",)) or "," in t for t in texts))
+        date = next((t for t in texts if "day, " in t), None)
+        check("...the time big and bold (the typeface the others have), the date under it",
+              fonts[clock] is F["home1_clock"] and fonts.get(date) is F["home1_date"])
         check("...an accent ring round the app picked", near(img.getpixel((int(x0) - 5, int((y0 + y1) / 2))), g.ACCENT))
-        check("...its name bold", fonts.get("Games") is F["small_b"])
-        check("...the buttons on a bar of their own", near(img.getpixel((5, 480 - m.FOOTER)), g.LINE, 4)
-              and near(img.getpixel((5, 470)), g.BG, 4))
+        check("...its name bold, the others' not", fonts.get("Games") is F["home1_label_b"]
+              and fonts.get("Music") is F["home_label"])
+        check("...the buttons straight on the background, a thin line over them (no bar of their own)",
+              near(img.getpixel((100, 480 - m.FOOTER + 4)), g.LINE, 4)
+              and img.getpixel((5, 470)) == g.wallpaper("Midnight", (640, 480)).getpixel((5, 470)))
         tile = m.home_icon("Games")
         check(f"...bright tiles, white glyphs (Games: {tile.getpixel((10, 6))[:3]})", tile.size == (72, 72)
               and near(tile.getpixel((10, 6)), (58, 152, 96), 4) and near(img.getpixel((int(x0 + 36), int(y0 + 30))),
@@ -215,6 +221,139 @@ m2 = g.Media()
 check(f"a save from before: its 'Just the time' forgotten, Minimal shown as Glass ({m2.setting('home_style')})",
       "widget" not in m2.state["settings"] and m2.setting("home_style") == "Glass" and m2.home_style() == "Glass")
 
+# ---- the backgrounds: the home screen's words take the ink each needs (as ever on a dark one; white, a soft shadow
+# under them, on a strong colour; dark on a pale one), and its tiles go with it
+def home_on(style, wall, pop=False):
+    """The home screen drawn in this style over this background: (the picture, what it says, the time as said)."""
+    m.set_setting("home_style", style); m.set_setting("wallpaper", wall)
+    m.view = "home"; m.home_sel = apps.index("Games")
+    if pop:
+        m.pop_now()
+    texts = drawn(m)
+    return FB.last.convert("RGB"), texts, next(t for t in texts if ":" in t and len(t) <= 8)
+
+
+def is_dark(c):
+    return max(c[:3]) < 110
+
+
+def tile_look(img, name="Files"):
+    """(how light an app's tile is, about; its darkest and its lightest part)."""
+    x0, y0, x1, y1 = (int(v) for v in m.card_box(apps.index(name), g.home_layout(len(apps), 5), 5, 0))
+    part = np.asarray(img.crop((x0 + 8, y0 + 8, x1 - 8, y1 - 8)).convert("L"))
+    return float(part.mean()), int(part.min()), int(part.max())
+
+
+import numpy as np
+about = g.HOME_ICONS["Games"][1]
+for style in ["Bright", "Glass", "Cards"]:
+    img, texts, clock = home_on(style, "Midnight")
+    as_ever = texts.count(clock) == 1 and inked[clock] == g.TEXT
+    dim = tile_look(img)
+    tile = m.home_icon("Files")
+    img, texts, clock = home_on(style, "Candy")
+    check(f"{style} on a strong colour (Candy): the time white, a soft shadow under it; on a dark one, as ever",
+          as_ever and inked[clock] == (255, 255, 255) and texts.count(clock) == 2
+          and (style == "Cards" or inked["Music"][0] > 240) and inked[about][0] > 230)
+    check(f"...its tiles as on a dark one ({tile_look(img)[0]:.0f}, {dim[0]:.0f})",
+          m.home_icon("Files") is tile and abs(tile_look(img)[0] - dim[0]) < 12)
+    img, texts, clock = home_on(style, "Peach")
+    check(f"{style} on a pale one (Peach): the time, the apps' names and the line along the bottom dark, said once",
+          is_dark(inked[clock]) and texts.count(clock) == 1 and is_dark(inked["Music"]) and is_dark(inked[about])
+          and is_dark(inked["68°"]))
+    light = tile_look(img)
+    if style == "Bright":
+        check("...its tiles as bright as ever", m.home_icon("Files") is tile)
+    else:
+        check(f"...{'light glass tiles, their glyphs dark' if style == 'Glass' else 'white cards'} "
+              f"({light[0]:.0f}, from {light[1]} to {light[2]}; on a dark one {dim[0]:.0f}, from {dim[1]} to {dim[2]})",
+              light[0] > dim[0] + 50 and light[2] > 225 and light[1] < 120 and dim[0] < 120 and dim[2] > 180
+              and m.home_icon("Files") is not tile)
+for wall in ("Aurora", "Snow", "Candy"):               # (Glass, the app picked: its tile's shadow fades away under
+    img, texts, clock = home_on("Glass", wall)         #  it evenly, not cut short where its name is drawn afresh:
+    x0, y0, x1, y1 = (int(v) for v in m.card_box(apps.index("Games"), g.home_layout(len(apps), 5), 5, 0))
+    cut = y1 + m.home_geometry()[3] - 11               #  on Aurora that was a step of 22 in one row, among 1s and 2s)
+    down = [sum(img.getpixel((x0 + 8, y))) for y in range(cut - 4, cut + 4)]
+    steps = [b - a for a, b in zip(down, down[1:])]
+    check(f"Glass on {wall}: the picked tile's shadow fades away under it evenly, no edge (row by row: {steps})",
+          max(steps) - min(steps) <= 12)
+m.play([radio], 0, show=False)
+m.meta["song"] = "Take Five"
+for style in ["Bright", "Glass", "Cards"]:
+    img, texts, clock = home_on(style, "Midnight", pop=True)
+    as_ever = inked["Jazz Radio"] == g.TEXT
+    img, texts, clock = home_on(style, "Peach", pop=True)
+    x0 = next(xy for t, f, xy in said if t == "Jazz Radio")[0]
+    check(f"{style} on a pale one: what's playing pops up on a light card, its words dark (a dark one: as ever)",
+          as_ever and is_dark(inked["Jazz Radio"]) and is_dark(inked["Take Five"])
+          and min(img.getpixel((int(x0) + 200, 40))) > 200)
+m.stop(); m.np_until = 0.0
+from PIL import Image
+Image.new("RGB", (800, 600), (250, 250, 250)).save(HOME + "/Pictures/white.png")
+m.set_setting("picture", HOME + "/Pictures/white.png")
+img, texts, clock = home_on("Glass", "Picture")
+check(f"a picture of yours, even a white one: darkened, the words light as ever ({img.getpixel((5, 5))})",
+      inked[clock] == g.TEXT and max(img.getpixel((5, 5))) < 160 and m.home_ink() is g.INK["light"])
+m.set_setting("picture", "")
+img, texts, clock = home_on("Glass", "Picture")
+check("...Picture with none picked yet: Midnight's look", inked[clock] == g.TEXT
+      and img.getpixel((5, 5)) == g.wallpaper("Midnight", (640, 480)).getpixel((5, 5)))
+m.state["settings"]["wallpaper"] = "Teletext"
+img, texts, clock = home_on("Glass", "Teletext")
+check("...one it doesn't know: Midnight's too", inked[clock] == g.TEXT
+      and img.getpixel((5, 5)) == g.wallpaper("Midnight", (640, 480)).getpixel((5, 5)))
+
+# ---- Settings > Background: ◀ ▶ on its row as ever; A opens a page of them all, a little picture each
+m.set_setting("wallpaper", "Midnight"); m.set_setting("home_style", "Glass")
+m.tab = m.tab_index("settings"); m.view = "list"; m.set_page = "root"
+m.set_sel = [r[0] for r in m.settings_rows()].index("wallpaper")
+texts = drawn(m)
+check("Settings > Background: ◀ ▶ change it, A shows them all", "Change" in texts and "See them all" in texts)
+m.press("right")
+check(f"...▶: the next ({m.setting('wallpaper')})", m.setting("wallpaper") == g.WALLPAPERS[1])
+m.press("left"); m.press("left")
+check(f"...◀ from the first: round to the last, a picture of yours ({m.setting('wallpaper')})",
+      m.setting("wallpaper") == "Picture")
+m.press("right")
+m.press("a")
+texts = drawn(m)
+cols = m.wall_layout()[0]
+check(f"...A: a page of them all by name, {cols} across, the one in use picked",
+      m.set_page == "wallpaper" and all(w in texts for w in g.WALLPAPERS) and cols == 5
+      and g.WALLPAPERS[m.set_sel] == m.setting("wallpaper") == "Midnight" and "Use this" in texts)
+m.press("down"); m.press("down"); m.press("right")
+check(f"...▼ ▼ ▶: two rows down and one along ({g.WALLPAPERS[m.set_sel]}), nothing changed yet",
+      m.set_sel == 2 * cols + 1 and m.setting("wallpaper") == "Midnight")
+m.press("a")
+check(f"...A: that one's the background ({m.setting('wallpaper')}), kept, the page still up",
+      m.setting("wallpaper") == g.WALLPAPERS[2 * cols + 1] and m.set_page == "wallpaper"
+      and json.load(open(g.STATE_FILE))["settings"]["wallpaper"] == g.WALLPAPERS[2 * cols + 1])
+m.set_sel = g.WALLPAPERS.index("Picture")
+texts = drawn(m)
+check("...on Picture: A picks one of yours", "Pick a picture" in texts and "One of your own" in texts)
+m.press("b")
+check("...B: back to Settings, on its row", m.set_page == "root"
+      and m.settings_rows()[m.set_sel][0] == "wallpaper")
+small = FB.w, FB.h
+FB.w, FB.h = 480, 320                               # (a small handheld's screen)
+m.press("a"); m.set_sel = len(g.WALLPAPERS) - 1
+texts = drawn(m)
+check(f"...on a small screen: four across, the page going down to the one picked ({m.wall_layout()[:5]})",
+      m.wall_layout()[0] == 4 and "Picture" in texts and "Midnight" not in texts)
+m.set_sel = 0
+texts = drawn(m)
+check("...and back up", "Midnight" in texts and "Picture" not in texts and "▼" in texts)
+FB.w, FB.h = 960, 540                               # (a TV's)
+texts = drawn(m)
+cols, cw, ch, pw, ph, top = m.wall_layout()
+check(f"...on a TV: five across still, bigger pictures, every one on the page ({pw} x {ph})",
+      cols == 5 and pw > 120 and ph > 64 and all(w in texts for w in g.WALLPAPERS)
+      and top + 4 * ch <= 540 - m.FOOTER)
+FB.w, FB.h = small
+m.press("b")
+m.set_setting("wallpaper", "Midnight")
+m.go_home()
+
 # ---- the grid's kept, but not across styles
 m.set_setting("home_style", "Cards"); m.view = "home"; m.dirty = True; m.flush()
 base = m.home_base
@@ -252,4 +391,72 @@ for name in ("Midnight", "Aurora", "Dusk", "Ocean", "Forest"):
     turn = edges(kept.astype(float) * (1 << SHIFT), 24)
     check(f"...on a 16-bit screen (the GPi Case's): dithered to its own steps, kept as they are, no band's edge "
           f"({turn:.2f}; it was 4.3 to 6)", np.array_equal(b, exact) and turn < 2.0)
+
+# ---- the backgrounds themselves: the dark ones as they were, and brighter ones: strong colours, pale ones
+names = [w for w in g.WALLPAPERS if w != "Picture"]
+check(f"Settings > Background: {len(g.WALLPAPERS)} to pick from, each with a look of its own, Midnight first (what it "
+      f"starts with), a picture of yours last",
+      sorted(names) == sorted(g.WALLS) and len(set(g.WALLPAPERS)) == len(g.WALLPAPERS) >= 20
+      and g.WALLPAPERS[0] == "Midnight" == g.SETTINGS_DEFAULT["wallpaper"] and g.WALLPAPERS[-1] == "Picture")
+AT = [(40, 30), (320, 240), (600, 60), (100, 440), (560, 400)]
+WAS = {"Midnight": [(18, 22, 30), (14, 18, 24), (18, 21, 29), (11, 14, 19), (12, 15, 20)],
+       "Dusk": [(58, 38, 85), (57, 37, 70), (89, 53, 95), (20, 17, 36), (45, 30, 55)],
+       "Ocean": [(21, 94, 126), (14, 63, 88), (11, 69, 100), (12, 43, 62), (7, 31, 49)],
+       "Forest": [(24, 73, 52), (27, 64, 44), (40, 92, 61), (10, 26, 20), (21, 47, 32)],
+       "Aurora": [(35, 81, 97), (37, 60, 96), (43, 71, 136), (15, 36, 44), (24, 39, 73)],
+       "Black": [(0, 0, 0)] * 5}
+off = {name: max(max(abs(a - b) for a, b in zip(g.wallpaper(name, (640, 480)).getpixel(xy), c))
+                 for xy, c in zip(AT, was)) for name, was in WAS.items()}
+check(f"the ones there were: as they were ({off})", max(off.values()) <= 3)
+
+
+def lum(rgb):
+    """How light a colour is to the eye, 0 to 1 (as contrast is worked out from)."""
+    c = np.asarray(rgb, np.float64) / 255
+    c = np.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return c[..., 0] * 0.2126 + c[..., 1] * 0.7152 + c[..., 2] * 0.0722
+
+
+def stands_out(ink, part):
+    """How far a colour stands out from nearly all of a part of a picture (the contrast between them, 1 to 21)."""
+    a, b = lum(ink), lum(part)
+    return float(np.percentile((np.maximum(a, b) + 0.05) / (np.minimum(a, b) + 0.05), 5))
+
+
+WORDS = {"time": (20, 20, 240, 108), "weather": (400, 20, 620, 108), "names1": (40, 206, 600, 222),
+         "names2": (40, 312, 600, 328), "names3": (40, 417, 600, 433), "foot": (28, 456, 612, 476)}
+kinds, least = {}, {}
+for name in names:
+    a = np.asarray(g.wallpaper(name, (640, 480)))
+    ink = g.wall_ink(name)
+    kinds.setdefault(ink, []).append(name)
+    light = float(lum(a).mean())
+    for where, (x0, y0, x1, y1) in WORDS.items():      # (Glass's on the GPi Case's screen: where its words are)
+        key = "label" if where.startswith("names") else "text"
+        least[name, where] = stands_out(g.INK[ink][key], a[y0:y1, x0:x1])
+    if (light > 0.45) != (ink == "dark") or (ink == "light" and light > 0.12):
+        check(f"{name}: its ink ({ink}) goes with how light it is ({light:.2f})", False)
+worst = min(least, key=least.get)
+check(f"each one's ink goes with it: light on the dark ones ({len(kinds['light'])}), white on strong colours "
+      f"({len(kinds['white'])}), dark on pale ones ({len(kinds['dark'])})",
+      set(kinds) == {"light", "white", "dark"} and len(kinds["white"]) >= 4 and len(kinds["dark"]) >= 5
+      and g.wall_ink("Picture") == g.wall_ink("Teletext") == "light")
+check(f"...and the home screen's words stand out from every one, where they are (least: {worst[0]}'s {worst[1]}, "
+      f"{least[worst]:.1f} to 1)", least[worst] >= 3.0)
+for name in ("Rainbow", "Snow", "Peach"):              # (new ones with no shape down their middle)
+    a = np.asarray(g.wallpaper(name, (1920, 1080)))
+    check(f"{name} at 1920 x 1080: a smooth sweep too ({edges(a):.2f})", edges(a) < 0.4)
+    b = np.asarray(g.wallpaper(name, (640, 480), depth=(5, 6, 5)))
+    kept = b >> SHIFT
+    check("...and on a 16-bit screen: dithered to its own steps",
+          np.array_equal(b, np.rint(kept * (255 / ((1 << (8 - SHIFT.astype(int))) - 1))).astype(np.uint8)))
+t0 = time.perf_counter()
+for name in names:
+    g.wallpaper(name, (640, 480), depth=(5, 6, 5))
+took = (time.perf_counter() - t0) / len(names)
+check(f"made once each, when it's picked: {took * 1000:.0f} ms a background on this machine, about", took < 1.0)
+sizes = {name: g.wallpaper(name, (960, 540)).size for name in ("Arcade", "Sky", "Space", "Candy")}
+check("the ones with shapes (a sun, clouds, stars, bubbles): made at any size",
+      set(sizes.values()) == {(960, 540)} and g.wallpaper("Sky", (1140, 480)).size == (1140, 480)
+      and g.wallpaper("Arcade", (2, 2)).size == (2, 2))
 print("ALL OK" if all(ok_all) else f"{ok_all.count(False)} FAILED")

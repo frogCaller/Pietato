@@ -132,7 +132,7 @@ class SimScreen:
             got = (self.press_notes if s.key == "notes" else self.press_fortune)(s, name, repeat)
             if got is not False:
                 return got
-        if s.key == "glow":                            # (the TV backlight: its own buttons, screens/glow.py)
+        if s.key == "glow":                            # (the LED backlight: its own buttons, screens/glow.py)
             got = self.press_glow(s, name, repeat)
             if got is not False:
                 return got
@@ -242,7 +242,7 @@ class SimScreen:
 
     def press_sim_opts(self, s, name, repeat):
         """START's card: up and down pick a row, left and right change it, A or B closes it."""
-        if s.key == "glow":                                # (the TV backlight's: screens/glow.py)
+        if s.key == "glow":                                # (the LED backlight's: screens/glow.py)
             return self.press_glow_opts(s, name, repeat)
         rows = self.sim_rows(type(s))
         if name in ("l", "r"):
@@ -433,7 +433,7 @@ class SimScreen:
         """The card over the box, if there's one, as (picture, where): START's options; Paused; a sim's
         note (Life when it settles); in Rock Paper Scissors the moment to pick a winner, and who won.
         Full screen: just START's options."""
-        if self.sim_opts is not None and s.key == "glow":   # (the TV backlight's card: screens/glow.py)
+        if self.sim_opts is not None and s.key == "glow":   # (the LED backlight's card: screens/glow.py)
             key = self.glow_card_key()
         elif self.sim_opts is not None:
             key = ("opts", s.key, self.sim_opts, tuple(self.sim_value(type(s), k) for k, _, _, _ in self.sim_rows(type(s))),

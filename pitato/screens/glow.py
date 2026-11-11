@@ -1,20 +1,24 @@
-"""Apps > TV backlight (pitato/glow.py): an 8x8 grid of WS2812B LEDs behind the TV (or a strip of them round its
+"""Apps > LED backlight (pitato/glow.py): an 8x8 grid of WS2812B LEDs behind the TV (or a strip of them round its
 edges), on this Pi's GPIO 10 (SPI), lit by the games and music of whichever of your Pietatos it follows (this one too),
 and in a colour of your own the rest of the time (its page: a picture of the LEDs as they're lit, backlight.py; the
-web page's Library has it too). And the other way: this one's games and music lighting your grids, wherever they are.
-A game's colours come from its emulator (told where they go: glow ADDRESS:PORT...); music's beats from its player, when one of your grids wants them: a song or a station then plays
-through party mode's player (party.py: it knows when each bit of it is heard), on its own, as if it were a party."""
+web page's Library has it too). And the other way: this one's games and music lighting your grids, wherever they are,
+and the ESP32 boards on your network (esp32/pietato_led: found by themselves). A game's colours come from its emulator
+(told where they go: glow ADDRESS:PORT...); music's beats from its player, when one of your grids or boards wants them:
+a song or a station then plays through party mode's player (party.py: it knows when each bit of it is heard), on its
+own, as if it were a party."""
 import secrets
 import threading
 import time
 import urllib.parse
 
 from ..config import SETTINGS_DEFAULT
-from ..glow import (ANY, colour_of, COLOURS, CONFIG_TXT, GLOW_PORT, GlowOut, Grid, NOBODY, PI_MODEL, spi_lines,
-                    SPI_DEV, STARTS, Strip, STRIP_LEAST, STRIP_MOST, strip_points, THIS_ONE, turn_spi_on)
+from ..glow import (ANY, colour_of, COLOURS, CONFIG_TXT, GLOW_PORT, GlowOut, Grid, LAMP_PORT, Lamps, NOBODY, PI_MODEL,
+                    spi_lines, SPI_DEV, STARTS, Strip, STRIP_LEAST, STRIP_MOST, strip_points, target_words,
+                    THIS_ONE, turn_spi_on)
 from ..handheld import is_handheld
 from ..library import LISTEN_KINDS
 from ..party import PartyProc, RelayServer
+from ..screen import web_late
 from ..system import is_pc, read_file, run_out
 from ..theme import ACCENT, ACCENTS, BODY, co_mix, LINE, MUTED, ROW, TEXT
 
@@ -46,14 +50,16 @@ NAMED_KEEP = 10.0            # seconds an address's name is kept (the grid asks 
 
 
 class GlowScreen:
-    """Apps > TV backlight, the grid it lights, and this one's games and music lighting your grids."""
+    """Apps > LED backlight, the grid it lights, and this one's games and music lighting your grids."""
     glow_grid = None         # this Pi's LED grid, lit (glow.Grid)
+    glow_lamps = None        # lights of your own on the network, found (an ESP32's LED: glow.Lamps)
     glow_out = None          # this one's music, to your grids (glow.GlowOut)
     glow_station = None      # a station on party mode's player, for its beat: {"token", "server", "relay", "song", "quiet"}
     glow_note = ""           # why the grid isn't lit ("" when it is, or it's off)
     glow_restart = False     # SPI turned on in config.txt: the Pi needs restarting
     glow_seen = glow_music_at = 0.0
-    glow_to = ()             # your grids (and this one's): [(address, port)]
+    glow_to = ()             # your grids (and this one's), and the lights of your own: [(address, port)]
+    glow_to_lamps = ()       # ...the lights among them
     glow_names = None        # address -> (name, when looked up)
 
     # -- what it is --------------------------------------------------------------------------------------------------
@@ -139,7 +145,7 @@ class GlowScreen:
             bright = 0.25
         return max(0.35, bright ** 0.45)
 
-    # -- Apps > TV backlight -----------------------------------------------------------------------------------------
+    # -- Apps > LED backlight -----------------------------------------------------------------------------------------
     def glow_page(self, s):
         """(sim_game's.) Its page as things are now: the grid for its picture, how bright, what's beside it, what it
         says at the foot of the picture, and its buttons."""
@@ -147,14 +153,27 @@ class GlowScreen:
 
         def short(v):
             return v if len(v) <= 13 else v[:12].rstrip() + "…"
+        boards = len(self.lamps_on())                  # (ESP32 boards on your network, lit along with it)
+        s.plain = not self.glow_can()
+        s.blurb = "Your ESP32 boards' LEDs, lit by this Pietato's games and music." if s.plain else type(s).blurb
+        if s.plain:                                    # (a GPi Case, a PC: no LEDs of its own. Just the boards, then)
+            beat = self.glow_setting("glow_beat") != "Off"
+            s.grid, s.points = None, None
+            s.facts = [("ESP32 boards", str(boards) if boards else "None"),
+                       ("Pulse to music", "On" if beat else "Off")]
+            s.says = ("No LEDs here", "They go on a Pi behind the TV") if not boards else (
+                "1 ESP32 board" if boards == 1 else f"{boards} ESP32 boards",
+                "Lit by this Pietato's games and music" if beat else "Lit by this Pietato's games")
+            s.own_hints = [("A", "Pulse off" if beat else "Pulse on")] if boards else [("B", "Back")]
+            return
         s.grid, s.shade, s.points = self.glow_grid, self.glow_shade(), self.glow_points()
         s.facts = [("LEDs", "On" if on else "Off"),
                    ("Shape", f"Strip of {self.glow_count()}" if self.glow_strip() else "8x8 grid"),
                    ("Colour", self.glow_colour_name()), ("Brightness", self.glow_setting("glow_bright") or "25%"),
                    ("Follows", short(self.glow_follows())), ("Lit by", short(self.glow_lit_by()))]
-        if not self.glow_can():
-            s.says = ("No LEDs here", "They go on a Pi behind the TV")
-        elif not on:
+        if boards:
+            s.facts.append(("ESP32 boards", str(boards)))
+        if not on:
             s.says = ("The LEDs are off", "A turns them on")
         elif self.glow_grid is None and self.glow_restart:
             s.says = ("Restart the Pi", "To light them: START, then Restart the Pi now")
@@ -178,15 +197,25 @@ class GlowScreen:
 
     def press_glow(self, s, name, repeat):
         """Its page's buttons: A turns the LEDs on or off, ◀▶ go through its colours, ▲▼ make it brighter or dimmer
-        (START has the rest). False: not one of these (as any sim's: screens/sims.py)."""
+        (START has the rest). False: not one of these (as any sim's: screens/sims.py). On a Pietato with no LEDs of
+        its own, A is your ESP32 boards' pulse to music, on or off, and that's all."""
+        if not self.glow_can():
+            if name in ("b", "l", "r"):
+                return False
+            if name == "a" and not repeat:
+                if self.lamps_on():
+                    new = "Off" if self.glow_setting("glow_beat") != "Off" else "On"
+                    self.glow_pick("glow_beat", new)
+                    self.toast(f"Pulse to music: {new.lower()}", 2)
+                else:
+                    self.toast("The LED backlight goes on a Pi behind the TV", 3)
+                self.dirty = True
+            return None
         if name not in ("a", "left", "right", "up", "down"):
             return False
         if repeat:
             return None
         if name == "a":
-            if not self.glow_can():
-                self.toast("The TV backlight goes on a Pi behind the TV", 3)
-                return None
             self.glow_pick("glow_on", "Off" if self.glow_setting("glow_on") == "On" else "On")
             if self.glow_setting("glow_on") != "On":
                 self.toast("LEDs off", 2)
@@ -274,7 +303,7 @@ class GlowScreen:
         img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(img)
         d.rounded_rectangle((0, 0, W - 1, H - 1), radius=12, fill=ROW + (255,), outline=LINE + (255,))
-        d.text((22, 29), "TV backlight", font=F["head"], fill=TEXT, anchor="lm")
+        d.text((22, 29), "LED backlight", font=F["head"], fill=TEXT, anchor="lm")
         if fit < len(rows):                            # (more above or below: which way)
             d.text((W - 24, 29), ("▲ " if first else "") + ("▼" if first + fit < len(rows) else ""), font=F["small"],
                    fill=MUTED, anchor="rm")
@@ -321,8 +350,31 @@ class GlowScreen:
         self.glow_seen = 0.0
 
     # -- the grid ----------------------------------------------------------------------------------------------------
+    def lamps_start(self):
+        """Lights of your own on the network (an ESP32's LED) listened for, from here on: on any Pietato, with or
+        without a grid of its own."""
+        if self.glow_lamps is None:
+            try:
+                self.glow_lamps = Lamps(getattr(self, "lamps_port", LAMP_PORT))
+            except OSError as ex:
+                print(f"glow: lights on the network aren't listened for ({ex})", flush=True)
+
+    def lamps_stop(self):
+        lamps, self.glow_lamps = self.glow_lamps, None
+        if lamps is not None:
+            lamps.close()
+
+    def lamps_on(self):
+        """The lights there now: [(address, name, its LEDs)]."""
+        return self.glow_lamps.on() if self.glow_lamps is not None else []
+
+    def lamps_note(self):
+        """How many of them, in a few words ("" for none)."""
+        n = len(self.lamps_on())
+        return "" if not n else "1 ESP32 board found" if n == 1 else f"{n} ESP32 boards found"
+
     def glow_start(self):
-        """The grid lit (Apps > TV backlight: on), if it can be: the Pi's SPI turned on first (in config.txt: then a
+        """The grid lit (Apps > LED backlight: on), if it can be: the Pi's SPI turned on first (in config.txt: then a
         restart), if it isn't."""
         if self.glow_grid is not None or self.glow_setting("glow_on") != "On" or not self.glow_can():
             return
@@ -420,10 +472,11 @@ class GlowScreen:
 
     # -- this one's games and music, lighting your grids -------------------------------------------------------------
     def glow_targets(self):
-        """Your grids that are on (this one's too): [(address, port)]."""
+        """Your grids that are on (this one's too), and the lights of your own on the network: [(address, port)]."""
         out = []
         if self.glow_grid is not None and self.glow_follows() != NOBODY:
             out.append(("127.0.0.1", self.glow_grid.port))
+        out += [(ip, GLOW_PORT) for ip, _, _ in self.lamps_on()]
         pie = getattr(self, "pie", None)
         if pie is None or self.setting("share") == "Off":
             return out
@@ -438,10 +491,13 @@ class GlowScreen:
         return out
 
     def glow_beats_wanted(self):
-        """One of your grids (this one's too) follows this one and pulses to its music: its music played on party mode's
-        player, which knows when each beat's heard."""
-        if self.glow_grid is not None and self.glow_setting("glow_beat") != "Off" \
-                and self.glow_follows() in (ANY, THIS_ONE):
+        """One of your grids (this one's too) follows this one and pulses to its music, or a light of your own's on the
+        network (unless Pulse to music is off here): its music played on party mode's player, which knows when each
+        beat's heard."""
+        beat = self.glow_setting("glow_beat") != "Off"
+        if self.glow_grid is not None and beat and self.glow_follows() in (ANY, THIS_ONE):
+            return True
+        if beat and self.lamps_on():
             return True
         pie = getattr(self, "pie", None)
         if pie is None or self.setting("share") == "Off":
@@ -456,17 +512,18 @@ class GlowScreen:
         if now - self.glow_seen >= GLOW_LOOK:
             self.glow_seen = now
             self.glow_to = self.glow_targets()
+            self.glow_to_lamps = frozenset((ip, GLOW_PORT) for ip, _, _ in self.lamps_on())
             if self.glow_out is not None:
-                self.glow_out.aim(self.glow_to)
+                self.glow_out.aim(self.glow_to, self.glow_to_lamps)
 
     def glow_game_tick(self, run, now):
         """(A game on.) Its emulator told where its colours go, when that changes."""
         self.glow_look(now)
-        spec = " ".join(f"{h}:{p}" for h, p in self.glow_to) or "-"
-        if spec != getattr(run, "glow_said", "-") and getattr(run, "state", "") in ("on", "paused") \
+        say = target_words(self.glow_to, self.glow_to_lamps)   # (the lights marked: a picture to a few at a time)
+        if say != getattr(run, "glow_said", "-") and getattr(run, "state", "") in ("on", "paused") \
                 and hasattr(run, "send"):
-            if run.send(f"glow {spec}") is not False:
-                run.glow_said = spec
+            if run.send(f"glow {say}") is not False:
+                run.glow_said = say
 
     def glow_beat(self, t, strength):
         """(Party mode's player, as it plays.) A beat, heard at t (its clock: the leader's, in another's party)."""
@@ -475,7 +532,7 @@ class GlowScreen:
             return
         if self.party is not None and not self.party.get("lead"):
             t -= self.party_clock() - time.monotonic()  # (the leader's clock, as this one's)
-        out.event("beat", strength, at=t)
+        out.event("beat", strength, at=t, lamps=self.glow_setting("glow_beat") != "Off")   # (a grid: its own say)
 
     def glow_tick(self, now):
         """(Media mode's main loop.) Music on party mode's player: its colour, now and then, to your grids (the beats
@@ -483,10 +540,13 @@ class GlowScreen:
         playing = isinstance(self.proc, PartyProc) and self.kind in LISTEN_KINDS
         if playing or self.glow_out is not None:
             self.glow_look(now)
+        if playing and getattr(self.proc, "player", None) is not None:   # (its sound on the web page, Sound here: its
+            used = getattr(self, "sound_used", None) or ("",)           #  beats as that one's listener hears them)
+            self.proc.player.late = web_late() if used[0] == "web" else 0.0
         if playing and self.glow_to and not self.paused and now - self.glow_music_at >= GLOW_MUSIC:
             if self.glow_out is None:
                 self.glow_out = GlowOut()
-                self.glow_out.aim(self.glow_to)
+                self.glow_out.aim(self.glow_to, self.glow_to_lamps)
             self.glow_music_at = now
             self.glow_out.music(dict(ACCENTS).get(self.setting("accent"), ACCENTS[0][1]))
         st = self.glow_station
@@ -521,7 +581,7 @@ class GlowScreen:
 
     # -- the web page's Library ----------------------------------------------------------------------------------------
     def web_glow_rows(self):
-        """Library > TV backlight's settings, on the web page (a Pi that can have a grid): as Settings rows are."""
+        """Library > LED backlight's settings, on the web page (a Pi that can have a grid): as Settings rows are."""
         rows = [dict(key=k, label=label, kind="choice", value=self.glow_value(k), choices=list(choices))
                 if k != "glow_count" else dict(key=k, label=label, kind="count", value=self.glow_count(),
                                                min=STRIP_LEAST, max=STRIP_MOST)
@@ -560,7 +620,7 @@ class GlowScreen:
         return self.web_glow_now()
 
     def web_glow_now(self):
-        """Library > TV backlight: the LEDs as they're lit now (as they're seen from in front, each "#rrggbb", row by
+        """Library > LED backlight: the LEDs as they're lit now (as they're seen from in front, each "#rrggbb", row by
         row; None while they're off), what's lighting them, and its settings."""
         g = self.glow_grid
         points = self.glow_points()                  # (a strip: where its LEDs are round the TV; the grid: None)
@@ -572,6 +632,9 @@ class GlowScreen:
         if pic is not None:
             px = (pic.reshape(-1, 3) * self.glow_shade()).clip(0, 255).round().astype(int)
             leds = ["#%02x%02x%02x" % tuple(c) for c in px.tolist()]
-        return {"can": self.glow_can(), "on": g is not None, "leds": leds, "status": self.glow_status(),
+        status, boards = self.glow_status(), self.lamps_note()
+        if boards and not self.glow_note:
+            status = f"{status}. {boards}" if status else boards
+        return {"can": self.glow_can(), "on": g is not None, "leds": leds, "status": status,
                 "warn": bool(self.glow_note), "rows": self.web_glow_rows() if self.glow_can() else [],
                 "strip": None if points is None else points.round(4).tolist()}

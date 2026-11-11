@@ -10,11 +10,10 @@ sends it straight from that computer to the other Pietato to keep, in the same f
 
 If you have more than one Pietato on your network, they share what they fetch: coin and stock prices
 and charts, and the weather. Whichever needs something first fetches it, and the others ask it, so
-CoinGecko and Yahoo Finance see one Pietato instead of several. Your game saves follow you too: when you
-stop playing, that Pietato passes the game's saves to the others that are on, and when you start a game,
-it checks the others for a newer save first. A save that gets replaced is kept in `Games/Saves/.replaced`.
-They also talk among themselves, and with you, in Apps > [Group chat](apps.md#group-chat). Settings > Share
-with other Pietatos turns all of this off.
+CoinGecko and Yahoo Finance see one Pietato instead of several. Each Pietato keeps its own game saves:
+nothing another one plays ever replaces them. To carry a game on somewhere else, use
+[Play on another Pietato](games.md) in the game's menu. They also talk among themselves, and with you, in
+Apps > [Group chat](apps.md#group-chat). Settings > Share with other Pietatos turns all of this off.
 
 If your Pietatos all have the same name, give each one its own in Settings > Other Pietatos on the web
 page: this one's name at the top, and below it each of the others that are on, with its address. A name

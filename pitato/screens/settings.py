@@ -5,7 +5,7 @@ import threading
 import time
 
 from ..theme import ACCENT, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
-from ..config import SETTINGS, TURN_DEGREES
+from ..config import SETTINGS, TURN_DEGREES, WALLPAPERS
 from ..system import is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
                       resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
@@ -66,6 +66,8 @@ class SettingsScreen:
             info = self.res_info()
             return [("res", "Auto", None)] + [("res", res_name(s), s) for s in info[1]] if info else \
                 [("res_none", "No TV or monitor on HDMI", None)]
+        if self.set_page == "wallpaper":
+            return [("wall", name, name) for name in WALLPAPERS]
         return self.settings_root_rows()
 
     def settings_root_rows(self):
@@ -140,7 +142,7 @@ class SettingsScreen:
         if key == "sound":
             self.pick_sound(value)
         elif key.startswith("glow_"):
-            self.glow_pick(key, value)                 # (the TV backlight's grid, as it's set now)
+            self.glow_pick(key, value)                 # (the LED backlight's grid, as it's set now)
         else:
             self.set_setting(key, value)
 
@@ -156,6 +158,8 @@ class SettingsScreen:
             return "pass"                              # tabs, as everywhere
         if self.set_page == "bluetooth":
             return self.press_bluetooth(name, repeat)
+        if self.set_page == "wallpaper":
+            return self.press_wall(name, repeat)
         rows = self.settings_rows()
         self.set_sel %= len(rows)
         key, label, extra = rows[self.set_sel]
@@ -194,14 +198,10 @@ class SettingsScreen:
                 self.friend_page()
                 if self.friend.server and self.friend.models_at != self.friend.server:
                     self.friend.fetch_models()
-            elif key == "wallpaper" and self.setting("wallpaper") == "Picture":
-                pi = self.tab_index("photos")
-                self.load_tab(pi)
-                if not self.tab_items(pi):
-                    self.toast("No pictures in ~/Pictures yet", 3)
-                else:
-                    self.picking, self.tab = "wallpaper", pi
-                    self.toast("Pick a picture for the background", 3)
+            elif key == "wallpaper":                   # (every one of them, to pick from)
+                self.set_page = "wallpaper"
+                cur = self.setting("wallpaper")
+                self.set_sel = WALLPAPERS.index(cur) if cur in WALLPAPERS else 0
             elif key == "pad":
                 self.start_learn()
             elif extra:
@@ -213,6 +213,125 @@ class SettingsScreen:
             self.toast("Back to each controller's standard buttons", 3)
         self.dirty = True
         return None
+
+    # -- Background: every one of them on a page, each a little picture -------------------------------------------
+    WALL_PIC = (104, 56)       # a background's picture on the page (the GPi Case's screen; a bigger one's are bigger)
+    WALL_ROOM = (18, 26)       # ...the room round it across, and for its name under it
+    WALL_BIGGEST = 110         # ...and never taller than this
+
+    def wall_layout(self):
+        """The page's grid: (how many across, a cell's width and height, a picture's width and height, its top).
+        Five across, as the list is arranged (the dark ones, strong colours, pale ones, the rest), four on a
+        narrow screen; the pictures as big as lets every row fit, to a point."""
+        W, H = self.fb.w, self.fb.h
+        top = self.LIST_TOP + 26
+        cols = 5 if W >= 600 else 4
+        rows = -(-len(WALLPAPERS) // cols)
+        pad_x, pad_y = self.WALL_ROOM
+        ph = max(self.WALL_PIC[1], min((H - self.FOOTER - top) // rows - pad_y, self.WALL_BIGGEST))
+        pw = min(ph * self.WALL_PIC[0] // self.WALL_PIC[1], (W - 30) // cols - pad_x)
+        return cols, min((W - 30) // cols, pw + pad_x + 6), ph + pad_y, pw, ph, top
+
+    def wall_pick_picture(self):
+        """A picture of yours for the background: off to Photos to pick it."""
+        pi = self.tab_index("photos")
+        self.load_tab(pi)
+        if not self.tab_items(pi):
+            self.toast("No pictures in ~/Pictures yet", 3)
+        else:
+            self.picking, self.tab = "wallpaper", pi
+            self.toast("Pick a picture for the background", 3)
+
+    def press_wall(self, name, repeat):
+        """The page of backgrounds: the d-pad goes round them, A uses the one picked (Picture: one of yours, picked
+        in Photos), B goes back."""
+        n, cols = len(WALLPAPERS), self.wall_layout()[0]
+        sel = self.set_sel % n
+        if name in ("left", "right"):
+            sel = (sel + (1 if name == "right" else -1)) % n
+        elif name in ("up", "down"):
+            to = sel + (cols if name == "down" else -cols)
+            if 0 <= to < n:
+                sel = to
+            elif name == "down" and sel // cols < (n - 1) // cols:   # (a short last row: its last)
+                sel = n - 1
+        elif name == "a" and not repeat:
+            if WALLPAPERS[sel] == "Picture":
+                self.wall_pick_picture()
+            else:
+                self.set_setting("wallpaper", WALLPAPERS[sel])
+        elif name == "b" and not repeat:
+            self.set_page, sel = "root", self.settings_root_index("wallpaper")
+        self.set_sel = sel
+        self.dirty = True
+        return None
+
+    def wall_swatch(self, name, size):
+        """A background as a little picture with round corners, made once (Picture: yours, or None: none yet)."""
+        from ..fine import made_fine, scale
+        from PIL import Image, ImageDraw
+        s = scale()
+        picture = self.setting("picture") if name == "Picture" else ""
+        key = (name, picture, s, size)
+        kept = self.wall_swatches
+        if key not in kept:
+            if name == "Picture" and not picture:
+                kept[key] = None
+            else:
+                w, h = size[0] * s, size[1] * s
+                pic = wallpaper(name, (w, h), picture).convert("RGBA")   # (at its own size: quick to make)
+                edge = Image.new("L", (w * 4, h * 4), 0)
+                ImageDraw.Draw(edge).rounded_rectangle((0, 0, w * 4 - 1, h * 4 - 1), radius=10 * s * 4, fill=255)
+                pic.putalpha(edge.resize((w, h), Image.LANCZOS))
+                kept[key] = made_fine(pic)
+            if len(kept) > 2 * len(WALLPAPERS) + 4:    # (pictures of yours tried, one after another: not all kept)
+                for old in [k for k in kept if k != key][:len(kept) - len(WALLPAPERS)]:
+                    del kept[old]
+        return kept[key]
+
+    def render_wall(self):
+        """Settings > Background: every one of them, a little picture each with its name under it; the one in use
+        ticked, the one picked ringed."""
+        F = self.fonts
+        img, d = self.canvas()
+        W, H = self.fb.w, self.fb.h
+        self.header(img, d)
+        d.text((20, self.LIST_TOP + 10), "Settings  ›  Background", font=F["small"], fill=MUTED, anchor="lm")
+        n = len(WALLPAPERS)
+        sel, now = self.set_sel % n, self.setting("wallpaper")
+        cols, cw, ch, pw, ph, top = self.wall_layout()
+        rows_fit = max(1, (H - self.FOOTER - top) // ch)
+        first = max(0, min(sel // cols - rows_fit + 1, (n - 1) // cols - rows_fit + 1))
+        left = (W - cols * cw) / 2
+        for k, name in enumerate(WALLPAPERS):
+            r, c = divmod(k, cols)
+            if not first <= r < first + rows_fit:
+                continue
+            x, y = int(left + c * cw + (cw - pw) / 2), top + (r - first) * ch + 3
+            self.tappable((left + c * cw, y - 3, left + (c + 1) * cw, y - 3 + ch), "sel", "attr", "set_sel", k)
+            pic = self.wall_swatch(name, (pw, ph))
+            if pic is None:                            # (Picture, with none picked yet: a frame, a hill and a sun)
+                d.rounded_rectangle((x, y, x + pw - 1, y + ph - 1), radius=10, fill=ROW, outline=LINE)
+                mx, my = x + pw / 2, y + ph / 2
+                d.polygon([(mx - 22, my + 15), (mx - 6, my - 5), (mx + 6, my + 9), (mx + 14, my + 1),
+                           (mx + 24, my + 15)], fill=MUTED)
+                d.ellipse((mx + 10, my - 15, mx + 20, my - 5), fill=MUTED)
+            else:
+                img.paste(pic, (x, y), pic)
+            if k == sel:
+                d.rounded_rectangle((x - 3, y - 3, x + pw + 2, y + ph + 2), radius=12, outline=ACCENT, width=2)
+            if name == now:                            # (the one in use: a tick on it)
+                cx, cy = x + pw - 14, y + 14
+                d.ellipse((cx - 9, cy - 9, cx + 9, cy + 9), fill=ACCENT, outline=(16, 19, 23))
+                d.line((cx - 4, cy, cx - 1, cy + 3, cx + 4, cy - 3), fill=(16, 19, 23), width=2)
+            d.text((x + pw / 2, y + ph + 13), name, font=F["label"],
+                   fill=TEXT if k == sel else ACCENT if name == now else BODY, anchor="mm")
+        if (n - 1) // cols >= first + rows_fit:       # more below
+            d.text((W / 2, H - self.FOOTER - 3), "▼", font=F["small"], fill=MUTED, anchor="mm")
+        picture = WALLPAPERS[sel] == "Picture"
+        self.footer(d, [("A", "Pick a picture" if picture else "Use this"), ("L R", "Tabs"), ("B", "Back")],
+                    right="One of your own" if picture else None)
+        self.fb.show(img)
 
     # -- Rotate screen: a screen mounted on its side or upside down ----------------------------------------------
     def turn_screen(self):
@@ -537,6 +656,8 @@ class SettingsScreen:
             return self.render_bluetooth()
         if self.set_page == "f_char":
             return self.render_character()
+        if self.set_page == "wallpaper":
+            return self.render_wall()
         F = self.fonts
         img, d = self.canvas()
         W, H = self.fb.w, self.fb.h
@@ -705,8 +826,8 @@ class SettingsScreen:
                 hints = [("A", "Set up buttons"), ("X", "Reset"), ("L R", "Tabs"), ("B", "Home")]
             elif key == "pad_swap" and self.pad_in_hand() is not None:   # (which controller: on the right)
                 right = self.fit(d, self.pad_in_hand().dev.name.strip(), F["small"], 220)
-            elif key == "wallpaper" and self.setting("wallpaper") == "Picture":
-                hints.insert(1, ("A", "Pick picture"))
+            elif key == "wallpaper":
+                hints.insert(1, ("A", "See them all"))
         self.footer(d, hints, right=right)
         self.fb.show(img)
 

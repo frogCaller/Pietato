@@ -423,6 +423,17 @@ try:
 except urllib.error.HTTPError as ex:
     code = ex.code
 check("unknown icon: 404, nothing kept", code == 404 and all(k[0] in g.HOME_ICONS for k in m.web_icons))
+wall, ctype = get("/wall?name=Candy")
+check("a background's little picture (Settings', on the web page): a PNG", ctype == "image/png"
+      and wall[:4] == b"\x89PNG" and len(wall) < 60000)
+codes = []
+for bad in ("Picture", "Nope", "", "..%2Fstate"):
+    try:
+        get("/wall?name=" + bad); codes.append(200)
+    except urllib.error.HTTPError as ex:
+        codes.append(ex.code)
+check(f"...a picture of yours, or a name that isn't one: 404, nothing kept ({codes})", codes == [404] * 4
+      and set(m.web_walls) == {"Candy"})
 
 # ---- the web page keeps to your home folder ------------------------------------------
 os.makedirs(S + "/home/u/.secret", exist_ok=True)

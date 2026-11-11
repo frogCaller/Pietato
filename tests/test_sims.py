@@ -417,13 +417,13 @@ m.home_sel = [a for a, _ in m.home_apps()].index("Apps")
 m.press("a")
 SIMI = m.tab
 corner = (g.SIM_BOX[0], g.SIM_BOX[1])
-SHOWN = [it["title"] for it in m.tab_items()]          # (Apps' list as it is here: TV backlight only on a Pi with LEDs)
-check(f"Apps' list here: all of them but the TV backlight ({len(SHOWN)})",
-      SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n != "TV backlight"])
+SHOWN = [it["title"] for it in m.tab_items()]          # (Apps' list as it is here: LED backlight only on a Pi with LEDs)
+check(f"Apps' list here: all of them but the LED backlight ({len(SHOWN)})",
+      SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n != "LED backlight"])
 for row, name in enumerate(SHOWN):
     if row:
         m.press("down")
-    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "TV backlight"):
+    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "LED backlight"):
         continue                                   # (test_clock.py, test_notes.py, test_fortune.py, test_sim.py,
                                                    #  test_fishtank.py, test_glow.py)
     if next(t for t in g.LIBRARY if t["name"] == name)["type"] != "sim":

@@ -327,7 +327,11 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lights_hit = 0.0        # ...when an arrow last dimmed one
         self.home_sel = 0            # the icon picked on the home screen
         self.wall = (None, None)     # (what it's for, the home screen's background)
+        self.wall_tones = None       # ...its colour, about, from its top to its foot (screens/home.py)
+        self.wall_swatches = {}      # Settings > Background's page: each of them, small (screens/settings.py)
+        self.web_walls = {}          # ...and for the web page's (screens/web.py)
         self.home_base = (None, None)  # (what it's for, that background with the app cards on it)
+        self.home_tiles = []           # (...and where each card on it is: its top left)
         self.np_until = 0.0          # what's playing shows on the home screen until then (monotonic)
         self.case = case_kind()      # the GPi Case this Pi's in: "2w", "2" (the GPi Case 2), or None
         self.gpi_case = self.case == "2w"   # the 2W's speaker: given silence in the terminal (player.py)
@@ -373,6 +377,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.attract = None                    # a game playing by itself (Settings > Attract mode: screens/attract.py)
         self.attract_wait = 0.0                # ...no games to play: not looked for again till then
         self.stirs = 0                         # how many times something's happened (a button, the web page)
+        self.whose = None                      # a game started that has a guest here: whose game, asked
         self.invite = None                     # another of your Pietatos asking to play a game together (A or B:
                                                # screens/together.py)
         self.konami_in = None                  # the box for one of your codes (HOME and a button: screens/konami.py)
@@ -642,11 +647,12 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         elif tab["type"] == "group":
             rows = []
             for name in tab["children"]:
-                if name == "TV backlight" and not self.glow_can():
-                    continue                           # (an LED grid: only a Pi with the pins free for one)
+                boards = name == "LED backlight" and not self.glow_can()   # (an LED grid: only a Pi with the pins free
+                if boards and not self.lamps_on():                         #  for one. Any other: while ESP32 boards
+                    continue                                               #  are on your network, their page)
                 ci = next(k for k, t in enumerate(LIBRARY) if t["name"] == name)
                 rows.append(dict(item("grp:" + name, name, "child", str(ci),
-                                      sub=LIBRARY[ci].get("about", "")),
+                                      sub="Your ESP32 boards' LEDs" if boards else LIBRARY[ci].get("about", "")),
                                  icon=LIBRARY[ci].get("badge", "")))
             self.items[i] = rows
         elif tab["type"] == "radio":
@@ -1007,7 +1013,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.ears.stop()
         self.camera.stop()
         self.camera.close()
-        self.glow_stop()                               # (the TV backlight's LEDs dark)
+        self.glow_stop()                               # (the LED backlight's LEDs dark)
+        self.lamps_stop()
         self.glow_station_end()
         if self.active and self.fb is not None and system_stopping():
             self.goodbye()                 # the Pi is going off (the power switch, say): say so
@@ -1469,6 +1476,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         everyone (which a Pi's WiFi saving power can miss)."""
         if self.pie.hear(ip, msg) and self.sharing and self.setting("share") != "Off":
             self.share_tell(ip)
+            self.guests_tell(ip)                       # (a game of its own, played on here: it takes it home)
 
     def share_tell(self, ip):
         """This Pietato's beacon, straight to one at ip."""
@@ -1496,7 +1504,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 game = None
             if game is not None:
                 beacon["game"] = game
-            grid = self.glow_beacon()                  # (its TV backlight: for your others to light)
+            grid = self.glow_beacon()                  # (its LED backlight: for your others to light)
             if grid is not None:
                 beacon["glow"] = grid
         return beacon
@@ -1571,7 +1579,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
-        self.glow_tick(now)                            # (your TV backlights: this one's music on them)
+        self.glow_tick(now)                            # (your LED backlights: this one's music on them)
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:
@@ -1883,6 +1891,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return self.press_konami_in(name, repeat)
         if self.view == "invite":                      # another of your Pietatos asks to play together: A or B
             return self.press_invite(name, repeat)
+        if self.view == "whose":                       # a game that has a guest here: whose game (◀▶, A)
+            return self.press_whose(name, repeat)
         if self.view == "game":                        # the buttons are the game's (HOME: its menu)
             return self.press_game(name, repeat)
         if self.view == "gamemenu":
@@ -2295,6 +2305,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.home_drawn = self.view
         draw = {"home": self.render_home, "keys": self.render_keys, "help": self.render_help,
                 "learn": self.render_learn, "gamemenu": self.render_game_menu, "invite": self.render_invite,
+                "whose": self.render_whose,
                 "konami": self.render_konami_in, "filemenu": self.render_file_menu, "mediamenu": self.render_media_menu,
                 "netmenu": self.render_net_menu,
                 "photo": self.render_photo, "keepres": self.render_keep_res,

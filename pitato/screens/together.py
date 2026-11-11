@@ -90,9 +90,11 @@ class TogetherScreen:
         return self.game is not None and self.game.game.get("system") in LINK_SYSTEMS
 
     def together_can(self):
-        """The game playing can be played together with another of yours (and one's on)."""
+        """The game playing can be played together with another of yours (and one's on). Not one that's another
+        Pietato's, a guest here: its save isn't this one's to link up with."""
         run = self.game
-        if run is None or getattr(run, "attract", False) or self.together_of() is not None:
+        if run is None or getattr(run, "attract", False) or self.together_of() is not None \
+                or run.game.get("whose"):
             return False
         return run.game.get("system") in NET_SYSTEMS + LINK_SYSTEMS and self.handoff_target() is not None
 
@@ -211,10 +213,10 @@ class TogetherScreen:
         self.view = "game"
         self.render_curtain(g["title"], f"Linking up with {who}…" if link else f"Joining {who}'s game…", hints=hints)
         if link:                                       # its own save (a copy: back with yours after)
-            if not host:
-                came = self.saves_follow(g, lambda words: self.render_curtain(g["title"], words, hints=hints))
+            if not host:                               # (played on on another of yours since? Home first)
+                came = self.saves_home(name, say=lambda words: self.render_curtain(g["title"], words, hints=hints))
                 if came:
-                    self.render_curtain(g["title"], f"Your save from {came}. Linking up with {who}…", hints=hints)
+                    self.render_curtain(g["title"], f"Your game from {came}. Linking up with {who}…", hints=hints)
             mine = os.path.join(games_dir(), SAVES_FOLDER, name)
             for ext in (".srm", ".rtc"):
                 if os.path.isfile(mine + ext):

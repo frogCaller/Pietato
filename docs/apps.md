@@ -23,7 +23,7 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type
-- **Apps**: [Group chat](#group-chat), the [TV backlight](#tv-backlight) (on a Pi with LEDs behind the TV), a
+- **Apps**: [Group chat](#group-chat), the [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
@@ -47,6 +47,9 @@ Pietato starts on a home screen of apps:
   shows it as a list instead, with Update software, Reboot and Shut down
 - **Settings**: WiFi, Bluetooth, the home screen's style, background, colours, video size, a TV or monitor's
   resolution, battery saver, sound, controller
+- Settings > Background changes the home screen's background: dark ones, colourful ones like Sunset, Candy
+  and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and A shows
+  them all to pick from
 - If you'd rather see the apps on the whole screen, set Settings > Full screen apps to On. The status
   bar, the tabs and the button hints go away, leaving just the app's name at the top. The buttons work
   the same, and L and R still switch apps
@@ -94,7 +97,7 @@ R and START on any of them pause it, move about in a song or skip, for all of th
 HOME's menu ends it on the one you started it on, and leaves it on the others. Settings > Share with other
 Pietatos needs to be on.
 
-## TV backlight
+## LED backlight
 
 An 8x8 grid of WS2812B LEDs behind your TV, or a strip of them round its edges, can light up with the colours
 along the edges of the game you're playing, on whichever of your Pietatos it follows. It flashes red when you're
@@ -105,7 +108,7 @@ To wire it to the Pi behind the TV (not one in a GPi Case, whose screen uses tho
 (pin 19) and GND to a ground pin. Power the LEDs with 5 V from their own supply, since they can draw more than a
 Pi gives, and join that supply's ground to the Pi's. Size the supply for a strip: each LED can draw up to 60 mA at
 full white, though the brightness setting keeps it well under that. If the first LED flickers, a level shifter (a
-74AHCT125) on DIN helps. Then open Apps > TV backlight and press A to turn it on. The first time, it turns on the
+74AHCT125) on DIN helps. Then open Apps > LED backlight and press A to turn it on. The first time, it turns on the
 Pi's SPI and asks you to restart.
 
 The page shows the LEDs as they're lit. ◀▶ pick their colour for whenever no game or music is lighting them:
@@ -116,8 +119,20 @@ or Nobody to keep it to your colour), and whether it pulses to music.
 Shape sets a grid or a strip. For a grid, Turn, Mirror and Wiring match how it's put up. For a strip, set how
 many LEDs it has (up to 300), where its first LED is, which way it goes round as you look at the TV, and whether
 it runs along the bottom too. Each LED then takes the colour of the edge of the screen nearest it. Show which way
-is up lights the top red and the left side green. The web page's Library has a TV backlight tab with all of this
+is up lights the top red and the left side green. The web page's Library has an LED backlight tab with all of this
 too.
+
+An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato_led/pietato_led.ino` in the
+Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
+any ESP32 with an RGB LED). It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
+takes a game's colours, a hit's red and an achievement's gold. Its LED is amber while it looks for your WiFi,
+and green for a moment once it's on it.
+
+Any number of boards can do it at once, on any Pietato, with or without LEDs of its own. A beat is one small
+packet to each board, and a game's colours go to a couple of them at a time, in turn, so they don't slow the Pi
+down. Apps > LED backlight shows how many it's found (it's there on a Pietato with no LEDs of its own too, while
+a board is on), and Pulse to music there is for the boards as well, for music played on that Pietato. The sketch
+can light a strip of LEDs on one of the board's pins instead (with the FastLED library).
 
 ## Fish Tank
 

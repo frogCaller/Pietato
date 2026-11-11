@@ -36,7 +36,8 @@ Beside the screen (under it on a phone), On this computer (or On this phone) has
   channels, Neo Geo, Neo Geo Pocket, PSP and Dreamcast games, and games in more than one file (a `.cue`)
   still play on the Pi.
 - **Sound here**: the Pi's sound plays on your phone or computer instead of the Pi. It's a moment
-  behind the picture.
+  behind the picture, and a little further behind after it's cut out, so it doesn't again. On a
+  computer, rest the pointer on the switch to see how far behind it is, and how often it's cut out.
 - **Mic here**: the bot hears you through your phone's or computer's microphone instead of one
   plugged into the Pi (unless Settings > Bot > Listens is off). Browsers only let a page use your
   microphone over a secure connection, so the Pi has a secure page too:
@@ -62,9 +63,9 @@ you draw. If you've set up a bot, Ask your bot has it say what it sees.
 press Arrange and drag the tanks into a grid, and set the space between your screens. See
 [Fish Tank](apps.md#fish-tank).
 
-**TV backlight**, in Library on a Pi with LEDs behind the TV, shows them as they're lit, as a grid or a
+**LED backlight**, in Library on a Pi with LEDs behind the TV, shows them as they're lit, as a grid or a
 strip round the TV. Tap a colour for them, or change how bright they are, which Pietato they follow, the
-strip's LEDs and the rest. See [TV backlight](apps.md#tv-backlight).
+strip's LEDs and the rest. See [LED backlight](apps.md#led-backlight).
 
 **Files** takes files or whole folders dropped on it. Music, videos, pictures, documents and games
 each go to their own folder, and settings files like `radio.txt` go to Settings. Each file can
@@ -73,4 +74,5 @@ be shown on the Pi's screen, downloaded or deleted. The Computers tab has your o
 **Settings** has everything the Pi's Settings has, and each app's own: Home Assistant's address and
 token, WiFi, Weather's place, the Bot's computer, your stocks and coins, and this page's password.
 It's easier than the Pi's keyboard for pasting a token. Passwords and tokens can be put in or taken
-off there, but the page never shows them.
+off there, but the page never shows them. The home screen's backgrounds are there as little pictures to
+pick from.

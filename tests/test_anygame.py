@@ -283,7 +283,7 @@ check(f"...that pick asked again at once, without it; then told it can't see ({F
 blog = open(S + "/d3.ai.log").read()
 check("...and its log says so", "d3 can't look at pictures" in blog)
 
-# the model not answering: it waits, and asks again
+# the model not answering: it gets the game going by itself, and asks again
 Fake.asked.clear()
 srv2 = ThreadingHTTPServer(("127.0.0.1", 0), Ollama)
 dead = f"127.0.0.1:{srv2.server_address[1]}"
@@ -291,11 +291,17 @@ srv2.server_close()                             # (nothing there)
 ai = A.GameAI(run, dead, "clef", S + "/dead.ai.log")
 pressed_before = len(sent)
 ai.start()
-time.sleep(3)
-check(f"no answer: it waits, pressing nothing ({ai.status!r})", ai.alive() and len(sent) == pressed_before
-      and "Waiting" in ai.status)
+until(lambda: any(s[0] == "down" and s[1] == "start" for s in sent[pressed_before:]), 8)
+mine = [s[1] for s in sent[pressed_before:] if s[0] == "down"]
+check(f"no answer: it presses on by itself, to get the game going ({mine[:4]}; {ai.status!r})",
+      ai.alive() and "start" in mine)
+dlog = S + "/dead.ai.log"
+until(lambda: "Start pressed" in open(dlog).read(), 6)     # (what came of it, said once it's been watched)
 ai.stop()
 until(lambda: not ai.thread.is_alive(), 8)
+events = [json.loads(x).get("event") for x in open(dlog).read().splitlines()]
+check(f"...its log says the model isn't answering, and what it pressed ({[e for e in events if e][1:4]})",
+      any("isn't answering" in str(e) for e in events) and any(str(e).startswith("Start pressed") for e in events))
 run.quit()
 
 # ---- Pokémon Emerald's player: the screen goes with its picks too ---------------------------------------------------

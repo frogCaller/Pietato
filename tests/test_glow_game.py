@@ -1,4 +1,4 @@
-"""TV backlight, end to end with a real emulator (Genesis Plus GX, with a pretend screen): a tiny test game of our own
+"""LED backlight, end to end with a real emulator (Genesis Plus GX, with a pretend screen): a tiny test game of our own
 that's blue, and red while player 1 holds B. Told where its colours go (glow ADDRESS:PORT, as media mode tells it), the
 emulator sends the edges of each picture over UDP, 30 a second at most: blue; B held, red; let go, blue again. Told
 nowhere: nothing more. And an LED grid (glow.py's, its LEDs a plain file) lit by them, over real UDP."""

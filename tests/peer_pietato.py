@@ -10,7 +10,8 @@ terminal's keys, go in the log too (another Pietato controlling this one: pilot.
 It prints READY <its web page's address> once it's answering; then takes a line at a time: state (what's on its
 screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu), mediahome (...on a video or Now playing),
 news WHAT WHY (its emulator says WHAT, then ends: netgone, say), gamenews WHAT WHY (...and plays on: watchjoined, say),
-game PATH|TITLE|SYSTEM (a game of its own, opened), beacon (what it tells your others it is, and doing, as JSON),
+game PATH|TITLE|SYSTEM (a game of its own, opened), send (its game, to the other one: its menu's Play on another
+Pietato), endgame (its game, ended), beacon (what it tells your others it is, and doing, as JSON),
 expire (another's asking to play together, not answered in time),
 peer URL NAME, set KEY VALUE (a setting), pilots (the controllers another Pietato's working it with, as JSON), group say
 TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON, for log), quit. Its emulator,
@@ -218,6 +219,8 @@ def state_now():
                        "file_menu": [k for k, _ in m.file_menu_items()] if m.view == "filemenu" else [],
                        "media_menu": [k for k, _ in m.media_menu_items()] if m.view == "mediamenu" else [],
                        "menu": [k for k, _ in m.game_menu_items()] if run else [],
+                       "whose": (run.game.get("whose") or "") if run else None, "me": m.saves_id(),
+                       "asking": [list(r) for r in m.whose["rows"]] if m.view == "whose" and m.whose else None,
                        "send": m.game_value("send") if run else "",
                        "note": m.together_note() if run else "",
                        "invite": {"host": inv.get("host"), "title": (inv.get("ident") or {}).get("title"),
@@ -299,8 +302,8 @@ try:
             if not done_it.wait(10):
                 got.append(state_now())
             print(got[0], file=SAY, flush=True)
-        elif words[0] in ("press", "news", "gamenews", "game", "expire", "home", "mediahome"):   # (on its main loop,
-            #                                                                                     as a button would be)
+        elif words[0] in ("press", "news", "gamenews", "game", "expire", "home", "mediahome", "send",
+                          "endgame"):                   # (on its main loop, as a button would be)
             done_it = threading.Event()
             rest = words[1].split() if len(words) > 1 else []
 
@@ -322,6 +325,10 @@ try:
                     elif what == "game":
                         path, title, key = " ".join(rest).split("|")
                         m.game_open({"src": path, "title": title, "system": key})
+                    elif what == "send":                # (its game's menu: Play on another Pietato)
+                        m.game_send()
+                    elif what == "endgame":             # (...Quit)
+                        m.game_end()
                     elif what == "expire" and m.invite is not None:
                         m.invite["until"] = 0.0
                 finally:

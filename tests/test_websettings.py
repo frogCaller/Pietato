@@ -163,6 +163,24 @@ for bad in (f"{HOME}/Documents/notes.jpg", f"{HOME}/Pictures/../Documents/notes.
 os.symlink("/etc/hostname", f"{HOME}/Pictures/sneaky.jpg")
 check("error" in do("picture", f"{HOME}/Pictures/sneaky.jpg"), "...nor a link out of Pictures")
 
+# ---- the background: every one of them, for the page to show as little pictures --------------------------------------
+import io
+wall = rows()["wallpaper"]
+check(wall.get("walls") is True and wall["choices"] == g.WALLPAPERS and wall["value"] == "Picture",
+      f"Background: every one of them ({len(wall['choices'])}), said to be shown as pictures")
+png = m.web_wall("Candy")
+pic = Image.open(io.BytesIO(png))
+check(png[:8] == b"\x89PNG\r\n\x1a\n" and pic.size == (192, 108) and len(png) < 60000 and m.web_wall("Candy") is png,
+      f"...one's little picture: a small PNG, made once ({pic.size}, {len(png)} bytes)")
+check(all(m.web_wall(w) for w in g.WALLPAPERS if w != "Picture") and max(len(v) for v in m.web_walls.values()) < 60000,
+      f"...each of them has one ({sum(len(v) for v in m.web_walls.values()) // 1024} KB in all)")
+check(all(m.web_wall(bad) is None for bad in ("Picture", "Nope", "", "../state", None, 3, ["Candy"]))
+      and set(m.web_walls) == set(g.WALLS), "...none for a picture of yours (the page shows that itself), or a name that isn't one")
+check(do("wallpaper", "Candy") == {"ok": True} and m.setting("wallpaper") == "Candy"
+      and m.setting("picture").endswith("Lake.png"), "one picked on the page: the background (your picture kept for later)")
+check(do("wallpaper", "Picture") == {"ok": True} and m.setting("wallpaper") == "Picture",
+      "...Picture again: yours, as it was")
+
 # ---- Weather's place -------------------------------------------------------------------------------------------------
 place = {"name": "Springfield", "admin": "Illinois", "country": "US", "lat": "39.8", "lon": -89.64,
          "label": "Springfield, Illinois, US", "evil": "x" * 500}

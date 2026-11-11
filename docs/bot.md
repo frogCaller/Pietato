@@ -57,13 +57,15 @@ If that computer has a decision model (Ollama 0.35 or newer: `ollama pull nimble
 Snake and the model plays. Pick which one in Snake's options (START), and Slow if it can't keep up.
 
 It can also play your games for you: in a game, open its menu with Home and press ▶ on AI player to
-pick a decision model. Your buttons wait while it plays. In racing games, platformers, fighting games
-and shooters it plays by instinct, many times a second: it holds the gas and steers along the road,
-runs and jumps over gaps and enemies, attacks and blocks, or keeps firing, and the model says when to
-play like that and when to press through a menu. In other games it looks at the screen and picks the
-next button to press, while the game goes on at its own speed. From a game's title screen it presses
-Start to get going, even when the title screen looks like a level or plays a demo of its own, and it
-does again if it ends up back there after a game over.
+pick a decision model. Your buttons wait while it plays. It gets a game going by itself, the way you
+would without thinking: Start, then A, through the logos, the title screen, menus and text (a coin
+first in an arcade game), and again if it ends up back there after a game over. Racing games,
+platformers, fighting games and shooters it then plays by instinct, many times a second: it holds the
+gas and steers along the road, runs and jumps over gaps and enemies, attacks and blocks, or keeps
+firing. The model says which way to go and helps with menus, but the game doesn't wait for it, and
+it plays on when the model's slow or says nothing. It knows what kind of game many are from their
+names; for the rest, your Bot's model says. In other games the model looks at the screen and picks
+the next button to press, while the game goes on at its own speed.
 
 It plays Pokémon Emerald (the English cartridge) best, as there it reads the game's memory too. It
 knows the story (out of the truck, the clock, your rival, Professor Birch, and on badge by badge) and

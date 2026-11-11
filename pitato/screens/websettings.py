@@ -90,7 +90,8 @@ class WebSettingsScreen:
             return {"status": words, "tone": "busy" if ok == "busy" else "ok" if ok else "bad"}
 
         # the screen
-        rows = [choice("wallpaper", choices=WALLPAPERS, picture=os.path.basename(self.setting("picture") or "")),
+        rows = [choice("wallpaper", choices=WALLPAPERS, picture=os.path.basename(self.setting("picture") or ""),
+                       walls=True),               # (the page shows a little picture of each: web.py's web_wall)
                 choice("home_style"),
                 choice("accent", colours={a: hex_of(rgb) for a, rgb in ACCENTS}),
                 choice("clock"), choice("app_full")]
@@ -126,8 +127,8 @@ class WebSettingsScreen:
             choice("group_eyes", "Its camera notices you", ["On", "Off"],
                    note="A USB camera plugged in looks for someone moving, so your others know you're here.")]
             if self.setting("share") != "Off" else [])
-            + self.web_peer_rows(), "Prices and the weather fetched once for them all, your game saves following "
-            "you (a game picks up where you left it on whichever of them you played it on last), and Group chat.")
+            + self.web_peer_rows(), "Prices and the weather fetched once for them all, a game carried on on "
+            "another of them (each keeps its own saves), and Group chat.")
 
         # WiFi
         w, went = self.wifi, self.wifi.get("said")
@@ -398,7 +399,7 @@ class WebSettingsScreen:
         return handler(value, cmd)
 
     def web_choices(self, key):
-        """What a setting may be, as web_settings says (the TV backlight's: as the web page's Library has them)."""
+        """What a setting may be, as web_settings says (the LED backlight's: as the web page's Library has them)."""
         if key in GLOW_KEYS:
             return next((r.get("choices") for r in self.web_glow_rows() if r["key"] == key), None) \
                 if self.glow_can() else None

@@ -364,7 +364,10 @@ class PartyPlayer:
 
     def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None, on_beat=None):
         self.src, self.pos0 = src, max(0.0, float(pos or 0))
-        self.beats = Beats(PARTY_RATE, on_beat) if on_beat is not None else None   # (an LED grid's: glow.py)
+        self.late = 0.0                                # seconds later than it's played here that it's heard (the web
+                                                       # page's Sound here: its listener's a moment behind the Pi)
+        self.beats = (Beats(PARTY_RATE, lambda when, hard: on_beat(when + self.late, hard))   # (an LED grid's, as
+                      if on_beat is not None else None)                                       #  they're heard: glow.py)
         self.clock = clock or time.monotonic
         self.device, self.volume = device, volume
         self.lock = threading.Lock()
@@ -385,6 +388,8 @@ class PartyPlayer:
         self.fade = 0                                  # samples left of a fade in (after silence, or a jump)
         self.xfade = None                              # ...what it was playing before a jump (and how much of it's
                                                        #  gone): faded out as it goes on
+        self.tail = None                               # ...or before a jump into silence: the rest of its fade out,
+                                                       #  for the next piece written (a piece can end partway)
         self.until = None                              # ...ahead after a jump: silence till then (the leader's clock)
         self.closed = False
         self.aplay = None
@@ -516,7 +521,7 @@ class PartyPlayer:
                 first = (sent + len(pending)) / FRAME  # (the first of them: when aplay takes it, and it's heard then)
                 head = pace.when(first, now, taken) + latency + (self.clock() - time.monotonic())
                 data = self.next_out(head, n)
-                if self.beats is not None:             # (its beats, as they'll be heard: your TV backlight's)
+                if self.beats is not None:             # (its beats, as they'll be heard: your LED backlight's)
                     try:
                         self.beats.feed(data, head)
                     except Exception as ex:
@@ -553,7 +558,7 @@ class PartyPlayer:
                 left = n - i
                 if self.until is not None and t < self.until:   # (ahead, after a jump: silence till the clock's there)
                     k = min(left, max(1, int(np.ceil((self.until - t) * rate))))
-                    out.append(np.zeros((k, 2), dtype=np.float32))
+                    out.append(self.quiet(k))
                     i += k
                     continue
                 self.until = None
@@ -561,7 +566,7 @@ class PartyPlayer:
                 if want is None:                       # (silence: till it starts, or plays on, or for the rest)
                     at = self.anchor[0] if self.stop_at is None else None
                     k = left if at is None or at <= t else min(left, max(1, int((at - t) * rate)))
-                    out.append(np.zeros((k, 2), dtype=np.float32))
+                    out.append(self.quiet(k))
                     i += k
                     self.fade, self.xfade = int(PARTY_FADE * rate), None   # (a fade in when it plays again)
                     continue
@@ -582,9 +587,9 @@ class PartyPlayer:
                 if got is None:                        # (nothing to play now)
                     if self.decoded and self.done_at is None:
                         self.done_at = t               # (the end: its last sound's heard then)
-                    out.append(np.zeros((left, 2), dtype=np.float32))
+                    out.append(self.quiet(left))
                     break
-                out.append(self.shaped(got, t))
+                out.append(self.tailed(self.shaped(got, t)))
                 i += len(got)
         a = np.concatenate(out)[:n] if out else np.zeros((n, 2), dtype=np.float32)
         return np.clip(np.rint(a), -32768, 32767).astype("<i2").tobytes()
@@ -606,7 +611,8 @@ class PartyPlayer:
             if drop < e:
                 if self.decoded and self.done_at is None:
                     self.done_at = t                   # (it's over: what was due is past its end)
-                out.append(self.fading(was, left))     # (or not decoded yet: let go of as it comes)
+                self.tail = self.fading(was, fade)     # (or not decoded yet: let go of as it comes)
+                out.append(self.quiet(left))
                 self.fade, self.xfade = fade, None
                 return True
             if was is None or not len(was):
@@ -615,8 +621,8 @@ class PartyPlayer:
                 self.xfade = (was, 0)                  # (faded out as what's due now's faded in: take's)
         elif e < 0:                                    # (ahead: silence till the clock's there, it faded out into it)
             self.until = t - e / PARTY_RATE
-            k = min(-e, left)
-            out.append(self.fading(was, k))
+            self.tail = self.fading(was, fade)         # (all of its fade out: what this piece hasn't room for, in
+            out.append(self.quiet(min(-e, left)))      #  the next)
             self.fade, self.xfade = fade, None
             return False
         elif fresh:
@@ -637,13 +643,27 @@ class PartyPlayer:
         return src[i0] * (1 - f) + src[i0 + 1] * f
 
     def fading(self, was, k):
-        """k samples: was, faded out (as loud as it's set), then silence."""
+        """k samples: was, faded out (as loud as it's set), then silence. None when there's nothing to fade."""
+        if was is None or not len(was) or not k:
+            return None
         a = np.zeros((k, 2), dtype=np.float32)
-        if was is not None and len(was) and k:
-            m = min(k, len(was))
-            ramp = 1.0 - np.arange(1, m + 1, dtype=np.float32) / (len(was) + 1)
-            a[:m] = was[:m] * (ramp * self.volume / 100.0)[:, None]
+        m = min(k, len(was))
+        ramp = 1.0 - np.arange(1, m + 1, dtype=np.float32) / (len(was) + 1)
+        a[:m] = was[:m] * (ramp * self.volume / 100.0)[:, None]
         return a
+
+    def tailed(self, a):
+        """A piece about to be written, with what was playing before a jump into silence still fading out across the
+        first of it (what the piece before had no room for)."""
+        if self.tail is not None:
+            m = min(len(a), len(self.tail))
+            a[:m] += self.tail[:m]
+            self.tail = self.tail[m:] if m < len(self.tail) else None
+        return a
+
+    def quiet(self, k):
+        """k samples of silence (with the rest of that fade out, if there's one)."""
+        return self.tailed(np.zeros((k, 2), dtype=np.float32))
 
     def steer(self, t):
         """Faster or slower, from how far out of step it is (t: when, by the leader's clock): a little, while it's more

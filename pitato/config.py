@@ -50,7 +50,10 @@ def web_private(name):
 
 
 # ---- settings: saved with the rest of the state ---------------------------------------
-WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora", "Black", "Picture"]
+WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings > Background: the dark ones, as ever;
+              "Sunset", "Candy", "Lagoon", "Jungle", "Arcade",      # strong colours; pale ones (the home screen's
+              "Sky", "Peach", "Mint", "Lemon", "Bubblegum",         # words go dark over them); and the rest. How each
+              "Rainbow", "Snow", "Space", "Black", "Picture"]       # looks: home.py's WALLS
 SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Video size; Y while a video plays
 SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you are and the temperature's units are
                # Weather's: START there)
@@ -78,7 +81,7 @@ SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you
                                                                      # were: screens/games.py game_boot)
     ("start_song", "Random song at start-up", ["Off", "On"]),   # one of yours from ~/Music, as it starts
     ("share", "Share with other Pietatos", ["On", "Off"]),   # prices and the weather fetched once for them all, and
-                                                            # your game saves following you (savesync.py)
+                                                            # a game carried on on another of them (savesync.py)
 ]
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
@@ -92,7 +95,7 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "c
                     "glow_beat": "On", "glow_shape": "8x8 grid", "glow_turn": "0°", "glow_mirror": "On",
                     "glow_wiring": "Rows", "glow_count": "60", "glow_start": "Bottom left", "glow_way": "Clockwise",
                     "glow_bottom": "Yes"}
-                                                    # (Apps > TV backlight: screens/glow.py)
+                                                    # (Apps > LED backlight: screens/glow.py)
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,
                   "Minimal": "Glass"}                                                               # and one gone)

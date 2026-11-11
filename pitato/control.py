@@ -144,7 +144,7 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_bluetooth())
                 if u.path == "/fish":                  # (the web page's Fish Tank: the whole grid, now)
                     return self.reply(200, media.web_fish())
-                if u.path == "/glow":                  # (the web page's TV backlight: its LEDs, and its settings)
+                if u.path == "/glow":                  # (the web page's LED backlight: its LEDs, and its settings)
                     return self.reply(200, media.web_glow())
                 if u.path == "/fishpic":               # (...and a fish's picture, to draw)
                     png = media.web_fish_pic(q.get("name", ""), q.get("id", "0"), q.get("size", "96"))
@@ -163,6 +163,10 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 if u.path == "/icon":
                     icon = media.web_icon(q.get("name", ""), q.get("size") or 96)
                     return self.reply(200, icon, "image/png") if icon else self.reply(404, {"error": "No such app"})
+                if u.path == "/wall":                  # (one of the home screen's backgrounds, small: Settings')
+                    pic = media.web_wall(q.get("name", ""))
+                    return self.reply(200, pic, "image/png") if pic else \
+                        self.reply(404, {"error": "No such background"})
             except Exception as ex:
                 print(f"web page asked for {u.path}: {ex!r}", flush=True)
                 return self.reply(500, {"error": "Something went wrong on the Pi"})
@@ -234,9 +238,10 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
             if not isinstance(cmd, dict):
                 return self.reply(400, {"error": "Bad request"})
             cmd["cmd"] = u.path.strip("/")
-            if cmd["cmd"] == "savenews":               # another of your Pietatos has played a game: answered at once
-                try:
-                    return self.reply(200, media.web_saves_news(cmd))
+            if cmd["cmd"] in ("savenews", "savehome"):   # another of your Pietatos has played a game (one that's
+                try:                                   # this one's, or a guest here that's gone home): answered at once
+                    return self.reply(200, media.web_saves_home(cmd) if cmd["cmd"] == "savehome"
+                                      else media.web_saves_news(cmd))
                 except Exception as ex:
                     print(f"saves: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})

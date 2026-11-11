@@ -38,9 +38,11 @@ def check(what, cond):
 
 
 def sh(cmd, user=USER, cwd=None, ok=True):
-    """A command as the folder's owner (or root)."""
-    pre = ["runuser", "-u", user, "--", "env", f"HOME={HOME}"] if user != "root" else []
-    r = subprocess.run(pre + cmd, cwd=cwd, capture_output=True, text=True)
+    """A command as the folder's owner (or root): from a folder that user can go into (this test's own is root's,
+    and a newer git won't clone from in there: it looks at where it's run from)."""
+    pre = ["runuser", "-u", user, "--", "env", f"HOME={HOME}", f"XDG_CONFIG_HOME={HOME}/.config"] \
+        if user != "root" else []
+    r = subprocess.run(pre + cmd, cwd=cwd or (T if user != "root" else None), capture_output=True, text=True)
     if ok and r.returncode != 0:
         raise SystemExit(f"{cmd}: {r.stderr}")
     return r

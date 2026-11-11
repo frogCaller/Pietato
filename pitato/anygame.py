@@ -4,22 +4,28 @@ a lot of games, says what kind of game this is, what its buttons do and how it's
 at the screen and works out what to aim for and how; the decision model follows it. Until it's said, the kind of game
 is guessed from its name (pitato/instincts.py).
 
-An action game (racing, a platformer, fighting, a shooter) is played by instinct (pitato/instincts.py): many times a
-second it looks at the screen and holds what a player would (the gas, steering to keep on the road; running and
-jumping; attacks and blocks; firing and weaving), and the decision model's asked on a thread of its own, as often as
-it answers, whether that's what to do now (a race on, a level going) and which way, or which button gets past a title
-screen, a menu or some text. The game never waits for the model. If the model's not answering, it plays by instinct
-while the screen's moving, and presses A or Start when it's been still a while (a menu, most likely).
+It gets the game going by itself, the way a person does without thinking (pitato/instincts.py's PressOn): Start, then
+A, through logos, a title screen, menus, text, a name to put in (a coin first, in an arcade game), watching what
+comes of each press. It knows the game's going when the screen moves as it walks a moment and stops when it stops,
+or stops when it presses Start (paused: Start again). The decision model's asked meanwhile, on a thread of its own:
+its picks are made too, when they come in time for the screen they were picked for (not after something's been
+pressed since, or long after, with something new on the screen); and when its own presses are getting nowhere, it
+waits a while for the model's, which can see what's on the screen.
 
-Whatever the model says, a few seconds into a game from its start it presses Start to get past its title screen (a
-title screen can look like a level, and play its own demo), and watches what comes of it: the screen changing, it's
-going; the game paused, Start again to play on; nothing, again in a while. It does once more when it's been stuck a
-while (back at a title screen, after a game over).
+An action game (racing, a platformer, fighting, a shooter) is then played by instinct (pitato/instincts.py): many
+times a second it looks at the screen and holds what a player would (the gas, steering to keep on the road; running
+and jumping; attacks and blocks; firing and weaving), and the decision model's asked, as often as it answers, which
+way to go, or which button gets through a menu. The game never waits for the model: once it's going it's played by
+instinct whatever the model says or doesn't, unless the model's moving through a menu itself and getting somewhere.
+When the screen stops dead (text, a level's end, GAME OVER, the game paused) it presses on, and when it's got
+nowhere for a long while (back at a title screen, after a game over) it gets the game going again, from the top.
+A model that presses Start in the middle of the game isn't followed (that would only pause it).
 
 Any other game is played a move at a time: the decision model's shown the game's picture as it is now and picks the
 next thing to press (a button, a direction for a moment or held a while, a direction with a button, or nothing for a
 moment) and this presses it; the game runs on meanwhile, at its own speed, and nothing's pressed while the model
-thinks. It's told the game's name and system, what's known of the game, the coach's goal and plan (and your tips),
+thinks (if it isn't answering, or its moves keep bringing nothing new, it presses on by itself where the game's
+waiting). It's told the game's name and system, what's known of the game, the coach's goal and plan (and your tips),
 and what it did last and what came of each: something new on the screen, nothing new (it changed, but only to how it's
 looked before, as with a jump on the spot), or nothing at all. When its moves have brought nothing new for a while,
 it's stuck: it's told so, and which buttons it hasn't tried there; what it's mostly been doing comes off its list for a
@@ -32,7 +38,7 @@ import time
 import numpy as np
 
 from .games import plain_title, system as system_info
-from .instincts import INSTINCTS, KINDS, LIVE, guess_kind, roles_for
+from .instincts import INSTINCTS, KINDS, LIVE, PressOn, guess_kind, roles_for
 
 STEP, HELD, TOGETHER, WAIT = 0.2, 1.0, 0.6, 1.0   # seconds: a direction for a moment, held, with a button; nothing
 MISSED_WAIT = 2.0            # seconds before it asks again when the model didn't pick (it isn't answering)
@@ -51,7 +57,8 @@ MOSTLY = 0.5                 # ...when that was at least this share of those mov
 LEFT_ON = 4                  # (moves left on its list, at least)
 TIPS_FOR_PICKS = 500         # characters of your tips the decision model's told (the coach reads them all)
 PUSH = 127                   # a stick pushed all the way (an N64 game's directions)
-CAME = {"new": "something new", "same": "nothing new", "nothing": "nothing changed", None: "not known"}
+CAME = {"new": "something new", "same": "nothing new", "nothing": "nothing changed", None: "not known",
+        "passed": "not done (your last moves got nowhere)"}
 
 # each system's buttons: what the model's told each is, and the button as the emulator takes it (libretro's names:
 # a PlayStation's go by where they are, so Cross is libretro's B, and a Dreamcast's too, its triggers libretro's L2
@@ -109,22 +116,22 @@ PLAYS = {
 }
 PLAY_WAY = {"go_right": "right", "go_left": "left", "fight_right": "right", "fight_left": "left"}
 TICK = 0.1                   # seconds between the instincts' looks, at least
+SLOW_TICK = 0.25             # ...and between looks at a game played a move at a time, once it's going
 ASK_GAP = 1.0                # seconds between the decision model's picks, at least, while it plays by instinct
 CHECK_EVERY = 1.0            # seconds between looks at what's come of it (new, or not), for the coach and when stuck
 LIVE_STUCK = 10              # of those in a row with nothing new: it's stuck (and again after as many more)
-STILL_POKE = 3               # ...and of those with the screen still, when the model's not answering: A or Start
-STILL_SHARE = 0.02           # (still: less than this share of it changed since the last check, as a title screen
-                             # with PRESS START blinking)
-PROBE_FIRST = 4.0            # seconds in, from a game's start (its title screen, most likely), that it presses Start to
-                             # get the game going, unless the model's pressed it already
-PROBE_EVERY = 4.0            # ...and again this long after, while that brings nothing (a logo, an intro), a few times
-PROBE_TRIES = 6
-PROBE_WATCH = 2.0            # seconds it watches what came of it
-PROBE_BIG = 0.25             # this share of the screen changed after it: it went somewhere (into the game, or a menu)
-PROBE_STILL = 5              # looks in a row with the screen still after it, moving before: it paused the game (Start
-                             # again, to play on)
-PROBE_STUCK = 2              # stuck this many times in a row (LIVE_STUCK seconds each) while it plays: Start once more
-                             # (back at a title screen, after a game over, say)
+STILL_SHARE = 0.02           # (still: less than this share of the screen changed since the last check)
+AGAIN_AFTER = 2              # stuck this many times in a row (LIVE_STUCK seconds each): it gets the game going again,
+                             # from the top (back at a title screen, after a game over, say)
+LEADS_FOR = 3.0              # seconds after the model's moved through a menu itself that it's left to (nothing
+                             # pressed for it, nothing played meanwhile)...
+UNHEEDED = 3                 # ...till this many of its moves in a row have brought nothing new: then it's played by
+                             # instinct, and pressed on, whatever it says, till one does again
+PASSED = 4                   # ...and only one in this many of its moves is made meanwhile
+LATE = 3.0                   # a move the model picked this long after it was asked, the screen showing something new
+                             # since: it was for another screen, and isn't made
+WAITS = 2                    # its own presses in a row that brought nothing, getting the game going: it waits for
+WAIT_MOST = 10.0             # the model's pick (the model can see what's on the screen), this many seconds at most
 A_KIND = {"racing": "a racing", "platformer": "a platform", "fighting": "a fighting", "shooter": "a shooting",
           "sports": "a sports", "puzzle": "a puzzle", "rpg": "an RPG", "adventure": "an adventure", "other": "a"}
 
@@ -217,10 +224,10 @@ class Decider:
         with self.cv:
             return self.job is None
 
-    def ask(self, says, state, choices, fallback, picture):
+    def ask(self, says, state, choices, fallback, picture, kind="live", quiet=True):
         with self.cv:
             self.asked += 1
-            self.job = (self.asked, says, state, choices, fallback, picture)
+            self.job = (self.asked, says, state, choices, fallback, picture, kind, quiet)
             self.cv.notify()
 
     def take(self):
@@ -243,9 +250,9 @@ class Decider:
                 job = self.job
             if job is None:
                 return
-            n, says, state, choices, fallback, picture = job
+            n, says, state, choices, fallback, picture, kind, quiet = job
             try:
-                pick = self.io.decide("live", says, state, choices, fallback, picture=picture, quiet=True)
+                pick = self.io.decide(kind, says, state, choices, fallback, picture=picture, quiet=quiet)
                 by = self.io.last_by
             except Exception as ex:                # (it says why; the game goes on)
                 self.io.log(event="The decision model's pick went wrong", error=repr(ex)[:300])
@@ -261,6 +268,7 @@ class AnyGame:
 
     def __init__(self, game, io, coach=None):
         self.io, self.coach = io, coach
+        self.now = getattr(io, "now", time.monotonic)    # (the time, as io keeps it: the clock's, but a try-out's own)
         self.system = game.get("system") or ""
         try:
             self.system_name = system_info(self.system)[2]
@@ -283,16 +291,26 @@ class AnyGame:
         self.kind = self.card["kind"]
         self.instinct = None                             # (an action game's: pitato/instincts.py)
         self.decider = None                              # (the model asked on a thread of its own, meanwhile)
-        self.mode = "menu"                               # play (by instinct), menu (a move picked: then nothing), auto
+        self.mode = "menu"                               # what the model last said: play (by instinct), menu (a
+                                                         # move: a button, a menu's cursor), auto (it's not answering)
         self.way = "right"                               # (which way it's going, by instinct)
         self.ask_at = self.check_at = 0.0
-        self.stale_checks = self.still_checks = 0        # checks in a row with nothing new, and with the screen still
+        self.stale_checks = 0                            # checks in a row with nothing new
         self.last_check = None
-        self.poke = 0
         self.fresh = not getattr(getattr(io, "run", None), "resumed", False)   # (from its start: its title screen)
-        self.going = False                               # the game's got going: Start got somewhere (or the model
-                                                         # pressed it itself)
-        self.probe, self.probe_at, self.probe_why, self.probes = None, -1.0, "start", 0   # Start, to get it going
+        self.presser = PressOn(self.system, self.kind in LIVE, self.fresh,     # (what gets the game going, and
+                               log=lambda words: self.io.log(event=words),      # on when it waits)
+                               stick=self.system in STICK_SYSTEMS)
+        self.led_at = -1e9                               # when the model last moved through a menu itself
+        self.unheeded = 0                                # its moves in a row that brought nothing new
+        self.passed = 0                                  # (its moves passed over since)
+        self.asked_at = 0.0                              # (when it was last asked)
+        self.silent = False                              # it isn't answering
+        self.moving = False                              # its last pick was a move (a button, a menu's cursor)
+
+    def new_decider(self):
+        """The decision model, asked on a thread of its own (io's own way of asking, if it has one: a try-out's)."""
+        return self.io.decider() if hasattr(self.io, "decider") else Decider(self.io)
 
     def play(self):
         self.io.status(f"Looking at {self.title}")
@@ -325,34 +343,119 @@ class AnyGame:
                               + ("played by instinct" if self.kind in LIVE else "played a move at a time"))
             self.io.let_go()
             self.mode = "menu"
+            self.presser.live = self.kind in LIVE
             if self.decider is not None:
                 self.decider.forget()
         self.instinct = None                             # (made again: what its buttons do may be known now)
 
+    @property
+    def going(self):
+        """The game's got going: past its title screen and its menus."""
+        return self.presser.going
+
+    def leads(self, now):
+        """The decision model's moving through a menu itself, and getting somewhere: it's left to it."""
+        return self.mode == "menu" and now - self.led_at < LEADS_FOR and self.unheeded < UNHEEDED
+
+    def late(self, now):
+        """The model's move has come for a screen that's gone: something's been pressed since it was asked (its
+        own press, getting the game on); or it's been a while, with something new on the screen since (a model that's
+        slow to wake, asked at the title screen, answering in the middle of a level). Not in a game played a move at
+        a time, once it's going: there the model's moves are the playing, however long they take."""
+        pr = self.presser
+        if pr.pressed and pr.last_press >= self.asked_at:
+            return True
+        if pr.going and self.kind not in LIVE:
+            return False
+        return now - self.asked_at > LATE and (pr.last_new or 0.0) > self.asked_at + 0.5
+
+    def waits(self, now):
+        """Its own presses keep bringing nothing, getting the game going, and the decision model's answering: it
+        waits a while for the model's pick for this screen (the model can see what's on it) before it presses again."""
+        pr = self.presser
+        if pr.going or pr.fails < WAITS or self.silent or not self.moving or self.unheeded >= UNHEEDED:
+            return False                                 # (not for a model that only says wait, or play)
+        return now - max(pr.last_press or 0.0, self.led_at) < WAIT_MOST
+
+    def heeds(self, key):
+        """Whether the model's move is made: yes, unless its last few have brought nothing new while the game's
+        getting going (they're in the way of what does: then only one in a few, to see if it's finding its feet)."""
+        if key == "wait" or self.unheeded < UNHEEDED or self.presser.going and self.kind not in LIVE:
+            return True
+        self.passed += 1
+        return self.passed % PASSED == 0
+
+    def press_on(self, look, now):
+        """Its own presses, getting the game going and on when it waits (pitato/instincts.py's PressOn): done, if
+        there's one to make now (True)."""
+        if self.presser.going and self.kind not in LIVE:     # (a game played a move at a time, going: only when the
+            helpless = self.silent or self.unheeded >= UNHEEDED   # model's not answering, or getting nowhere)
+        else:
+            helpless = not self.leads(now) and not self.waits(now)
+        steps = self.presser.tick(look, now, says_play=self.mode == "play", helpless=helpless, way=self.way)
+        if steps is None:
+            return False
+        self.io.status(self.presser.said or "Pressing on")
+        for buttons, sticks, secs in steps:
+            self.io.hold_only(buttons, sticks)
+            self.io.wait(secs)
+        return True
+
     def turn(self):
-        """One move, picked by the model from the screen as it is now; then it's done. (Not while the model's still
-        answering a question from playing by instinct: one at a time.)"""
-        while self.decider is not None and not self.decider.idle():
-            self.io.wait(0.1)
+        """A moment of a game played a move at a time: its own presses first, getting the game going and on when it
+        waits; the model's pick, if one's come, done (a move: then nothing's held till the next); and the model asked
+        again, with the screen as it is now, when it's free. The game never waits for the model: it's asked on a
+        thread of its own."""
+        if self.decider is None:
+            self.decider = self.new_decider()
         look = self.io.look()
-        if self.probing(look, time.monotonic()):
+        now = self.now()
+        if self.press_on(look, now):
             return
-        self.came(look)
-        if self.coach is not None:
-            self.coach.see(look, self.story())
-        choices = self.choices
-        if self.off_left > 0:
-            choices = {k: w for k, w in self.choices.items() if k not in self.off}
-        key = self.io.decide("move", self.says, self.state(look), choices, "wait", picture=look or False)
+        got = self.decider.take()
+        if got is not None:
+            key, by = got
+            if by != "model":
+                if not self.silent:
+                    self.io.log(event="The decision model isn't answering: it presses on through what it can by "
+                                      "itself, and asks again")
+                self.silent, self.mode = True, "auto"
+                self.io.status("Waiting for your bot's computer to answer")
+                self.ask_at = now + MISSED_WAIT
+            elif key in self.moves:
+                self.silent, self.moving = False, key != "wait"
+                if self.late(now):
+                    self.not_made(key)                   # (for another screen: asked again, for this one)
+                elif self.heeds(key):
+                    self.move(key, look, now)
+                    return
+                else:
+                    self.recent.append({"move": self.moves[key][0].split(" (")[0], "key": key, "came": "passed"})
+        if self.decider.idle() and now >= self.ask_at:
+            self.came(look)
+            if self.coach is not None:
+                self.coach.see(look, self.story())
+            choices = self.choices
+            if self.off_left > 0:
+                choices = {k: w for k, w in self.choices.items() if k not in self.off}
+            self.decider.ask(self.says, self.state(look), choices, "wait", look or False, kind="move",
+                             quiet=self.silent)
+            self.ask_at = self.asked_at = now
+        pr = self.presser                                # (looked at less often once it's going: it's the model's
+        self.io.wait(TICK if not pr.going or pr.watch is not None or pr.pending else SLOW_TICK)   # to play)
+
+    def not_made(self, key, why="came for a screen that's gone"):
+        """The model's move, not made (it came too late for the screen it was picked for): said in the log."""
+        self.io.log(event=f"The model's pick ({self.moves[key][0].split(' (')[0]}) {why}: not made")
+
+    def move(self, key, look, now):
+        """The model's pick, carried out."""
         words, how = self.moves[key]
-        if self.io.last_by != "model":
-            self.io.status("Waiting for your bot's computer to answer")
-            self.io.wait(MISSED_WAIT)
-            return
-        if key == "start":
-            self.going = True                            # (the model got it going itself)
         if self.off_left > 0:
             self.off_left -= 1
+        self.mode = "menu"
+        if key != "wait":
+            self.led_at = now
         self.io.status(self.doing(words))
         self.before = self.io.look() if how[0] != "wait" else look   # (just before it: what changes is its doing)
         self.recent.append({"move": words.split(" (")[0], "key": key, "came": None})
@@ -372,19 +475,18 @@ class AnyGame:
 
     def live(self):
         """A moment of an action game: a look; the model's pick, if one's come (play by instinct, or a move: a
-        button for a menu); the model asked again (with this look) if it's free; what's come of it, once a second;
-        then the instinct's next moment, or nothing (after a move, till the model says to play)."""
+        button for a menu); its own presses, getting the game going and on when it waits; the model asked again
+        (with this look) if it's free; what's come of it, once a second; then the instinct's next moment, or
+        nothing (the game's yet to get going, or the model's moving through a menu itself)."""
         if self.instinct is None:
             self.make_instinct()
         if self.decider is None:
-            self.decider = Decider(self.io)
-        t0 = time.monotonic()
+            self.decider = self.new_decider()
+        t0 = self.now()
         look = self.io.look()
-        now = time.monotonic()
-        if self.probing(look, now):
-            return
+        now = self.now()
         got = self.decider.take()
-        if got is not None and self.follow(got, look):
+        if got is not None and self.follow(got, look, now):
             return                                   # (a move made: what came of it's seen next time)
         if look is not None and now >= self.check_at:
             self.check(look, now)
@@ -392,63 +494,79 @@ class AnyGame:
             plays = self.plays()
             fallback = next((k for k in plays if PLAY_WAY.get(k, self.instinct.way) == self.instinct.way), "wait") \
                 if self.mode == "play" else "wait"
-            self.decider.ask(self.live_says(), self.state(look) | {"now": self.now_words()}, dict(plays, **self.choices),
-                             fallback, look or False)
-            self.ask_at = now + ASK_GAP
-        if look is None:                                 # (it can't see the game this moment: nothing held)
-            steps = [(set(), {}, TICK)]
-        elif self.mode == "play" or (self.mode == "auto" and self.still_checks < STILL_POKE):
+            self.decider.ask(self.live_says(), self.state(look) | {"now": self.now_words(now)},
+                             dict(plays, **self.choices), fallback, look or False)
+            self.ask_at, self.asked_at = now + ASK_GAP, now
+        if self.press_on(look, now):
+            return
+        if look is None or self.presser.quiet or not self.plays_now(now):
+            steps = [(set(), {}, TICK)]                  # (nothing held: it can't see the game this moment, it's
+        else:                                            # pressing on, or it's not for playing yet)
             steps = self.instinct.tick(look, now)
             self.io.status(self.doing(self.instinct.said or "Playing"))
-        elif self.mode == "auto":
-            self.poke += 1
-            if self.poke % 2:                            # (Start, on a still screen: what gets it going)
-                self.going = True
-            steps = [({self.button("start" if self.poke % 2 else "a")}, {}, 0.08), (set(), {}, 1.0)]
-            self.still_checks = STILL_POKE - 2              # (and again in a couple of seconds, if it's still still)
-            self.io.status("Pressing on (the model's not answering)")
-        else:
-            steps = [(set(), {}, TICK)]
         for buttons, sticks, secs in steps:
             self.io.hold_only(buttons, sticks if sticks is not None else dict(self.io.sticks))
             self.io.wait(secs)
-        took = time.monotonic() - t0 - sum(st[2] for st in steps)
+        took = self.now() - t0 - sum(st[2] for st in steps)
         if took > TICK / 3:                              # (a slow Pi: it looks less often, so the game keeps up)
             self.io.wait(min(0.5, took * 2))
+
+    def plays_now(self, now):
+        """Whether it plays by instinct this moment: when the model says to; and once the game's going, whatever
+        the model says or doesn't, unless the model's moving through a menu itself and getting somewhere."""
+        if self.mode == "play":
+            return True
+        return self.presser.going and not self.leads(now)
 
     def button(self, name):
         """A button by the emulator's name, if this console has it (else its first)."""
         lib = [b for _, b in BUTTONS.get(self.system, NINTENDO)]
         return name if name in lib else lib[0]
 
-    def follow(self, got, look):
-        """The model's pick, as it comes: play by instinct (which way), or a move (done now; then nothing's held till
-        it picks again): True if it made a move. Not picked by the model (it's not answering): it plays on as best it
-        can."""
+    def follow(self, got, look, now=None):
+        """The model's pick, as it comes: play by instinct (which way), or a move (done now: a button, a menu's
+        cursor): True if it made a move. Not picked by the model (it's not answering): it plays on by instinct, and
+        presses on by itself."""
         key, by = got
+        now = self.now() if now is None else now
         plays = self.plays()
         if by != "model":
             if self.mode != "auto":
-                self.io.log(event="The decision model isn't answering: it plays by instinct while the screen's "
-                                  "moving, and presses on when it's still")
-            self.mode = "auto"
+                self.io.log(event="The decision model isn't answering: it gets the game going and plays by instinct "
+                                  "by itself")
+            self.mode, self.silent = "auto", True
             return False
+        self.silent, self.moving = False, key in self.moves and key != "wait"
         if key not in plays and key not in self.moves:  # (a pick from another kind of game's choices)
             return False
         words = plays.get(key) or self.moves[key][0]
-        if not self.recent or self.recent[-1]["key"] != key:
-            self.recent.append({"move": words.split(" (")[0].split(":")[0], "key": key, "came": None})
-        if key in plays:
-            self.mode = "play"
-            self.way = self.instinct.way = PLAY_WAY.get(key, self.instinct.way)
+        if key in plays or key == "wait":
+            if not self.recent or self.recent[-1]["key"] != key:
+                self.recent.append({"move": words.split(" (")[0].split(":")[0], "key": key, "came": None})
+            self.mode = "play" if key in plays else "menu"
+            if key in plays:
+                self.unheeded = 0
+                self.way = self.instinct.way = PLAY_WAY.get(key, self.instinct.way)
+            return False
+        if self.late(now):                               # (a move for another screen: asked again, for this one)
+            self.not_made(key)
+            return False
+        still = self.presser.idle(now) >= 1.0            # (the screen's waiting)
+        if self.presser.going and not still and self.moves[key][1] == ("tap", "start"):
+            self.not_made(key, "would only pause the game, as it's going")
             return False
         self.mode = "menu"
-        if key == "start":
-            self.going = True                            # (the model got it going itself)
+        done = self.heeds(key)                           # (a move: a button, a menu's cursor)
+        self.recent.append({"move": words.split(" (")[0], "key": key, "came": None if done else "passed",
+                            "still": still})
+        if not done:
+            return False
+        if still:                                        # (a button pressed in the middle of the game doesn't make
+            self.led_at = now                            # it the model's to lead: it's played on by instinct)
         self.io.hold_only(set(), {})
         self.io.status(self.doing(words))
         self.do(self.moves[key][1])
-        self.ask_at = time.monotonic() + 0.3         # (asked again once it's seen what came of that, not before)
+        self.ask_at = self.now() + 0.3               # (asked again once it's seen what came of that, not before)
         return True
 
     def check(self, look, now):
@@ -461,79 +579,35 @@ class AnyGame:
         new = share >= NEW_SHARE
         still = self.last_check is not None and changed(look, self.last_check) < STILL_SHARE
         self.last_check = look
-        self.still_checks = self.still_checks + 1 if still else 0
         last = self.recent[-1] if self.recent else None
         if last is not None and last["came"] is None:
             last["came"] = "new" if new else "nothing" if still else "same"
+            if last["key"] in self.moves:                # (a move of the model's: did it get anywhere? only one made
+                got = new and last.get("still", True)     # while the screen was waiting can be said to have)
+                self.unheeded = 0 if got else self.unheeded + 1
         self.stale_checks = 0 if new else self.stale_checks + 1
         if self.stale_checks and self.stale_checks % LIVE_STUCK == 0:
             self.io.log(event=f"Stuck: {self.stale_checks} seconds with nothing new")
-            if self.mode in ("play", "auto"):
-                self.instinct.stuck(now)
-                if self.stale_checks % (LIVE_STUCK * PROBE_STUCK) == 0 and self.probe is None:
-                    self.probe_at, self.probe_why = now, "stuck"   # (a title screen, back at it: Start)
+            self.instinct.stuck(now)
+            if self.stale_checks % (LIVE_STUCK * AGAIN_AFTER) == 0:
+                self.presser.again(now)                  # (a title screen, back at it: from the top)
             if self.coach is not None:
                 self.coach.nudge()
         if self.coach is not None:
             self.coach.see(look, self.story())
-
-    def probing(self, look, now):
-        """Start, to get the game going: a few seconds in, from the game's start (its title screen, most likely) unless
-        the model's pressed it already, and when it's been stuck a while (back at a title screen: after a game over,
-        say). Pressed once, then watched a moment: most of the screen changing, it went somewhere (into the game, or a
-        menu: it's going); the screen standing still when it was moving before, it paused the game (Start again, to
-        play on); nothing, at the start, again in a while (a logo or an intro first), a few times. True while it's at
-        it (nothing else is pressed meanwhile)."""
-        if self.probe_at == -1.0:                        # (its first look: when the first's due)
-            self.probe_at = now + PROBE_FIRST if self.fresh else None
-        p = self.probe
-        if p is None:
-            if self.probe_at is None or now < self.probe_at or look is None:
-                return False
-            if self.probe_why == "start" and self.going:
-                self.probe_at = None                     # (it's going already)
-                return False
-            moving = self.last_check is not None and changed(look, self.last_check) >= STILL_SHARE
-            self.probe_at, self.probes = None, self.probes + 1
-            self.probe = {"before": look, "prev": look, "until": now + PROBE_WATCH, "most": 0.0, "still": 0,
-                          "moving": moving, "why": self.probe_why}
-            self.io.let_go()
-            self.io.tap(self.button("start"))
-            self.io.log(event="Start pressed, to get the game going" if self.probe_why == "start"
-                        else "Stuck a while: Start pressed (back at a title screen?)")
-            self.io.status("Pressing Start")
-            return True
-        if look is not None:
-            p["most"] = max(p["most"], changed(look, p["before"]))
-            p["still"] = p["still"] + 1 if changed(look, p["prev"]) < STILL_SHARE else 0
-            p["prev"] = look
-        if now < p["until"]:
-            self.io.wait(TICK)
-            return True
-        self.probe = None
-        if p["most"] >= PROBE_BIG:
-            self.going = True
-            self.stale_checks = 0
-            self.io.log(event=f"...it went somewhere: {p['most']:.0%} of the screen changed")
-        elif p["moving"] and p["still"] >= PROBE_STILL:
-            self.going = True
-            self.io.tap(self.button("start"))
-            self.io.log(event="...that paused the game: Start again, to play on")
-        elif p["why"] == "start" and not self.going and self.probes < PROBE_TRIES:
-            self.probe_at, self.probe_why = now + PROBE_EVERY, "start"   # (a logo or an intro first: again)
-        return False
 
     def live_says(self):
         _, playing, play = PLAYS[self.kind]
         return LIVE_SAYS.format(game=self.title, system=self.system_name, a_kind=A_KIND[self.kind],
                                 playing=playing, play=play)
 
-    def now_words(self):
+    def now_words(self, now=None):
         """What it's doing now, for the model."""
-        if self.mode == "play":
+        now = self.now() if now is None else now
+        if not self.presser.going:
+            return "getting the game going: pressing Start and what picks things, till it's being played"
+        if self.plays_now(now):
             return f"playing by itself: {self.instinct.said or 'playing'}, going {self.instinct.way}"
-        if self.mode == "auto":
-            return "playing as best it can (you weren't answering)"
         return "waiting for your pick"
 
     def came(self, look):
@@ -551,6 +625,7 @@ class AnyGame:
             last["came"] = "nothing"
         else:
             last["came"] = "new" if share >= NEW_SHARE else "same"
+        self.unheeded = 0 if last["came"] == "new" else self.unheeded + 1
         if last["came"] == "new":                       # (it's got somewhere: all its moves are back on its list)
             self.stale, self.off, self.off_left = [], (), 0
             return
@@ -633,6 +708,10 @@ class AnyGame:
             state["screen"] = "You can't see the screen (you can't look at pictures): go by the game and what you did."
         elif look is None:
             state["screen"] = "The game's screen couldn't be seen this time."
+        still = self.presser.idle(self.now())
+        if still >= 2.0:                                 # (what one picture can't show: whether it's moving)
+            state["moving"] = (f"Nothing new on the screen for {still:.0f} seconds: it's waiting for a button (a "
+                               "title screen, a menu, text), or the game's standing still.")
         advice = self.coach.advice if self.coach is not None else None
         for key in ("goal", "plan"):
             if advice and advice.get(key):

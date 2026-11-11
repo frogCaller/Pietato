@@ -718,7 +718,7 @@
   .ft-gap { display: flex; align-items: center; gap: 8px; }
   .ft-gap input { width: 140px; accent-color: var(--accent); }
   .ft-gap-v { min-width: 3.2em; font-variant-numeric: tabular-nums; color: var(--body); }
-  /* the TV backlight: its LEDs as they're lit (a board of them, dark whatever the page's colours), its settings */
+  /* the LED backlight: its LEDs as they're lit (a board of them, dark whatever the page's colours), its settings */
   .gl { display: grid; grid-template-columns: minmax(200px, 320px) minmax(0, 1fr); gap: 20px; align-items: start; }
   .gl-board { background: #0c0e11; border: 1px solid #2c3239; border-radius: 18px; }
   .gl-board.is-grid { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; padding: 4%; }
@@ -890,6 +890,16 @@
   .range-v { min-width: 2ch; text-align: right; color: var(--body); font-variant-numeric: tabular-nums; }
   .swatch { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px var(--line-2) inset; }
   .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+  .set-walls { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 12px; padding: 4px; }   /* in fives, as they're arranged: the dark ones, strong colours, pale ones, the rest */
+  .wall-sw { display: grid; gap: 6px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 600; text-align: center; min-width: 0; }
+  .wall-sw:hover { color: var(--text); }
+  .wall-pic { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; object-fit: cover; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line-2); color: var(--muted); }
+  .wall-pic svg { width: 26px; height: 26px; }
+  .wall-sw[aria-pressed="true"] { color: var(--text); }
+  .wall-sw[aria-pressed="true"] .wall-pic { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+  .wall-sw:focus-visible { outline: none; }
+  .wall-sw:focus-visible .wall-pic { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+  .wall-sw span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .set-pics { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; max-height: 284px; overflow-y: auto; padding: 4px; }
   .set-pics .fr-thumb[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
   .set-pics .fr-note { grid-column: 1 / -1; }
@@ -1014,6 +1024,9 @@
     .list { padding: 0 4px 10px; }
     .browse { border-radius: 16px; }
     .set-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .set-walls { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 8px; padding: 2px; }
+    .wall-sw { font-size: 12px; gap: 5px; }
+    .wall-pic { border-radius: 8px; }
     .set-c, .swatches, .set-ask { justify-content: flex-start; }
   }
   @media (max-width: 420px) { .gamepad { --k: .88; } }
@@ -2411,13 +2424,31 @@ window.addEventListener("message", (e) => {               // (the game's page: i
   if (name) hereKey(name, !!e.data.down);                             //  as one pressed here)
 });
 
-// Sound here: the Pi's sound plays on this phone or computer instead of the Pi's speaker, a moment behind it (two 16-bit
-// channels at 48 kHz, as the Pi sends them), while this page is open
-const SND = { on: false, ctx: null, stop: null, at: 0, skip: false, said: 0 };
+// Sound here: the Pi's sound plays on this phone or computer instead of the Pi's speaker, a moment behind it (two
+// 16-bit channels at 48 kHz, as the Pi sends them, 20 ms at a time), while this page is open. What's come is lined up
+// to play a little ahead of now: SND.want seconds, which is a bit more than the longest it's been kept waiting for a
+// piece lately (a busy network, a busy page), so it doesn't run out; and it's played a hair faster or slower to stay
+// there (this one's clock and the Pi's never quite agree). When it does run out, it goes on from what's newest; and
+// what's fallen far behind is let go: it's the Pi's sound as it is now, not all of it. The Pi's told how late it's
+// heard here, so an LED grid's beats come with the sound.
+// (SND.at: where the next piece goes, in the player's own samples: a whole one, so each piece starts on the sample
+// after the last one's end, and they join as they were cut.)
+const SND = { on: false, ctx: null, stop: null, said: 0, at: 0, want: 0, need: 0, low: null, sum: 0, cnt: 0, lowAt: 0,
+              mid: null, rate: 1, skip: false, fade: false, gaps: 0, late: 0, held: null, from: 0 };
+const SND_RATE = 48000;
+const SND_WANT = [0.12, 0.6];                             // seconds lined up as a piece comes: at least, and at most
+const SND_SPARE = 0.04;                                   // ...this much more than its longest wait for one, lately
+const SND_FIRST = 0.11;                                   // ...which is taken to be this, to start with
+const SND_FORGET = 0.9954;                                // ...and forgotten bit by bit (half in 5 minutes: this, each 2 s)
+const SND_FAR = 0.2;                                      // this much more lined up than wanted: too far behind, let go
+const SND_TRIM = 0.005;                                   // a hair faster or slower: this much at most (not heard)
+const soundWant = () => Math.min(SND_WANT[1], Math.max(SND_WANT[0], SND.need + SND_SPARE));
 function drawChips() {
   $("#soundHere").setAttribute("aria-pressed", String(SND.on));
   $("#micHere").setAttribute("aria-pressed", String(MIC.on));
-  $("#soundHere").title = SND.on ? "The Pi's sound plays here. Tap to hear it on the Pi again"
+  const behind = SND.late ? `, ${SND.late.toFixed(1)} s behind it` : "";
+  const cuts = SND.gaps ? ` (it's cut out ${SND.gaps === 1 ? "once" : SND.gaps + " times"})` : "";
+  $("#soundHere").title = SND.on ? `The Pi's sound plays here${behind}${cuts}. Tap to hear it on the Pi again`
     : "Play the Pi's sound on this " + (PHONE ? "phone" : "computer") + " instead of the Pi";
   $("#micHere").title = MIC.on ? "The bot hears this microphone. Tap to stop"
     : "The bot hears you through this " + (PHONE ? "phone" : "computer") + "'s microphone instead of the Pi's";
@@ -2429,13 +2460,78 @@ function soundOff() {
   SND.ctx = SND.stop = null;
   drawChips();
 }
+function soundPiece(ctx, bytes, n, piece) {               // (n samples of it, just come: lined up after the last)
+  const now = ctx.currentTime, R = ctx.sampleRate;
+  let lead = SND.at / R - now;                            // (how far ahead of now what's lined up reaches)
+  const out = !SND.at || lead < 0.005;                    // nothing lined up: its start, or it ran out (kept waiting
+  if (out && SND.at) {                                    // longer than was lined up: that long's wanted from here on;
+    SND.gaps++;                                           // not after seconds of nothing, a page that was asleep)
+    if (lead > -1.5) SND.need = Math.min(SND_WANT[1], Math.max(SND.need, (SND.mid === null ? SND.want : SND.mid) - lead));
+    SND.want = Math.max(SND.want, soundWant());
+  }
+  if (SND.held && now >= SND.from) SND.held = null;       // (what's lined up since then has begun to play)
+  if (out || (SND.held && lead > SND.want + 0.015)) {     // ...or what was held up is still coming, more than's wanted,
+    for (const old of SND.held || []) { try { old.stop(); } catch (e) {} }   // before any of it has played: that's
+    Object.assign(SND, { at: Math.ceil((now + SND.want) * R), low: null, sum: 0, cnt: 0, lowAt: now, mid: null,
+                         rate: 1, skip: false, fade: true, held: [], from: now + SND.want });   // let go, and it
+    lead = SND.want;                                      // goes on from here
+    if (n > piece) {                                      // (with the newest of what's come: the rest of it is old)
+      bytes = bytes.subarray((n - piece) * 4);
+      n = piece;
+    }
+  } else if (lead > SND.want + SND_FAR) SND.skip = true;  // far too much lined up (what was held up, come at once):
+  if (SND.skip) {                                         // what comes is let go, till it's a moment more than wanted
+    if (lead > SND.want + 0.06) return;
+    Object.assign(SND, { skip: false, fade: true, low: null, sum: 0, cnt: 0, lowAt: now });
+  }
+  if (SND.low === null || lead < SND.low) SND.low = lead;
+  SND.sum += lead; SND.cnt++;
+  if (now - SND.lowAt >= 2) {                             // every couple of seconds:
+    const mean = SND.sum / SND.cnt;                       // how much was lined up as each piece came, and at its least
+    SND.need = Math.max(mean - SND.low, SND.need * SND_FORGET);   // (the longest wait for one: lately)
+    const goal = soundWant();                             // more wanted: at once; less: a step at a time
+    SND.want = goal > SND.want ? goal : goal <= SND.want - 0.03 ? SND.want - 0.03 : SND.want;
+    SND.mid = SND.mid === null ? mean : SND.mid + (mean - SND.mid) * 0.3;   // (over a few of these: a late piece
+    const off = SND.mid - SND.want;                       //  or two isn't the clocks disagreeing)
+    SND.rate = Math.abs(off) < 0.01 ? 1 : 1 + Math.max(-SND_TRIM, Math.min(SND_TRIM, off * 0.1));
+    Object.assign(SND, { low: null, sum: 0, cnt: 0, lowAt: now });
+  }
+  const heard = lead + Math.max(0, n - 960) / SND_RATE + (ctx.outputLatency || ctx.baseLatency || 0);
+  SND.late += (heard - SND.late) * (SND.late ? 0.05 : 1);   // (how long after it comes it's heard, near enough)
+  const buf = ctx.createBuffer(2, n, SND_RATE), l = buf.getChannelData(0), r = buf.getChannelData(1);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 4);
+  for (let i = 0; i < n; i++) { l[i] = dv.getInt16(i * 4, true) / 32768; r[i] = dv.getInt16(i * 4 + 2, true) / 32768; }
+  if (SND.fade) {                                         // (after silence, or what was let go: faded in, no click)
+    const m = Math.min(n, 240);
+    for (let i = 0; i < m; i++) { l[i] *= i / m; r[i] *= i / m; }
+    SND.fade = false;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = SND.rate;
+  src.connect(ctx.destination);
+  if (SND.rate === 1 && R === SND_RATE) SND.at = Math.ceil(SND.at - 1e-6);   // (on a sample of its own again, after
+  src.start((SND.at - 0.001) / R);                        //  a while faster or slower; and asked for a hair before
+  SND.at += n * (R / SND_RATE) / SND.rate;                //  it, so no browser rounds it on to the next)
+  if (SND.held) SND.held.push(src);
+  if (ctx.state === "running" && performance.now() - SND.said > 2000) {   // (it's playing: the Pi's told so, and how
+    SND.said = performance.now();                                          // late; a phone that's locked doesn't,
+    fetch("/api/sound", { method: "POST", headers: { "Content-Type": "application/json" },   // and the Pi plays it
+                          body: JSON.stringify({ late: Math.round(SND.late * 1000) / 1000 }) }).catch(() => {});
+    drawChips();                                                           // itself again)
+  }
+}
 async function soundOn() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return toast("This browser can't play the Pi's sound");
-  const ctx = new AC();                                   // (made and started while the tap's still going: allowed)
+  let ctx;                                                // (made and started while the tap's still going: allowed)
+  try { ctx = new AC({ sampleRate: SND_RATE, latencyHint: "interactive" }); }   // (at the Pi's rate: its pieces fit
+  catch (e) { ctx = new AC(); }                                                  //  end to end as they are)
   ctx.resume().catch(() => {});
-  Object.assign(SND, { on: true, ctx });
+  Object.assign(SND, { on: true, ctx, need: SND_FIRST, gaps: 0, late: 0 });
+  SND.want = soundWant();
   drawChips();
+  const piece = ctx.sampleRate === SND_RATE ? 960 : 4800; // (a browser that plays at its own rate: fewer joins)
   let told = false;
   while (SND.on && SND.ctx === ctx) {
     const stop = SND.stop = new AbortController();
@@ -2451,34 +2547,22 @@ async function soundOn() {
     if (!told) toast("The Pi's sound plays here now");
     told = true;
     const reader = r.body.getReader();
-    let rest = null;
+    let held = new Uint8Array(0);
     SND.at = 0;
     try {
       for (;;) {
         const { value, done } = await reader.read();
         if (done || SND.ctx !== ctx) break;
-        let bytes = value;
-        if (rest) { const j = new Uint8Array(rest.length + bytes.length); j.set(rest); j.set(bytes, rest.length); bytes = j; rest = null; }
-        const n = Math.floor(bytes.length / 4);
-        if (bytes.length > n * 4) rest = bytes.slice(n * 4);
-        if (!n) continue;
-        const now = ctx.currentTime;
-        if (SND.at < now + 0.02) { SND.at = now + 0.12; SND.skip = false; }   // (behind: on again, a moment from now)
-        else if (SND.at > now + 0.4) SND.skip = true;     // (too far behind the Pi, after a hiccup: what comes is let
-        if (SND.skip && SND.at > now + 0.15) continue;    // go, until it's only a moment behind again)
-        SND.skip = false;
-        const buf = ctx.createBuffer(2, n, 48000), l = buf.getChannelData(0), rr = buf.getChannelData(1);
-        const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 4);
-        for (let i = 0; i < n; i++) { l[i] = dv.getInt16(i * 4, true) / 32768; rr[i] = dv.getInt16(i * 4 + 2, true) / 32768; }
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        src.start(SND.at);
-        SND.at += buf.duration;
-        if (ctx.state === "running" && performance.now() - SND.said > 2000) {   // (it's playing: the Pi's told so; a
-          SND.said = performance.now();                                          // phone that's locked doesn't, and
-          fetch("/api/sound", { method: "POST" }).catch(() => {});               // the Pi plays it itself again)
-        }
+        if (held.length) {
+          const j = new Uint8Array(held.length + value.length);
+          j.set(held); j.set(value, held.length);
+          held = j;
+        } else held = value;
+        const n = Math.floor(held.length / 4);
+        if (n < piece) continue;                          // (20 ms of it or more at a time: not a join for every bit)
+        const bytes = held.subarray(0, n * 4);
+        held = held.slice(n * 4);
+        soundPiece(ctx, bytes, n, piece);
       }
     } catch (e) {}
     if (SND.on && SND.ctx === ctx) await sleep(1500);    // (the Pi stopped sending: again, in a moment)
@@ -2721,7 +2805,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) btKi
 const TABS = [                  // (the Pi's apps are on its screen: tapped there)
   ["cartoons", "Cartoons"], ["films", "Films"], ["news", "News"],
   ["sports", "Sports"], ["radio", "Radio"], ["streams", "Your streams"], ["cameras", "Cameras"], ["friend", "Bot"],
-  ["draw", "Draw"], ["fish", "Fish Tank"], ["glow", "TV backlight"],
+  ["draw", "Draw"], ["fish", "Fish Tank"], ["glow", "LED backlight"],
 ];
 const OWN = new Set(["cameras", "friend", "draw", "fish", "glow"]);   // tabs that draw a page of their own
 const LICON = {                 // each one's picture, beside its name
@@ -2782,7 +2866,7 @@ function drawLibTabs() {
   box.textContent = "";
   let lot = null;
   for (const [key, label] of TABS) {
-    if (!libHas(key)) continue;             // (your streams, once there are some; the TV backlight, where it can go)
+    if (!libHas(key)) continue;             // (your streams, once there are some; the LED backlight, where it can go)
     const now = OWN.has(key) ? "More" : "Watch and listen";
     if (now !== lot) {
       const g = el("div", "lgrp", now);
@@ -4889,12 +4973,12 @@ function ftPointer(cv) {
   cv.addEventListener("pointercancel", () => { FT.drag = null; cv.classList.remove("dragging"); });
 }
 
-// ---- the TV backlight: the LEDs behind the TV, as they're lit now, and their colour and the rest ----------------------
+// ---- the LED backlight: the LEDs behind the TV, as they're lit now, and their colour and the rest ----------------------
 const GL = { gen: 0, data: null, sig: "", board: null, list: null, sub: null };
 function drawGlow() {
   const box = $("#content"), token = ++libToken;
   box.textContent = "";
-  const h = head("TV backlight", "");
+  const h = head("LED backlight", "");
   GL.sub = h.querySelector(".src");
   box.append(h);
   const wrap = el("div", "gl");
@@ -4981,7 +5065,7 @@ function glDraw() {
     }
   }
   if (!d.can) {
-    if (GL.sig !== "none") { GL.sig = "none"; GL.list.textContent = ""; noteInto(GL.list, "No LEDs here", "The TV backlight goes on a Pi behind the TV, not one in a GPi Case or a PC."); }
+    if (GL.sig !== "none") { GL.sig = "none"; GL.list.textContent = ""; noteInto(GL.list, "No LEDs here", "The LED backlight goes on a Pi behind the TV, not one in a GPi Case or a PC."); }
     return;
   }
   const sig = JSON.stringify(d.rows);
@@ -4994,7 +5078,8 @@ function glDraw() {
 
 // ---- settings: everything the Pi's Settings has, and each app's own (passwords and tokens never come here) ---------
 const SET = { data: null, error: "", timer: 0, armed: {}, ask: {}, open: {}, typed: {}, places: null, placesQ: "",
-              peerPw: {} };                             // (peerPw: another Pietato that wants its page's password)
+              peerPw: {}, pin: null };                  // (peerPw: another Pietato that wants its page's password;
+                                                        //  pin: the part picked in the index, till you scroll)
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const SET_MORE = {                                      // what's on this page already, where it is
   id: "elsewhere", title: "Elsewhere", about: "", rows: [
@@ -5036,7 +5121,7 @@ async function setSave(key, value, ctl, quiet) {    // (what the Pi said, or nul
   }
   if (ctl && ctl.isConnected) ctl.disabled = false;
   setKick(200);
-  glKick();                                             // (Library's TV backlight: its LEDs and rows, as they are now)
+  glKick();                                             // (Library's LED backlight: its LEDs and rows, as they are now)
   return ok;
 }
 // something that can't be taken back: pressed once it asks, pressed again within 4 seconds it's done
@@ -5169,6 +5254,34 @@ const SET_DRAW = {
         sw.append(b);
       }
       c.append(sw);
+      return row;
+    }
+    if (r.walls) {                                      // the home screen's backgrounds: a little picture of each
+      const picking = !!SET.open.pics;                  // (Picture: one of yours, picked under them)
+      c.append(el("span", "set-here", picking ? "Picture" : name(r.value)));
+      const box = el("div", "set-walls");
+      box.setAttribute("role", "group"); box.setAttribute("aria-label", r.label);
+      for (const v of r.choices) {
+        const b = button("wall-sw", "");
+        b.setAttribute("aria-pressed", String(picking ? v === "Picture" : v === r.value));
+        let pic;
+        if (v === "Picture") { pic = el("span", "wall-pic"); pic.innerHTML = ICONS.pictures; }
+        else {
+          pic = new Image();
+          pic.className = "wall-pic"; pic.alt = ""; pic.loading = "lazy";
+          pic.src = "/api/pi/wall?" + qs({ name: v });
+        }
+        b.append(pic, el("span", "", v === "Picture" ? "Your picture" : name(v)));
+        b.onclick = () => {
+          if (v === "Picture") { SET.open.pics = !SET.open.pics; drawSettings(); return; }
+          const was = SET.open.pics;
+          delete SET.open.pics;
+          if (v !== r.value) setChoose(r, v, b); else if (was) drawSettings();
+        };
+        box.append(b);
+      }
+      row.append(box);
+      if (picking) row.append(setPics(r));
       return row;
     }
     if (SET.ask[r.key] !== undefined) {                 // a choice that restarts the Pi: asked first
@@ -5510,7 +5623,8 @@ function drawSettings() {
       b.dataset.sec = x.id;
       b.onclick = () => {
         const t = document.getElementById("set-" + x.id);
-        if (t) t.scrollIntoView({ block: "start", behavior: REDUCED ? "auto" : "smooth" });
+        SET.pin = x.id;                                 // (it stays lit till you scroll yourself: the last ones
+        if (t) t.scrollIntoView({ block: "start", behavior: REDUCED ? "auto" : "smooth" });   // can't reach the top)
         setIndexOn(x.id);
       };
       index.append(b);
@@ -5557,13 +5671,17 @@ function setIndexOn(id) {
   }
 }
 function setIndexFromScroll() {
-  const line = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--top")) + 100;
+  if (SET.pin) return setIndexOn(SET.pin);              // (one picked in the index: that one)
+  const bar = $("header.top");                          // (the part under the page's top bar: a little way down it)
+  const line = (bar ? bar.getBoundingClientRect().bottom : 64) + 100;
   let cur = null;
   for (const n of $$("#setList > .set-sec")) if (n.getBoundingClientRect().top <= line) cur = n;
   cur = cur || $("#setList > .set-sec");
   if (cur) setIndexOn(cur.id.slice(4));
 }
 window.addEventListener("scroll", () => { if (S.view === "settings") setIndexFromScroll(); }, { passive: true });
+for (const what of ["wheel", "touchmove", "keydown"])   // (scrolled by hand: the part you've come to, from here on)
+  window.addEventListener(what, () => { SET.pin = null; }, { passive: true });
 
 // ---- files: what's on the Pi --------------------------------------------------------------
 function drawDest() {

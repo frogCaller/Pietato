@@ -855,11 +855,15 @@ class Camera:
         im.draft("RGB", (640, 480))
         rgb = im.convert("RGB")
         was = self.connecting or self.frame is None   # (back, or the first: the whole screen's drawn again)
-        frame = turn_picture(rgb, self.turn_of(self.addr))
+        turn = self.turn_of(self.addr)
+        frame = turn_picture(rgb, turn)
         fitted = fit_picture(frame, self.fit_to)
         with self.lock:
             if gen != self.gen:
                 return
+            if self.turn_of(self.addr) != turn:        # (rotated meanwhile: this picture as it's turned now, not
+                frame = turn_picture(rgb, self.turn_of(self.addr))   # the way it was a moment ago)
+                fitted = fit_picture(frame, self.fit_to)
             self.raw, self.jpeg, self.frame_at, self.reached = rgb, data, time.monotonic(), True
             self.frame, self.fitted, self.connecting = frame, (frame, fitted), False
         (self.on_frame if self.on_frame is not None and not was else self.on_change)()

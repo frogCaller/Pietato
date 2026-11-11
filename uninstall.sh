@@ -98,7 +98,7 @@ if [ -n "$user_home" ] && [ "$user_home" != / ] && [ -d "$user_home/.cache/pitat
   rm -rf "$user_home/.cache/pitato"
 fi
 
-# Settings > TV backlight's lines in config.txt (the Pi's SPI on, its core clock steady), if Pietato put them in
+# Apps > LED backlight's lines in config.txt (the Pi's SPI on, its core clock steady), if Pietato put them in
 for c in /boot/firmware/config.txt /boot/config.txt; do
   if grep -qs '^# >>> pietato led grid >>>$' "$c"; then
     sed -i '/^# >>> pietato led grid >>>$/,/^# <<< pietato led grid <<<$/d' "$c"

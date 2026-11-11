@@ -1,4 +1,4 @@
-"""Apps > TV backlight, on the screen: a picture of the LEDs behind your TV, lit as they are now (its own colour, a
+"""Apps > LED backlight, on the screen: a picture of the LEDs behind your TV, lit as they are now (its own colour, a
 game's, music's), beside how it's set: the 8x8 grid, or a TV with the strip round it. Its buttons, its options and the
 LEDs themselves are media mode's (screens/glow.py, glow.py): this just draws them, and only as often as they change."""
 import time
@@ -25,6 +25,7 @@ class Backlight(Sim):
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
+        self.plain = False               # no LEDs of this Pietato's own: no picture of them (its note says the rest)
         self.grid = None                 # the LEDs, while they're on (glow.Grid): media mode's
         self.points = None               # a strip's LEDs, where each is round the TV (0 to 1 across and down), or None
         self.shade = 1.0                 # its picture drawn this bright, for how bright the LEDs are
@@ -103,6 +104,8 @@ class Backlight(Sim):
         from .fine import ImageDraw
         pic = self.colours()
         self.drawn = pic
+        if self.plain:
+            return
         s = detail(img)
         d = ImageDraw.Draw(img)
         lit = pic is not None and pic.max() >= 4

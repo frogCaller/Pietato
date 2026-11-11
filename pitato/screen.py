@@ -191,12 +191,20 @@ _descs = {}                                    # card id -> the card's own name 
 LOOPBACK = "Loopback"                          # the card the web page's Sound here and Mic here go through (snd-aloop,
                                                # setup.sh's): never a speaker or a microphone of its own
 WEB_PCM = "pietato_web"                        # ALSA's way into it, mixed (setup.sh: /etc/alsa/conf.d/60-pietato-web.conf)
-WEB_SOUND = {"until": 0.0}                     # Sound here: the Pi's sound goes to the web page till then (monotonic)
+WEB_SOUND = {"until": 0.0, "late": 0.2}        # Sound here: the Pi's sound goes to the web page till then (monotonic),
+WEB_LATE_MOST = 2.0                            # and it's heard there that much later than the Pi plays it (seconds: as
+                                               # the page says, at most this)
 
 
 def web_sound():
     """Sound here is on: a web page is playing the Pi's sound (webui.py says so, every few seconds)."""
     return time.monotonic() < WEB_SOUND["until"]
+
+
+def web_late():
+    """How much later than the Pi plays it the web page's listener hears its sound (seconds), while Sound here is on:
+    an LED grid's beats wait that long, to come with it."""
+    return WEB_SOUND["late"] if web_sound() else 0.0
 
 
 def can_play(num):

@@ -1,6 +1,9 @@
 """webui.py's Sound here, by itself: while a page plays what it's sent (it says so every couple of seconds), media mode
 is told Sound here is on; a page that stops saying so (a phone that locked) and the Pi is told it's off, and on again
-when it does; the last page gone, off."""
+when it does; the last page gone, off. The sound's asked of arecord 20 ms at a time (left to itself, it hands it over
+an eighth of a second at a time, each piece as late). How late a page says it hears it is passed on to media mode with
+the Pi's own part added (an LED grid's beats wait that long): the later of two pages', not one that's gone quiet, and
+not nonsense."""
 import os, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 os.environ["HOME"] = SP + "/t_soundout_home"
@@ -8,8 +11,10 @@ os.environ["PATH"] = SP + "/soundstub/bin:" + os.environ["PATH"]
 sys.path.insert(0, ROOT + "/pitato")
 import webui
 told = []
-webui.tell_pi = lambda what, on: told.append((round(time.monotonic(), 2), what, on)) or {}
+webui.tell_pi = lambda what, on, **more: told.append((round(time.monotonic(), 2), what, on, more)) or {}
 webui.SOUND_HEARD = 1.5
+os.environ["SOUNDSTUB_LOG"] = SP + "/t_soundout_args"
+open(os.environ["SOUNDSTUB_LOG"], "w").close()
 ok_all = []
 def check(what, cond):
     ok_all.append(bool(cond)); print(("ok   " if cond else "FAIL ") + what, flush=True)
@@ -26,6 +31,23 @@ threading.Thread(target=page, daemon=True).start()
 for _ in range(10):
     S.playing(); time.sleep(0.3)
 check(f"a page playing it: on ({[t[2] for t in told]}, {sum(got)} bytes)", told and all(t[2] for t in told) and sum(got) > 100000)
+args = open(os.environ["SOUNDSTUB_LOG"]).read().split()
+check(f"...asked of arecord 20 ms at a time ({args[-2:]})", "--period-time=20000" in args and "--buffer-time=200000" in args
+      and args[args.index("-D") + 1] == "hw:Loopback,1,0")
+check("...the page hasn't said how late it hears it: nor is media mode told", all(t[3] == {} for t in told))
+for _ in range(6):
+    S.playing(0.15, "phone"); time.sleep(0.3)
+check(f"the page says how late it hears it: passed on, the Pi's own part added ({told[-1][3]})",
+      told[-1][2] is True and told[-1][3] == {"late": round(0.15 + webui.SOUND_OWN, 3)})
+for _ in range(6):
+    S.playing(0.15, "phone"); S.playing(0.4, "desk"); time.sleep(0.3)
+check(f"...two pages: the later of them ({told[-1][3]})", told[-1][3] == {"late": round(0.4 + webui.SOUND_OWN, 3)})
+for junk in (True, -1, 9, "0.3", None, [0.2]):
+    S.playing(junk, "odd")
+for _ in range(7):
+    S.playing(0.15, "phone"); time.sleep(0.3)
+check(f"...one of them gone quiet, and nonsense: the other's ({told[-1][3]})",
+      told[-1][3] == {"late": round(0.15 + webui.SOUND_OWN, 3)})
 n = len(told)
 time.sleep(2.5)                                # (it stops saying so)
 check(f"...it stops saying it's playing it: off ({[t[2] for t in told[n:]]})", told[n:] and told[-1][2] is False)

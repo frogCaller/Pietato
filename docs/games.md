@@ -42,9 +42,12 @@ have the Pi start in the game you played last, right where you were, set Setting
 If you have two Pietatos, with Settings > Share with other Pietatos on, a game's menu has two more:
 
 - **Play on another Pietato** carries the game on there from the same moment (◀▶ picks which one), and
-  its menu there sends it back. HOME on a video or on Now playing has it too, for the video, song or
-  station (so does X twice), and for a picture, a PDF, a document or some text you're looking at, HOME
-  has **View on another Pietato**: it opens there where you were (the same page, zoom and place), and
+  its menu there sends it back. It plays there as a guest: that Pietato's own save of the game stays as it
+  is, and what you play goes back to the one the game came from, when you send it back or when you're done
+  (if that one's off, the next time both are on). If you played it on both meanwhile, each keeps its own,
+  and starting the game asks whose to play. HOME on a video or on Now playing has it too, for the video,
+  song or station (so does X twice), and for a picture, a PDF, a document or some text you're looking at,
+  HOME has **View on another Pietato**: it opens there where you were (the same page, zoom and place), and
   HOME there sends it back. **Send to another Pietato** gives it a copy to keep instead, in its Pictures
   (for a picture) or Documents (the rest), with a number added to the name if it already has one. A song
   of yours on Now playing has it too: a copy goes in its Music, and the song keeps playing here. HOME on a
@@ -91,4 +94,4 @@ shows at the top of the game when you get it, and Achievements in the game's men
 regular kind (not hardcore), so save states still work. Disc games in `.chd` files don't get them yet.
 
 With an LED grid behind your TV, a game lights it with the colours along its edges: see
-[TV backlight](apps.md#tv-backlight).
+[LED backlight](apps.md#led-backlight).

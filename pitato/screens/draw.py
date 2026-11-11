@@ -88,12 +88,14 @@ class DrawScreen:
             "note": f(FONT, 72), "mono_s": f(FONT_MONO, 15), "mono_l": f(FONT_MONO, 20),
             "head": f(FONT_BOLD, 18), "status": f(FONT, 13), "status_b": f(FONT_BOLD, 13),
             "code": f(FONT_MONO, 44), "price": f(FONT_BOLD, 46), "mid": f(FONT_BOLD, 24),
-            "clock": f(FONT_BOLD, 52), "small_b": f(FONT_BOLD, 15), "label": f(FONT, 14), "temp": f(FONT_BOLD, 72),
+            "small_b": f(FONT_BOLD, 15), "label": f(FONT, 14), "temp": f(FONT_BOLD, 72),
             "home_clock": f(FONT_THIN, 52), "wx_temp": f(FONT_THIN, 52), "home_ampm": f(FONT_UI, 17),
             "home_date": f(FONT_UI, 17), "home_label": f(FONT_UI, 14), "home_foot": f(FONT_UI, 15),
             "home_pop_head": f(FONT_UI_BOLD, 11), "home_pop_title": f(FONT_UI_BOLD, 18), "home_pop_sub": f(FONT_UI, 14),
-            "home4_clock": f(FONT_BOLD, 48), "home4_date": f(FONT, 18),
-            "home4_temp": f(FONT_BOLD, 34), "home4_label": f(FONT, 13),
+            "home1_clock": f(FONT_UI_BOLD, 54), "home1_ampm": f(FONT_UI_BOLD, 18), "home1_date": f(FONT_UI, 19),
+            "home1_label_b": f(FONT_UI_BOLD, 14),
+            "home4_clock": f(FONT_UI_BOLD, 50), "home4_date": f(FONT_UI, 18), "home4_temp": f(FONT_UI_BOLD, 36),
+            "home4_label": f(FONT_UI, 13), "home4_small": f(FONT_UI, 15),
             "keycap": f(FONT, 20), "face": f(FONT, 40), "chat": f(FONT, 18),
             "co_code": f(FONT_MONO_BOLD if os.path.exists(FONT_MONO_BOLD) else FONT_MONO, 17),
             "co_mono_xs": f(FONT_MONO, 13), "co_z1": f(FONT_BOLD, 16), "co_z2": f(FONT_BOLD, 21),
@@ -217,25 +219,33 @@ class DrawScreen:
             out.pop(max(i for i, h in enumerate(out) if h[0] not in keep))
         return out
 
-    def key(self, d, x, y, label, on=False):
+    def key(self, d, x, y, label, on=False, fill=None, text=None):
         """Button icon (a dot round a letter, a pill round a word), vertically centred on y, lit when what it
-        turns on is on. Returns end x."""
+        turns on is on. Returns end x. (fill, text: its colour and its letter's, on the home screen's own
+        background.)"""
         F = self.fonts
         w = self.key_w(d, label)
         box = (x, y - 11, x + w, y + 11)
         if len(label) == 1:
-            d.ellipse(box, fill=ACCENT if on else KEY_FILL)
+            d.ellipse(box, fill=ACCENT if on else fill or KEY_FILL)
         else:
-            d.rounded_rectangle(box, radius=11, fill=ACCENT if on else KEY_FILL)
-        d.text((x + w / 2, y), label, font=F["key"], fill=BG if on else TEXT, anchor="mm")
+            d.rounded_rectangle(box, radius=11, fill=ACCENT if on else fill or KEY_FILL)
+        d.text((x + w / 2, y), label, font=F["key"], fill=BG if on else text or TEXT, anchor="mm")
         return x + w
 
-    def footer(self, d, items, right=None, credit=None, plain=False, pill=True, always=False):
+    def footer(self, d, items, right=None, credit=None, plain=False, pill=True, always=False, ink=None):
         """Button hints along the bottom (key, label[, lit]) and a note on the right. A credit (where the numbers
         come from) is always shown, as clearly as the hints: any hint that would run into it is left out instead.
-        plain: the home screen's, straight onto what's behind it under a thin line, in its own typeface. pill:
-        a notice above it, if there's one (False: it's put up later, over what's drawn after). always: even with
-        Full screen apps on (an are-you-sure's buttons)."""
+        plain: the home screen's, straight onto what's behind it under a thin line, in its own typeface (ink: in
+        the colours its background takes, screens/home.py's INK and the line's). pill: a notice above it, if
+        there's one (False: it's put up later, over what's drawn after). always: even with Full screen apps on (an
+        are-you-sure's buttons)."""
+        ink = ink or {}
+
+        def say(xy, text, fill, anchor):               # (the home screen's, over a strong colour: a soft shadow)
+            if ink.get("shadow"):
+                d.text((xy[0], xy[1] + 1), text, font=font, fill=ink["shadow"], anchor=anchor)
+            d.text(xy, text, font=font, fill=fill, anchor=anchor)
         F, W, H = self.fonts, self.fb.w, self.fb.h
         if self.full_app() and not plain and not always:   # Full screen apps: no buttons, a credit small in the corner
             if credit:
@@ -247,7 +257,7 @@ class DrawScreen:
         y = H - fh // 2
         font = F["home_foot"] if plain else F["small"]
         if plain:
-            d.line((28, H - fh + 4, W - 28, H - fh + 4), fill=LINE)
+            d.line((28, H - fh + 4, W - 28, H - fh + 4), fill=ink.get("line", LINE))
         else:
             d.rectangle((0, H - fh, W, H), fill=BG)
             d.line((0, H - fh, W, H - fh), fill=LINE)
@@ -258,8 +268,9 @@ class DrawScreen:
             if credit and x + self.key_w(d, k) + 7 + d.textlength(label, font=font) > room:
                 break
             x0 = x
-            x = self.key(d, x, y, k, on) + (9 if plain else 7)
-            d.text((x, y), label, font=font, fill=TEXT if plain else BODY, anchor="lm")
+            tint = (ink["key"], ink.get("key_text")) if ink.get("key") else ()   # (a bright background's: its own)
+            x = self.key(d, x, y, k, on, *tint) + (9 if plain else 7)
+            say((x, y), label, ink.get("text", TEXT) if plain else BODY, "lm")
             x += d.textlength(label, font=font) + (26 if plain else 18)
             self.tap_hint(x0 - 8, x - (17 if plain else 9), H - fh, H, k)   # (halfway to the next)
         if credit:
@@ -267,7 +278,7 @@ class DrawScreen:
         elif right:
             end = W - 28 if plain else W - 20
             if x - (10 if plain else 0) + d.textlength(right, font=font) < end:   # (16 apart is enough, there)
-                d.text((end, y), right, font=font, fill=FOOT_NOTE if plain else MUTED, anchor="rm")
+                say((end, y), right, ink.get("note", FOOT_NOTE) if plain else MUTED, "rm")
         if pill:
             self.msg_pill(d)
 

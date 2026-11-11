@@ -1,4 +1,4 @@
-"""TV backlight (pitato/glow.py, screens/glow.py, and the emulator's part): an LED grid behind the TV, lit by your
+"""LED backlight (pitato/glow.py, screens/glow.py, and the emulator's part): an LED grid behind the TV, lit by your
 Pietatos' games and music. First the pieces on their own: what's sent (a picture's colours, something happening, music's
 colour; anything else not taken); a picture's edges (RGB565, 0RGB1555 and XRGB8888 pictures, one with a pitch wider than
 it); a hit from a game's rich presence (lives or health going down; not a timer or a score); beats in music, as they're
@@ -8,11 +8,12 @@ dark once it's quiet; its own colour then, a game's taking over, a rainbow, foll
 bright; turned, mirrored and in zigzag rows; dark as it's shut), over real UDP too; and config.txt's lines for SPI.
 Then the emulator's part (a pretend screen): told where its colours go, each picture's edges sent (30 a second at
 most; one the graphics chip drew, from the screen), an achievement's gold, a controller shaken and lives going down: a
-hit. Then media mode: Apps > TV backlight, not Settings (A: the grid on, SPI's lines into config.txt and a restart
+hit. Then media mode: Apps > LED backlight, not Settings (A: the grid on, SPI's lines into config.txt and a restart
 asked for; ◀▶ its colour, ▲▼ how bright, START's card the rest; its picture of the LEDs), the beacon saying it's there
 (or not, following nobody), your grids found (where a game's colours go, said to its emulator), and music played
 through party mode's player for the beat: the grid pulsing as each kick drum's heard, music's colour between, pause and
-seek as mplayer takes them, and a station passed through here for its song's names. Pulse to music off, or no grid:
+seek as mplayer takes them (with the web page's Sound here on, each beat as late as its listener hears the sound),
+and a station passed through here for its song's names. Pulse to music off, or no grid:
 music as ever (mplayer). The web page's Library: the LEDs as they're lit, and its settings. A Pi that can't have one:
 none of it."""
 import os, shutil, subprocess, sys, threading, time, wave
@@ -568,11 +569,11 @@ open(m.glow_spi, "wb").close()
 open(S + "/m-config.txt", "w").write("dtparam=audio=on\n")
 APPS = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Apps")
 m.load_tab(APPS)
-check("Apps: TV backlight, on a Pi that can have a grid", "TV backlight" in [it["title"] for it in m.items[APPS]])
+check("Apps: LED backlight, on a Pi that can have a grid", "LED backlight" in [it["title"] for it in m.items[APPS]])
 m.view, m.tab = "list", next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.set_page = None
 check("...not in Settings any more", "glow" not in [k for k, _, _ in m.settings_rows()])
-m.web_tab("TV backlight")
+m.web_tab("LED backlight")
 s = m.sim_game()
 check(f"its page: the LEDs off, and said so; its buttons ({s.says}; {m.sim_hints(s)})", s.key == "glow"
       and s.grid is None and s.says == ("The LEDs are off", "A turns them on")
@@ -682,7 +683,7 @@ m.pie.heard[PEER] = {"host": "tv", "seen": time.time() + 3600, "peer": True,
                      "glow": {"port": 5448, "follow": "gpi", "beat": True}}
 check(f"your grids: this one's and the TV's ({m.glow_targets()})",
       m.glow_targets() == [("127.0.0.1", grid.port), ("10.0.0.7", 5448)])
-m.web_tab("TV backlight")
+m.web_tab("LED backlight")
 m.press("start")
 m.press("left")
 check(f"following nobody (START's card): its beacon says nothing, nothing sent to it, no beat wanted "
@@ -766,6 +767,37 @@ check(f"seek, said as mplayer takes it: 10 s on ({here:.1f} to {m.proc.player.po
 m.stop()
 
 
+# Sound here: the song's sound on the web page, heard there a moment after the Pi plays it: its beats with it
+def beats_heard(secs, late):
+    """The loop going for secs: the beats the grid's told of after the first second and a half (when each shows),
+    and how far the furthest is from a kick drum heard `late` after the Pi plays it."""
+    lit_in.clear()
+    t0 = time.monotonic()
+    while time.monotonic() < t0 + secs:
+        now = time.monotonic()
+        m.sound_tick(now)
+        m.glow_tick(now)
+        time.sleep(0.02)
+    got = [p["at"] + min(grid.offsets["127.0.0.1"]) for _, _, p in lit_in
+           if p["kind"] == "event" and p["name"] == "beat"]
+    got = [t for t in got if t > t0 + 1.5]
+    return got, max([min(abs(t - late - (start + b)) for b in beats) for t in got] or [9.0])
+
+
+m.play([item], 0)
+start = m.proc.player.anchor[0]
+m.web_command({"cmd": "websound", "on": True, "late": 0.35})
+got, out = beats_heard(5.0, 0.35)
+check(f"Sound here on, heard there 0.35 s after the Pi plays it: the song through the web page's way "
+      f"({m.proc.player.device!r}), the grid told of each kick drum that much later ({len(got)}, the furthest out "
+      f"{out * 1000:.0f} ms)", m.proc.player.device == "pietato_web" and len(got) >= 5 and out < 0.04)
+m.web_command({"cmd": "websound", "on": False})
+got, out = beats_heard(4.0, 0.0)
+check(f"...off again: through the Pi ({m.proc.player.device!r}), each as the Pi plays it ({len(got)}, the furthest "
+      f"out {out * 1000:.0f} ms)", m.proc.player.device != "pietato_web" and len(got) >= 3 and out < 0.04)
+m.stop()
+
+
 # a station: passed through here (its song's names)
 class Station(BaseHTTPRequestHandler):
     EVERY = 4000
@@ -822,7 +854,7 @@ while time.monotonic() < end and m.glow_station is not None:
 check("...let go of once it's not played", m.glow_station is None)
 
 # pulse to music off (and no other grid): as ever
-m.web_tab("TV backlight")
+m.web_tab("LED backlight")
 m.press("start")
 m.press("down")
 m.press("right")
@@ -836,7 +868,7 @@ m.stop()
 until(lambda: near(grid.picture()[3, 3], BLUE_OWN, 1) and not grid.lively(time.monotonic()), 6)   # (music gone)
 w = m.web_glow()
 keys = [r["key"] for r in w["rows"]]
-check(f"the web page's Library: TV backlight, its LEDs as they're lit, its settings ({keys})",
+check(f"the web page's Library: LED backlight, its LEDs as they're lit, its settings ({keys})",
       m.web_catalog()["glow"] is True and w["can"] and w["on"] and len(w["leds"]) == 64
       and keys[:3] == ["glow_on", "glow_colour", "glow_bright"] and "glow_reboot" in keys
       and w["rows"][1]["value"] == "Blue" and w["rows"][1]["colours"]["Blue"] == "#1450ff"
@@ -869,7 +901,7 @@ m.web_settings_do({"key": "glow_shape", "value": "8x8 grid"})
 check("...the grid again: no LED count to set", grid.count() == 64
       and "error" in m.web_settings_do({"key": "glow_count", "value": 50}) and m.web_glow()["strip"] is None)
 
-# ...in a real browser: Library > TV backlight, its LEDs as they're lit, a colour tapped
+# ...in a real browser: Library > LED backlight, its LEDs as they're lit, a colour tapped
 import asyncio, logging
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 from werkzeug.serving import make_server
@@ -911,7 +943,7 @@ async def browse():
         await pg.goto(f"http://127.0.0.1:{web.server_port}/#library")
         await pg.wait_for_selector(".ltab", timeout=10000)
         tabs = await pg.eval_on_selector_all(".ltab", "bs => bs.map((b) => b.textContent)")
-        await pg.click(".ltab:has-text('TV backlight')")
+        await pg.click(".ltab:has-text('LED backlight')")
         await pg.wait_for_function("document.querySelectorAll('.gl-led.lit').length === 64", timeout=5000)
         await pg.wait_for_selector(".gl-set .swatch", timeout=5000)
         got = await pg.evaluate("""(() => {
@@ -921,7 +953,7 @@ async def browse():
                   swatches: [...document.querySelectorAll('.gl-set .swatch')].map((x) => x.getAttribute('aria-label'))};
         })()""")
         rgb = [int(v) for v in got["c"][got["c"].index("(") + 1:-1].split(",")[:3]]
-        check(f"the page: Library has a TV backlight tab ({tabs})", "TV backlight" in tabs)
+        check(f"the page: Library has a LED backlight tab ({tabs})", "LED backlight" in tabs)
         check(f"...the LEDs as they're lit, pink ({rgb}; {got['sub']})", near(rgb, PINK, 3)
               and got["sub"] == "Pink, till a game or music comes on")
         check(f"...its settings, a swatch for each colour ({got['rows']}; {got['swatches']})",
@@ -972,15 +1004,15 @@ asyncio.run(browse())
 done.set()
 main.join(5)
 web.shutdown()
-m.web_tab("TV backlight")
+m.web_tab("LED backlight")
 m.press("a")
 check("A again: LED grid off, dark, and gone from the beacon", m.glow_grid is None
       and "glow" not in m.share_beacon("gpi", full=True) and until(lambda: last_lit(m.glow_spi).max() == 0, 2)
       and m.sim_game().says == ("The LEDs are off", "A turns them on") and m.web_glow()["leds"] is None)
 m.glow_can = lambda: False
 m.load_tab(APPS)
-check("a Pi that can't have one (a PC, a GPi Case): no TV backlight in Apps, nor on the web page",
-      "TV backlight" not in [it["title"] for it in m.items[APPS]] and m.web_catalog()["glow"] is False
+check("a Pi that can't have one (a PC, a GPi Case): no LED backlight in Apps, nor on the web page",
+      "LED backlight" not in [it["title"] for it in m.items[APPS]] and m.web_catalog()["glow"] is False
       and m.web_glow()["rows"] == [] and "error" in m.web_settings_do({"key": "glow_colour", "value": "Blue"})
       and "glow" not in [k for k, _, _ in m.settings_rows()])
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}")
