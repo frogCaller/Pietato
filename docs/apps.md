@@ -134,6 +134,14 @@ down. Apps > LED backlight shows how many it's found (it's there on a Pietato wi
 a board is on), and Pulse to music there is for the boards as well, for music played on that Pietato. The sketch
 can light a strip of LEDs on one of the board's pins instead (with the FastLED library).
 
+The web page's Library > LED backlight lists the boards it has found. Tap a colour for one and it's lit in that
+instead of the colours of what's playing, still pulsing to the beat. Auto goes back to what's playing. The board
+keeps its colour itself, so it's the same from every Pietato and after a power cut. Which one? lights a board
+for a moment, to tell them apart. A board that had the sketch before this needs it uploaded again first.
+
+For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
+library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.
+
 ## Fish Tank
 
 Each Pietato has a fish of its own in Apps > Fish Tank. With two or more on the same network, their tanks join up

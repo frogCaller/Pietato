@@ -400,9 +400,8 @@ class WebSettingsScreen:
 
     def web_choices(self, key):
         """What a setting may be, as web_settings says (the LED backlight's: as the web page's Library has them)."""
-        if key in GLOW_KEYS:
-            return next((r.get("choices") for r in self.web_glow_rows() if r["key"] == key), None) \
-                if self.glow_can() else None
+        if key in GLOW_KEYS:                           # (none of them, where there's nothing to light)
+            return next((r.get("choices") for r in self.web_glow_rows() if r["key"] == key), None)
         for sec in self.web_settings_now()["sections"]:
             for row in sec["rows"]:
                 if row["key"] == key and row["kind"] == "choice":

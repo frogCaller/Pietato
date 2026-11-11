@@ -2,10 +2,12 @@
 edges), on this Pi's GPIO 10 (SPI), lit by the games and music of whichever of your Pietatos it follows (this one too),
 and in a colour of your own the rest of the time (its page: a picture of the LEDs as they're lit, backlight.py; the
 web page's Library has it too). And the other way: this one's games and music lighting your grids, wherever they are,
-and the ESP32 boards on your network (esp32/pietato_led: found by themselves). A game's colours come from its emulator
+and the ESP32 boards on your network (esp32/pietato_led: found by themselves; the web page lists them, and gives each
+a colour of its own, which the board keeps). A game's colours come from its emulator
 (told where they go: glow ADDRESS:PORT...); music's beats from its player, when one of your grids or boards wants them:
 a song or a station then plays through party mode's player (party.py: it knows when each bit of it is heard), on its
 own, as if it were a party."""
+import re
 import secrets
 import threading
 import time
@@ -41,6 +43,8 @@ GLOW_CARD = ("glow_follow", "glow_beat", "glow_shape") + GLOW_GRID_ONLY + GLOW_S
 GLOW_SWATCH = {"Off": "linear-gradient(135deg, #23272e 44%, #8b95a3 44% 56%, #23272e 56%)",
                "Rainbow": "conic-gradient(#ff3b30, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff2d55, #ff3b30)"}
                              # (the web page's swatches for what isn't one colour)
+LAMP_COLOURS = [(n, "#%02x%02x%02x" % c) for n, c in COLOURS if isinstance(c, tuple)]
+                             # an ESP32 board's own colour, on the web page: these, or any other
 GLOW_LOOK = 2.0              # seconds between looks for your grids (and where a game's colours go)
 GLOW_MUSIC = 0.5             # seconds between music's colour, said to your grids (a beat between)
 GLOW_LEAD = 0.8              # seconds from a song being started to its playing, on party mode's player
@@ -373,6 +377,43 @@ class GlowScreen:
         n = len(self.lamps_on())
         return "" if not n else "1 ESP32 board found" if n == 1 else f"{n} ESP32 boards found"
 
+    def glow_shown(self):
+        """The web page's Library has an LED backlight: a Pi that can have LEDs of its own, or any Pietato that's found
+        an ESP32 board (since it started: so it doesn't come and go with them)."""
+        lamps = self.glow_lamps
+        return bool(lamps is not None and lamps.ever) or self.glow_can()
+
+    def web_lamps(self):
+        """The ESP32 boards there now, for the web page: each one's name, its LEDs, and its own colour ("#rrggbb"; ""
+        for none: it takes what's playing; None for a board with the older sketch, which can't keep one)."""
+        lamps = self.glow_lamps
+        return [{"ip": b["ip"], "name": b["name"], "leds": b["leds"],
+                 "colour": None if not b["keeps"] else "#%02x%02x%02x" % b["colour"] if b["colour"] else ""}
+                for b in (lamps.boards() if lamps is not None else [])]
+
+    def web_set_glow_lamp(self, value, cmd):
+        """(The web page.) One of the ESP32 boards there now (its address), given a colour of its own ("#rrggbb"; "":
+        none, so it takes what's playing); or just lit a moment, so you can tell which one it is (find)."""
+        lamps = self.glow_lamps
+        ip = value.get("ip") if isinstance(value, dict) else None
+        board = next((b for b in (lamps.boards() if lamps is not None else []) if b["ip"] == ip), None)
+        if board is None:
+            return {"error": "That board isn't on now"}
+        if not board["keeps"]:
+            return {"error": "It needs the newer sketch first (esp32/pietato_led)"}
+        port = getattr(self, "lamp_port", GLOW_PORT)   # (where a board takes its colours: the tests' own)
+        if value.get("find") is True:                  # (the colour it has, told it again: it shows it a moment)
+            if not lamps.set_colour(ip, board["colour"], port):
+                return {"error": "It couldn't be told"}
+            return {"ok": True, "said": f"{board['name']} lights up for a moment"}
+        colour = value.get("colour")
+        if not isinstance(colour, str) or not re.fullmatch(r"(#[0-9a-fA-F]{6})?", colour):
+            return {"error": "That isn't a colour"}
+        rgb = tuple(int(colour[k:k + 2], 16) for k in (1, 3, 5)) if colour else None
+        if not lamps.set_colour(ip, rgb, port):
+            return {"error": "It couldn't be told"}
+        return {"ok": True}
+
     def glow_start(self):
         """The grid lit (Apps > LED backlight: on), if it can be: the Pi's SPI turned on first (in config.txt: then a
         restart), if it isn't."""
@@ -581,7 +622,13 @@ class GlowScreen:
 
     # -- the web page's Library ----------------------------------------------------------------------------------------
     def web_glow_rows(self):
-        """Library > LED backlight's settings, on the web page (a Pi that can have a grid): as Settings rows are."""
+        """Library > LED backlight's settings, on the web page (a Pi that can have a grid): as Settings rows are. On a
+        Pietato with no LEDs of its own: just your ESP32 boards' pulse to music, while one's on."""
+        if not self.glow_can():
+            if not self.lamps_on():
+                return []
+            return [dict(key="glow_beat", label="Pulse to music", kind="choice", value=self.glow_value("glow_beat"),
+                         choices=["On", "Off"], note="Your ESP32 boards, to this Pietato's music.")]
         rows = [dict(key=k, label=label, kind="choice", value=self.glow_value(k), choices=list(choices))
                 if k != "glow_count" else dict(key=k, label=label, kind="count", value=self.glow_count(),
                                                min=STRIP_LEAST, max=STRIP_MOST)
@@ -633,8 +680,11 @@ class GlowScreen:
             px = (pic.reshape(-1, 3) * self.glow_shade()).clip(0, 255).round().astype(int)
             leds = ["#%02x%02x%02x" % tuple(c) for c in px.tolist()]
         status, boards = self.glow_status(), self.lamps_note()
-        if boards and not self.glow_note:
+        if not self.glow_can():                        # (no LEDs of its own: just the boards)
+            status = boards
+        elif boards and not self.glow_note:
             status = f"{status}. {boards}" if status else boards
         return {"can": self.glow_can(), "on": g is not None, "leds": leds, "status": status,
-                "warn": bool(self.glow_note), "rows": self.web_glow_rows() if self.glow_can() else [],
-                "strip": None if points is None else points.round(4).tolist()}
+                "warn": bool(self.glow_note), "rows": self.web_glow_rows(),
+                "strip": None if points is None else points.round(4).tolist(),
+                "boards": self.web_lamps(), "colours": [list(c) for c in LAMP_COLOURS]}

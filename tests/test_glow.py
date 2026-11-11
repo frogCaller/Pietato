@@ -14,8 +14,8 @@ asked for; ◀▶ its colour, ▲▼ how bright, START's card the rest; its pict
 through party mode's player for the beat: the grid pulsing as each kick drum's heard, music's colour between, pause and
 seek as mplayer takes them (with the web page's Sound here on, each beat as late as its listener hears the sound),
 and a station passed through here for its song's names. Pulse to music off, or no grid:
-music as ever (mplayer). The web page's Library: the LEDs as they're lit, and its settings. A Pi that can't have one:
-none of it."""
+music as ever (mplayer). The web page's Library: the LEDs as they're lit (ones with no red in them at all too), and
+its settings. A Pi that can't have one: none of it."""
 import os, shutil, subprocess, sys, threading, time, wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 real_run = subprocess.run                              # (FFmpeg, to make a station's sound: the test stands in for the rest)
@@ -960,6 +960,19 @@ async def browse():
               got["rows"][:3] == ["glow_on", "glow_colour", "glow_bright"]
               and got["swatches"] == [n for n, _ in G.COLOURS])
         await pg.screenshot(path=S + "/glow_web.png")
+        await pg.click(".gl-set .swatch[aria-label='Green']")   # (a colour with no red in it at all: lit all the same)
+        green = np.array(G.colour_of("Green")) * m.glow_shade()
+        try:
+            await pg.wait_for_function("""(want) => {
+              const leds = [...document.querySelectorAll('.gl-led')];
+              const c = getComputedStyle(leds[27], '::before').backgroundColor;
+              const v = c.slice(c.indexOf('(') + 1, -1).split(',').map(Number);
+              return leds.every((x) => x.classList.contains('lit')) && v.slice(0, 3).every((x, i) => Math.abs(x - want[i]) <= 3);
+            }""", arg=[int(round(v)) for v in green], timeout=5000)
+            lit = True
+        except Exception:
+            lit = False
+        check(f"...green tapped: the LEDs drawn lit, green ({[int(round(v)) for v in green]})", lit)
         await pg.click(".gl-set .swatch[aria-label='Purple']")
         took = await asyncio.to_thread(until, lambda: m.setting("glow_colour") == "Purple"
                                        and grid.colour == G.colour_of("Purple"), 5)

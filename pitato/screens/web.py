@@ -126,7 +126,8 @@ class WebScreen:
                 "learning": self.learn_status(),
                 "size": list(self.screen_dims() if self.fb else screen_size()),
                 "canvas": [self.fb.w, self.fb.h] if self.fb else None,   # (what the menus, and drawings, are drawn at)
-                "plex": self.plex.signed_in, "msg": self.msg, "kb": self.web_kb()}
+                "plex": self.plex.signed_in, "msg": self.msg, "kb": self.web_kb(),
+                "glow": self.glow_shown()}             # (Library's LED backlight: there once a board's found)
 
     def web_kb(self):
         """The box to type in that's on the screen (its title, and what's in it so far), for the web page to type
@@ -729,8 +730,8 @@ class WebScreen:
                           "stations": [list(x) for x in RADIO_STATIONS],
                           "genres": [g[0] for g in RADIO_GENRES]},
                 "streams": [[it["title"], it.get("sub", ""), it["src"]] for it in read_streams(streams["files"])],
-                "plex": self.plex.signed_in, "glow": self.glow_can()}   # (glow: Library's LED backlight, on a Pi that
-                                                                        # can have one)
+                "plex": self.plex.signed_in, "glow": self.glow_shown()}   # (glow: Library's LED backlight, on a Pi
+                                                                          # that can have one, or with ESP32 boards)
 
     def web_channels(self, what):
         """Plex's free Live TV channels of a kind (anime, toons, movies, news, sports)."""

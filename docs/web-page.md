@@ -65,7 +65,8 @@ press Arrange and drag the tanks into a grid, and set the space between your scr
 
 **LED backlight**, in Library on a Pi with LEDs behind the TV, shows them as they're lit, as a grid or a
 strip round the TV. Tap a colour for them, or change how bright they are, which Pietato they follow, the
-strip's LEDs and the rest. See [LED backlight](apps.md#led-backlight).
+strip's LEDs and the rest. It lists the ESP32 boards on the network too, on any Pietato that has found one,
+with a colour to tap for each. See [LED backlight](apps.md#led-backlight).
 
 **Files** takes files or whole folders dropped on it. Music, videos, pictures, documents and games
 each go to their own folder, and settings files like `radio.txt` go to Settings. Each file can

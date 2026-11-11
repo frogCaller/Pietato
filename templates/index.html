@@ -729,6 +729,35 @@
   .gl-led.lit::before { background: var(--c); box-shadow: 0 0 12px 3px var(--c); }
   .gl-set { padding-top: 4px; }
   .gl-set > .set-row:first-child { border-top: 0; }
+  .gl-set:empty { display: none; }
+  .gl-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
+  .gl.plain { grid-template-columns: minmax(0, 1fr); }      /* a Pietato with no LEDs of its own: just the boards */
+  .gl.plain .gl-board { display: none; }
+  /* ...and the ESP32 boards it's found, under the LEDs: a colour for each (what's playing, one of these, or any other) */
+  .gl-lamps[hidden] { display: none; }
+  .gl:not(.plain) .gl-lamps .set-row { grid-template-columns: minmax(0, 1fr); }
+  .gl:not(.plain) .gl-lamps .set-c, .gl:not(.plain) .gl-lamps .swatches { justify-content: flex-start; }
+  @media (min-width: 641px) {                      /* (on their own: room for a board's colours in one row) */
+    .gl.plain .gl-lamps .set-row[data-key^="lamp:"] { grid-template-columns: minmax(150px, 1fr) auto; }
+  }
+  .set-note.gl-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+  .swatch.auto {                                   /* (what's playing: a word, as it's not a colour) */
+    width: auto; padding: 0 13px; border-radius: 15px; background: var(--raised); box-shadow: none;
+    font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap;
+  }
+  .swatch.auto:hover { color: var(--text); }
+  .swatch.auto[aria-pressed="true"] { background: var(--text); color: var(--room); box-shadow: none; }
+  .swatch.any { position: relative; display: block; overflow: hidden; cursor: pointer; background: var(--c, transparent); }
+  .swatch.any:not(.on) { box-shadow: 0 0 0 1.5px var(--line-3) inset; }
+  .swatch.any:not(.on)::before {
+    content: ""; position: absolute; inset: 8px;
+    background: linear-gradient(var(--muted), var(--muted)) center / 100% 2px no-repeat,
+                linear-gradient(var(--muted), var(--muted)) center / 2px 100% no-repeat;
+  }
+  .swatch.any.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); overflow: visible; }
+  .swatch.any input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+  .swatch.any:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .gl-find { font-size: 13px; white-space: nowrap; }
   .content-h .src.bad { color: var(--bad); }
   @media (max-width: 760px) { .gl { grid-template-columns: minmax(0, 1fr); } .gl-board { max-width: 340px; width: 100%; justify-self: center; } }
 
@@ -1583,6 +1612,10 @@ async function poll() {                                   // (in Files, now and 
     SCR.state = st;
     drawState(st);
     if (!files) watchScreen();
+    if (L.cat && st.glow !== undefined && !!L.cat.glow !== !!st.glow) {   // (an ESP32 board's been found: Library has
+      L.cat.glow = !!st.glow;                                             //  the LED backlight from now on)
+      if (L.tab !== "glow") drawLibTabs();
+    }
   } else if (SCR.fails > 1) drawOffline();
   clearTimeout(SCR.timer);
   SCR.timer = setTimeout(poll, SCR.fails > 1 ? 5000 : files ? 10000 : 1500);
@@ -2866,7 +2899,8 @@ function drawLibTabs() {
   box.textContent = "";
   let lot = null;
   for (const [key, label] of TABS) {
-    if (!libHas(key)) continue;             // (your streams, once there are some; the LED backlight, where it can go)
+    if (!libHas(key)) continue;             // (your streams, once there are some; the LED backlight, where it can go,
+                                            //  or once an ESP32 board's been found)
     const now = OWN.has(key) ? "More" : "Watch and listen";
     if (now !== lot) {
       const g = el("div", "lgrp", now);
@@ -4974,7 +5008,8 @@ function ftPointer(cv) {
 }
 
 // ---- the LED backlight: the LEDs behind the TV, as they're lit now, and their colour and the rest ----------------------
-const GL = { gen: 0, data: null, sig: "", board: null, list: null, sub: null };
+const GL = { gen: 0, data: null, sig: "", board: null, list: null, lamps: null, wrap: null, sub: null, lampSig: "",
+             lampRows: {} };                           // (lampRows: each ESP32 board's row, its colour shown in it)
 function drawGlow() {
   const box = $("#content"), token = ++libToken;
   box.textContent = "";
@@ -4988,9 +5023,14 @@ function drawGlow() {
   GL.kind = "";
   glBoard(!!(GL.data && GL.data.strip));
   GL.list = el("div", "set-sec gl-set");
-  wrap.append(GL.board, GL.list);
+  GL.lamps = el("div", "set-sec gl-lamps");              // (the ESP32 boards it's found, once there are some)
+  GL.lamps.hidden = true;
+  GL.wrap = wrap;
+  const side = el("div", "gl-side");
+  side.append(GL.board, GL.lamps);
+  wrap.append(side, GL.list);
   box.append(wrap);
-  GL.sig = "";
+  GL.sig = GL.lampSig = "";
   if (GL.data) glDraw();
   glStart(token);
 }
@@ -5025,7 +5065,10 @@ function glBoard(strip) {        // (the grid's 64 LEDs; or a TV, its strip roun
   if (strip) GL.board.append(GL.cv = el("canvas"));
   else for (let i = 0; i < 64; i++) GL.board.append(el("span", "gl-led"));
 }
-const glLit = (c) => !!c && parseInt(c.slice(1), 16) > 0x0a0a0a;
+const glLit = (c) => {           // (lit: any of its red, green and blue more than a glimmer)
+  const v = c ? parseInt(c.slice(1), 16) : 0;
+  return (v >> 16) > 10 || ((v >> 8) & 255) > 10 || (v & 255) > 10;
+};
 function glStrip(d) {            // (the TV, and each LED just round its edge, lit as it is)
   const cv = GL.cv, k = window.devicePixelRatio || 1, box = cv.getBoundingClientRect();
   const W = Math.max(1, Math.round(box.width * k)), H = Math.max(1, Math.round(box.height * k));
@@ -5064,16 +5107,116 @@ function glDraw() {
       if (lit) leds[i].style.setProperty("--c", c); else leds[i].style.removeProperty("--c");
     }
   }
-  if (!d.can) {
-    if (GL.sig !== "none") { GL.sig = "none"; GL.list.textContent = ""; noteInto(GL.list, "No LEDs here", "The LED backlight goes on a Pi behind the TV, not one in a GPi Case or a PC."); }
-    return;
-  }
-  const sig = JSON.stringify(d.rows);
+  GL.wrap.classList.toggle("plain", !d.can);   // (no LEDs of its own, in a GPi Case or on a PC: just its boards,
+  glLamps(d);                                  //  and what there is to set goes with them)
+  const rows = d.can ? d.rows : [];
+  const sig = JSON.stringify(rows);
   const busy = GL.list.contains(document.activeElement) && document.activeElement.matches("select, input");
   if (sig === GL.sig || busy) return;          // (not while you're choosing in it)
   GL.sig = sig;
   GL.list.textContent = "";
-  for (const r of d.rows) if (SET_DRAW[r.kind]) GL.list.append(SET_DRAW[r.kind](r));
+  for (const r of rows) if (SET_DRAW[r.kind]) GL.list.append(SET_DRAW[r.kind](r));
+}
+// the ESP32 boards on your network, found by themselves: each one's colour (what's playing, or one of its own, which
+// the board keeps), and a way to tell which is which
+function glLamps(d) {
+  const boards = d.boards || [], rows = d.can ? [] : d.rows || [];
+  GL.lamps.hidden = !boards.length && d.can;
+  if (GL.lamps.hidden) { GL.lampSig = ""; return; }
+  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null]), d.colours, rows]);
+  const picking = GL.lamps.contains(document.activeElement) && document.activeElement.matches("input[type=color]");
+  if (sig !== GL.lampSig && !picking) {        // (other boards than before: drawn again, though not under the
+    GL.lampSig = sig;                          //  browser's picker while a colour's being picked in it)
+    GL.lampRows = {};
+    GL.lamps.textContent = "";
+    if (!boards.length) {
+      noteInto(GL.lamps, "No ESP32 boards on now", "One with the Pietato sketch on it shows up here by itself.");
+      return;
+    }
+    const h = el("header");
+    h.append(el("h2", "", "ESP32 boards"), el("p", "", "Each takes the colours of what's playing, or keeps one of its own."));
+    GL.lamps.append(h);
+    for (const b of boards) GL.lamps.append(glLamp(b, d.colours || []));
+    for (const r of rows) if (SET_DRAW[r.kind]) GL.lamps.append(SET_DRAW[r.kind](r));
+  }
+  for (const b of boards) if (GL.lampRows[b.ip]) GL.lampRows[b.ip](b.colour);   // (each one's colour, as it is now)
+}
+function glLamp(b, colours) {
+  const [row, c, l] = setRow({ key: "lamp:" + b.ip, label: b.name });
+  const meta = el("span", "set-note gl-meta");
+  meta.append(el("span", "", b.leds === 1 ? "1 LED" : b.leds + " LEDs"));
+  l.append(meta);
+  if (b.colour === null) {                     // (the older sketch: it can't keep one)
+    c.append(el("span", "set-note", "Put the newer sketch on it to give it a colour"));
+    return row;
+  }
+  const sw = el("div", "swatches"), keys = [];
+  sw.setAttribute("role", "group"); sw.setAttribute("aria-label", b.name + ": its colour");
+  let shown, sent = "", going = false, held = 0;
+  const show = (colour) => {                   // (its colour: that one's swatch pressed, or the picker's lit in it)
+    if (colour === shown) return;
+    shown = colour;
+    let named = false;
+    for (const [k, hex] of keys) { named = named || hex === colour; k.setAttribute("aria-pressed", String(hex === colour)); }
+    any.classList.toggle("on", !named);
+    if (named) any.style.removeProperty("--c"); else any.style.setProperty("--c", colour);
+    if (document.activeElement !== inp) inp.value = colour || "#ffffff";   // (the picker opens at the colour it has)
+  };
+  const tell = async (colour) => {             // (the board told; what's shown here stands a moment, whatever an
+    held = Date.now();                         //  answer that was already on its way says)
+    if (await glLampSet(b, colour)) return;
+    held = 0;                                  // (not taken: as the Pi has it, again)
+    glKick();
+  };
+  const add = (cls, name, hex, word) => {
+    const k = button(cls, word || "");
+    if (hex) k.style.setProperty("--c", hex);
+    k.title = name;
+    if (!word) k.setAttribute("aria-label", name);
+    k.onclick = () => { if (k.getAttribute("aria-pressed") !== "true") { show(hex); tell(hex); } };
+    keys.push([k, hex]);
+    sw.append(k);
+  };
+  add("swatch auto", "The colours of what's playing", "", "Auto");
+  for (const [name, hex] of colours) add("swatch", name, hex);
+  const any = el("label", "swatch any"), inp = el("input");     // (any other colour: the browser's own picker)
+  any.title = "Another colour";
+  inp.type = "color";
+  inp.setAttribute("aria-label", b.name + ": another colour");
+  any.append(inp);
+  sw.append(any);
+  const follow = async () => {                 // (a colour being picked: the board shows it as you go, one told at
+    held = Date.now();                         //  a time; it keeps the one you leave it at)
+    show(inp.value.toLowerCase());
+    if (going) return;
+    going = true;
+    while (sent !== inp.value.toLowerCase()) { sent = inp.value.toLowerCase(); await tell(sent); }
+    going = false;
+  };
+  inp.oninput = follow;
+  inp.onchange = () => { follow(); inp.blur(); };
+  GL.lampRows[b.ip] = (colour) => { if (!going && Date.now() - held > 1500) { sent = ""; show(colour); } };
+  show(b.colour);
+  const find = button("linkbtn gl-find", "Which one?");
+  find.title = "Lights it for a moment, so you can tell";
+  find.onclick = async () => {
+    find.disabled = true;
+    await glLampSet(b, null);
+    if (find.isConnected) find.disabled = false;
+  };
+  meta.append(find);
+  c.append(sw);
+  return row;
+}
+async function glLampSet(b, colour) {          // (colour null: just lit a moment, so you can tell which it is)
+  try {
+    const r = await pi("settings", { key: "glow_lamp", value: colour === null ? { ip: b.ip, find: true } : { ip: b.ip, colour } });
+    if (r && r.said) toast(r.said);
+    return true;
+  } catch (e) {
+    toast(e.message);
+    return false;
+  }
 }
 
 // ---- settings: everything the Pi's Settings has, and each app's own (passwords and tokens never come here) ---------
