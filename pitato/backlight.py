@@ -1,11 +1,15 @@
 """Apps > LED backlight, on the screen: a picture of the LEDs behind your TV, lit as they are now (its own colour, a
 game's, music's), beside how it's set: the 8x8 grid, or a TV with the strip round it. Its buttons, its options and the
-LEDs themselves are media mode's (screens/glow.py, glow.py): this just draws them, and only as often as they change."""
+LEDs themselves are media mode's (screens/glow.py, glow.py): this just draws them, and only as often as they change.
+On a Pietato with no LEDs of its own, the picture is of your ESP32 boards instead: an LED for each, in its own colour
+(dark, if it takes what's playing), with its name."""
+import math
 import time
 
 from .fine import detail, made_fine
 from .glow import TV_H, TV_W
 from .sims import Sim
+from .theme import BODY, FONT_UI, FONT_UI_BOLD, MUTED
 
 BOARD = (12, 14, 17)                     # the grid's board (and the TV's screen)
 BOARD_EDGE = (44, 50, 58)
@@ -13,6 +17,8 @@ UNLIT = (40, 44, 51)                     # an LED that's off
 CORE = 0.31                              # an LED's size, of the space for each (its radius)
 HALO = 0.78                              # ...and its light's
 STEADY, LIVELY, OFF = 1.0, 0.2, 2.0      # seconds to its next picture: the LEDs as they are; changing; off
+FOOT = 100                               # your ESP32 boards' picture: the room kept at the foot of the box (its card)
+BOARD_W, BOARD_H = 104, 96               # ...the least room for a board with its name under it (fewer fit: no names)
 
 
 class Backlight(Sim):
@@ -25,7 +31,9 @@ class Backlight(Sim):
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
-        self.plain = False               # no LEDs of this Pietato's own: no picture of them (its note says the rest)
+        self.plain = False               # no LEDs of this Pietato's own: your ESP32 boards' picture instead
+        self.lamps = []                  # ...those boards: (name, how many LEDs, its own colour or None)
+        self.tags = {}                   # (words, size, bold, detail) -> their mask, and its size
         self.grid = None                 # the LEDs, while they're on (glow.Grid): media mode's
         self.points = None               # a strip's LEDs, where each is round the TV (0 to 1 across and down), or None
         self.shade = 1.0                 # its picture drawn this bright, for how bright the LEDs are
@@ -100,11 +108,82 @@ class Backlight(Sim):
         th = tw * TV_H / TV_W
         return (self.w - tw) / 2, (self.h - th) / 2, tw, th
 
+    def tag(self, text, size, bold, s):
+        """A few words as a mask in the screen's own pixels (a board's name, how many LEDs it has), and how wide and
+        tall they are: made once."""
+        key = (text, size, bold, s)
+        got = self.tags.get(key)
+        if got is None:
+            from PIL import Image, ImageDraw, ImageFont
+            try:
+                font = ImageFont.truetype(FONT_UI_BOLD if bold else FONT_UI, round(size * s))
+            except OSError:
+                font = ImageFont.load_default()
+            l, t, r, b = ImageDraw.Draw(Image.new("L", (1, 1))).textbbox((0, 0), text, font=font)
+            w, h = -(-(r - l + 2) // s) * s, -(-(b - t + 2) // s) * s     # (whole pixels of the picture's own)
+            pic = Image.new("L", (max(s, w), max(s, h)), 0)
+            ImageDraw.Draw(pic).text((1 - l, 1 - t), text, font=font, fill=255)
+            if len(self.tags) > 200:
+                self.tags = {}
+            got = self.tags[key] = (made_fine(pic, s), pic.width / s, pic.height / s)
+        return got
+
+    def draw_boards(self, img, x0, y0):
+        """Your ESP32 boards, an LED each: lit in its own colour, or dark (it takes what's playing); its name under
+        it, and how many LEDs it has if that's more than one. More of them than there's room to name: just the LEDs."""
+        n = len(self.lamps)
+        if not n:
+            return
+        s = detail(img)
+        room = max(BOARD_H, self.h - FOOT)             # (above the card at the foot of the box)
+        across, down = max(1, int(self.w // BOARD_W)), max(1, int(room // BOARD_H))
+        named = n <= across * down
+        if named:
+            cols = min(n, across)
+            rows = math.ceil(n / cols)
+            cw, ch = self.w / cols, min(room / rows, BOARD_H + 16)
+            core_d = 24.0
+        else:
+            cols = max(1, math.ceil(math.sqrt(n * self.w / room)))
+            rows = math.ceil(n / cols)
+            cw = ch = min(self.w / cols, room / rows)
+            core_d = max(4.0, min(24.0, cw * 0.45))
+        halo_d = core_d * HALO / CORE
+        halo, core, hn, cn = self.light(core_d, halo_d, s)
+        top = (room - rows * ch) / 2
+
+        def put(mask, x, y, col):         # (on the picture's own pixels)
+            x, y = round(x * s) / s, round(y * s) / s
+            img.paste(col, (x, y) if s > 1 else (int(x), int(y)), mask)
+
+        def words(text, cx, y, size, bold, col):
+            mask, w, h = self.tag(text, size, bold, s)
+            if w > cw - 4 and text.startswith("ESP32 "):   # (no room for all of its name: the part that's its own)
+                mask, w, h = self.tag(text[6:], size, bold, s)
+            while w > cw - 4 and len(text) > 2:
+                text = text[:-2].rstrip() + "…"
+                mask, w, h = self.tag(text, size, bold, s)
+            put(mask, cx - w / 2, y, col)
+        for k, (name, count, colour) in enumerate(self.lamps):
+            row, i = divmod(k, cols)
+            here = min(cols, n - row * cols)           # (the last row: in the middle)
+            cx = x0 + (self.w - here * cw) / 2 + (i + 0.5) * cw
+            cy = y0 + top + (row + 0.5) * ch - (16 if named else 0)
+            if colour is not None and max(colour) >= 12:
+                put(halo, cx - hn / 2, cy - hn / 2, tuple(colour))
+            put(core, cx - cn / 2, cy - cn / 2, UNLIT if colour is None else
+                tuple(max(v, u) for v, u in zip(colour, UNLIT)) if max(colour) < 40 else tuple(colour))
+            if named:
+                words(name, cx, cy + core_d / 2 + 9, 12, True, BODY)
+                if count > 1:
+                    words(f"{count} LEDs", cx, cy + core_d / 2 + 26, 11, False, MUTED)
+
     def draw(self, img, x0, y0):
         from .fine import ImageDraw
         pic = self.colours()
         self.drawn = pic
         if self.plain:
+            self.draw_boards(img, x0, y0)
             return
         s = detail(img)
         d = ImageDraw.Draw(img)

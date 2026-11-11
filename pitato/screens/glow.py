@@ -163,6 +163,8 @@ class GlowScreen:
         if s.plain:                                    # (a GPi Case, a PC: no LEDs of its own. Just the boards, then)
             beat = self.glow_setting("glow_beat") != "Off"
             s.grid, s.points = None, None
+            lamps = self.glow_lamps                    # (its picture: an LED for each, in its own colour)
+            s.lamps = [(b["name"], b["leds"], b["colour"]) for b in (lamps.boards() if lamps is not None else [])]
             s.facts = [("ESP32 boards", str(boards) if boards else "None"),
                        ("Pulse to music", "On" if beat else "Off")]
             s.says = ("No LEDs here", "They go on a Pi behind the TV") if not boards else (

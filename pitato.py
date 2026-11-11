@@ -195,8 +195,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 a strip: how many LEDs, where it starts, which way it goes, along the bottom or not); the
                 web page's Library has it too. An ESP32 board's own LED joins in over WiFi, on any Pietato
                 (esp32/pietato_led: it says it's there, and is lit as a grid is; one with no LEDs of its
-                own has this page for them while a board's on: A is their pulse to music; the web page's
-                Library lists the boards, and gives each a colour of its own, which the board keeps)
+                own has this page for them while a board's on, an LED drawn for each: A is their pulse to
+                music; the web page's Library lists the boards, and gives each a colour of its own, which
+                the board keeps)
     Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
                 of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
                 Y out, for as long as they're held

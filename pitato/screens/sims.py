@@ -44,8 +44,13 @@ class SimScreen:
         return None
 
     def sim_full(self):
-        """Full screen: just the sim, on the whole screen (for every sim)."""
-        return self.setting("sim_full") == "On"
+        """Full screen: just the sim, on the whole screen (for every sim). Not the LED backlight's page on a Pietato
+        with no LEDs of its own: what it says is beside its box and at its foot, and full screen has neither."""
+        return self.setting("sim_full") == "On" and not self.sim_plain()
+
+    def sim_plain(self):
+        """This page is the LED backlight's on a Pietato with no LEDs of its own: your ESP32 boards' page."""
+        return self.tab_type() == "sim" and LIBRARY[self.tab].get("sim") == "glow" and not self.glow_can()
 
     def sim_paced(self):
         """The sim on this page, if its picture changes only now and then (the Clock: each second), else None."""

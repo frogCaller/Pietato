@@ -13,7 +13,10 @@ and then keeps its colour between them. A colour of its own: told it by a Pietat
 shows it a moment, says it back at once, keeps it through a power cut (written only when it changes), and is lit in
 it whatever's playing (music's beats on it, a hit's red over it); told none, it takes what's playing again; a Pietato
 reads what it says of itself, lists the boards by name with their colours, and tells only one that's there and keeps
-one. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red first, dim, and never more than 300 mA."""
+one. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red first, dim, and never more than 300 mA. FastLED read
+before the sketch's own settings (it has a BRIGHTNESS of its own), and a strip told again every half second. Its
+page in Apps on a Pietato with no LEDs of its own: your boards drawn in its box, an LED each, and never full screen
+(it would be a black one)."""
 import asyncio, json, logging, os, shutil, socket, subprocess, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -129,11 +132,20 @@ struct Preferences {
   }
 };
 ''')
+# FastLED, as far as the sketch uses it. The real one has names of its own that are the sketch's settings' too (its
+# ClearFlags has a BRIGHTNESS, since 3.10): it's to be read before any of them is set, or it won't build at all
 open(S + "/board/FastLED.h", "w").write(r'''
 #pragma once
+#if defined(BRIGHTNESS) || defined(LED_COUNT) || defined(STRIP_PIN) || defined(ONBOARD_PIN) || defined(MOST_MILLIAMPS)
+#error "FastLED.h is to be read before the sketch's own settings: it has names of its own like theirs"
+#endif
+#if defined(MATRIX_BRIGHTNESS) || defined(MATRIX_ORDER) || defined(STRIP_ORDER)
+#error "FastLED.h is to be read before the sketch's own settings: it has names of its own like theirs"
+#endif
 #include "Arduino.h"
 struct CRGB { uint8_t r = 0, g = 0, b = 0; CRGB() {} CRGB(uint8_t x, uint8_t y, uint8_t z) : r(x), g(y), b(z) {} };
 enum { GRB = 1, RGB = 2 };
+enum class ClearFlags : uint32_t { NONE = 0, CHANNELS = 1 << 0, POWER_SETTINGS = 1 << 1, BRIGHTNESS = 1 << 2 };
 struct WS2812B {};
 extern CRGB *STRIP; extern int STRIP_N, STRIP_AT;
 struct CFastLED {
@@ -142,6 +154,7 @@ struct CFastLED {
     printf("A %d %d %s\n", PIN, n, ORDER == RGB ? "RGB" : "GRB");
   }
   void setMaxPowerInVoltsAndMilliamps(int volts, int ma) { printf("P %d %d\n", volts, ma); }
+  void setDither(uint8_t mode) { printf("D %d\n", mode); }
   void show() {
     printf("F %.4f %d", NOW, STRIP_AT);
     for (int i = 0; i < STRIP_N; i++) printf(" %d,%d,%d", STRIP[i].r, STRIP[i].g, STRIP[i].b);
@@ -156,11 +169,10 @@ inline void fill_solid(CRGB *leds, int n, CRGB c) { for (int i = 0; i < n; i++) 
 open(S + "/main.cpp", "w").write(r'''
 #include "Arduino.h"
 double NOW = 0; bool ON_WIFI = false; WiFiClass WiFi; std::deque<Packet> INBOX;
-#ifdef WITH_STRIP
-#include "FastLED.h"
+#include "sketch.cpp"
+#ifdef WITH_STRIP                  // (FastLED's own things: after the sketch, which reads FastLED.h where it must)
 CRGB *STRIP = nullptr; int STRIP_N = 0, STRIP_AT = 0; CFastLED FastLED;
 #endif
-#include "sketch.cpp"
 int main() {
   setup();
   char line[8192];
@@ -223,6 +235,7 @@ def run(prog, script, kept=None):
     ASKED[:] = [float(line.split()[1]) for line in r.stdout.splitlines() if line.startswith("W ")]
     KEPT[:] = [(float(w[1]), int(w[2])) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "K"]
     SET_UP[:] = [w[1:] for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] in ("A", "P")]
+    DITHER[:] = [int(w[1]) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "D"]
     for line in r.stdout.splitlines():
         w = line.split()
         if w[0] == "L":
@@ -236,7 +249,7 @@ def run(prog, script, kept=None):
     return leds, sent, begun, strip
 
 
-ASKED, KEPT, SET_UP = [], [], []
+ASKED, KEPT, SET_UP, DITHER = [], [], [], []
 
 
 def at(leds, t):
@@ -391,8 +404,15 @@ if BOARD and prog:
                                      packet(PI, G.music_packet(BLUE, 1.4 + AHEAD)), "t 2.2"])
         last = shows[-1] if shows else (0, 0, [(0, 0, 0)])   # (as it's lit by then: sent when it changes)
         check(f"...all eight of its LEDs, music's colour ({last[2][:2]}, for {base}), on its pin ({last[1]}), green "
-              f"first as such strips take it ({SET_UP})", len(last[2]) == 8 and len(set(last[2])) == 1
-              and near(last[2][0], base) and last[1] == 5 and SET_UP == [["5", "8", "GRB"]])
+              f"first as such strips take it ({SET_UP}), each colour as it is ({DITHER})", len(last[2]) == 8
+              and len(set(last[2])) == 1 and near(last[2][0], base) and last[1] == 5
+              and SET_UP == [["5", "8", "GRB"]] and DITHER == [0])
+        _, _, _, shows = run(strip, ["wifi 1", "t 9.0"])
+        dark = [x[0] for x in shows if x[0] > 4.0 and set(x[2]) == {(0, 0, 0)}]
+        gaps = [round(b - a, 2) for a, b in zip(dark, dark[1:])]
+        check(f"...told again every half second, changed or not (a telling can go astray, with the WiFi busy): "
+              f"{len(dark)} times in five seconds of dark ({sorted(set(gaps))})", 9 <= len(dark) <= 11
+              and all(0.5 <= g <= 0.52 for g in gaps))
 
     # ---- a Waveshare ESP32-S3-Matrix: 64 LEDs on pin 14, red first, dim, and no more than 300 mA -------------------------
     matrix = build("matrix", matrix=True)
@@ -843,8 +863,9 @@ class Board(threading.Thread):
 
 class FB:
     w, h = 640, 480
-    def show(self, img): pass
-    def show_part(self, img, box): pass
+    last = None
+    def show(self, img): FB.last = img.copy()
+    def show_part(self, img, box): FB.last = img.copy()
     def invalidate(self): pass
     def close(self): pass
 
@@ -866,6 +887,69 @@ def until(cond, secs):
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 from werkzeug.serving import make_server
 m.load_fonts(); m.fb = FB(); m.active = True
+
+# ---- its page in Apps, drawn (a Pietato with no LEDs of its own): your boards in its box, never a black screen --------
+at = m.glow_lamps.clock()
+for name, ip, colour in (("ESP32 A1B2C3", "127.0.0.1", (255, 0, 0)), ("ESP32 77AA01", "10.0.0.82", None)):
+    m.glow_lamps.take(G.lamp_packet(name, 64 if colour else 1, 1.0), ip, at)
+    m.glow_lamps.take(G.state_packet(colour, 1.0), ip, at)
+m.glow_lamps.take(G.lamp_packet("another", 1, 1.0), "10.0.0.81", at)   # (one with the older sketch)
+
+
+def drawn():
+    """The LED backlight's page as it's drawn on the screen now: (its sim, the picture as numbers)."""
+    m.web_tab("LED backlight")
+    sim = m.sim_game()
+    m.dirty = True
+    m.flush()
+    return sim, np.asarray(FB.last.convert("RGB")).astype(int)
+
+
+def about(pic, colour, by=40):
+    """How many of a picture's pixels are about that colour."""
+    return int((np.abs(pic - np.array(colour)).max(axis=2) <= by).sum())
+
+
+m.set_setting("sim_full", "Off")
+sim, pic = drawn()
+check(f"its page, drawn: in its box, your boards, by name ({sim.lamps}), an LED each: one lit in its own colour "
+      f"({about(pic, (255, 0, 0))} red pixels), the others dark ({about(pic, (40, 44, 51), 3)})",
+      sim.plain and (sim.w, sim.h) != (640, 480)
+      and sim.lamps == [("another", 1, None), ("ESP32 77AA01", 1, None), ("ESP32 A1B2C3", 64, (255, 0, 0))]
+      and about(pic, (255, 0, 0)) > 250 and about(pic, (40, 44, 51), 3) > 600)
+FB.last.convert("RGB").save(S + "/boards_page.png")
+m.set_setting("sim_full", "On")                        # (SELECT on any sim: full screen, kept for every one of them)
+sim, full = drawn()
+bright = int((full.max(axis=2) > 150).sum())
+check(f"...with Full screen on: this page in its box all the same, not a black screen (it has nothing to fill one "
+      f"with): {bright} bright pixels, {about(full, (255, 0, 0))} red", not m.sim_full()
+      and (sim.w, sim.h) != (640, 480) and bright > 1500 and about(full, (255, 0, 0)) == about(pic, (255, 0, 0)))
+m.web_tab("Fish Tank")
+kept = m.sim_full()
+m.glow_can = lambda: True
+m.web_tab("LED backlight")
+check("...the other sims full screen as ever, and a Pi's own LEDs' page too", kept and m.sim_full())
+del m.glow_can
+m.set_setting("sim_full", "Off")
+m.glow_lamps.take(G.lamp_packet("x", 1, 1.0), "10.0.0.83", at)
+for k in range(30):                                    # (a lot of boards: no room for names, just their LEDs)
+    m.glow_lamps.take(G.lamp_packet(f"ESP32 {k:06X}", 1, 1.0), f"10.0.2.{k}", at)
+    m.glow_lamps.take(G.state_packet((0, 0, 255) if k % 2 else None, 1.0), f"10.0.2.{k}", at)
+sim, many = drawn()
+check(f"...a lot of boards (34): an LED each still ({about(many, (0, 0, 255))} blue pixels for 15 of them)",
+      len(sim.lamps) == 34 and about(many, (0, 0, 255)) > 15 * 60)
+FB.last.convert("RGB").save(S + "/boards_page_many.png")
+with m.glow_lamps.lock:
+    m.glow_lamps.heard.clear()
+    m.glow_lamps.states.clear()
+for k in range(4):                                     # (names as long as a board's can be: cut to fit under its LED)
+    m.glow_lamps.take(G.lamp_packet(f"A light with a long name{k}"[-24:], 300, 1.0), f"10.0.3.{k}", at)
+    m.glow_lamps.take(G.state_packet((0, 255, 0), 1.0), f"10.0.3.{k}", at)
+sim, long = drawn()
+cut = sorted((v[1], k[0]) for k, v in sim.tags.items() if k[0].endswith("…"))
+check(f"...names as long as they can be: cut to fit under their LEDs ({cut[:1]}, in {sim.w / 4:.0f} pixels each), "
+      f"each lit ({about(long, (0, 255, 0))} green pixels)", len(sim.lamps) == 4 and cut
+      and cut[0][0] <= sim.w / 4 - 4 and about(long, (0, 255, 0)) > 4 * 250)
 g.list_devices = lambda: []                            # (no controllers here)
 control = g.Control()
 server = g.serve_control(m, control, port=0, key="k" * 32)

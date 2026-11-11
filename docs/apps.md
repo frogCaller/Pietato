@@ -130,9 +130,10 @@ and green for a moment once it's on it.
 
 Any number of boards can do it at once, on any Pietato, with or without LEDs of its own. A beat is one small
 packet to each board, and a game's colours go to a couple of them at a time, in turn, so they don't slow the Pi
-down. Apps > LED backlight shows how many it's found (it's there on a Pietato with no LEDs of its own too, while
-a board is on), and Pulse to music there is for the boards as well, for music played on that Pietato. The sketch
-can light a strip of LEDs on one of the board's pins instead (with the FastLED library).
+down. Apps > LED backlight shows how many it's found, and Pulse to music there is for the boards as well, for
+music played on that Pietato. On a Pietato with no LEDs of its own, the page is there while a board is on, and
+shows the boards instead: an LED for each, in its own colour. The sketch can light a strip of LEDs on one of the
+board's pins instead (with the FastLED library).
 
 The web page's Library > LED backlight lists the boards it has found. Tap a colour for one and it's lit in that
 instead of the colours of what's playing, still pulsing to the beat. Auto goes back to what's playing. The board

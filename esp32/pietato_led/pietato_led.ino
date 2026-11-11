@@ -35,8 +35,16 @@
 const char *WIFI_NAME = "your WiFi's name";
 const char *WIFI_PASSWORD = "its password";
 
-#define WAVESHARE_MATRIX 0   // 1: a Waveshare ESP32-S3-Matrix, its 8x8 LEDs (needs FastLED)
+#define WAVESHARE_MATRIX 0   // 1: a Waveshare ESP32-S3-Matrix, its 8x8 LEDs (needs the FastLED library)
 #define LED_COUNT 1          // 1: the board's own LED. More: a strip of WS2812B LEDs on STRIP_PIN (needs FastLED)
+
+#if WAVESHARE_MATRIX || LED_COUNT > 1   // (FastLED, read here, before the names below: it has a BRIGHTNESS of its
+#pragma push_macro("LED_COUNT")         //  own, and may come to have more of them)
+#undef LED_COUNT
+#include <FastLED.h>
+#pragma pop_macro("LED_COUNT")
+#endif
+
 #define ONBOARD_PIN -1       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some)
 #define STRIP_PIN 5          // a strip's DIN
 #define BRIGHTNESS 90        // how bright it gets at most, 0 to 255
@@ -58,7 +66,6 @@ const uint8_t IDLE_COLOUR[3] = {0, 0, 0};   // its colour while nothing's playin
 #define STRIP_ORDER GRB
 #endif
 #if LED_COUNT > 1
-#include <FastLED.h>
 CRGB leds[LED_COUNT];
 #endif
 
@@ -78,6 +85,7 @@ const double HIT_SECS = 0.5, GOLD_SECS = 1.4;    // a hit's red, an achievement'
 const double LED_GAMMA = 2.2;       // an LED's brightness as it's seen
 const double EVENT_KEEP = 3.0;      // seconds something that's happened is kept
 const int EVENTS_MOST = 12;
+const double STRIP_AGAIN = 0.5;     // seconds between tellings of a strip's LEDs what they already show
 const double SHOW_SECS = 2.0;       // seconds it shows its colour, when that's set (or it's asked which one it is)
 const double SHOW_TAU = 0.08;
 const double KEEP_AFTER = 1.0;      // seconds its colour has stood before it's kept (not each step of one being picked)
@@ -143,12 +151,17 @@ void keptColour() {                                 // (...and as it was kept)
 }
 
 void light(uint8_t r, uint8_t g, uint8_t b) {       // (the LED, or every LED of a strip, that colour)
-  if (r == lit[0] && g == lit[1] && b == lit[2]) return;
-  lit[0] = r; lit[1] = g; lit[2] = b;
 #if LED_COUNT > 1
+  static double toldAt = -1e9;                      // (a strip's told again now and then, changed or not: with the
+  const double now = seconds();                     //  WiFi busy a telling can go astray, and wouldn't be put right)
+  if (r == lit[0] && g == lit[1] && b == lit[2] && now - toldAt < STRIP_AGAIN) return;
+  toldAt = now;
+  lit[0] = r; lit[1] = g; lit[2] = b;
   fill_solid(leds, LED_COUNT, CRGB(r, g, b));
   FastLED.show();
 #else
+  if (r == lit[0] && g == lit[1] && b == lit[2]) return;
+  lit[0] = r; lit[1] = g; lit[2] = b;
   #if ONBOARD_PIN >= 0
   const int pin = ONBOARD_PIN;
   #elif defined(RGB_BUILTIN)
@@ -317,6 +330,7 @@ void hello(double now) {
 void setup() {
 #if LED_COUNT > 1
   FastLED.addLeds<WS2812B, STRIP_PIN, STRIP_ORDER>(leds, LED_COUNT);
+  FastLED.setDither(0);                             // (each colour as it is: not sent often enough to dither)
 #ifdef MOST_MILLIAMPS
   FastLED.setMaxPowerInVoltsAndMilliamps(5, MOST_MILLIAMPS);
 #endif

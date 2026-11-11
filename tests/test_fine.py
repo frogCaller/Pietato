@@ -287,13 +287,23 @@ def tour(which):
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
     for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "LED backlight",
-                 "LED backlight strip"):
+                 "LED backlight strip", "LED backlight boards"):
         try:
-            if name.startswith("LED backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
+            if name == "LED backlight boards":          # (a Pietato with no LEDs of its own: its ESP32 boards' picture,
+                import pitato.glow as GLOW              #  an LED each in its own colour, with their names)
+                m.lamps_start()
+                at = m.glow_lamps.clock()
+                for k, col in enumerate(((255, 0, 0), None, (20, 80, 255), (255, 80, 167), None)):
+                    m.glow_lamps.take(GLOW.lamp_packet(f"ESP32 {0xA11CE + k * 0x1F3D5:06X}", 64 if k == 3 else 1, 1.0),
+                                      f"10.0.0.{70 + k}", at)
+                    m.glow_lamps.take(GLOW.state_packet(col, 1.0), f"10.0.0.{70 + k}", at)
+            elif name.startswith("LED backlight"):      # (its LEDs lit, as a grid or a strip has them: a rainbow)
                 from types import SimpleNamespace
                 from pitato.glow import rainbow
                 from pitato.glow import strip_points, strip_weights
                 strip = name.endswith("strip")
+                m.glow_can = lambda: True               # (a Pi with LEDs of its own, as far as this goes)
+                m.set_setting("glow_on", "On")
                 m.set_setting("glow_shape", "Strip" if strip else "8x8 grid")
                 pts = strip_points(60)
                 m.glow_grid = SimpleNamespace(port=0, picture=lambda: rainbow(8, 8, 0.0), lively=lambda now: False,
@@ -317,6 +327,8 @@ def tour(which):
             if name.startswith("LED backlight"):
                 m.glow_grid = None
                 m.set_setting("glow_shape", "8x8 grid")
+                m.set_setting("glow_on", "Off")
+                vars(m).pop("glow_can", None)
     # full screen (SELECT), one of them
     try:
         tab("Game of Life")
