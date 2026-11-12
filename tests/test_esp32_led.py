@@ -13,10 +13,14 @@ and then keeps its colour between them. A colour of its own: told it by a Pietat
 shows it a moment, says it back at once, keeps it through a power cut (written only when it changes), and is lit in
 it whatever's playing (music's beats on it, a hit's red over it); told none, it takes what's playing again; a Pietato
 reads what it says of itself, lists the boards by name with their colours, and tells only one that's there and keeps
-one. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red first, dim, and never more than 300 mA. FastLED read
-before the sketch's own settings (it has a BRIGHTNESS of its own), and a strip told again every half second. Its
-page in Apps on a Pietato with no LEDs of its own: your boards drawn in its box, an LED each, and never full screen
-(it would be a black one)."""
+one. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red first, set up the way such a board is known to work
+(FastLED's WS2812, and nothing asked of FastLED but to send each colour as it is), dim, and never more than 300 mA
+(the sketch's own sum: a white's dimmed to fit). FastLED read before the sketch's own settings (it has a BRIGHTNESS
+of its own), and a strip told again every half second. On your WiFi it's green for a second and a half, and the
+Serial Monitor is told how it is every ten seconds and when that changes (what it lights, whether it's on your
+WiFi and why not, which Pietato is lighting it, its own colour): a line a second at most, none with no one
+listening. Its page in Apps on a Pietato with no LEDs of its own: your boards drawn in its box, an LED each, and
+never full screen (it would be a black one)."""
 import asyncio, json, logging, os, shutil, socket, subprocess, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -49,11 +53,22 @@ open(S + "/board/Arduino.h", "w").write(r'''
 #include <vector>
 extern double NOW;
 extern bool ON_WIFI;
+extern int WHY_NOT;                 // (what its WiFi says of itself while it isn't on one: 6, looking; 1, none of
+                                    //  that name; 4, the password wasn't taken)
 inline long long esp_timer_get_time() { return (long long)llround(NOW * 1e6); }
 inline void delay(int ms) { NOW += ms / 1000.0; }
 #define RGB_BUILTIN 97
+#define WL_NO_SSID_AVAIL 1
 #define WL_CONNECTED 3
+#define WL_CONNECT_FAILED 4
 #define WIFI_STA 1
+struct SerialClass {                // (the Serial Monitor: each line it's sent noted, if one's listening)
+  bool there = true;
+  void begin(unsigned long speed) { printf("SB %lu\n", speed); }
+  explicit operator bool() const { return there; }
+  void println(const char *s) { printf("# %.4f %s\n", NOW, s); }
+};
+extern SerialClass Serial;
 struct IPAddress {
   uint8_t b[4];
   IPAddress() : b{0, 0, 0, 0} {}
@@ -62,7 +77,7 @@ struct IPAddress {
   bool operator==(const IPAddress &o) const { return !memcmp(b, o.b, 4); }
 };
 struct WiFiClass {
-  int status() { return ON_WIFI ? WL_CONNECTED : 6; }
+  int status() { return ON_WIFI ? WL_CONNECTED : WHY_NOT; }
   void mode(int) {}
   void setSleep(bool) {}
   void begin(const char *name, const char *) { printf("W %.4f %s\n", NOW, name); }
@@ -146,14 +161,16 @@ open(S + "/board/FastLED.h", "w").write(r'''
 struct CRGB { uint8_t r = 0, g = 0, b = 0; CRGB() {} CRGB(uint8_t x, uint8_t y, uint8_t z) : r(x), g(y), b(z) {} };
 enum { GRB = 1, RGB = 2 };
 enum class ClearFlags : uint32_t { NONE = 0, CHANNELS = 1 << 0, POWER_SETTINGS = 1 << 1, BRIGHTNESS = 1 << 2 };
-struct WS2812B {};
+struct WS2812 { static const char *name() { return "WS2812"; } };
+struct WS2812B { static const char *name() { return "WS2812B"; } };
 extern CRGB *STRIP; extern int STRIP_N, STRIP_AT;
 struct CFastLED {
   template <typename CHIP, int PIN, int ORDER> void addLeds(CRGB *leds, int n) {
     STRIP = leds; STRIP_N = n; STRIP_AT = PIN;
-    printf("A %d %d %s\n", PIN, n, ORDER == RGB ? "RGB" : "GRB");
+    printf("A %d %d %s %s\n", PIN, n, ORDER == RGB ? "RGB" : "GRB", CHIP::name());
   }
   void setMaxPowerInVoltsAndMilliamps(int volts, int ma) { printf("P %d %d\n", volts, ma); }
+  void setBrightness(uint8_t scale) { printf("R %d\n", scale); }
   void setDither(uint8_t mode) { printf("D %d\n", mode); }
   void show() {
     printf("F %.4f %d", NOW, STRIP_AT);
@@ -165,10 +182,10 @@ extern CFastLED FastLED;
 inline void fill_solid(CRGB *leds, int n, CRGB c) { for (int i = 0; i < n; i++) leds[i] = c; }
 ''')
 # the test's word with it, a line at a time: "t SECONDS" (its loop, till then), "p ADDRESS HEX" (a packet for it),
-# "wifi 0|1"
+# "wifi 0|1", "why N" (what its WiFi says while it isn't on one), "monitor 0|1" (a Serial Monitor listening, or not)
 open(S + "/main.cpp", "w").write(r'''
 #include "Arduino.h"
-double NOW = 0; bool ON_WIFI = false; WiFiClass WiFi; std::deque<Packet> INBOX;
+double NOW = 0; bool ON_WIFI = false; int WHY_NOT = 6; WiFiClass WiFi; std::deque<Packet> INBOX; SerialClass Serial;
 #include "sketch.cpp"
 #ifdef WITH_STRIP                  // (FastLED's own things: after the sketch, which reads FastLED.h where it must)
 CRGB *STRIP = nullptr; int STRIP_N = 0, STRIP_AT = 0; CFastLED FastLED;
@@ -180,6 +197,8 @@ int main() {
     double t; int a, b, c, d, on; char hex[8000];
     if (sscanf(line, "t %lf", &t) == 1) { while (NOW < t) loop(); }
     else if (sscanf(line, "wifi %d", &on) == 1) ON_WIFI = on;
+    else if (sscanf(line, "why %d", &on) == 1) WHY_NOT = on;
+    else if (sscanf(line, "monitor %d", &on) == 1) Serial.there = on;
     else if (sscanf(line, "p %d.%d.%d.%d %7999s", &a, &b, &c, &d, hex) == 5) {
       Packet p; p.from = IPAddress(a, b, c, d);
       for (size_t i = 0; i + 1 < strlen(hex); i += 2) { unsigned v; sscanf(hex + i, "%2x", &v); p.data.push_back((uint8_t)v); }
@@ -225,7 +244,9 @@ def run(prog, script, kept=None):
     """Its loop, run through what the test says: what its LED was sent [(when, pin, r, g, b)] (a strip: [(when, pin,
     [its LEDs])]), what it sent [(when, to, port, bytes)], and when it began listening [(when, port)]. (ASKED: when
     it asked for the WiFi. kept: the file it keeps things in through a power cut, if it's to: KEPT has when each
-    was written, and what; SET_UP how a strip was set up: its pin, its LEDs, their order, and the most it may draw.)"""
+    was written, and what; SET_UP how a strip was set up: its pin, its LEDs, their order and kind (and a limit asked
+    of FastLED, if one was); BRIGHT and DITHER what FastLED was told of its brightness and its dithering; SAID
+    what it told the Serial Monitor [(when, the line)], and MONITOR the speed it began that at.)"""
     env = dict(os.environ)
     env.pop("KEPT", None)
     if kept:
@@ -236,6 +257,9 @@ def run(prog, script, kept=None):
     KEPT[:] = [(float(w[1]), int(w[2])) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "K"]
     SET_UP[:] = [w[1:] for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] in ("A", "P")]
     DITHER[:] = [int(w[1]) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "D"]
+    BRIGHT[:] = [int(w[1]) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "R"]
+    SAID[:] = [(float(x.split()[1]), x.split(None, 2)[2]) for x in r.stdout.splitlines() if x.startswith("# ")]
+    MONITOR[:] = [int(x.split()[1]) for x in r.stdout.splitlines() if x.startswith("SB ")]
     for line in r.stdout.splitlines():
         w = line.split()
         if w[0] == "L":
@@ -249,7 +273,7 @@ def run(prog, script, kept=None):
     return leds, sent, begun, strip
 
 
-ASKED, KEPT, SET_UP, DITHER = [], [], [], []
+ASKED, KEPT, SET_UP, DITHER, BRIGHT, SAID, MONITOR = [], [], [], [], [], [], []
 
 
 def at(leds, t):
@@ -291,10 +315,50 @@ if BOARD and prog:
     check(f"...and says it's there every couple of seconds, to everyone on its network ({len(hellos)}, {gaps}, "
           f"{hellos[0][1] if hellos else None}): {said}", len(hellos) == 3 and all(1.95 <= x <= 2.1 for x in gaps)
           and hellos[0][1] == "10.0.0.255" and said == {"name": "ESP32 A1B2C3", "count": 1})
-    joined = at(leds, 1.1)
-    check(f"...its LED green for a moment, so you can tell ({joined}), then dark, with nothing playing "
-          f"({at(leds, 6.9)})", joined is not None and joined[1] >= 8 and joined[0] == joined[2] == 0
-          and at(leds, 6.9) == (0, 0, 0))
+    joined, still = at(leds, 1.1), at(leds, 2.45)
+    check(f"...its LED green for a second and a half, so you can't miss it ({joined}, still {still}), then fading "
+          f"({at(leds, 2.9)}) to dark, with nothing playing ({at(leds, 4.5)}, {at(leds, 6.9)})",
+          joined == still == seen((0, 140, 0)) and 0 < at(leds, 2.9)[1] < joined[1] and at(leds, 2.9)[0] == 0
+          and at(leds, 4.5) == at(leds, 6.9) == (0, 0, 0))
+    said = list(SAID)
+    check(f"the Serial Monitor (begun at {MONITOR}): told at once that it's looking for the WiFi, by name, and what "
+          f"it lights ({said[:1]})", MONITOR == [115200] and len(said) >= 1 and said[0][0] < 0.2
+          and said[0][1] == 'Pietato LED (the board\'s own LED): looking for the WiFi "your WiFi\'s name"')
+    check(f"...and once it's on it: its address, the name your Pietatos list it by, and that it's dark till something "
+          f"plays ({said[1:2]})", len(said) >= 2 and 1.0 <= said[1][0] <= 2.1 and said[1][1] ==
+          'Pietato LED (the board\'s own LED): on your WiFi as 10.0.0.77, "ESP32 A1B2C3" to your Pietatos; '
+          'dark till something plays on a Pietato')
+    _, _, _, _ = run(prog, ["t 25.0", "why 1", "t 35.0", "why 4", "t 45.0", "wifi 1", "t 71.0",
+                            packet(PI, G.music_packet((96, 170, 228), 71.0 + AHEAD)), "t 73.0",
+                            packet(PI, G.colour_packet((255, 136, 0), 73.0 + AHEAD)), "t 95.0", "wifi 0", "t 97.0"])
+    said = list(SAID)
+    gaps = [round(b[0] - a[0], 1) for a, b in zip(said, said[1:])]
+    check(f"...told how it is every ten seconds, changed or not ({gaps[:6]})", gaps[:4] == [10.0, 10.0, 10.0, 10.0]
+          and all(1.0 <= x <= 10.1 for x in gaps))
+    check(f"...no WiFi of that name: said so ({said[3][1][-70:]!r}); the password not taken: that ({said[4][1][-45:]!r})",
+          said[2][1].endswith('"your WiFi\'s name"') and said[3][1].endswith(
+              "There's none of that name here (an ESP32 only sees 2.4 GHz ones)")
+          and said[4][1].endswith("It's there, but the password wasn't taken"))
+    lit = [x for x in said if "lit by" in x[1]]
+    check(f"...a Pietato lighting it: said within a second or so, with that one's address ({lit[:1]})", lit and
+          71.0 <= lit[0][0] <= 72.1 and lit[0][1].endswith("lit by the Pietato at 10.0.0.5"))
+    own = [x for x in said if "its own colour" in x[1] and x[0] < 95.0]
+    check(f"...a colour of its own: that too ({own[:1]}), and with nothing playing ({own[-1:]})", own
+          and 73.0 <= own[0][0] <= 74.1 and own[0][1].endswith("lit by the Pietato at 10.0.0.5, in its own colour "
+                                                                "(#ff8800)") and own[-1][1].endswith(
+              "dark till something plays on a Pietato (then in its own colour, #ff8800)"))
+    check(f"...the WiFi gone: said ({said[-1]})", 95.0 <= said[-1][0] <= 96.2 and "looking for the WiFi" in said[-1][1])
+    flood = ["wifi 1", "t 3.0"]                        # (a colour being picked: forty of them, in a second)
+    for k in range(1, 41):
+        flood += [f"t {3.0 + k * 0.025:.3f}", packet(PI, G.colour_packet((k, 0, 200), 3.0 + AHEAD))]
+    run(prog, flood + ["t 5.5"])
+    lines = [x for x in SAID if 3.0 <= x[0] <= 5.5]
+    check(f"...a colour being picked (forty in a second): a line a second at most ({[round(x[0], 2) for x in lines]}), "
+          f"the last with the one it ended on ({lines[-1][1][-10:] if lines else None})", 2 <= len(lines) <= 3
+          and all(b[0] - a[0] >= 0.99 for a, b in zip(lines, lines[1:])) and lines[-1][1].endswith("#2800c8)"))
+    leds_quiet, sent_quiet, _, _ = run(prog, ["monitor 0", "t 1.0", "wifi 1", "t 7.0"])
+    check(f"...nothing listening: nothing's said ({SAID}), and it does as it does ({leds_quiet[:2]})", SAID == []
+          and leds_quiet == leds and [x[1:] for x in sent_quiet] == [x[1:] for x in sent])
     leds, sent, _, _ = run(prog, ["t 100.0", "wifi 1", "t 300.0", "wifi 0", "t 420.0"])
     asked = list(ASKED)
     check(f"no WiFi yet: asked for again every half minute, and no oftener ({asked[:5]})",
@@ -379,8 +443,10 @@ if BOARD and prog:
             G.HEAD.pack(G.MAGIC, G.VERSION, b"E", 1.0 + AHEAD) + G.EVENT.pack(1.0 + AHEAD, 255) + b"boom",
             G.HEAD.pack(G.MAGIC, G.VERSION, b"M", float("nan")) + bytes(3),
             G.HEAD.pack(G.MAGIC, G.VERSION, b"F", 1.0 + AHEAD) + bytes((0, 0)), G.lamp_packet("x", 1, 1.0 + AHEAD)]
-    leds, _, _, _ = run(prog, ["wifi 1", "t 1.0"] + [packet(PI, j) for j in junk] + ["t 2.0"])
-    check(f"what isn't a Pietato's packet (or isn't right): nothing ({at(leds, 1.9)})", at(leds, 1.9) == (0, 0, 0))
+    leds, _, _, _ = run(prog, ["wifi 1", "t 4.0"] + [packet(PI, j) for j in junk] + ["t 5.0"])
+    check(f"what isn't a Pietato's packet (or isn't right): nothing ({at(leds, 4.9)}), and nothing said of one "
+          f"lighting it ({[x[1][-45:] for x in SAID if x[0] > 4.0]})", at(leds, 4.9) == (0, 0, 0)
+          and not [x for x in SAID if "lit by" in x[1]])
     script = ["wifi 1", "t 1.0"]
     for k in range(8):
         t = 1.0 + k * 0.5
@@ -404,9 +470,15 @@ if BOARD and prog:
                                      packet(PI, G.music_packet(BLUE, 1.4 + AHEAD)), "t 2.2"])
         last = shows[-1] if shows else (0, 0, [(0, 0, 0)])   # (as it's lit by then: sent when it changes)
         check(f"...all eight of its LEDs, music's colour ({last[2][:2]}, for {base}), on its pin ({last[1]}), green "
-              f"first as such strips take it ({SET_UP}), each colour as it is ({DITHER})", len(last[2]) == 8
-              and len(set(last[2])) == 1 and near(last[2][0], base) and last[1] == 5
-              and SET_UP == [["5", "8", "GRB"]] and DITHER == [0])
+              f"first as such strips take it ({SET_UP}), each colour as it is: FastLED isn't to dim it or dither it "
+              f"({BRIGHT}, {DITHER})", len(last[2]) == 8 and len(set(last[2])) == 1 and near(last[2][0], base)
+              and last[1] == 5 and SET_UP == [["5", "8", "GRB", "WS2812"]] and BRIGHT == [255] and DITHER == [0])
+        check(f"...and the Serial Monitor's told it's a strip ({SAID[0][1][:44] if SAID else None})", SAID
+              and SAID[0][1].startswith("Pietato LED (a strip, 8 LEDs on pin 5): "))
+        _, _, _, shows = run(strip, ["wifi 1", "t 3.0", packet(PI, G.colour_packet((255, 255, 255), 3.0 + AHEAD)),
+                                     "t 4.5"])
+        check(f"...a white: as bright as the sketch's set to ({shows[-1][2][:1]}): a strip has its own supply",
+              shows[-1][2][0] == (90, 90, 90))
         _, _, _, shows = run(strip, ["wifi 1", "t 9.0"])
         dark = [x[0] for x in shows if x[0] > 4.0 and set(x[2]) == {(0, 0, 0)}]
         gaps = [round(b - a, 2) for a, b in zip(dark, dark[1:])]
@@ -423,11 +495,34 @@ if BOARD and prog:
         last = shows[-1] if shows else (0, 0, [(0, 0, 0)])
         dim = seen([v * 0.4 for v in BLUE], 40)
         said = next((G.read_lamp(x[3]) for x in sent if x[3][3:4] == b"L"), None)
-        check(f"...its 64 LEDs on pin 14, red first, and never more than 300 mA between them ({SET_UP}); all of "
-              f"them music's colour, dim ({last[2][:1]}, for {dim}: the board gets hot otherwise); and it says it "
-              f"has 64 ({said})", SET_UP == [["14", "64", "RGB"], ["5", "300"]] and len(last[2]) == 64
+        check(f"...its 64 LEDs on pin 14, red first, set up as a board of them is known to work ({SET_UP}, FastLED's "
+              f"own brightness {BRIGHT}, its dithering {DITHER}); all of them music's colour, dim ({last[2][:1]}, for "
+              f"{dim}: the board gets hot otherwise); and it says it has 64 ({said})",
+              SET_UP == [["14", "64", "RGB", "WS2812"]] and BRIGHT == [255] and DITHER == [0] and len(last[2]) == 64
               and len(set(last[2])) == 1 and near(last[2][0], dim, 1) and last[1] == 14
               and said == {"name": "ESP32 A1B2C3", "count": 64})
+        check(f"...and the Serial Monitor's told it's the matrix ({SAID[0][1][:58] if SAID else None})", SAID
+              and SAID[0][1].startswith("Pietato LED (a Waveshare matrix, 64 LEDs on pin 14): "))
+
+        def takes(leds):                               # (mA, as FastLED reckons a WS2812 at 5 V: the board 25, a dark
+            return 25 + sum(1 + (16 * r + 11 * g + 15 * b) / 255 for r, g, b in leds)   # LED 1, and each colour)
+
+        script = ["t 1.0", "wifi 1", "t 4.0"]
+        for k, rgb in enumerate(((255, 255, 255), (255, 0, 0), (255, 255, 0), (0, 0, 255))):
+            script += [packet(PI, G.colour_packet(rgb, 4.0 + AHEAD)), f"t {6.0 + k * 3:.1f}"]   # (shown a moment)
+        _, _, _, shows = run(matrix, script)
+        most = max(takes(x[2]) for x in shows)
+        white, red, yellow, blue = ([x[2][0] for x in shows if x[0] < t][-1] for t in (5.9, 7.9, 10.9, 13.9))
+        check(f"...never more than 300 mA between them, whatever it's asked for ({most:.0f} mA at the most, in "
+              f"{len(shows)} tellings): a white's dimmed to fit ({white}), and a yellow ({yellow}); a red and a "
+              f"blue aren't ({red}, {blue})", 290 <= most <= 300 and white in ((19, 19, 19), (20, 20, 20))
+              and red == (40, 0, 0) and blue == (0, 0, 40) and yellow[0] == yellow[1] and 28 <= yellow[0] <= 32
+              and yellow[2] == 0 and all(len(set(x[2])) == 1 for x in shows))
+        amber = [x for x in shows if x[0] < 1.0]
+        check(f"...looking for the WiFi: all 64 a dim amber, at once ({amber[1][0] if len(amber) > 1 else None} s: "
+              f"{amber[1][2][:1] if len(amber) > 1 else None}), and told again every half second "
+              f"({len(amber)} tellings in the first second)", len(amber) >= 3 and set(amber[0][2]) == {(0, 0, 0)}
+              and amber[1][0] <= 0.01 and set(amber[1][2]) == {(10, 5, 0)} and 3 <= len(amber) <= 4)
 
     # ---- a colour of its own: told it, shown a moment, kept, and what it's lit in whatever's playing ----------------------
     def states(sent):
@@ -491,8 +586,8 @@ if BOARD and prog:
     good = G.colour_packet(RED, 1.0 + AHEAD)
     junk = [good[:-1], good + b"x", good[:12] + b"\x02" + good[13:],
             G.HEAD.pack(G.MAGIC, G.VERSION, b"C", float("nan")) + good[12:]]
-    leds, sent, _, _ = run(prog, ["wifi 1", "t 1.0"] + [packet(PI, j) for j in junk] + ["t 3.0"], S + "/kept3")
-    check(f"a colour that isn't said right: nothing ({at(leds, 1.9)}, {KEPT})", at(leds, 1.9) == (0, 0, 0)
+    leds, sent, _, _ = run(prog, ["wifi 1", "t 4.0"] + [packet(PI, j) for j in junk] + ["t 6.0"], S + "/kept3")
+    check(f"a colour that isn't said right: nothing ({at(leds, 4.9)}, {KEPT})", at(leds, 4.9) == (0, 0, 0)
           and KEPT == [] and all(x[1]["colour"] is None for x in states(sent)))
     flood = ["wifi 1", "t 3.0"]                        # (a colour being picked: forty of them, in a second)
     for k in range(1, 41):

@@ -6,7 +6,7 @@ import re
 import stat
 import tempfile
 
-from .theme import ACCENTS
+from .theme import ACCENTS, LOOKS
 
 
 CONTROL_PORT = 5480        # the web page (webui.py) works media mode through this, on this Pi only
@@ -62,6 +62,8 @@ SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you
     ("wallpaper", "Background", WALLPAPERS),
     ("home_style", "Home screen style", ["Bright", "Glass", "Cards"]),
     ("accent", "Accent colour", [a for a, _ in ACCENTS]),
+    ("look", "App pages", list(LOOKS)),   # the pages inside the apps, dark (as ever) or light; the home screen keeps
+                                          # its background (theme.py's set_look)
     ("clock", "Clock", ["12-hour", "24-hour"]),
     ("app_full", "Full screen apps", ["Off", "On"]),   # the apps without the bars along the top and bottom
     ("screen", "Video size", SCREEN_MODES),
@@ -83,7 +85,7 @@ SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you
     ("share", "Share with other Pietatos", ["On", "Off"]),   # prices and the weather fetched once for them all, and
                                                             # a game carried on on another of them (savesync.py)
 ]
-SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "clock": "12-hour",
+SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
                     "screen": "Fit", "sound": "Auto", "coder_sound": "On", "sim_full": "Off", "bot_mode": "chat",
                     "game_picture": "Fit", "start_song": "Off", "home_style": "Glass",

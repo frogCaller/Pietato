@@ -69,6 +69,7 @@ class Notes(Sim):
                ("font", "Font", NOTE_FONTS, "Clean"),
                ("size", "Size", tuple(NOTE_SIZES), "Normal"),
                ("effect", "Effect", NOTE_EFFECTS, "None"))
+    pale_defaults = {"ink": "Ink", "paper": "Paper"}   # (on a light page: dark words on paper, till you pick)
     bare = True                         # on the page itself: no box, and nothing beside it
     paced = True                        # its picture changes as the cursor blinks (frame_in), not frame by frame
 

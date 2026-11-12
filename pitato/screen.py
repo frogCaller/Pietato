@@ -858,6 +858,49 @@ def grab_screen(max_w=640, dev="/dev/fb0"):
         return read_screen(f, fb_geometry(f), max_w)
 
 
+PIL_565 = [None]             # PIL packs the usual 16-bit pixels itself (rgb565: True, False; None: not tried yet)
+
+
+def rgb565(img):
+    """An RGB picture's pixels as the usual 16-bit screen has them (the GPi Case's: RGB565), as bytes. PIL's own
+    way where it has one (its BGR;16 pictures: five times quicker than numpy, a frame of Apps' worlds a fifth
+    cheaper on a Pi Zero; gone from Pillow 12) and it makes the same bytes (tried once, on a picture of every
+    value); numpy's otherwise, as ever."""
+    import numpy as np
+
+    def plain(img):
+        a = np.asarray(img)
+        px = (a[..., 0] >> 3).astype("<u2") << 11  # four times quicker than a field at a time, the same bytes
+        px |= (a[..., 1] >> 2).astype("<u2") << 5
+        px |= a[..., 2] >> 3
+        return px.tobytes()
+
+    if PIL_565[0] is None:
+        try:
+            import warnings
+            from PIL import Image
+            warnings.filterwarnings("ignore", message=".*BGR;1[56].*", category=DeprecationWarning)
+            v = np.arange(256, dtype=np.uint8)
+            probe = np.stack([np.repeat(v, 3)[:765], np.tile(v[::-1], 3)[:765], (np.arange(765) * 7 % 256)], axis=1)
+            probe = Image.fromarray(probe.astype(np.uint8).reshape(17, 45, 3), "RGB")   # (an odd width, too)
+            PIL_565[0] = probe.convert("BGR;16").tobytes() == plain(probe)
+        except Exception:                              # (no such pictures in this PIL, or not as they were)
+            PIL_565[0] = False
+    if PIL_565[0]:
+        return img.convert("BGR;16").tobytes()
+    return plain(img)
+
+
+def bgrx(img):
+    """An RGB picture's pixels as the usual 32-bit screen has them (KMS, any HDMI TV: blue first), as bytes: its own
+    bytes, each pixel's turned round. The same bytes PIL packs itself, in about half the time (a 1080p TV's frame
+    of Apps' worlds is five megabytes of them)."""
+    import numpy as np
+    v = np.frombuffer(img.tobytes("raw", "RGBX"), "<u4").byteswap()   # (red, green, blue, nothing: nothing, blue,
+    v >>= 8                                                           #  green, red; then the nothing off its end)
+    return v.tobytes()
+
+
 class Framebuffer:
     """Draws a PIL image onto /dev/fb0 in whatever format it uses. The menus are drawn 640x480 on the
     GPi Case's screen. On a big one (1080p, 4K) they're drawn a little bigger, 960x540 on a 1080p
@@ -966,14 +1009,10 @@ class Framebuffer:
         if img.mode != "RGB":
             img = img.convert("RGB")
         if getattr(self, "raw", None):
-            return img.tobytes("raw", self.raw)
+            return bgrx(img)
         import numpy as np
         if self.bpp == 16 and [tuple(f) for f in self.fields] == [(11, 5), (5, 6), (0, 5)]:
-            a = np.asarray(img)                       # the usual 16-bit screen (the GPi Case's): RGB565,
-            px = (a[..., 0] >> 3).astype("<u2") << 11  # four times quicker than below, the same bytes
-            px |= (a[..., 1] >> 2).astype("<u2") << 5
-            px |= a[..., 2] >> 3
-            return px.tobytes()
+            return rgb565(img)                        # the usual 16-bit screen (the GPi Case's): RGB565
         a = np.asarray(img, dtype=np.uint32)
         px = np.zeros(a.shape[:2], dtype=np.uint32)
         for c, (off, ln) in enumerate(self.fields):
@@ -1041,13 +1080,36 @@ class Framebuffer:
             import numpy as np
             mem[y:y + h, x:x + w] = np.frombuffer(data, dtype=mem.dtype).reshape(h, w)
             return
-        if x == 0 and y == 0 and w == self.dev_w and self.stride == row and not self.xo and not self.yo:
-            self.f.seek(0)
-            self.f.write(data)
+        at, stride = (y + self.yo) * self.stride + (x + self.xo) * bp, self.stride
+        fd = self.fileno()
+        if x == 0 and w == self.dev_w and stride == row and not self.xo:   # (whole rows, one under another: the
+            if fd is not None:                                             #  lot in one go)
+                os.pwrite(fd, data, at)
+            else:
+                self.f.seek(at)
+                self.f.write(data)
+            return
+        if fd is not None:                             # (each row where it goes, in one go)
+            view, pwrite = memoryview(data), os.pwrite
+            for r in range(h):
+                pwrite(fd, view[r * row:(r + 1) * row], at + r * stride)
             return
         for r in range(h):
-            self.f.seek((y + r + self.yo) * self.stride + (x + self.xo) * bp)
+            self.f.seek(at + r * stride)
             self.f.write(data[r * row:(r + 1) * row])
+
+    def fileno(self):
+        """The screen's file, by number, for writing a row straight where it goes (None: it hasn't one, or can't
+        be written to so)."""
+        f, fd = getattr(self, "fd_of", (None, None))
+        if f is not self.f:                            # (found once for the file it has)
+            try:
+                fd = self.f.fileno()
+                os.pwrite(fd, b"", 0)
+            except (AttributeError, OSError, ValueError):
+                fd = None
+            self.fd_of = (self.f, fd)
+        return fd
 
     def show(self, img):
         self.last = img
@@ -1104,22 +1166,21 @@ class Framebuffer:
     def put_repeated(self, packed, x, y, w, h, k=None):
         """Packed pixels (w x h of them, from x, y in the menus, or in a picture of them drawn finely), each repeated k
         times both ways (2x, 3x, 4x) onto the screen: straight into its memory if it's mapped, the bigger copy never
-        made."""
+        made. Put down k x k times, every k-th pixel of every k-th row each time: several times quicker than one
+        assignment spread out over them all (a 4K TV's frame, a fifth of what it took: Apps' worlds were slow there)."""
         import numpy as np
         k = k or self.tw // self.w
         a = np.frombuffer(packed, dtype="<u2" if self.bpp == 16 else "<u4").reshape(h, w)
         x0, y0 = self.ox + x * k, self.oy + y * k
         x0, y0, bw, bh = turn_block(self.turn, self.dev_w, self.dev_h, x0, y0, w * k, h * k)
         a = turn_pixels(a, self.turn)                  # (turned while it's small: the screen's on its side)
-        h, w = a.shape
-        a = a.reshape(h, 1, w, 1)
         mem = self.memory()
-        if mem is not None:
-            block = mem[y0:y0 + bh, x0:x0 + bw]
-            block.shape = (h, k, w, k)                 # (a view of it, never a copy: an error otherwise)
-            block[...] = a
-            return
-        self.put_dev(np.broadcast_to(a, (h, k, w, k)).tobytes(), x0, y0, bw, bh)
+        block = mem[y0:y0 + bh, x0:x0 + bw] if mem is not None else np.empty((bh, bw), a.dtype)
+        for j in range(k):
+            for i in range(k):
+                block[j::k, i::k] = a
+        if mem is None:
+            self.put_dev(block.tobytes(), x0, y0, bw, bh)
 
     def show_part(self, img, box):
         """Only box (x0, y0, x1, y1) has changed since the last picture: just that goes to the screen
@@ -1137,7 +1198,9 @@ class Framebuffer:
                                                          math.ceil(y1)))
         x0, y0, x1, y1 = (int(v) for v in box)
         if self.same:
-            self.put(self.pack(img.crop((x0, y0, x1, y1))), x0, y0, x1 - x0, y1 - y0)
+            if (x1 - x0) * 5 >= self.w * 3 and not self.turn:   # (most of the way across: its rows whole, which
+                x0, x1 = 0, self.w                               #  go to the screen in one go, not one at a time:
+            self.put(self.pack(img.crop((x0, y0, x1, y1))), x0, y0, x1 - x0, y1 - y0)   # a Pi Zero's quicker so)
             return
         if self.sharp:                                 # each pixel repeated: just the box's
             x0, y0, x1, y1 = max(0, x0), max(0, y0), min(self.w, x1), min(self.h, y1)

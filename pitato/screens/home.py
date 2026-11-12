@@ -415,7 +415,7 @@ class HomeScreen:
 
     def home_wx_icon(self, img, sky, size, at):
         """The sky's icon, on the background. Over a pale one, a soft shadow behind it: its cloud is as pale."""
-        icon = self.wx_icon(sky, size)
+        icon = self.wx_icon(sky, size, pale=False)
         if self.home_pale():
             from ..fine import Image
             from PIL import ImageFilter

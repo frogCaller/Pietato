@@ -4,7 +4,7 @@ import subprocess
 import threading
 import time
 
-from ..theme import ACCENT, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
+from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
 from ..config import SETTINGS, TURN_DEGREES, WALLPAPERS
 from ..system import is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
@@ -322,8 +322,8 @@ class SettingsScreen:
                 d.rounded_rectangle((x - 3, y - 3, x + pw + 2, y + ph + 2), radius=12, outline=ACCENT, width=2)
             if name == now:                            # (the one in use: a tick on it)
                 cx, cy = x + pw - 14, y + 14
-                d.ellipse((cx - 9, cy - 9, cx + 9, cy + 9), fill=ACCENT, outline=(16, 19, 23))
-                d.line((cx - 4, cy, cx - 1, cy + 3, cx + 4, cy - 3), fill=(16, 19, 23), width=2)
+                d.ellipse((cx - 9, cy - 9, cx + 9, cy + 9), fill=ACCENT, outline=BG)
+                d.line((cx - 4, cy, cx - 1, cy + 3, cx + 4, cy - 3), fill=BG, width=2)
             d.text((x + pw / 2, y + ph + 13), name, font=F["label"],
                    fill=TEXT if k == sel else ACCENT if name == now else BODY, anchor="mm")
         if (n - 1) // cols >= first + rows_fit:       # more below

@@ -7,7 +7,7 @@ import time
 
 from .sims import Sim
 from .fine import detail
-from .theme import BG, BODY, co_mix, FONT_UI, MUTED, TEXT, typeface
+from .theme import BG, co_mix, FONT_UI, typeface
 
 
 # ---- the Clock --------------------------------------------------------------------------------------------
@@ -40,6 +40,13 @@ HANDS = ((-0.07, 0.52, 0.023), (-0.07, 0.8, 0.0165))   # the hour and minute han
 SECOND_HAND = (-0.2, 0.86, 0.0055)    # the second hand: from (its tail), to, half how thick
 HUB = (0.042, 0.014)                  # the middle: the second hand's disc, and the pin in it
 DATE = (0.4, 0.105)                   # the date: below the middle, its letters' size
+# its colours on what's behind it: something dark (as ever), or pale (a light page, Settings > App pages): its dial
+# white, its marks, hands and figures dark
+ON_DARK = {"text": (236, 239, 243), "body": (176, 184, 196), "muted": (104, 112, 125), "face": FACE,
+           "edge": FACE_EDGE, "dot": MINUTE_DOT[2], "mark": HOUR_MARK[3], "figure": FIGURES[2]}
+ON_PALE = {"text": (20, 24, 31), "body": (64, 72, 86), "muted": (116, 124, 138), "face": (252, 253, 254),
+           "edge": (202, 208, 218), "dot": (158, 166, 178), "mark": (70, 78, 92), "figure": (30, 36, 46)}
+PALE_DEEPER = 0.3                     # ...and the colour picked that much deeper, to show on it (White: its dark)
 
 # the digital look, in parts of the figures' letter size
 SIDE = (0.06, 0.34, 0.14)             # beside the time: the gap, the seconds' letters, AM/PM's
@@ -92,6 +99,10 @@ class Clock(Sim):
         self.dials = {}                 # (radius, date, backdrop) -> the dial with its date (a float32 picture)
         self.masks = {}                 # fonts, and words and figures as pictures: (what, how big...) -> it
 
+    def relook(self):
+        self.dials.clear()
+        self.masks.clear()
+
     def update(self, dt):
         return None                     # (A switches the look: it's never paused)
 
@@ -137,20 +148,37 @@ class Clock(Sim):
         if back == "Black":
             return (0, 0, 0)
         if back == "Colour":
-            return co_mix(BG, self.colour(), CLOCK_TINT)
+            return co_mix(BG, self.picked(), CLOCK_TINT)
         return BG
+
+    def pale(self):
+        """What's behind it is pale (a light page: Settings > App pages)."""
+        return sum(self.backdrop) > 384
+
+    def inks(self):
+        """Its colours on what's behind it (ON_DARK, ON_PALE)."""
+        return ON_PALE if self.pale() else ON_DARK
 
     def dial_colours(self):
         """The dial's face and its edge: a shade lighter than what's behind it."""
-        back = self.backdrop
+        back, ink = self.backdrop, self.inks()
         if back == BG:
-            return FACE, FACE_EDGE
-        return co_mix(back, TEXT, 0.05), co_mix(back, TEXT, 0.11)
+            return ink["face"], ink["edge"]
+        if self.pale():                                # (a pale shade of its colour: its dial paler still)
+            return co_mix(back, (255, 255, 255), 0.62), co_mix(back, ink["text"], 0.16)
+        return co_mix(back, ink["text"], 0.05), co_mix(back, ink["text"], 0.11)
 
-    def colour(self):
-        """The colour picked: the second hand and its disc, or the colon and the seconds."""
+    def picked(self):
+        """The colour picked, as it's named."""
         pick = self.values.get("colour")
         return next((c for name, c in CLOCK_COLOURS if name == pick), CLOCK_COLOURS[0][1])
+
+    def colour(self):
+        """The colour picked: the second hand and its disc, or the colon and the seconds. On something pale, deeper."""
+        c = self.picked()
+        if not self.pale():
+            return c
+        return ON_PALE["text"] if c == CLOCK_COLOURS[-1][1] else co_mix(c, (0, 0, 0), PALE_DEEPER)
 
     def seconds(self):
         return self.values.get("seconds") != "Off"
@@ -229,13 +257,14 @@ class Clock(Sim):
         face, edge = self.dial_colours()
         d.ellipse(((c - R) * k, (c - R) * k, (c + R) * k, (c + R) * k), fill=face, outline=edge,
                   width=max(1, round(k * 0.8)))
-        at, size, colour = MINUTE_DOT
+        ink = self.inks()
+        at, size, colour = MINUTE_DOT[:2] + (ink["dot"],)
         for m in range(60):
             if m % 5:
                 a = math.radians(m * 6)
                 x, y, r = c + math.sin(a) * at * R, c - math.cos(a) * at * R, max(0.7, size * R)
                 d.ellipse(((x - r) * k, (y - r) * k, (x + r) * k, (y + r) * k), fill=colour)
-        r0, r1, w, colour = HOUR_MARK
+        r0, r1, w, colour = HOUR_MARK[:3] + (ink["mark"],)
         for hour in range(12):
             if hour % 3:
                 a = math.radians(hour * 30)
@@ -245,7 +274,7 @@ class Clock(Sim):
                 for r in (r0, r1):                     # (round ends)
                     x, y, e = c + ux * r * R, c + uy * r * R, w * R / 2
                     d.ellipse(((x - e) * k, (y - e) * k, (x + e) * k, (y + e) * k), fill=colour)
-        at, size, colour = FIGURES
+        at, size, colour = FIGURES[:2] + (ink["figure"],)
         path, scale_k = self.figures()
         f = self.font(path, max(8, round(size * R * k * min(scale_k, 1.0))))
         for hour, text in ((0, "12"), (3, "3"), (6, "6"), (9, "9")):
@@ -267,7 +296,8 @@ class Clock(Sim):
             c = pic.width / 2
             if text:
                 ImageDraw.Draw(pic).text((c, c + DATE[0] * R), text,
-                                         font=self.font(FONT_UI, max(9, round(DATE[1] * R))), fill=BODY, anchor="mm")
+                                         font=self.font(FONT_UI, max(9, round(DATE[1] * R))),
+                                         fill=self.inks()["body"], anchor="mm")
             if len(self.dials) >= 3:
                 self.dials.clear()
             got = self.dials[key] = np.asarray(pic, np.float32)
@@ -283,14 +313,15 @@ class Clock(Sim):
         mins = t.tm_min + (t.tm_sec / 60 if self.seconds() else 0)
         for turn, (r0, r1, half) in ((((t.tm_hour % 12) + mins / 60) * 30, HANDS[0]), (mins * 6, HANDS[1])):
             ux, uy = math.sin(math.radians(turn)), -math.cos(math.radians(turn))
-            capsule(a, c + ux * r0 * R, c + uy * r0 * R, c + ux * r1 * R, c + uy * r1 * R, half * R, TEXT)
+            capsule(a, c + ux * r0 * R, c + uy * r0 * R, c + ux * r1 * R, c + uy * r1 * R, half * R,
+                    self.inks()["text"])
         colour = self.colour()
         if self.seconds():
             ux, uy = math.sin(math.radians(t.tm_sec * 6)), -math.cos(math.radians(t.tm_sec * 6))
             r0, r1, half = SECOND_HAND
             capsule(a, c + ux * r0 * R, c + uy * r0 * R, c + ux * r1 * R, c + uy * r1 * R, max(0.75, half * R), colour)
         hub, pin = HUB
-        capsule(a, c, c, c, c, hub * R, colour if self.seconds() else TEXT)
+        capsule(a, c, c, c, c, hub * R, colour if self.seconds() else self.inks()["text"])
         capsule(a, c, c, c, c, max(1.0, pin * R), self.backdrop)
         img.paste(Image.fromarray((a + 0.5).astype(np.uint8), "RGB"),
                   (int(round(x0 + self.w / 2 - c)), int(round(y0 + self.h / 2 - c))))
@@ -335,16 +366,17 @@ class Clock(Sim):
         block = cap + (size * UNDER[0] + date_size if date else 0)
         x = x0 + (self.w - total) / 2
         base = y0 + (self.h - block) / 2 + cap
-        for i, (p, colour_of) in enumerate(zip(parts, (TEXT, colour, TEXT))):
+        ink = self.inks()
+        for i, (p, colour_of) in enumerate(zip(parts, (ink["text"], colour, ink["text"]))):
             x += self.paste_words(img, p, path, size, colour_of, x, base) + (gap if i < 2 else 0)
         x += size * SIDE[0]
         if ampm:                                       # (its letters' top where the figures' is: their pictures
             down = self.words(ampm, path, label)[1]    # start a pixel above it)
-            self.paste_words(img, ampm, path, label, MUTED, x, base - cap + down - 1)
+            self.paste_words(img, ampm, path, label, ink["muted"], x, base - cap + down - 1)
         if secs:
             self.paste_words(img, f"{t.tm_sec:02d}", path, small, colour, x, base)
         if not date:
             return
         pic, down = self.words(date, FONT_UI, date_size)
-        img.paste(BODY, (int(round(x0 + (self.w - pic.width) / 2)), int(round(base + size * UNDER[0] + date_size * 0.73
-                                                                               - down + 1))), pic)
+        img.paste(ink["body"], (int(round(x0 + (self.w - pic.width) / 2)),
+                                int(round(base + size * UNDER[0] + date_size * 0.73 - down + 1))), pic)

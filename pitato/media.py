@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 
-from .theme import MUTED, set_accent, TEXT
+from .theme import MUTED, set_accent, set_look, TEXT
 from .config import (clean_name, home_dir, HOME_STYLE_WAS, SCREEN_MODES, SETTINGS_DEFAULT, SETTINGS_GONE, STATE_FILE,
                      TURN_DEGREES, WEB_PORT, web_private)
 from .util import classify, clock, FILE_KINDS, find_files, IMAGE_EXTS, item, looks_like_text, title_of
@@ -41,7 +41,7 @@ from .homeassistant import HomeAssistant, HomeLights
 from .pihole import Pihole
 from .plex import Plex, PLEX_TIMELINE_SECS
 from .jellyfin import Jellyfin
-from .sims import SIM_FPS, SIM_FPS_BIG
+from .sims import SIM_FPS, SIM_FPS_BIG, SIM_KEEN, SIM_SETTLE, SIM_SMOOTH
 from .snake import SnakeBrain
 from .shrink import Shrinker
 from .update import Updater
@@ -280,6 +280,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lofi_next = 0.0         # ...when its next frame's due
         self.sim_next = 0.0          # when its next frame is due
         self.sim_due = None          # ...for which sim, with which options (another, or them changed: one now)
+        self.sim_cost = None         # ...seconds a frame of it takes this machine, of late (None: not known yet)
+        self.sim_cost_of = None      # ...which sim that is, on how much of the screen
+        self.sim_rate = None         # ...frames a second it's drawn now, one that moves smoothly (sim_fps)
+        self.sim_rate_at = 0.0       # ...since when
         self.sim_base = (None, None, None)       # what doesn't move: (what it shows, it, the box's corners)
         self.sim_panel = (None, None, 0.0)       # the numbers beside the box: (what they show, them, when)
         self.sim_card = (None, None)             # a card over the box: (what it says, it)
@@ -477,6 +481,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.res_boot()                                # (just restarted at a new resolution: it asks if you'll keep it)
         self.boot_song = (time.monotonic() + BOOT_SONG_WAIT if self.setting("start_song") == "On" and not self.boot_game
                           else 0.0)                    # (a game to start: it has the speaker)
+        set_look(self.setting("look"))                 # (Settings > App pages: the pages dark, or light)
         set_accent(self.setting("accent"))
         turn = TURN_DEGREES.get(self.setting("turn"), 0)
         screen_out.set_turn(turn)                      # (Settings > Rotate screen: everything drawn turned)
@@ -503,6 +508,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if key == "accent":
             set_accent(value)
             self.icons.clear()
+        if key == "look":
+            self.look_changed()
         if key in ("wallpaper", "picture"):
             self.wall = (None, None)
         if key == "turn":
@@ -897,11 +904,58 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         s = max(getattr(self.fb, "s", 1), self.web_fine()) if self.fb is not None else 1
         if s != drawing_scale():                       # pictures kept at the other scale: made again
             set_drawing_scale(s)
-            self.forget_drawn()
-            self.friend_pics, self.lofi_card, self.cam_base, self.sketch_fit = {}, (None, None), None, None
-            for kept in (self.sim_tiles, self.game_pics, self.icons, self.wx_icons, self.thumbs, self.www_pics,
-                         self.web_icons):
-                kept.clear()
+            self.forget_kept()
+
+    def sim_fps(self, s, now):
+        """Frames a second for the sim on the screen: SIM_FPS, as ever (a Pi Zero on a TV: SIM_FPS_BIG, each of them
+        scaled up). One that moves smoothly (Rock Paper Scissors) is drawn more often where this machine has the
+        time: the most of SIM_SMOOTH's rates that a frame, as long as they've taken of late (sim_frame_took), takes
+        no more than its share of the time between. A rate is kept a couple of seconds before another's tried."""
+        base = SIM_FPS if self.fb is None or getattr(self.fb, "same", True) or not self.pi_slow else SIM_FPS_BIG
+        if not getattr(s, "smooth", False):
+            return base
+        rate = self.sim_rate or base
+        if self.sim_cost is None or now - self.sim_rate_at < SIM_SETTLE:
+            return rate
+        best = base
+        for fps, share in SIM_SMOOTH:
+            if fps <= base:
+                continue
+            if self.sim_cost > share / fps * SIM_KEEN[1 if rate >= fps else 0]:
+                break
+            best = fps
+        if best != rate:
+            self.sim_rate, self.sim_rate_at = best, now
+        return best
+
+    def sim_frame_took(self, s, secs, now):
+        """A frame of the sim on the screen took this long (its world moved on, drawn, and on the screen): how long
+        they take, of late. Another sim, or another size of it (the whole screen, a box): worked out anew, at the
+        usual rate till it's known."""
+        of = (s.key, self.sim_full(), self.fb.w if self.fb else 0, self.fb.h if self.fb else 0)
+        if of != self.sim_cost_of:
+            self.sim_cost_of, self.sim_cost, self.sim_rate, self.sim_rate_at = of, None, None, now
+            return                                     # (its first: with its pictures to make, not like the rest)
+        self.sim_cost = secs if self.sim_cost is None else self.sim_cost * 0.9 + secs * 0.1
+
+    def forget_kept(self):
+        """Every picture kept to draw quicker, forgotten: they were drawn at another scale, or in the other look."""
+        self.forget_drawn()
+        self.friend_pics, self.lofi_card, self.cam_base, self.sketch_fit = {}, (None, None), None, None
+        for kept in (self.sim_tiles, self.game_pics, self.icons, self.wx_icons, self.thumbs, self.www_pics,
+                     self.web_icons):
+            kept.clear()
+
+    def look_changed(self):
+        """Settings > App pages, put into effect: the pages' colours (theme.py's set_look; the accent's a darker one
+        of its kind on a light page), and whatever was drawn in the others thrown away, Apps' worlds' own too."""
+        set_look(self.setting("look"))
+        self.forget_kept()
+        self.face_shot = None
+        for sim in self.sims.values():
+            sim.relook()
+            if sim.pale_defaults:                      # (Notes' paper and ink, till you pick them: the look's)
+                sim.configure({k: self.sim_value(type(sim), k) for k in sim.pale_defaults})
 
     def enter(self):
         try:
@@ -1740,7 +1794,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             if paced is not None:                      # (the Clock: as each second begins, and not in between)
                 self.sim_next = now + paced.frame_in(time.time())
             else:
-                fps = SIM_FPS if self.fb is None or getattr(self.fb, "same", True) or not self.pi_slow else SIM_FPS_BIG
+                fps = self.sim_fps(s, now)
                 nxt = self.sim_next + 1.0 / fps          # (a steady beat; behind, it starts again)
                 self.sim_next = nxt if nxt > now else now + 1.0 / fps
             self.dirty = True

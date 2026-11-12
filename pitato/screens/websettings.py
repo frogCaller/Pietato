@@ -94,6 +94,7 @@ class WebSettingsScreen:
                        walls=True),               # (the page shows a little picture of each: web.py's web_wall)
                 choice("home_style"),
                 choice("accent", colours={a: hex_of(rgb) for a, rgb in ACCENTS}),
+                choice("look"),                   # (the pages inside the apps: dark, or light)
                 choice("clock"), choice("app_full")]
         if "turn" in root:
             rows.append(choice("turn"))
@@ -388,9 +389,9 @@ class WebSettingsScreen:
                 return {"error": f"From {STRIP_LEAST} to {STRIP_MOST} LEDs"}
             self.glow_pick("glow_count", str(int(str(value).strip())))
             return {"ok": True}
-        if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "sound",
-                   "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery", "share",
-                   "attract") \
+        if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "look",
+                   "sound", "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery",
+                   "share", "attract") \
                 or key.startswith("game_picture_") or key in GLOW_KEYS:
             return self.web_pick(key, value)
         handler = getattr(self, "web_set_" + key, None)

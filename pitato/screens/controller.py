@@ -3,7 +3,7 @@ import math
 import time
 from evdev import ecodes as e
 
-from ..theme import ACCENT, DONE, LINE, MUTED, PHOTO_BG, ROW, TEXT
+from ..theme import ACCENT, DONE, LINE, look, MUTED, PHOTO_BG, ROW, TEXT
 from ..inputs import LEARN_SKIP, LEARN_STEPS, STAR, learn_steps
 
 
@@ -192,8 +192,9 @@ class ControllerScreen:
         fx, fy = cx + 105, top + 85
         for name, (bx, by) in (("x", (fx, fy - 32)), ("a", (fx + 32, fy)), ("b", (fx, fy + 32)), ("y", (fx - 32, fy))):
             d.ellipse((bx - 16, by - 16, bx + 16, by + 16), fill=fill(name))
-            d.text((bx, by), name.upper(), font=F["key"], fill=PHOTO_BG if fill(name) in (ACCENT, DONE) else TEXT,
-                   anchor="mm")
+            lit = PHOTO_BG if look() == "Dark" else ROW   # (a letter on a lit button: dark on a dark page's
+            d.text((bx, by), name.upper(), font=F["key"],   # bright colours, white on a light page's deeper ones)
+                   fill=lit if fill(name) in (ACCENT, DONE) else TEXT, anchor="mm")
         for name, box in (("select", (cx - 42, top + 112, cx - 6, top + 124)),
                           ("start", (cx + 6, top + 112, cx + 42, top + 124))):
             d.rounded_rectangle(box, radius=6, fill=fill(name))

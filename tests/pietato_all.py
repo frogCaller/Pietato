@@ -75,6 +75,9 @@ class _AllOfIt(types.ModuleType):
 
 sys.modules[__name__].__class__ = _AllOfIt
 
+if _os.environ.get("PITATO_LOOK_TEST"):    # (the pages inside the apps in the other look, Light, unless a test's
+    importlib.import_module("pitato.config").SETTINGS_DEFAULT["look"] = _os.environ["PITATO_LOOK_TEST"]   # settings
+                                                                                 # say: to look at its pictures so)
 if _os.environ.get("PITATO_FINE_TEST"):    # (every picture of the menus drawn finely, as on a 4K TV: fine.py)
     _fine = importlib.import_module("pitato.fine")
     _fine.set_scale(int(_os.environ["PITATO_FINE_TEST"]))

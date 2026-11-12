@@ -8,7 +8,7 @@ import tempfile
 import textwrap
 import threading
 
-from ..theme import BG, BODY, MUTED, PHOTO_BG, TEXT
+from ..theme import BG, BODY, MUTED, on_dark, PHOTO_BG
 from ..config import CACHE_DIR
 from ..util import cache_name
 from ..library import TEXT_LIMIT
@@ -261,7 +261,7 @@ class ReadingScreen:
         im = self.pdf_image()
         wide = False
         if im is None:
-            d.text((W / 2, AH / 2), "Can't show this page", font=F["big"], fill=TEXT, anchor="mm")
+            d.text((W / 2, AH / 2), "Can't show this page", font=F["big"], fill=on_dark("TEXT"), anchor="mm")
         elif v["fit"] == "width":
             limit = max(im.height - AH, 0)
             v["scroll"] = int(max(0, min(v["scroll"], limit)))

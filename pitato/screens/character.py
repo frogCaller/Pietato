@@ -8,7 +8,7 @@ Character), or its settings (Settings > Bot > Character)."""
 import random
 import time
 
-from ..theme import ACCENT, BODY, LINE, MUTED, ROW, TEXT
+from ..theme import ACCENT, BODY, LINE, MUTED, on_dark, ROW, TEXT
 from ..bot import FRIEND_CHATTER, FRIEND_STYLES
 from ..face import FACE_BACKS, FACE_COLOURS, SHAPE_DEFAULTS, SHAPE_MOST
 from ..voice import BOT_VOICES, voice_name, voices_here
@@ -287,11 +287,11 @@ class CharacterScreen:
         face_at = ((px0 + px1) / 2, top + (bottom - top) * 0.52, size)
         self.draw_bot_face(d, face_at, look=self.char_preview_look(), back=back)
         look = dict(CHAR_LOOKS).get(getattr(self, "char_look", "idle"), "Calm")
-        ink = BODY if lightness(back) < 140 else (40, 44, 52)
+        ink = on_dark("BODY") if lightness(back) < 140 else (40, 44, 52)
         name = self.bot_name()
         if name:                                       # its name, over its face (clear of its frames)
             d.text(((px0 + px1) / 2, top + 22), self.fit(d, name, F["head"], pw - 40), font=F["head"],
-                   fill=TEXT if lightness(back) < 140 else (26, 28, 34), anchor="mm")
+                   fill=on_dark("TEXT") if lightness(back) < 140 else (26, 28, 34), anchor="mm")
         lw = self.key_w(d, "SELECT") + 8 + d.textlength(look, font=F["small"])
         lx, ly = (px0 + px1 - lw) / 2, bottom - 20
         x = self.key(d, lx, ly, "SELECT") + 8

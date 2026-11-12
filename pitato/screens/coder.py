@@ -2,7 +2,7 @@
 import socket
 import time
 
-from ..theme import ACCENT, BG, BODY, LINE, MUTED, ROW, TEXT
+from ..theme import ACCENT, BG, BODY, LINE, MUTED, on_dark, ROW, TEXT
 from ..config import read_config, settings_glob, WEB_PORT
 from ..system import run_out
 from ..screen import aplay_device
@@ -290,11 +290,12 @@ class CoderScreen:
             coder_desk(img, ox, oy, bottom=fb.h if self.full_app() else None)   # (no buttons: to the bottom)
             self.bot_label(d)
             y = (CO_TOP + oy + 8 + fb.h - self.FOOTER) / 2
-            d.text((24, y), title, font=F["head"], fill=TEXT, anchor="lm")
-            if sub:
-                d.text((24 + d.textlength(title, font=F["head"]) + 12, y + 1), sub, font=F["small"], fill=MUTED, anchor="lm")
+            d.text((24, y), title, font=F["head"], fill=on_dark("TEXT"), anchor="lm")   # (on its desk's front: dark
+            if sub:                                                                    # wood, whatever the pages)
+                d.text((24 + d.textlength(title, font=F["head"]) + 12, y + 1), sub, font=F["small"],
+                       fill=on_dark("MUTED"), anchor="lm")
             if quiet:
-                d.text((fb.w - 24, y + 1), "Sound off", font=F["small"], fill=MUTED, anchor="rm")
+                d.text((fb.w - 24, y + 1), "Sound off", font=F["small"], fill=on_dark("MUTED"), anchor="rm")
             self.footer(d, hints)
             stage = img.crop((ox, oy, ox + 640, oy + 480)) if ox or oy else img   # (drawn for 640x480)
             self.coder_base = (key, img, coder_under(stage))

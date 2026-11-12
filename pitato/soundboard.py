@@ -32,7 +32,6 @@ class Soundboard(Sim):
     options = ()
     bare = True                         # on the page itself: no box, and nothing beside it
     paced = True                        # drawn again when something changes, not frame by frame
-    backdrop = BG
     top_px = TOP                        # px above its buttons (the Band's page, made from this one, has more there)
 
     def __init__(self, w, h, rng=None, values=None):
@@ -47,6 +46,13 @@ class Soundboard(Sim):
         self.taps = []                  # where its buttons are on the screen: (box, the button)
         self.fonts = {}
         self.tiles = {}
+
+    @property
+    def backdrop(self):
+        return BG                       # (the page's own colour, as it is now)
+
+    def relook(self):
+        self.tiles.clear()
 
     def update(self, dt):
         return None

@@ -4,7 +4,8 @@ import os
 import threading
 import time
 
-from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, PI_BG, PI_DIM, PI_DOWN, PI_FG, PI_UP, ROW, TEXT, WARN
+from ..theme import (ACCENT, BG, BODY, co_mix, DONE, LINE, MUTED, PI_BG, PI_DIM, PI_DOWN, PI_FG, PI_UP, ROW, TEXT,
+                     WARN)
 from ..config import edit_config
 from ..util import _num
 from ..library import LIBRARY
@@ -53,6 +54,12 @@ def clock_at(t, gmtoffset, tz, now=None):
     if days < 6:
         return time.strftime("%a ", at) + clock
     return time.strftime("%b ", at) + str(at.tm_mday)
+
+
+def pi_grey(v):
+    """A grey on a card: v of 255 of the way from the card's colour to its words' (a black card, as ever: that grey
+    itself; a white one, on a light page: as far from white)."""
+    return co_mix(PI_BG, PI_FG, v / 255)
 
 
 class FinanceScreen:
@@ -334,7 +341,7 @@ class FinanceScreen:
             for k in range(len(cards)):
                 on = k == self.fin_card % len(cards)
                 r = 4 if on else 3
-                d.ellipse((x - r, bottom - 16 - r, x + r, bottom - 16 + r), fill=PI_FG if on else (70, 70, 70))
+                d.ellipse((x - r, bottom - 16 - r, x + r, bottom - 16 + r), fill=PI_FG if on else pi_grey(70))
                 x += gap
         if card and card[0] == "stock":                        # (shorter on the GPi's screen: Y Add still fits)
             credit = "Source: Yahoo Finance" if W >= 800 else "Yahoo Finance"
@@ -462,7 +469,7 @@ class FinanceScreen:
         name = self.fit(d, name, F["small"], W - pad * 2 - 230)
         d.text((pad, y0), name, font=F["small"], fill=PI_DIM)
         if name != sym:                                    # (its ticker beside its name, as a coin's rank is)
-            d.text((pad + d.textlength(name, font=F["small"]) + 10, y0), sym, font=F["small"], fill=(90, 90, 90))
+            d.text((pad + d.textlength(name, font=F["small"]) + 10, y0), sym, font=F["small"], fill=pi_grey(90))
         price = q.get("price")
         if price is None:
             why = st.error_of(sym)
@@ -492,10 +499,10 @@ class FinanceScreen:
             if window == "1D" and prev:                    # the last close, dotted across
                 yb = cb - (prev - bottom_v) / ((top_v - bottom_v) or 1) * (cb - ct)
                 for x in range(pad, W - pad, 10):
-                    d.line((x, yb, x + 3, yb), fill=(110, 110, 110), width=1)
+                    d.line((x, yb, x + 3, yb), fill=pi_grey(110), width=1)
         else:
             d.text((W / 2, (ct + cb) / 2), "Loading the chart…" if st.running else "No chart yet",
-                   font=F["small"], fill=(90, 90, 90), anchor="mm")
+                   font=F["small"], fill=pi_grey(90), anchor="mm")
 
         d.text((pad, y0 + 22), money(price, cur, kind), font=F["price"], fill=PI_FG)
         if change is not None and pct is not None:
@@ -542,7 +549,7 @@ class FinanceScreen:
         d.text((pad, y0), name, font=F["small"], fill=PI_DIM)
         if q.get("rank"):
             d.text((pad + d.textlength(name, font=F["small"]) + 10, y0), f"#{q['rank']}",
-                   font=F["small"], fill=(90, 90, 90))
+                   font=F["small"], fill=pi_grey(90))
         price = q.get("price")
         if price is None:
             d.text((W / 2, (top + bottom) / 2), "Waiting for prices…" if cr.running else "No prices yet",
@@ -554,7 +561,7 @@ class FinanceScreen:
         ct, cb = top + 118, bottom - 92                    # the chart's box
         if len(values) < 2:
             d.text((W / 2, (ct + cb) / 2), "Loading the chart…" if cr.running else "No chart yet",
-                   font=F["small"], fill=(90, 90, 90), anchor="mm")
+                   font=F["small"], fill=pi_grey(90), anchor="mm")
         if len(values) >= 2:
             step = max(1, len(values) // (W - pad * 2))
             vals = values[::step]

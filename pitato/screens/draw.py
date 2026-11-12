@@ -3,8 +3,8 @@ import os
 import time
 
 from ..theme import (
-    ACCENT, BADGE, BG, BODY, DONE, FONT, FONT_BOLD, FONT_MONO, FONT_MONO_BOLD, FONT_THIN, FONT_UI, FONT_UI_BOLD, LINE,
-    MUTED, ROW, TEXT, WARN)
+    ACCENT, BADGE, BG, BODY, DONE, FONT, FONT_BOLD, FONT_MONO, FONT_MONO_BOLD, FONT_THIN, FONT_UI, FONT_UI_BOLD,
+    KEY_FILL, KEY_TEXT, LINE, MUTED, on_dark, PILL, PILL_TEXT, ROW, TEXT, WARN)
 from ..config import home_dir
 from ..util import clock, human_size, short_path
 from ..system import cpu_temp, HOT_C, LOW_BATTERY, on_pc, wifi_bars, wifi_quality
@@ -15,7 +15,6 @@ from ..home import mix
 from .chromium import CHROME_HELP, CHROME_NOTES
 
 
-KEY_FILL = (62, 68, 79)      # a button, in the hints along the bottom
 FOOT_NOTE = (206, 211, 218)  # the home screen's line about the app picked
 BASE_ROOM = 480 - 48 - 76    # the GPi Case's screen between its bars: what a page with a set layout is drawn for
 FULL_VIEWS = ("list", "now", "photo", "pdf", "text")   # what Full screen apps puts on the whole screen
@@ -124,9 +123,9 @@ class DrawScreen:
         w = self.fb.w if self.fb else 640
         return max(self.GRID_COLS, (w - 32) // 152)
 
-    def canvas(self, bg=BG):
+    def canvas(self, bg=None):
         from ..fine import Image, ImageDraw
-        img = Image.new("RGB", (self.fb.w, self.fb.h), bg)
+        img = Image.new("RGB", (self.fb.w, self.fb.h), BG if bg is None else bg)   # (the page's colour, as it is now)
         return img, ImageDraw.Draw(img)
 
     # -- the web page's copy of the screen: what a tap on it does, where ----------------------------------------
@@ -230,7 +229,7 @@ class DrawScreen:
             d.ellipse(box, fill=ACCENT if on else fill or KEY_FILL)
         else:
             d.rounded_rectangle(box, radius=11, fill=ACCENT if on else fill or KEY_FILL)
-        d.text((x + w / 2, y), label, font=F["key"], fill=BG if on else text or TEXT, anchor="mm")
+        d.text((x + w / 2, y), label, font=F["key"], fill=BG if on else text or KEY_TEXT, anchor="mm")
         return x + w
 
     def footer(self, d, items, right=None, credit=None, plain=False, pill=True, always=False, ink=None):
@@ -269,6 +268,8 @@ class DrawScreen:
                 break
             x0 = x
             tint = (ink["key"], ink.get("key_text")) if ink.get("key") else ()   # (a bright background's: its own)
+            if plain and not tint:                     # (the home screen's, on a dark background: as a dark page's,
+                tint = (on_dark("KEY_FILL"), on_dark("KEY_TEXT"))   # whatever the pages inside the apps are)
             x = self.key(d, x, y, k, on, *tint) + (9 if plain else 7)
             say((x, y), label, ink.get("text", TEXT) if plain else BODY, "lm")
             x += d.textlength(label, font=font) + (26 if plain else 18)
@@ -295,8 +296,8 @@ class DrawScreen:
         msg = self.fit(d, self.msg, F["small"], W - 72)
         mw = d.textlength(msg, font=F["small"]) + 32
         y0 = H - self.FOOTER - 46
-        d.rounded_rectangle(((W - mw) / 2, y0, (W + mw) / 2, y0 + 34), radius=17, fill=ROW)
-        d.text((W / 2, y0 + 17), msg, font=F["small"], fill=TEXT, anchor="mm")
+        d.rounded_rectangle(((W - mw) / 2, y0, (W + mw) / 2, y0 + 34), radius=17, fill=PILL)
+        d.text((W / 2, y0 + 17), msg, font=F["small"], fill=PILL_TEXT, anchor="mm")
 
     # status bar and headers -----------------------------------------------------
     def status_signature(self):
@@ -420,10 +421,11 @@ class DrawScreen:
             self.tappable((W - 20, self.STATUS_H, W, self.HEADER), "tabs", 1)
         d.line((0, self.HEADER, W, self.HEADER), fill=LINE)
 
-    def app_title(self, d, title, right=None, right_fill=MUTED):
+    def app_title(self, d, title, right=None, right_fill=None):
         """Full screen apps' top: the app's name (or Now playing, a document's) and a note on the right, no status
         bar."""
         F, W = self.fonts, self.fb.w
+        right_fill = MUTED if right_fill is None else right_fill
         y = self.HEADER // 2
         rw = d.textlength(right, font=F["small"]) + 24 if right else 0
         d.text((20, y), self.fit(d, title, F["head"], W - 40 - rw), font=F["head"], fill=TEXT, anchor="lm")
@@ -431,8 +433,9 @@ class DrawScreen:
             d.text((W - 20, y), right, font=F["small"], fill=right_fill, anchor="rm")
         d.line((0, self.HEADER, W, self.HEADER), fill=LINE)
 
-    def title_row(self, d, title, right=None, right_fill=MUTED):
+    def title_row(self, d, title, right=None, right_fill=None):
         """Status bar plus a plain title, for screens that aren't tabs (Full screen apps: the title, no status bar)."""
+        right_fill = MUTED if right_fill is None else right_fill
         if self.full_app():
             self.app_title(d, title, right, right_fill)
             return
@@ -1042,8 +1045,8 @@ class DrawScreen:
         img, d = self.canvas(bg=(0, 0, 0))
         W, H = self.fb.w, self.fb.h
         d.text((W / 2, H / 2 - 30), self.fit(d, title, F["big"], W - 60),
-               font=F["big"], fill=TEXT, anchor="mm")
-        d.text((W / 2, H / 2 + 4), status, font=F["small"], fill=MUTED, anchor="mm")
+               font=F["big"], fill=on_dark("TEXT"), anchor="mm")
+        d.text((W / 2, H / 2 + 4), status, font=F["small"], fill=on_dark("MUTED"), anchor="mm")
         full = self.setting("screen") != "Fit"
         hints = hints or [("A", "Pause"), ("▲▼", "Volume"), ("Y", "Whole picture" if full else "Full screen"),
                           ("B", "Back")]
@@ -1051,7 +1054,7 @@ class DrawScreen:
                   for k, t in hints]
         x, y = (W - sum(widths) - 18 * (len(hints) - 1)) / 2, H / 2 + 44
         for (k, t), w in zip(hints, widths):
-            end = self.key(d, x, y, k) + 7
-            d.text((end, y), t, font=F["small"], fill=BODY, anchor="lm")
+            end = self.key(d, x, y, k, fill=on_dark("KEY_FILL"), text=on_dark("KEY_TEXT")) + 7
+            d.text((end, y), t, font=F["small"], fill=on_dark("BODY"), anchor="lm")
             x += w + 18
         self.fb.show(img)

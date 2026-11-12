@@ -74,6 +74,19 @@ WX_TINT = {   # PiE-ink's colours for each kind of weather (on a dark screen)
     "rain": (90, 160, 255), "snow": (215, 235, 255), "bolt": (245, 200, 80), "fog": (175, 180, 190),
     "wind": (195, 200, 210), "sunset": (255, 150, 80),
 }
+WX_TINT_PALE = {   # ...and on a light page (Settings > App pages): each a little deeper, to show against it
+    "sun": (244, 172, 20), "moon": (126, 142, 188), "cloud": (160, 168, 184), "dark": (112, 120, 138),
+    "rain": (46, 124, 232), "snow": (126, 176, 226), "bolt": (232, 166, 16), "fog": (148, 156, 170),
+    "wind": (148, 156, 172), "sunset": (240, 122, 52),
+}
+
+
+def wx_tint(pale=None):
+    """The weather's colours: on a dark page, or a light one (pale; None: as the pages are now)."""
+    if pale is None:
+        from .theme import look
+        pale = look() == "Light"
+    return WX_TINT_PALE if pale else WX_TINT
 
 
 def wx_words(code):
@@ -105,15 +118,15 @@ def compass(degrees):
         return ""
 
 
-def draw_wx(name, size):
-    """A weather picture, drawn three times bigger and scaled down for smooth edges."""
+def draw_wx(name, size, pale=False):
+    """A weather picture, drawn three times bigger and scaled down for smooth edges (pale: for a light page)."""
     from .fine import ImageDraw
     from PIL import Image
     S = size * 3
     k = S / 120
     im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    T = WX_TINT
+    T = wx_tint(pale)
 
     def B(x0, y0, x1, y1):
         return (x0 * k, y0 * k, x1 * k, y1 * k)

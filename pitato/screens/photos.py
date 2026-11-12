@@ -3,7 +3,7 @@ import os
 import threading
 import time
 
-from ..theme import ACCENT, BG, BODY, LINE, MUTED, PHOTO_BG, ROW, TEXT
+from ..theme import ACCENT, BG, BODY, LINE, MUTED, on_dark, PHOTO_BG, ROW, TEXT
 from ..config import CACHE_DIR
 from ..util import cache_name, in_home, pictures_dir, write_new
 from ..library import SLIDESHOW_SECS
@@ -328,7 +328,7 @@ class PhotoScreen:
         if v["edit"]:
             AH -= self.PREVIEW_STRIP
         if im is None:
-            d.text((W / 2, AH / 2), "Can't show this picture", font=F["big"], fill=TEXT, anchor="mm")
+            d.text((W / 2, AH / 2), "Can't show this picture", font=F["big"], fill=on_dark("TEXT"), anchor="mm")
         elif v["edit"]:
             pv = self.photo_preview((AW, AH))
             img.paste(pv, ((AW - pv.width) // 2, (AH - pv.height) // 2))

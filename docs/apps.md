@@ -52,6 +52,8 @@ Pietato starts on a home screen of apps:
 - Settings > Background changes the home screen's background: dark ones, colourful ones like Sunset, Candy
   and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and A shows
   them all to pick from
+- Settings > App pages makes the pages inside the apps Light: pale pages with dark words, in place of the
+  dark ones. The home screen keeps its background either way
 - If you'd rather see the apps on the whole screen, set Settings > Full screen apps to On. The status
   bar, the tabs and the button hints go away, leaving just the app's name at the top. The buttons work
   the same, and L and R still switch apps
@@ -128,7 +130,9 @@ An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato
 Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
 any ESP32 with an RGB LED). It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
 takes a game's colours, a hit's red and an achievement's gold. Its LED is amber while it looks for your WiFi,
-and green for a moment once it's on it.
+green for a couple of seconds once it's on it, and then dark till something plays. If it doesn't do that, the
+Arduino IDE's Serial Monitor (at 115200) says what it's doing every ten seconds: whether it's on your WiFi, and
+whether a Pietato is lighting it.
 
 Any number of boards can do it at once, on any Pietato, with or without LEDs of its own. A beat is one small
 packet to each board, and a game's colours go to a couple of them at a time, in turn, so they don't slow the Pi
@@ -144,6 +148,7 @@ for a moment, to tell them apart. A board that had the sketch before this needs 
 
 For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
 library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.
+For its Serial Monitor, set Tools > USB CDC On Boot to Enabled before you upload.
 
 ## Soundboard
 

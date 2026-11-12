@@ -2,7 +2,7 @@
 import math
 import time
 
-from ..theme import ACCENT, BG, BODY, co_mix, LINE, MUTED, ROW, TEXT
+from ..theme import ACCENT, BG, BODY, co_mix, LINE, look, MUTED, PILL, PILL_TEXT, ROW, TEXT
 from ..library import LIBRARY
 from ..sims import (
     Life, RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
@@ -43,6 +43,9 @@ class SimScreen:
                 v = self.setting("sim_full" if k == "full" else f"sim_{kind.key}_{k}")
                 if kind is FishTank and k == "kind" and v not in ways:
                     default = fish_default(self.own_name())   # (a fish of its own, till you pick one)
+                if (look() == "Light" and kind.pale_defaults.get(k) in ways   # (a light page: Notes' paper and
+                        and all(self.setting(f"sim_{kind.key}_{j}") is None for j in kind.pale_defaults)):   # ink,
+                    default = kind.pale_defaults[k]                           # till you pick either)
                 return v if v in ways and not isinstance(v, bool) else default
         return None
 
@@ -596,6 +599,7 @@ class SimScreen:
         from ..fine import Image
         fb = self.fb
         now = time.monotonic()
+        began = time.perf_counter()
         s = self.sim_game()
         if self.sim_opts is None:                      # (it waits while its options are open)
             dt = 0.0 if self.sim_t is None else min(now - self.sim_t, 0.1)
@@ -689,6 +693,8 @@ class SimScreen:
             box, _, dirty = self.sim_layout()
             fb.show_part(img, dirty if fresh else box)
         self.sim_shown = (key, getattr(fb, "frames", None), now, whole_t)
+        if not card_open:                              # (how long its frames take: sim_fps draws it as often as
+            self.sim_frame_took(s, time.perf_counter() - began, now)   # this machine has the time for)
 
     def sim_msg(self, img, low=False):
         """A notice (toast) over the sim: as msg_pill draws it, from a kept picture of the words. Low: at
@@ -702,11 +708,11 @@ class SimScreen:
                 self.group_bubble(ImageDraw.Draw(img), low=low)
             return
         W, H = self.fb.w, self.fb.h
-        tile = self.sim_tile(self.msg, "small", TEXT, ROW)
+        tile = self.sim_tile(self.msg, "small", PILL_TEXT, PILL)
         if tile.width > W - 70:                        # (a long one: shortened, as usual)
             self.msg_pill(ImageDraw.Draw(img))
             return
         mw = tile.width - 2 + 32
         y0 = H - 48 if low else H - self.FOOTER - 46
-        ImageDraw.Draw(img).rounded_rectangle(((W - mw) / 2, y0, (W + mw) / 2, y0 + 34), radius=17, fill=ROW)
+        ImageDraw.Draw(img).rounded_rectangle(((W - mw) / 2, y0, (W + mw) / 2, y0 + 34), radius=17, fill=PILL)
         img.paste(tile, ((W - tile.width) // 2, y0 + 17 - tile.height // 2))

@@ -3,8 +3,8 @@ import textwrap
 import threading
 import time
 
-from ..theme import ACCENT, BODY, LINE, MUTED, ROW, TEXT, WARN
-from ..weather import compass, draw_wx, place_text, wx_icon_name, WX_TINT, wx_words
+from ..theme import ACCENT, BODY, LINE, look, MUTED, ROW, TEXT, WARN
+from ..weather import compass, draw_wx, place_text, wx_icon_name, wx_tint, wx_words
 from ..fine import made_fine, scale
 
 WX_UNITS = ["°F", "°C"]
@@ -154,10 +154,13 @@ class WeatherScreen:
         self.footer(d, hints)
         self.fb.show(img)
 
-    def wx_icon(self, name, size):
-        key = (name, size, scale())
-        if key not in self.wx_icons:
-            self.wx_icons[key] = made_fine(draw_wx(name, size * scale()))   # (as finely as the screen's drawn)
+    def wx_icon(self, name, size, pale=None):
+        """A weather picture, kept. On a light page (Settings > App pages) its colours are a little deeper; the home
+        screen's is as ever, whatever the pages are (pale=False)."""
+        pale = look() == "Light" if pale is None else pale
+        key = (name, size, scale()) + (("pale",) if pale else ())
+        if key not in self.wx_icons:                   # (as finely as the screen's drawn)
+            self.wx_icons[key] = made_fine(draw_wx(name, size * scale(), pale))
         return self.wx_icons[key]
 
     def deg(self, v):
@@ -288,7 +291,7 @@ class WeatherScreen:
                 img.paste(pic, (150, int(mid - 15)), pic)
                 d.text((194, mid), wx_words(day.get("code"))[0], font=F["small"], fill=BODY, anchor="lm")
                 if day.get("rain"):
-                    d.text((W - 150, mid), f"{day['rain']}%", font=F["small"], fill=WX_TINT["rain"], anchor="rm")
+                    d.text((W - 150, mid), f"{day['rain']}%", font=F["small"], fill=wx_tint()["rain"], anchor="rm")
                 d.text((W - 80, mid), self.deg(day.get("hi")), font=F["row_b"], fill=TEXT, anchor="rm")
                 d.text((W - 26, mid), self.deg(day.get("lo")), font=F["row"], fill=MUTED, anchor="rm")
         else:                                          # the NWS in its own words

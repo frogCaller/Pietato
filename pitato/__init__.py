@@ -1,6 +1,6 @@
 """Pietato: game controller buttons as keys, plus a media mode. pitato.py starts it.
 
-  theme.py          colours, fonts and the accent
+  theme.py          colours (the pages dark or light), fonts and the accent
   config.py         the static folder, settings files, saved settings
   util.py           small helpers: files, kinds of file, text, numbers
   asyou.py          what the players and games run as: you, not root (setpriv's no new privileges too)

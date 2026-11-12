@@ -9,7 +9,7 @@ import threading
 import time
 import urllib.parse
 
-from ..theme import ACCENT, BODY, LINE, MUTED, ROW, TEXT
+from ..theme import ACCENT, BODY, LINE, MUTED, on_dark, ROW, TEXT
 from ..ahead import Ahead
 from ..asyou import as_you, nice_now
 from ..config import home_dir, SCREEN_MODES
@@ -672,8 +672,8 @@ class PlayerScreen:
         img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         d = ImageDraw.Draw(img)
         d.rounded_rectangle((0, 0, w - 1, h - 1), radius=12, fill=(14, 12, 26, 196))
-        d.text((16, 22), title, font=F["head"], fill=TEXT, anchor="lm")
-        d.text((16, 44), sub, font=F["small"], fill=ACCENT if self.paused else BODY, anchor="lm")
+        d.text((16, 22), title, font=F["head"], fill=on_dark("TEXT"), anchor="lm")   # (its card's dark, whatever the
+        d.text((16, 44), sub, font=F["small"], fill=on_dark("ACCENT" if self.paused else "BODY"), anchor="lm")  # pages)
         return img
 
     def render_lofi(self):
@@ -697,9 +697,9 @@ class PlayerScreen:
         d = ImageDraw.Draw(img)
         if length:                                     # how far through it is: a thin line along the card's foot
             x0, x1, by = x + 16, x + card.width - 16, y + card.height - 13
-            d.rounded_rectangle((x0, by, x1, by + 3), radius=1, fill=LINE)
+            d.rounded_rectangle((x0, by, x1, by + 3), radius=1, fill=on_dark("LINE"))
             d.rounded_rectangle((x0, by, x0 + max(3, (x1 - x0) * min(self.pos / length, 1)), by + 3), radius=1,
-                                fill=ACCENT)
+                                fill=on_dark("ACCENT"))
         self.msg_pill(d)                               # (a notice, over it)
         self.fb.show(img)
 

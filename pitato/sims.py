@@ -20,6 +20,12 @@ SIM_IN = 2                                    # pieces keep this far in from its
 SIM_PANEL = (468, 78, 628, 424)               # the numbers, beside it
 SIM_DIRTY = (SIM_BOX[0], SIM_BOX[1], SIM_PANEL[2], SIM_PANEL[3])   # what changes from one frame to the next
 SIM_FPS, SIM_FPS_BIG = 20, 10                 # frames a second (a Pi Zero on a TV: fewer, each one scaled up)
+SIM_SMOOTH = ((20, 0.5), (30, 0.5), (60, 0.25))   # a world that moves smoothly (Rock Paper Scissors): this many
+                                              # instead, the most of them that a frame takes this machine no more
+                                              # than this share of the time between (media mode times its frames)
+SIM_SETTLE = 2.0                              # ...seconds at one rate before it's changed for another
+SIM_KEEN = (0.85, 1.15)                       # ...up to a rate with this much of its share to spare; down from it
+                                              # once it's this much over
 SIM_SAMPLE = 0.2                              # seconds between a chart's points
 SIM_FULL = ("full", "Full screen", ("Off", "On"), "Off")   # (the last row of every sim's START card)
 
@@ -43,6 +49,9 @@ class Sim:
     poke_label = None               # X: what it does, or None
     options = ()
     restart_for = ()                # options it starts again for
+    pale_defaults = {}              # options it starts with on a light page (Settings > App pages) instead, till
+                                    # you pick any of them: {key: choice}
+    smooth = False                  # it moves smoothly: drawn more often where the machine has the time (SIM_SMOOTH)
     bare = False                    # drawn on the page itself, in the middle: no box, no numbers beside it
     paced = False                   # its picture changes now and then (frame_in says when), not frame by frame
     backdrop = SIM_FLOOR            # what's behind it on the whole screen
@@ -80,6 +89,9 @@ class Sim:
         """The box changes size (full screen, and back)."""
         self.w, self.h = w, h
         self.restart()
+
+    def relook(self):
+        """The pages' look has changed (Settings > App pages): pictures it kept in the page's colours, thrown away."""
 
     def update(self, dt):
         return None
@@ -156,6 +168,7 @@ RPS_READY = 3               # seconds to pick a winner before a round starts
 RPS_NEXT = 10               # seconds the winner shows, then the next round starts by itself
 RPS_TURNS = 48              # the angles a piece is drawn at (each one drawn once, then kept)
 RPS_EASE = 1.5              # how quickly a piece gets back to the speed (after a bump or a shake)
+RPS_QUICK = [True]          # its pieces put on the picture PIL's inner way (draw): False once that hasn't worked
 RPS_LOOKS = random.Random(5)
 RPS_ROCKS = [[0.78 + RPS_LOOKS.random() * 0.22 for _ in range(10)] for _ in range(6)]   # six rocks' shapes
 
@@ -232,6 +245,7 @@ class RockPaperScissors(Sim):
     key = "rps"
     blurb = "Paper covers rock, rock crushes scissors, scissors cut paper. A piece hit by its counter switches sides."
     poke_label = "Shake"
+    smooth = True
     options = (("count", "Pieces per team", RPS_COUNTS, 20),
                ("size", "Size", tuple(n for n, _ in RPS_SIZES), "Medium"),
                ("speed", "Speed", tuple(n for n, _ in RPS_SPEEDS), "Normal"))
@@ -405,7 +419,8 @@ class RockPaperScissors(Sim):
         rr2 = rr * rr
         lo, hi_x, hi_y = r, W - r, H - r
         top = max(max(map(abs, VX)), max(map(abs, VY)))
-        steps = max(2, min(8, int(math.ceil(top * 1.42 * dt / (0.5 * r)))))
+        least = 2 if dt >= 0.04 else 1             # (drawn more often than twenty times a second: a step's short
+        steps = max(least, min(8, int(math.ceil(top * 1.42 * dt / (0.5 * r)))))   # enough by itself)
         h = dt / steps
         cols = int(W // rr) + 1
         sqrt = math.sqrt
@@ -476,8 +491,13 @@ class RockPaperScissors(Sim):
         k = min(1.0, dt * RPS_EASE)               # back toward the speed, gently
         sp, ang, spin = self.speed, self.ang, self.spin
         for i in range(n):
-            X[i] = min(max(X[i], lo), hi_x)          # (a crowd can push one into the wall: not through it)
-            Y[i] = min(max(Y[i], lo), hi_y)
+            x, y = X[i], Y[i]                        # (a crowd can push one into the wall: not through it)
+            if x < lo:
+                x = lo
+            if y < lo:
+                y = lo
+            X[i] = hi_x if x > hi_x else x
+            Y[i] = hi_y if y > hi_y else y
             ang[i] += spin[i] * dt
             s = sqrt(VX[i] * VX[i] + VY[i] * VY[i])
             if s < 1:
@@ -494,17 +514,36 @@ class RockPaperScissors(Sim):
         if sprites.get("r") != self.r:                 # (another size: drawn again, as needed)
             sprites.clear()
             sprites["r"] = self.r
-        half = rps_span(self.r) // 2
+        span = rps_span(self.r)
+        half = span // 2
         ox, oy = x0 - half, y0 - half
         k = RPS_TURNS / (2 * math.pi)
         fs = detail(img)                               # (a screen drawn finely: the pieces drawn as finely, and put
-        for x, y, t, a, look in zip(self.x, self.y, self.t, self.ang, self.look):   # in place between its pixels)
+        core = None                                    # in place between its pixels)
+        if RPS_QUICK[0]:                               # (PIL's own picture underneath: sixty pieces put straight on
+            try:                                       # it cost half what sixty pastes do, each with its checks: a
+                under = img if fs == 1 else img.pic    # frame a tenth cheaper on a Pi Zero. A fine picture's: its
+                under.load()                           # own pixels, each piece where paste would put it)
+                core = under.im
+            except Exception:
+                core = None
+        for x, y, t, a, look in zip(self.x, self.y, self.t, self.ang, self.look):
             turn = int(a * k + 0.5) % RPS_TURNS
             key = (t, look if t == 0 else 0, turn, fs)
             s = sprites.get(key)
             if s is None:
                 s = sprites[key] = (rps_sprite(t, self.r, turn, look) if fs == 1 else
                                     made_fine(rps_sprite(t, self.r * fs, turn, look, rps_span(self.r) * fs), fs))
+            if core is not None:
+                try:
+                    if fs == 1:
+                        px, py, bit = ox + int(x + 0.5), oy + int(y + 0.5), s.im
+                    else:
+                        px, py, bit = round((ox + x) * fs), round((oy + y) * fs), s.pic.im
+                    core.paste(bit, (px, py, px + span * fs, py + span * fs), bit)
+                    continue
+                except Exception:                      # (a PIL that has it another way: its paste, from now on)
+                    RPS_QUICK[0], core = False, None
             img.paste(s, (ox + int(x + 0.5), oy + int(y + 0.5)) if fs == 1 else (ox + x, oy + y), s)
 
 

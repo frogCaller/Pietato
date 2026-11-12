@@ -1,6 +1,8 @@
 """Apps in the real main loop, in real time: opened with the d-pad from the home screen, Rock
-Paper Scissors runs at about SIM_FPS frames a second, mostly sending just its box; START's card stops
-the frames; leaving it stops them too; full screen; the Fish Tank keeps up full screen too, and so does the
+Paper Scissors runs at about SIM_FPS frames a second to begin with, mostly sending just its box, and a couple of
+seconds on as often as the machine has the time for (30 or 60: test_quick_frames.py has how that's worked out);
+START's card stops the frames; leaving it stops them too; full screen, the same; the Fish Tank keeps up full
+screen too at SIM_FPS, and so does the
 Mandelbrot Set while its own thread works out its pictures. Exploring it: buttons held down (no key
 repeat), and the web page's remote, a press at a time or held."""
 import os, sys, time, shutil, threading
@@ -164,13 +166,32 @@ check("A again: Rock Paper Scissors", m.tab_type() == "sim" and g.LIBRARY[m.tab]
 G = m.sims["rps"]
 press(e.BTN_SOUTH, 0.1)                        # (start now)
 t0 = time.monotonic()
-time.sleep(2.0)
+time.sleep(1.2)
 got = since(t0)
-fps = len(got) / 2.0
+fps = len(got) / 1.2
 small = sum(b == g.SIM_BOX for b in got)
-check(f"{fps:.1f} frames a second ({len(got)} in 2 s)", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
+check(f"{fps:.1f} frames a second to begin with, as ever ({len(got)} in 1.2 s)", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
 check(f"...{small} of them just the box, {got.count('whole')} whole", small >= 0.6 * len(got) and got.count("whole") <= 2)
-check(f"...it plays: {G.captures} captures by now", G.phase == "on" and G.clock > 1.5)
+check(f"...it plays: {G.captures} captures by now", G.phase == "on" and G.clock > 0.8)
+
+
+def settled(what):
+    """A couple of seconds on, it's drawn as often as this machine has the time for (a screen that costs nothing,
+    here): the rate it's settled on, and the frames in a second and a half since."""
+    time.sleep(1.4)
+    rate, t0 = m.sim_rate, time.monotonic()
+    time.sleep(1.5)
+    got = since(t0)
+    lo, hi = sorted((rate or 0, m.sim_rate or 0))       # (a busy machine may change its mind meanwhile)
+    fps = len(got) / 1.5
+    check(f"...a couple of seconds on, a frame taking {(m.sim_cost or 0) * 1000:.1f} ms: {what} {rate} times a second "
+          f"({fps:.1f})", lo >= 30 and hi in (30, 60) and 0.7 * lo <= fps <= hi + 3)
+    return got
+
+
+got = settled("drawn")
+check(f"...mostly just its box still ({sum(b == g.SIM_BOX for b in got)} of {len(got)})",
+      sum(b == g.SIM_BOX for b in got) >= 0.6 * len(got))
 press(e.BTN_START, 0.3)
 drawn()
 t0 = time.monotonic()
@@ -196,11 +217,13 @@ check("...A: and on it goes", m.tab_type() == "sim" and G.clock > clock)
 press(e.BTN_SELECT, 0.4)
 check("SELECT: full screen", m.sim_full() and (G.w, G.h) == (640, 480))
 t0 = time.monotonic()
-time.sleep(2.0)
+time.sleep(1.2)
 got = since(t0)
-fps = len(got) / 2.0
-check(f"...{fps:.1f} frames a second, each the whole screen", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2
+fps = len(got) / 1.2
+check(f"...{fps:.1f} frames a second to begin with, each the whole screen", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2
       and all(b == "whole" for b in got))
+got = settled("the whole screen")
+check("...each the whole screen still", got and all(b == "whole" for b in got))
 press(e.BTN_EAST, 0.3)
 for _ in range(2):
     press(e.BTN_DPAD_DOWN)

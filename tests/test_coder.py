@@ -329,10 +329,16 @@ real.f = F()
 real.setup(640, 480, 0, 0, 16, [(11, 5), (5, 6), (0, 5)], 1280)
 img = Image.new("RGB", (640, 480), (10, 20, 30))
 real.show(img)
-real.f.n = 0
+real.f.n, real.f.at = 0, []
 real.show_part(img, g.CO_DIRTY)
 x0, y0, x1, y1 = g.CO_DIRTY
-check(f"on a 640x480 screen a part is just its rows ({real.f.n} bytes)", real.f.n == (x1 - x0) * (y1 - y0) * 2 and real.last is img)
+check(f"on a 640x480 screen a part is just its rows: whole ones, as it's most of the way across, written in one go "
+      f"({real.f.n} bytes, at {real.f.at})", (x1 - x0) * 5 >= 640 * 3 and real.f.n == 640 * (y1 - y0) * 2
+      and real.f.at == [y0 * 1280] and real.last is img)
+real.f.n, real.f.at = 0, []
+real.show_part(img, (x0, y0, x0 + 200, y1))
+check(f"...a narrow part: just its own pixels, a row at a time ({real.f.n} bytes, {len(real.f.at)} rows)",
+      real.f.n == 200 * (y1 - y0) * 2 and real.f.at == [y * 1280 + x0 * 2 for y in range(y0, y1)])
 tv = g.Framebuffer.__new__(g.Framebuffer)
 tv.f = F()
 tv.setup(1920, 1080, 0, 0, 32, [(16, 8), (8, 8), (0, 8)], 1920 * 4)
