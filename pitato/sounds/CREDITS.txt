@@ -1,0 +1,17 @@
+The sounds in this folder are the Soundboard's starter pack (Apps > Soundboard). They were made for Pietato by the
+script beside them, make.py: each one is worked out from sums (sines, noise, envelopes), so nothing in them is anyone
+else's recording, sample or tune. Run make.py and the same files come out.
+
+To the extent possible under law, Pietato's authors have waived all copyright and related or neighbouring rights to
+these sounds: they are in the public domain under Creative Commons CC0 1.0 Universal.
+    https://creativecommons.org/publicdomain/zero/1.0/
+Use them for anything, changed or not, without asking and without saying where they came from.
+
+  Starter   Air horn, Rimshot, Sad horn, Ta-da, Applause, Crickets, Ding, Buzzer
+  Drums     Kick, Snare, Hi-hat, Open hat, Clap, Tom, Cowbell, Crash
+  Arcade    Laser, Pickup, Jump, Power up, Explosion, Boing, Siren, Game over
+
+Each is a 48 kHz, 16-bit, one-channel WAV file named for its sound.
+
+Sounds of your own go in the Soundboard folder of your home folder. Those are yours (or their makers'): nothing here
+says anything about them.

@@ -11,6 +11,7 @@ from ..theme import ACCENT, LINE, MUTED, ROW, TEXT
 from ..config import CACHE_DIR
 from ..util import clock, item, UA
 from ..plex import PLEX_CACHE
+from ..tv import is_hls
 from ..fine import made_fine, scale
 
 
@@ -352,6 +353,10 @@ class PlexScreen:
     def plex_start(self, it, start):
         session = uuid.uuid4().hex
         url = self.vod(it).stream_url(it["src"], start, session)
+        if is_hls(url):
+            url = self.ahead_for(url)                  # (with some of it in hand: ahead.py)
+        else:
+            self.ahead_stop()
         args = self.video_args() + PLEX_CACHE + ["-volume", str(self.volume)]
         self.kind, self.cur, self.meta, self.paused = "plex", it, {}, False
         self.plex_session, self.plex_base, self.plex_mode = session, start, None

@@ -761,6 +761,111 @@
   .content-h .src.bad { color: var(--bad); }
   @media (max-width: 760px) { .gl { grid-template-columns: minmax(0, 1fr); } .gl-board { max-width: 340px; width: 100%; justify-self: center; } }
 
+  /* ---- the Soundboard: a bank's buttons as keys, and the sounds to put on them ---- */
+  .sb { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); border-radius: 18px; }
+  .sb.files-over { outline: 2px dashed rgba(var(--accent-rgb), .75); outline-offset: 8px; }
+  .sb-banks { display: flex; gap: 8px; overflow-x: auto; padding: 3px; margin: -3px; scrollbar-width: thin; }
+  .sb-bank {
+    flex: none; height: 38px; padding: 0 15px; border: 0; border-radius: 11px; background: var(--surface-2);
+    font: 600 14.5px/1 var(--display); color: var(--body); white-space: nowrap; box-shadow: 0 0 0 1px var(--line-2) inset;
+  }
+  .sb-bank:hover { color: var(--text); background: var(--raised); }
+  .sb-bank[aria-selected="true"] { background: var(--raised); color: var(--text); box-shadow: 0 0 0 2px var(--ink) inset, 0 -5px 0 -2px var(--accent) inset; }
+  .sb-bank.plus { width: 38px; padding: 0; display: grid; place-items: center; color: var(--muted); }
+  .sb-bank.over, .sb-pad.over { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px rgba(var(--accent-rgb), .8); }
+  .sb-main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(290px, 2fr); gap: 14px; align-items: stretch; }
+  .sb-board, .sb-list { min-width: 0; border-radius: 18px; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line) inset; }
+  .sb-board { padding: 12px 16px 12px; }
+  .sb-list { display: flex; flex-direction: column; min-height: 0; padding: 12px 8px 8px; }   /* (as tall as the buttons' */
+  .sb-list .sb-rows { flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; }      /*  panel: more scroll in it) */
+  .sb-board-h, .sb-list-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 38px; margin-bottom: 12px; }
+  .sb-list-h { padding: 0 6px 0 8px; margin-bottom: 8px; }
+  .sb-board-h h4, .sb-list-h h4, .sb-pack-h h4 { margin: 0; min-width: 0; font: 600 18px/1.2 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-pack-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 8px 8px; }
+  .sb-pack-h .linkbtn { font-size: 13.5px; }
+  .sb-pack .sb-rows { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 2px 14px; }
+  .sb-tools { display: flex; align-items: center; gap: 14px; flex: none; }
+  .sb-tools .linkbtn, .sb-acts .linkbtn { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .sb-tools .linkbtn:hover, .sb-acts .linkbtn:hover { color: var(--text); text-decoration: none; }
+  .sb-tools .linkbtn.armed, .sb-acts .linkbtn.armed { color: var(--bad); font-weight: 600; }
+  .sb-move { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); }
+  .sb-move:hover { background: var(--press); color: var(--text); }
+  .sb-move:disabled { opacity: .3; cursor: default; background: none; }
+  .sb-move svg { width: 9px; height: 9px; transform: rotate(90deg); }
+  .sb-move.back svg { transform: rotate(-90deg); }
+  .sb-keys { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  .sb-side { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+  .sb-pad {
+    position: relative; grid-column: span 2; min-height: 78px; padding: 9px 10px 10px; border-radius: 13px;
+    display: grid; align-content: space-between; justify-items: start; gap: 8px; min-width: 0;
+    background: var(--key); box-shadow: var(--key-edge); cursor: pointer; user-select: none; -webkit-user-select: none;
+    transition: transform .05s, box-shadow .05s;
+  }
+  .sb-pad[data-pad="up"], .sb-pad[data-pad="down"], .sb-pad[data-pad="x"], .sb-pad[data-pad="b"] { grid-column: 2 / span 2; }
+  .sb-pad:hover { filter: brightness(1.05); }
+  .sb-pad:active, .sb-pad.playing { transform: translateY(2px); box-shadow: var(--key-down); }
+  .sb-pad.playing { background: var(--c); color: #10181c; filter: none; }
+  .sb-pad.free { background: none; box-shadow: none; outline: 1.5px dashed var(--line-3); outline-offset: -1.5px; cursor: default; transform: none; filter: none; }
+  .sb.picking .sb-pad, .sb.dragging .sb-pad { cursor: copy; }
+  .sb.picking .sb-pad.free, .sb.dragging .sb-pad.free { outline-color: rgba(var(--accent-rgb), .8); }
+  .sb-pad.over { transform: none; }
+  [data-pad="up"] { --c: #60aae4; } [data-pad="left"] { --c: #40c4b4; } [data-pad="right"] { --c: #6ec878; } [data-pad="down"] { --c: #a082e6; }
+  [data-pad="x"] { --c: #e878aa; } [data-pad="y"] { --c: #e6be50; } [data-pad="a"] { --c: #ec6464; } [data-pad="b"] { --c: #e4e8ee; }
+  .sb-cap {
+    flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--c);
+    color: #10181c; font: 700 12.5px/1 var(--display); box-shadow: 0 0 0 2px var(--ink);
+  }
+  .sb-cap svg { width: 10px; height: 10px; }
+  .sb-cap[data-pad="down"] svg { transform: rotate(180deg); }
+  .sb-cap[data-pad="left"] svg { transform: rotate(-90deg); }
+  .sb-cap[data-pad="right"] svg { transform: rotate(90deg); }
+  .sb-cap.sm { width: 17px; height: 17px; font-size: 10px; box-shadow: 0 0 0 1.5px var(--ink); }
+  .sb-cap.sm svg { width: 7px; height: 7px; }
+  .sb-pad.playing .sb-cap { background: #10181c; color: var(--c); }
+  .sb-pad.free .sb-cap { opacity: .4; }
+  .sb-name { max-width: 100%; font: 600 14.5px/1.25 var(--display); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .sb-pad.free .sb-name { color: var(--faint); font-weight: 500; }
+  .sb-off { position: absolute; right: 5px; top: 5px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; opacity: 0; }
+  .sb-pad:hover .sb-off, .sb-pad:focus-within .sb-off, .sb-off:focus-visible { opacity: 1; }
+  .sb-off:hover { background: var(--press); color: var(--text); }
+  .sb-pad.playing .sb-off { color: #10181c; }
+  @media (hover: none) { .sb-off { opacity: .75; } }
+  .sb-hint { margin: 14px 0 0; min-height: 20px; font-size: 13px; line-height: 20px; color: var(--muted); }
+  .sb-do, .sb-rec { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sb-do .btn2 { display: inline-flex; align-items: center; }
+  .sb-dot { flex: none; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--bad); }
+  .sb-meter { flex: none; width: 76px; height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+  .sb-meter i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--ok); }
+  .sb-time { min-width: 2.4em; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--body); }
+  .sb-rec .linkbtn { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .sb-rows { display: grid; gap: 2px; }
+  .sb-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 48px; padding: 6px 10px 6px 8px; border-radius: 12px; cursor: grab; }
+  .sb-row:hover { background: var(--hover); }
+  .sb-row.picked { background: var(--raised); box-shadow: 4px 0 0 var(--accent) inset; }
+  .sb-play { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--key); color: var(--text); box-shadow: var(--key-line); }
+  .sb-play:hover { filter: brightness(1.08); }
+  .sb-row.playing .sb-play { background: var(--accent); color: var(--on-accent); }
+  .sb-mid { min-width: 0; }
+  .sb-t { font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-where { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin-top: 2px; padding: 0; border: 0; background: none; font-size: 12.5px; color: var(--muted); }
+  .sb-where > span:last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button.sb-where:hover { color: var(--text); }
+  .sb-where.none { color: var(--faint); }
+  .sb-acts { display: flex; gap: 12px; }
+  .sb-in { flex: 1; height: 34px; width: 100%; font-size: 14px; }
+  .sb-none { margin: 0; padding: 10px 8px; font-size: 13.5px; color: var(--muted); }
+  .sb-list .secure-note { margin: 0 8px 10px; }
+  @media (max-width: 900px) {
+    .sb-main { grid-template-columns: minmax(0, 1fr); }
+    .sb-list .sb-rows { flex: none; overflow: visible; }
+  }
+  @media (max-width: 560px) {
+    .sb-keys { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .sb-board { padding: 10px 12px; }
+    .sb-pad { min-height: 66px; }
+    .sb-tools { gap: 10px; }
+  }
+
   /* ---- files ---- */
   .files { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 36px; align-items: start; }
   .add { position: sticky; top: calc(var(--top) + 28px); max-height: calc(100vh - var(--top) - 56px); display: flex; flex-direction: column; }
@@ -2838,9 +2943,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) btKi
 const TABS = [                  // (the Pi's apps are on its screen: tapped there)
   ["cartoons", "Cartoons"], ["films", "Films"], ["news", "News"],
   ["sports", "Sports"], ["radio", "Radio"], ["streams", "Your streams"], ["cameras", "Cameras"], ["friend", "Bot"],
-  ["draw", "Draw"], ["fish", "Fish Tank"], ["glow", "LED backlight"],
+  ["draw", "Draw"], ["fish", "Fish Tank"], ["glow", "LED backlight"], ["sound", "Soundboard"],
 ];
-const OWN = new Set(["cameras", "friend", "draw", "fish", "glow"]);   // tabs that draw a page of their own
+const OWN = new Set(["cameras", "friend", "draw", "fish", "glow", "sound"]);   // tabs that draw a page of their own
 const LICON = {                 // each one's picture, beside its name
   cartoons: I('<rect x="3" y="5" width="18" height="13" rx="3.5"/><path d="M9.2 10v2.4M14.8 10v2.4M10 14.6q2 1.5 4 0M8.5 21h7"/>', 20),
   films: I('<path d="M4 9.5h16V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="m4 9.5-.8-3.2 15.5-3.6.8 3.2zM8 5.1l2.4 3M12.9 4l2.4 3"/>', 20),
@@ -2853,6 +2958,7 @@ const LICON = {                 // each one's picture, beside its name
   draw: I('<path d="m4 20 1.2-4.6L16.4 4.2a1.9 1.9 0 0 1 2.7 0l.7.7a1.9 1.9 0 0 1 0 2.7L8.6 18.8z"/><path d="m14.5 6.1 3.4 3.4"/>', 20),
   fish: I('<path d="M3 12c2.6-4 6-6 9.5-6 3 0 5.6 1.6 7.5 4.2L22 8v8l-2-2.2C18.1 16.4 15.5 18 12.5 18 9 18 5.6 16 3 12z"/><circle cx="8.2" cy="11" r=".9" fill="currentColor"/>', 20),
   glow: I('<rect x="5" y="8" width="14" height="9" rx="2"/><path d="M9.5 20.5h5M12 2.5v2.2M4.3 4.8l1.5 1.5M19.7 4.8l-1.5 1.5M2 11.5h1.5M20.5 11.5H22"/>', 20),
+  sound: I('<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>', 20),
 };
 const libHas = (key) => (key !== "streams" || L.cat.streams.length) && (key !== "glow" || !!L.cat.glow);
 const WHERE = { cartoons: "Cartoons", films: "Free Movies", news: "News", sports: "Sports", radio: "Radio", streams: "Streams" };
@@ -2958,6 +3064,7 @@ function drawLibrary() {
   if (tab === "draw") return drawDraw();
   if (tab === "fish") return drawFish();
   if (tab === "glow") return drawGlow();
+  if (tab === "sound") return drawSound();
   drawRows();
 }
 
@@ -5130,7 +5237,7 @@ function glLamps(d) {
     GL.lampRows = {};
     GL.lamps.textContent = "";
     if (!boards.length) {
-      noteInto(GL.lamps, "No ESP32 boards on now", "One with the Pietato sketch on it shows up here by itself.");
+      noteInto(GL.lamps, "No ESP32 boards on now", "One with Pietato's sketch on it shows up here by itself.");
       return;
     }
     const h = el("header");
@@ -5217,6 +5324,539 @@ async function glLampSet(b, colour) {          // (colour null: just lit a momen
     toast(e.message);
     return false;
   }
+}
+
+// ---- the Soundboard: its banks' buttons, and the sounds on them (Apps > Soundboard on the Pi) ---------------------
+// A bank's eight buttons, laid out as on a controller: one pressed plays its sound here. A sound goes on a button by
+// being dragged there (onto a bank: its first free button), or picked in the list and then the button pressed. Sounds
+// are added from files (the button, or dropped anywhere on the page) or recorded with this browser's microphone, and
+// renamed or deleted in the list. What's changed here, the Pi's Soundboard has at once.
+const SB = { gen: 0, data: null, sig: "", byId: new Map(), bank: store.get("sbbank", 0), picked: null, playing: new Map(),
+  drag: null, edit: null, rec: null, busy: "", insecure: false, root: null, sub: null, hint: null, tabs: null,
+  board: null, list: null, pack: null, pick: null };
+const SB_SAY = { up: "Up", left: "Left", right: "Right", down: "Down", x: "X", y: "Y", a: "A", b: "B" };
+const SB_SIDES = [["up", "left", "right", "down"], ["x", "y", "a", "b"]];   // (the d-pad's four, then the letters')
+const SB_KIND = /\.(wav|mp3|ogg)$/i;
+const SB_ARROW = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.3H1z" fill="currentColor"/></svg>';
+const SB_REC_WORKLET = `class PietatoRec extends AudioWorkletProcessor {
+  constructor() { super(); this.out = new Float32Array(2048); this.k = 0; }
+  process(inputs) {
+    const x = inputs[0] && inputs[0][0];
+    if (!x) return true;
+    for (let i = 0; i < x.length; i++) {
+      this.out[this.k++] = x[i];
+      if (this.k === this.out.length) { this.port.postMessage(this.out.buffer, [this.out.buffer]); this.out = new Float32Array(2048); this.k = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("pietato-rec", PietatoRec);`;
+const sbOpen = () => S.view === "library" && L.tab === "sound" && !!SB.root && SB.root.isConnected
+  && !document.body.classList.contains("lib-home");
+const sbBusy = () => !!(SB.drag || SB.edit || SB.rec || SB.busy);   // (not drawn again under you meanwhile)
+function sbFilesGone() { if (SB.root) SB.root.classList.remove("files-over"); }
+
+function drawSound() {
+  const box = $("#content"), token = ++libToken;
+  box.textContent = "";
+  const h = head("Soundboard", "");
+  SB.sub = h.querySelector(".src");
+  box.append(h);
+  SB.root = el("div", "sb");
+  SB.tabs = el("div", "sb-banks");
+  SB.tabs.setAttribute("role", "tablist");
+  SB.tabs.setAttribute("aria-label", "Banks");
+  SB.board = el("section", "sb-board");
+  SB.list = el("section", "sb-list");                      // (your sounds, beside the buttons; the starter pack's, under)
+  SB.pack = el("section", "sb-pack");
+  SB.pick = el("input");                                   // (Add sounds: the browser's own way to choose them)
+  SB.pick.type = "file"; SB.pick.multiple = true; SB.pick.hidden = true;
+  SB.pick.accept = ".wav,.mp3,.ogg,audio/wav,audio/mpeg,audio/ogg";
+  SB.pick.onchange = () => { const files = Array.from(SB.pick.files || []); SB.pick.value = ""; sbAdd(files); };
+  const main = el("div", "sb-main");
+  main.append(SB.board, SB.list);
+  SB.root.append(SB.tabs, main, SB.pack, SB.pick);
+  box.append(SB.root);
+  SB.edit = null; SB.drag = null;
+  if (SB.data) sbDraw();
+  else noteInto(SB.board, "Loading", "");
+  sbStart(token);
+}
+function sbStart(token) {        // (again when the page is back from being hidden: the old one stops)
+  const gen = ++SB.gen;
+  sbPoll(token, gen);
+}
+function sbLive(token, gen) {
+  return gen === SB.gen && token === libToken && L.tab === "sound" && !!SB.root && SB.root.isConnected && !document.hidden;
+}
+async function sbPoll(token, gen) {   // (what's changed on the Pi, or in the folder: here in a moment)
+  while (sbLive(token, gen)) {
+    if (!sbBusy()) {
+      try {
+        const d = await api("/api/soundboard");
+        if (!sbLive(token, gen)) return;
+        if (!sbBusy()) sbTake(d);
+      } catch (e) {
+        if (SB.sub) { SB.sub.textContent = e.message; SB.sub.classList.add("bad"); }
+        if (!SB.data && SB.board) { SB.board.textContent = ""; noteInto(SB.board, "Can't get the Soundboard", e.message); }
+      }
+    }
+    await sleep(3000);
+  }
+}
+function sbTake(d, always) {
+  SB.data = d;
+  const sig = JSON.stringify([d.banks, d.sounds]);
+  if (sig === SB.sig && !always) return;
+  SB.sig = sig;
+  sbDraw();
+}
+async function sbDo(body) {      // a change, made on the Pi: what comes back is how things are now
+  try {
+    const d = await post("/api/soundboard", body);
+    sbTake(d, true);
+    return d;
+  } catch (e) { toast(e.message); return null; }
+}
+function sbBank(i) {
+  SB.bank = i; store.set("sbbank", i);
+  if (SB.drag) sbDrawBoard();                              // (something's being dragged: what's dragged stays put)
+  else { SB.edit = null; sbDraw(); }
+}
+function sbCap(pad, small) {     // a button's own mark: an arrow or a letter, in its colour
+  const c = el("span", "sb-cap" + (small ? " sm" : ""));
+  c.dataset.pad = pad;
+  if (pad.length > 1) c.innerHTML = SB_ARROW; else c.textContent = pad.toUpperCase();
+  return c;
+}
+function armedLink(label, key, go) {   // (as armedButton: pressed once it asks, pressed again it's done)
+  const on = () => SET.armed[key] > Date.now();
+  const b = button("linkbtn", label);
+  const show = () => { const a = on(); b.textContent = a ? "Sure?" : label; b.classList.toggle("armed", a); };
+  show();
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (on()) { delete SET.armed[key]; go(b); return; }
+    SET.armed[key] = Date.now() + 4000;
+    show();
+    setTimeout(() => { if (b.isConnected) show(); }, 4060);
+  };
+  return b;
+}
+function sbInput(value, label, save) {   // a name, changed where it is: Enter keeps it, Esc doesn't
+  const inp = el("input", "in sb-in");
+  inp.value = value; inp.maxLength = 80; inp.autocomplete = "off"; inp.spellcheck = false;
+  inp.setAttribute("aria-label", label);
+  let done = false;
+  const end = async (keep) => {
+    if (done) return;
+    done = true;
+    const name = inp.value.trim();
+    SB.edit = null;
+    if (keep && name && name !== value) await save(name);
+    sbDraw();
+  };
+  inp.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); end(true); }
+    else if (e.key === "Escape") { e.preventDefault(); end(false); }
+  };
+  inp.onblur = () => end(true);
+  inp.onclick = (e) => e.stopPropagation();
+  setTimeout(() => { if (inp.isConnected) { inp.focus(); inp.select(); } }, 0);
+  return inp;
+}
+
+function sbDraw() {
+  const d = SB.data;
+  if (!d || !SB.root) return;
+  SB.byId = new Map(d.sounds.map((s) => [s.id, s]));
+  SB.bank = Math.max(0, Math.min(Number(SB.bank) || 0, d.banks.length - 1));
+  if (SB.picked && !SB.byId.has(SB.picked)) SB.picked = null;
+  const mine = d.sounds.filter((s) => !s.starter).length;
+  if (SB.sub) {
+    SB.sub.classList.remove("bad");
+    SB.sub.textContent = mine ? mine + (mine === 1 ? " sound" : " sounds") + " of yours, in " + d.folder : "Yours go in " + d.folder;
+  }
+  sbDrawBoard();
+  sbDrawList();
+}
+function sbDrawBoard() {
+  const d = SB.data, bank = d.banks[SB.bank];
+  if (!bank) return;
+  SB.tabs.textContent = "";
+  d.banks.forEach((b, i) => {
+    const t = button("sb-bank", b.name);
+    t.setAttribute("role", "tab");
+    t.setAttribute("aria-selected", String(i === SB.bank));
+    t.onclick = () => sbBank(i);
+    sbDropOn(t, (what) => sbOntoBank(what, i), () => { if (SB.bank !== i) sbBank(i); });
+    SB.tabs.append(t);
+  });
+  if (d.banks.length < d.banks_most) {
+    const add = button("sb-bank plus");
+    add.innerHTML = ICONS.plus;
+    add.title = "Add a bank"; add.setAttribute("aria-label", "Add a bank");
+    add.onclick = async () => {
+      const r = await sbDo({ do: "bank_add", name: "" });
+      if (r) { SB.bank = r.bank; store.set("sbbank", SB.bank); SB.edit = { bank: r.bank }; sbDraw(); }
+    };
+    SB.tabs.append(add);
+  }
+  const box = SB.board;
+  box.textContent = "";
+  const h = el("div", "sb-board-h");
+  if (SB.edit && SB.edit.bank === SB.bank) {
+    h.append(sbInput(bank.name, "The bank's name", (name) => sbDo({ do: "bank_rename", bank: SB.bank, name })));
+  } else {
+    h.append(el("h4", "", bank.name));
+    const tools = el("div", "sb-tools");
+    const rename = button("linkbtn", "Rename");
+    rename.onclick = () => { SB.edit = { bank: SB.bank }; sbDraw(); };
+    tools.append(rename);
+    if (d.banks.length > 1) {
+      for (const way of [-1, 1]) {
+        const m = button("sb-move" + (way < 0 ? " back" : ""));
+        m.innerHTML = SB_ARROW;
+        m.title = way < 0 ? "Move this bank earlier" : "Move this bank later";
+        m.setAttribute("aria-label", m.title);
+        m.disabled = SB.bank + way < 0 || SB.bank + way >= d.banks.length;
+        m.onclick = async () => { const r = await sbDo({ do: "bank_move", bank: SB.bank, to: SB.bank + way }); if (r) sbBank(r.bank); };
+        tools.append(m);
+      }
+    }
+    tools.append(armedLink("Delete", "sb:bank:" + bank.name, async () => { if (await sbDo({ do: "bank_delete", bank: SB.bank })) toast("Its sounds are still in the list"); }));
+    h.append(tools);
+  }
+  const keys = el("div", "sb-keys");
+  for (const side of SB_SIDES) {
+    const g = el("div", "sb-side");
+    for (const pad of side) g.append(sbPad(bank, pad));
+    keys.append(g);
+  }
+  SB.hint = el("p", "sb-hint");
+  SB.hint.setAttribute("aria-live", "polite");
+  box.append(h, keys, SB.hint);
+  sbMarks();
+}
+function sbPad(bank, pad) {      // one of the bank's buttons: a key, with its sound's name on it
+  const id = bank.pads[pad] || null, s = id ? SB.byId.get(id) : null;
+  const k = el("div", "sb-pad" + (id ? "" : " free"));
+  k.dataset.pad = pad;
+  if (id) k.dataset.id = id;
+  k.setAttribute("role", "button");
+  k.tabIndex = 0;
+  k.setAttribute("aria-label", SB_SAY[pad] + ": " + (s ? s.name : "nothing on it"));
+  k.append(sbCap(pad), el("span", "sb-name", s ? s.name : id ? id : "Empty"));
+  if (id) {
+    const off = button("sb-off");
+    off.innerHTML = ICONS.x;
+    off.title = "Take it off this button";
+    off.setAttribute("aria-label", "Take " + (s ? s.name : "it") + " off " + SB_SAY[pad]);
+    off.onclick = (e) => { e.stopPropagation(); sbDo({ do: "lift", bank: SB.bank, pad }); };
+    k.append(off);
+    k.draggable = true;
+    k.ondragstart = (e) => sbDragStart(e, { id, from: pad });
+    k.ondragend = sbDragEnd;
+  }
+  const go = () => { if (SB.picked) sbPut(SB.picked, pad, false); else if (id) sbPlay(id); };
+  k.onclick = go;
+  k.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === k) { e.preventDefault(); go(); } };
+  sbDropOn(k, (what) => (what.files ? sbAdd(what.files, { bank: SB.bank, pad }) : sbPut(what.id, pad, !!what.from)));
+  return k;
+}
+function sbDrawList() {
+  const d = SB.data, box = SB.list;
+  box.textContent = "";
+  const h = el("div", "sb-list-h");
+  h.append(el("h4", "", "Your sounds"));
+  const acts = el("div", "sb-do");
+  if (SB.rec) {                                             // recording: how long, how loud, and Stop
+    const wrap = el("div", "sb-rec"), meter = el("span", "sb-meter"), stop = button("btn2");
+    SB.rec.time = el("span", "sb-time", "0:00");
+    SB.rec.bar = el("i");
+    meter.append(SB.rec.bar);
+    stop.append(el("i", "sb-dot"), "Stop");
+    stop.onclick = () => sbRecStop(true);
+    const no = button("linkbtn", "Cancel");
+    no.onclick = () => sbRecStop(false);
+    wrap.append(SB.rec.time, meter, stop, no);
+    acts.append(wrap);
+  } else {
+    const add = button("btn2", "Add sounds"), rec = button("btn2");
+    add.onclick = () => SB.pick.click();
+    rec.append(el("i", "sb-dot"), "Record");
+    rec.onclick = sbRecStart;
+    add.disabled = rec.disabled = !!SB.busy;
+    acts.append(add, rec);
+  }
+  h.append(acts);
+  box.append(h);
+  if (SB.insecure) {                                        // (this page isn't the secure one: there, it's allowed)
+    const p = el("p", "secure-note", "A browser only lets a page use the microphone over a secure connection. ");
+    const a = el("a", "", "Open the secure page");
+    a.href = "https://" + location.hostname + ":5443/" + location.hash;
+    p.append(a, ". The first time, the browser warns about it, as the Pi made its own certificate: go on to the page from there.");
+    box.append(p);
+  }
+  const mine = d.sounds.filter((s) => !s.starter), pack = d.sounds.filter((s) => s.starter);
+  const rows = el("div", "sb-rows");
+  for (const s of mine) rows.append(sbRow(s));
+  if (!mine.length) {
+    rows.append(el("p", "sb-none", TOUCH ? "None of your own yet. Add some, or record one."
+      : "None of your own yet. Add some, record one, or drop wav, mp3 or ogg files anywhere on this page."));
+  }
+  box.append(rows);
+  SB.pack.textContent = "";
+  if (pack.length) {
+    const ph = el("div", "sb-pack-h");
+    ph.append(el("h4", "", "Starter pack"));
+    if (d.starters_off) {
+      const back = button("linkbtn", d.starters_off === 1 ? "Put the one on no button back" : "Put the " + d.starters_off + " on no button back");
+      back.onclick = async () => { const r = await sbDo({ do: "starter" }); if (r) sbBank(r.bank); };
+      ph.append(back);
+    }
+    const more = el("div", "sb-rows");
+    for (const s of pack) more.append(sbRow(s));
+    SB.pack.append(ph, more);
+  }
+  sbMarks();
+}
+function sbRow(s) {              // a sound in the list: heard, picked up, dragged, renamed, deleted
+  const r = el("div", "sb-row");
+  r.dataset.id = s.id;
+  r.tabIndex = 0;
+  const editing = SB.edit && SB.edit.id === s.id;
+  const play = button("sb-play");
+  play.innerHTML = ICONS.play;
+  play.setAttribute("aria-label", "Hear " + s.name);
+  play.onclick = (e) => { e.stopPropagation(); if (SB.playing.has(s.id)) sbHush(s.id); else sbPlay(s.id); };
+  const mid = el("div", "sb-mid"), acts = el("div", "sb-acts");
+  if (editing) mid.append(sbInput(s.name, "The sound's name", (name) => sbDo({ do: "rename", id: s.id, name })));
+  else {
+    mid.append(el("div", "sb-t", s.name));
+    if (s.at && sbBankAt(s.at[0])) {
+      const w = button("sb-where");
+      w.append(sbCap(s.at[1], true), el("span", "", sbBankAt(s.at[0]).name));
+      w.title = "Show the button it's on";
+      w.onclick = (e) => { e.stopPropagation(); sbBank(s.at[0]); };
+      mid.append(w);
+    } else mid.append(el("span", "sb-where none", "On no button"));
+    if (!s.starter) {
+      const rename = button("linkbtn", "Rename");
+      rename.onclick = (e) => { e.stopPropagation(); SB.edit = { id: s.id }; sbDraw(); };
+      acts.append(rename, armedLink("Delete", "sb:sound:" + s.id, () => { sbHush(s.id); sbDo({ do: "delete", id: s.id }); }));
+    }
+    r.draggable = true;
+    r.ondragstart = (e) => sbDragStart(e, { id: s.id, from: null });
+    r.ondragend = sbDragEnd;
+    const pick = () => { SB.picked = SB.picked === s.id ? null : s.id; sbMarks(); };
+    r.onclick = (e) => { if (!e.target.closest("button, input, a")) pick(); };
+    r.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === r) { e.preventDefault(); pick(); } };
+  }
+  r.append(play, mid, acts);
+  return r;
+}
+const sbBankAt = (i) => (SB.data ? SB.data.banks[i] : null);
+function sbMarks() {             // what's picked and what's playing, shown; and the line under the buttons
+  const root = SB.root;
+  if (!root) return;
+  root.classList.toggle("picking", !!SB.picked);
+  for (const r of root.querySelectorAll(".sb-row")) {
+    const on = SB.playing.has(r.dataset.id);
+    r.classList.toggle("picked", r.dataset.id === SB.picked);
+    if (r.classList.contains("playing") !== on) {
+      r.classList.toggle("playing", on);
+      const p = r.querySelector(".sb-play");
+      if (p) p.innerHTML = on ? ICONS.stop : ICONS.play;
+    }
+  }
+  for (const k of root.querySelectorAll(".sb-pad")) k.classList.toggle("playing", !!k.dataset.id && SB.playing.has(k.dataset.id));
+  if (!SB.hint) return;
+  const s = SB.picked ? SB.byId.get(SB.picked) : null;
+  SB.hint.textContent = SB.busy ? SB.busy
+    : s ? (TOUCH ? "Tap" : "Click") + " a button to put " + s.name + " on it."
+    : TOUCH ? "Tap a button to hear it. To put a sound on one, tap the sound, then the button."
+    : "Click a button to hear it. Drag a sound onto a button, or onto a bank.";
+}
+
+// a sound heard here, in the browser (again from its start, pressed again, as on the Pi)
+function sbPlay(id) {
+  sbHush(id);
+  const a = new Audio("/api/soundboard/sound?" + qs({ id }));
+  SB.playing.set(id, a);
+  const done = () => { if (SB.playing.get(id) === a) { SB.playing.delete(id); sbMarks(); } };
+  a.onended = done;
+  a.onerror = () => { if (SB.playing.get(id) === a) toast("This browser can't play that one"); done(); };
+  a.play().catch(() => {});
+  sbMarks();
+}
+function sbHush(id) {
+  const a = SB.playing.get(id);
+  if (!a) return;
+  SB.playing.delete(id);
+  a.onended = a.onerror = null;
+  a.pause();
+  sbMarks();
+}
+
+// dragging: a sound from the list, or from a button, onto a button or a bank; files from the computer, the same
+function sbDragStart(e, what) {
+  SB.drag = what;
+  const s = SB.byId.get(what.id);
+  try { e.dataTransfer.setData("text/plain", s ? s.name : ""); e.dataTransfer.effectAllowed = "move"; } catch (err) {}
+  SB.root.classList.add("dragging");
+}
+function sbDragEnd() {
+  SB.drag = null;
+  if (!SB.root) return;
+  SB.root.classList.remove("dragging");
+  for (const x of SB.root.querySelectorAll(".over")) x.classList.remove("over");
+}
+document.addEventListener("dragend", () => { if (SB.drag) sbDragEnd(); }, true);
+window.addEventListener("pointermove", (e) => { if (SB.drag && !e.buttons) sbDragEnd(); }, true);   // (a drag whose end
+function sbDropOn(node, drop, linger) {                                                              //  never came)
+  let n = 0, timer = 0;
+  const mine = (e) => !!SB.drag || hasFiles(e);
+  const out = () => { n = 0; node.classList.remove("over"); clearTimeout(timer); };
+  node.addEventListener("dragenter", (e) => {
+    if (!mine(e)) return;
+    e.preventDefault();
+    if (++n === 1) { node.classList.add("over"); if (linger) timer = setTimeout(linger, 700); }
+  });
+  node.addEventListener("dragover", (e) => {
+    if (!mine(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = SB.drag ? "move" : "copy";
+  });
+  node.addEventListener("dragleave", (e) => { if (mine(e) && --n <= 0) out(); });
+  node.addEventListener("drop", (e) => {
+    if (!mine(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    out();
+    if (SB.drag) { const what = SB.drag; sbDragEnd(); drop(what); return; }
+    depth = 0; sbFilesGone();
+    drop({ files: Array.from(e.dataTransfer.files || []) });
+  });
+}
+async function sbPut(id, pad, swap) {   // on a button (from another button: the two change places)
+  SB.picked = null;
+  await sbDo({ do: "put", id, bank: SB.bank, pad, swap: !!swap });
+}
+async function sbOntoBank(what, i) {    // onto a bank: its first free button
+  if (what.files) return sbAdd(what.files, null, i);
+  if (await sbDo({ do: "bank_put", id: what.id, bank: i })) sbBank(i);
+}
+
+// sounds added from files: each sent whole, then on a button (the one it was dropped on, or My sounds' first free one)
+async function sbAdd(files, onto, bank) {
+  const good = files.filter((f) => SB_KIND.test(f.name));
+  if (!good.length) { if (files.length) toast("A sound's a wav, mp3 or ogg file"); return; }
+  if (SB.busy) return toast("One at a time: it's still adding the last ones");
+  let last = null, k = 0, bad = files.length - good.length;
+  for (const f of good) {
+    k++;
+    SB.busy = good.length > 1 ? "Adding " + k + " of " + good.length + "…" : "Adding " + f.name + "…";
+    if (k === 1) sbDrawList();
+    sbMarks();
+    const q = Object.assign({ name: f.name }, onto && k === 1 ? onto : {});
+    try {
+      let d = await api("/api/soundboard/sound?" + qs(q), { method: "PUT", body: f });
+      if (bank !== undefined && bank !== null) d = Object.assign(await post("/api/soundboard", { do: "bank_put", id: d.id, bank }), { id: d.id });
+      last = d;
+    } catch (e) { toast(f.name + ": " + e.message); bad = -1; }
+  }
+  SB.busy = "";
+  const left = bad > 0 ? (bad === 1 ? "One file wasn't a wav, mp3 or ogg" : bad + " files weren't wav, mp3 or ogg") : "";
+  if (last) sbNew(last, left); else { sbDraw(); if (left) toast(left); }
+}
+function sbNew(d, also) {        // a sound that's just arrived: where it is shown, and picked up to put elsewhere
+  const s = d.sounds.find((x) => x.id === d.id);
+  if (s && s.at) { SB.bank = s.at[0]; store.set("sbbank", SB.bank); }
+  SB.picked = TOUCH && s ? s.id : null;
+  sbTake(d, true);
+  const where = s && s.at && d.banks[s.at[0]] ? s.name + " is on " + SB_SAY[s.at[1]] + " in " + d.banks[s.at[0]].name : "";
+  if (where || also) toast([where, also].filter(Boolean).join(". "));
+}
+
+// a sound recorded here: this browser's microphone, as it comes (one channel), kept on the Pi with its silence trimmed
+async function sbRecStart() {
+  if (SB.rec || SB.busy) return;
+  if (!window.isSecureContext || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    SB.insecure = true;
+    return sbDrawList();
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ctx, stream;
+  try { ctx = new AC({ sampleRate: 48000 }); } catch (e) { ctx = new AC(); }   // (the Pi's own rate, where it can be)
+  ctx.resume().catch(() => {});
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+  } catch (e) {
+    ctx.close().catch(() => {});
+    return toast("The microphone wasn't allowed. Your browser's settings for this page can allow it");
+  }
+  try {
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([SB_REC_WORKLET], { type: "text/javascript" })));
+  } catch (e) {
+    for (const t of stream.getTracks()) t.stop();
+    ctx.close().catch(() => {});
+    return toast("This browser can't record here");
+  }
+  for (const id of Array.from(SB.playing.keys())) sbHush(id);
+  const node = new AudioWorkletNode(ctx, "pietato-rec");
+  const rec = SB.rec = { ctx, stream, parts: [], n: 0, most: ((SB.data && SB.data.rec_secs) || 20) * ctx.sampleRate, time: null, bar: null };
+  node.port.onmessage = (e) => {
+    if (SB.rec !== rec) return;
+    const x = new Float32Array(e.data);
+    rec.parts.push(x);
+    rec.n += x.length;
+    let peak = 0;
+    for (let i = 0; i < x.length; i++) { const v = x[i] < 0 ? -x[i] : x[i]; if (v > peak) peak = v; }
+    if (rec.bar) rec.bar.style.width = Math.round(Math.sqrt(Math.min(1, peak)) * 100) + "%";
+    if (rec.time) rec.time.textContent = fmtClock(rec.n / ctx.sampleRate);
+    if (rec.n >= rec.most) sbRecStop(true);                // (as long as a sound can be)
+  };
+  const hush = ctx.createGain();                           // (heard, not played: on to the speaker silent, so the
+  hush.gain.value = 0;                                     //  browser keeps it going)
+  ctx.createMediaStreamSource(stream).connect(node).connect(hush).connect(ctx.destination);
+  SB.insecure = false;
+  sbDrawList();
+}
+async function sbRecStop(keep) {
+  const rec = SB.rec;
+  if (!rec) return;
+  SB.rec = null;
+  for (const t of rec.stream.getTracks()) t.stop();
+  const rate = rec.ctx.sampleRate;
+  rec.ctx.close().catch(() => {});
+  if (!keep || !rec.n) return sbDrawList();
+  SB.busy = "Keeping your recording…";
+  sbDrawList();
+  try {
+    const d = await api("/api/soundboard/sound?rec=1", { method: "PUT", body: sbWav(rec.parts, Math.min(rec.n, rec.most), rate), headers: { "Content-Type": "audio/wav" } });
+    SB.busy = "";
+    sbNew(d);
+  } catch (e) {
+    SB.busy = "";
+    toast(e.message);
+    sbDraw();
+  }
+}
+function sbWav(parts, n, rate) { // what was recorded, as a WAV file: one 16-bit channel
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, n * 2, true);
+  let o = 44, left = n;
+  for (const p of parts) {
+    for (let i = 0; i < p.length && left > 0; i++, left--, o += 2) {
+      const x = p[i] < -1 ? -1 : p[i] > 1 ? 1 : p[i];
+      v.setInt16(o, x < 0 ? x * 32768 : x * 32767, true);
+    }
+  }
+  return buf;
 }
 
 // ---- settings: everything the Pi's Settings has, and each app's own (passwords and tokens never come here) ---------
@@ -6327,19 +6967,22 @@ function dragState(where) {
 window.addEventListener("dragenter", (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault(); depth++;
+  if (sbOpen()) { SB.root.classList.add("files-over"); return; }   // (the Soundboard's open: they're sounds for it)
   if (S.view !== "files") go(S.folder, S.path);        // files dragged over the Screen: off to Files
 });
-window.addEventListener("dragleave", (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; dragState(null); } });
+window.addEventListener("dragleave", (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; dragState(null); sbFilesGone(); } });
 window.addEventListener("dragover", (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = "copy";
+  if (sbOpen()) return;
   dragState($("#browse").contains(e.target) && S.folder !== "computers" ? "browse" : "add");
 });
 window.addEventListener("drop", (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault();
   depth = 0;
+  if (sbOpen()) { sbFilesGone(); sbAdd(Array.from(e.dataTransfer.files || [])); return; }
   const intoBrowse = $("#browse").contains(e.target) && S.folder !== "computers";
   dragState(null);
   const target = intoBrowse ? { folder: S.folder, path: S.path } : null;
@@ -6397,6 +7040,7 @@ document.addEventListener("visibilitychange", () => {
   if (L.cat && L.tab === "friend") friendPoll(libToken, 0);  // (what you were typing stays)
   if (L.cat && L.tab === "fish" && FT.cv && FT.cv.isConnected) ftStart(libToken);   // (the fish again)
   if (L.cat && L.tab === "glow" && GL.board && GL.board.isConnected) glStart(libToken);   // (the LEDs again)
+  if (L.cat && L.tab === "sound" && SB.root && SB.root.isConnected) sbStart(libToken);    // (the Soundboard again)
 });
 $("#mode").value = S.mode = store.get("mode", "rename");
 $("#mode").onchange = (e) => { S.mode = e.target.value; store.set("mode", S.mode); };

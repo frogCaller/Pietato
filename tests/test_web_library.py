@@ -127,7 +127,7 @@ try:
 except ImportError:                                    # (not on the Pi's Python here: the Pi's side is tested)
     async_playwright = None
 WATCH = ["Cartoons", "Films", "News", "Sports", "Radio"]          # (Your streams: once there are some)
-MORE = ["Cameras", "Bot", "Draw", "Fish Tank"]                    # (LED backlight: on a Pi with LEDs)
+MORE = ["Cameras", "Bot", "Draw", "Fish Tank", "Soundboard"]      # (LED backlight: on a Pi with LEDs)
 
 
 async def web():

@@ -186,7 +186,9 @@ check(f"A opens Apps: a list of sims {rows}", m.tab_type() == "group" and g.LIBR
       and rows == [("Group chat", "CHAT"), ("Clock", "TIME"), ("Notes", "NOTE"), ("Fortune Cookie", "LUCK"),
                    ("Rock Paper Scissors", "RPS"),
                    ("Game of Life", "LIFE"),
-                   ("Fish Tank", "FISH"), ("Mandelbrot Set", "ZOOM"), ("Konami code", "CHEAT"), ("cmatrix", "CODE"),
+                   ("Fish Tank", "FISH"), ("Soundboard", "SFX"), ("Band", "JAM"), ("Mandelbrot Set", "ZOOM"),
+                   ("Konami code", "CHEAT"),
+                   ("cmatrix", "CODE"),
                    ("hollywood", "HACK"), ("nyancat", "NYAN"), ("cacafire", "HEAT"), ("htop", "PROC")])
 m.dirty = True; m.flush()
 m.fb.last.save(f"{SP}/sim_list_test.png")

@@ -238,6 +238,8 @@ class BotScreen:
                 return False, "It hasn't said anything yet"
             text = last["text"]
         self.dirty = True
+        self.board_quiet()                             # (the Soundboard, open: the sound card's the voice's meanwhile)
+        self.band_quiet()                              # (...and the Band)
         return self.voice.say(text, self.bot_voice(), aplay_device(self.setting("sound")), self.volume)
 
     def bot_replied(self, text):

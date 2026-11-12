@@ -451,6 +451,7 @@ APPS = {   # what you might call each app: its name in the library
     "fish tank": "Fish Tank", "fish": "Fish Tank", "the fish": "Fish Tank", "aquarium": "Fish Tank",
     "group chat": "Group chat", "mandelbrot": "Mandelbrot Set", "mandelbrot set": "Mandelbrot Set",
     "konami code": "Konami code", "konami codes": "Konami code", "konami": "Konami code",
+    "soundboard": "Soundboard", "sound board": "Soundboard", "band": "Band",
     "today": "Today", "to do list": "Today", "my list": "Today", "list": "Today", "tasks": "Today",
     "notes": "Today", "reminders": "Today", "timer": "Today", "timers": "Today",
 }

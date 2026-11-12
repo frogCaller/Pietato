@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The licences that go with each release's SD card images, in one zip, in their folders as they are here:
-THIRD-PARTY-LICENSES.md, LICENSE, the licenses folder, the fonts' licence and the console pictures' credits.
+THIRD-PARTY-LICENSES.md, LICENSE, the licenses folder, the fonts' licence, the console pictures' credits and the
+Soundboard's starter sounds'.
 GitHub runs it for each release (.github/workflows/image.yml).
 
     python3 image/licenses.py OUT.zip
@@ -10,7 +11,8 @@ import sys
 import zipfile
 
 TOP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PARTS = ("THIRD-PARTY-LICENSES.md", "LICENSE", "licenses", "static/fonts/OFL.txt", "pitato/icons/consoles/CREDITS.txt")
+PARTS = ("THIRD-PARTY-LICENSES.md", "LICENSE", "licenses", "static/fonts/OFL.txt", "pitato/icons/consoles/CREDITS.txt",
+         "pitato/sounds/CREDITS.txt")
 
 
 def files():

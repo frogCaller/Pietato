@@ -457,7 +457,7 @@ def run(ui, media, control=None, stop=None):
         if time.monotonic() < media.halting:
             return {"error": "The Pi is shutting down"}
         c = cmd.get("cmd")
-        if c not in ("websound", "webmic"):            # (webui.py's own word, not someone on the web page)
+        if c not in ("websound", "webmic", "soundboard"):   # (webui.py's own word, not someone on the web page)
             media.web_guard = True
             if c in ("tap", "swipe", "scroll") and media.active and media.resting:
                 media.stir()                           # (the screen resting: a touch wakes it, and does nothing else)

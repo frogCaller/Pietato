@@ -14,9 +14,12 @@ from ..mandelbrot import Mandelbrot
 from ..notes import Notes
 from ..fortune import Fortune
 from ..snake import Snake
+from ..soundboard import Soundboard
+from ..bandstage import BandStage
 
 
-SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Backlight, Mandelbrot, Snake)}
+SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Backlight, Soundboard, BandStage,
+                           Mandelbrot, Snake)}
 CLOCK_KEYS = {"a": "look", "up": "colour", "down": "colour", "left": "font", "right": "font",
               "x": "background", "y": "date"}    # the Clock's buttons: the option each changes (its seconds: START's)
 
@@ -45,8 +48,10 @@ class SimScreen:
 
     def sim_full(self):
         """Full screen: just the sim, on the whole screen (for every sim). Not the LED backlight's page on a Pietato
-        with no LEDs of its own: what it says is beside its box and at its foot, and full screen has neither."""
-        return self.setting("sim_full") == "On" and not self.sim_plain()
+        with no LEDs of its own: what it says is beside its box and at its foot, and full screen has neither. Nor the
+        Soundboard: its page is the whole of it already, and SELECT there stops the sounds."""
+        return (self.setting("sim_full") == "On" and not self.sim_plain() and not self.board_tab()
+                and not self.band_tab())
 
     def sim_plain(self):
         """This page is the LED backlight's on a Pietato with no LEDs of its own: your ESP32 boards' page."""
@@ -106,6 +111,10 @@ class SimScreen:
             s.aq = self.aquarium                               # (the fish live on, here and on your others)
         if kind is Backlight:
             self.glow_page(s)                                  # (the LEDs, as they're lit and set: screens/glow.py)
+        if kind is Soundboard:
+            self.board_page(s)                                 # (its bank and buttons, as they are: screens/soundboard.py)
+        if kind is BandStage:
+            self.band_page(s)                                  # (who's on what, the chord, your buttons: screens/band.py)
         return s
 
     def sim_set_full(self, on):
@@ -133,6 +142,10 @@ class SimScreen:
         s = self.sim_game()
         if self.sim_opts is not None:
             return self.press_sim_opts(s, name, repeat)
+        if s.key == "sound":                           # (the Soundboard: every button's its own, screens/soundboard.py)
+            return self.press_board(s, name, repeat)
+        if s.key == "band":                            # (the Band: the same, screens/band.py)
+            return self.press_band(s, name, repeat)
         if s.key in ("notes", "fortune"):              # (Notes, the Fortune Cookie: their own buttons, screens/)
             got = (self.press_notes if s.key == "notes" else self.press_fortune)(s, name, repeat)
             if got is not False:
@@ -249,6 +262,10 @@ class SimScreen:
         """START's card: up and down pick a row, left and right change it, A or B closes it."""
         if s.key == "glow":                                # (the LED backlight's: screens/glow.py)
             return self.press_glow_opts(s, name, repeat)
+        if s.key == "sound":                               # (the Soundboard's: screens/soundboard.py)
+            return self.press_board_card(s, name, repeat)
+        if s.key == "band":                                # (the Band's: screens/band.py)
+            return self.press_band_card(s, name, repeat)
         rows = self.sim_rows(type(s))
         if name in ("l", "r"):
             return "pass"                                  # (switching apps closes it)
@@ -272,6 +289,10 @@ class SimScreen:
         return None
 
     def sim_hints(self, s):
+        if self.sim_opts is not None and s.key == "sound":
+            return self.board_card_hints()
+        if self.sim_opts is not None and s.key == "band":
+            return self.band_card_hints()
         if self.sim_opts is not None:
             return self.glow_card_hints() if s.key == "glow" else [("▲▼", "Choose"), ("◀▶", "Change"), ("B", "Done")]
         own = s.hints()
@@ -440,6 +461,10 @@ class SimScreen:
         Full screen: just START's options."""
         if self.sim_opts is not None and s.key == "glow":   # (the LED backlight's card: screens/glow.py)
             key = self.glow_card_key()
+        elif self.sim_opts is not None and s.key == "sound":   # (the Soundboard's: screens/soundboard.py)
+            key = self.board_card_key()
+        elif self.sim_opts is not None and s.key == "band":    # (the Band's: screens/band.py)
+            key = self.band_card_key()
         elif self.sim_opts is not None:
             key = ("opts", s.key, self.sim_opts, tuple(self.sim_value(type(s), k) for k, _, _, _ in self.sim_rows(type(s))),
                    self.sim_box(), ACCENT)
@@ -457,6 +482,8 @@ class SimScreen:
             return None
         if key != self.sim_card[0]:
             self.sim_card = (key, self.glow_opts_card(s) if key[:2] == ("opts", "glow") else
+                             self.board_opts_card(s) if key[:2] == ("opts", "sound") else
+                             self.band_opts_card(s) if key[:2] == ("opts", "band") else
                              self.sim_opts_card(s) if key[0] == "opts" else self.sim_note(s, key))
         return self.sim_card[1]
 
@@ -640,6 +667,9 @@ class SimScreen:
         if not full and not bare:
             img.paste(self.sim_panel[1], self.sim_layout()[1][:2])
         s.draw(img, bx + inset, by + inset)
+        if not card_open:
+            for box, name in getattr(s, "taps", ()):   # (a sim's own places to tap: the Soundboard's buttons)
+                self.tappable(box, "keys", name)
         if not full:
             for tile, mask, at in self.sim_base[2]:
                 img.paste(tile, at, mask)

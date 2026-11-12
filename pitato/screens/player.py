@@ -7,8 +7,10 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 
 from ..theme import ACCENT, BODY, LINE, MUTED, ROW, TEXT
+from ..ahead import Ahead
 from ..asyou import as_you, nice_now
 from ..config import home_dir, SCREEN_MODES
 from ..util import clock
@@ -33,6 +35,8 @@ PLAYER_SETTLE_MAX = 60.0  # ...and how long that goes on (a stream that never st
 PLAYER_SAID = 12          # lines of what the player said last, for the log when it stops soon after it starts
 LIVE_AGAIN = 3            # a live channel that stops by itself after it's been playing is tuned in again, up to this
 LIVE_AGAIN_SECS = 120.0   # ...many times in this long (one that keeps stopping is let go)
+AHEAD_NOT_SECS = 600.0    # a stream that wouldn't play with some of it in hand (ahead.py): its others are played as
+                          # before for this long
 
 
 def quiet_child():
@@ -51,6 +55,65 @@ def quiet_child():
 
 class PlayerScreen:
     """Playing videos, music and radio, and what's playing now."""
+    ahead = None              # the stream that's playing, if it's one in pieces played with some in hand (ahead.py)
+    ahead_not = None          # where a stream came from that wouldn't play that way -> till when it's not tried
+    ahead_tried = None        # (where from, what) that's being played as before, because it wouldn't that way
+
+    # -- a stream in pieces (a live channel, a Plex video), played with some of it in hand ------------------------
+    def ahead_for(self, link):
+        """The address the player's given for a stream that comes in pieces (HLS), in place of its own: this
+        machine's, where the pieces to come are fetched before they're asked for (ahead.py), so a moment's trouble on
+        the network isn't seen. Its own, as before, if that didn't work for its like lately (or PITATO_AHEAD=0 says
+        not to: the tests look at what a player's given). Nothing's waited for here: the stream's opened as the
+        player starts, and one that can't be has its player stop at once (ahead_gave_up, then)."""
+        self.ahead_stop()
+        try:
+            host = urllib.parse.urlsplit(link).netloc
+        except ValueError:
+            return link
+        if (not host or os.environ.get("PITATO_AHEAD") == "0"
+                or (self.ahead_not or {}).get(host, 0) > time.monotonic()):
+            return link
+        try:
+            ahead = Ahead(link)
+            local = ahead.start()
+        except Exception as ex:                        # (never in the way of its playing)
+            print(f"player: a stream not played from ahead ({ex!r})", flush=True)
+            return link
+        if not local:
+            ahead.close()
+            return link
+        self.ahead = ahead
+        return local
+
+    def ahead_stop(self):
+        ahead, self.ahead = self.ahead, None
+        if ahead is not None:
+            ahead.close()
+
+    def ahead_gave_up(self):
+        """A stream played with some in hand that stopped as soon as it started (it couldn't be opened that way, or
+        wouldn't play): True if it's to be played again as before (and its like too, for a while: whatever about it
+        doesn't suit, they'll have it too)."""
+        ahead = self.ahead
+        if ahead is None:
+            return False
+        self.ahead_stop()
+        if self.ahead_not is None:
+            self.ahead_not = {}
+        host = urllib.parse.urlsplit(ahead.link).netloc
+        self.ahead_not[host] = time.monotonic() + AHEAD_NOT_SECS
+        self.ahead_tried = (host, self.cur)
+        print("player: a stream that wouldn't play from ahead: played as before", flush=True)
+        return True
+
+    def ahead_not_it(self):
+        """What's stopped as soon as it started was being played as before, because it wouldn't play with some in
+        hand: so it wasn't how it was played (the stream's down, or the network was just then), and its like are
+        played with some in hand again."""
+        tried, self.ahead_tried = self.ahead_tried, None
+        if tried and tried[1] is self.cur and self.ahead_not:
+            self.ahead_not.pop(tried[0], None)
 
     # -- the GPi Case's speaker, in the terminal -------------------------------
     def hush_tick(self, now):
@@ -295,6 +358,8 @@ class PlayerScreen:
     def spawn(self, args, target):
         self.started = time.monotonic()
         self.voice.stop(unload=True)                   # (the player has the sound, and the memory)
+        self.board_quiet()                             # (...and the Soundboard lets go of the sound card for it,
+        self.band_quiet()                              #  as the Band does)
         args = list(args)
         place = sound_place(self.setting("sound"))     # Settings > Sound (Bluetooth headphones, while they're on)
         if "-ao" in args:
@@ -434,6 +499,8 @@ class PlayerScreen:
             args += NET_CACHE if net else ([] if kind == "audio" else LOCAL_CACHE)
         if hls and net and kind not in LISTEN_KINDS:
             args += hls_lenient()                      # (whatever its pieces' links end in)
+        if (hls or plexlive) and net and kind not in LISTEN_KINDS:
+            target = self.ahead_for(target)            # (with some of it in hand: ahead.py)
         args += ["-volume", str(self.volume)]
         if start:
             args += ["-ss", str(int(max(start - 3, 0)))]
@@ -502,6 +569,7 @@ class PlayerScreen:
                 and self.music_loops()):                # (to come back once whatever stopped it is over)
             self.resume_later = (self.queue, self.qi, self.pos if self.kind == "audio" else 0)
         self.game_end()
+        self.ahead_stop()
         p, self.proc = self.proc, None
         self.muted, self.settling, self.sound_used = False, False, None
         if p and p.poll() is None:

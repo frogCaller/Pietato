@@ -423,9 +423,10 @@ check(f"Apps' list here: all of them but the LED backlight ({len(SHOWN)})",
 for row, name in enumerate(SHOWN):
     if row:
         m.press("down")
-    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "LED backlight"):
+    if name in ("Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "LED backlight", "Soundboard",
+                "Band"):
         continue                                   # (test_clock.py, test_notes.py, test_fortune.py, test_sim.py,
-                                                   #  test_fishtank.py, test_glow.py)
+                                                   #  test_fishtank.py, test_glow.py, test_soundboard.py, test_band.py)
     if next(t for t in g.LIBRARY if t["name"] == name)["type"] != "sim":
         continue                                   # (cmatrix, not a sim of its own: test_cmatrix.py)
     m.press("a")

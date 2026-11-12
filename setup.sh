@@ -1564,6 +1564,10 @@ install -d /usr/local/share/pitato/pitato/icons/consoles   # the Games tab's con
 for f in "$HERE"/pitato/icons/consoles/*; do
   if [ -f "$f" ]; then install -m 644 "$f" /usr/local/share/pitato/pitato/icons/consoles/; fi
 done
+install -d /usr/local/share/pitato/pitato/sounds           # the Soundboard's starter sounds (CREDITS.txt)
+for f in "$HERE"/pitato/sounds/*; do
+  if [ -f "$f" ]; then install -m 644 "$f" /usr/local/share/pitato/pitato/sounds/; fi
+done
 python3 -m compileall -q /usr/local/share/pitato/pitato > /dev/null || true   # (quicker to start)
 
 grep -qx uinput /etc/modules || echo uinput >> /etc/modules

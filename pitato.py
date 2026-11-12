@@ -78,6 +78,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                   (Live TV needs you signed in to Plex, in TV > Plex)
     Streams     - your own list in static/streams.txt, one per line:  Name | URL
                   (a live .m3u8 plays the version that suits the Pi)
+                  A stream that comes in pieces (Plex's Live TV, a Plex video, a live .m3u8) is fetched up to
+                  half a minute ahead of where it's playing (pitato/ahead.py), so a short drop in the WiFi
+                  doesn't have to freeze the picture; one that won't play that way is played as before
   Music       - files in ~/Music, keeps playing when you go back to the terminal; Settings > Random song
                 at start-up plays one of them as it starts, then the rest in a random order, round and
                 round (a list you pick goes round too), and music a game or a video stopped comes back
@@ -198,6 +201,21 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 own has this page for them while a board's on, an LED drawn for each: A is their pulse to
                 music; the web page's Library lists the boards, and gives each a colour of its own, which
                 the board keeps)
+    Soundboard  - a sound on every button: the d-pad's four and A, B, X and Y each play theirs (as many
+                at once as you like; pressed again, one starts again), L and R go through the banks of
+                eight, SELECT stops them all, START has the bank, the volume and (with a USB microphone)
+                Record a sound, and B there goes back. A starter pack comes with it (pitato/sounds: made
+                by a script, public domain); your own are wav, mp3 or ogg files in ~/Soundboard, on a
+                button a moment after they're put there. Its player's a process of its own, as you
+                (pitato/soundplay.py); the web page's Library has it too (add, record, rename, delete,
+                drag onto buttons and banks), and which sound is on which button is static/soundboard.txt
+    Band        - your Pietatos play together, each its own instrument (drums, bass, guitar, keys) through
+                its own speaker, in step: opened on one, the others that are on join it, and it plays
+                whatever nobody's taken (all four, on its own). SELECT starts and stops it; the d-pad's four
+                and A, B, X and Y play your instrument (always in key), L and R pick it; START has the song,
+                the tempo, the volume, and who decides what each player does with its next four bars: dice,
+                or a decision model on your bot's computer (asked four bars ahead, never waited for).
+                pitato/band.py has the music, pitato/bandplay.py plays it (a process of its own, as you)
     Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
                 of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
                 Y out, for as long as they're held

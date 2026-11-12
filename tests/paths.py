@@ -37,6 +37,9 @@ if not SP:
     SP = make_work()
     os.environ["PIETATO_TEST_WORK"] = SP
 os.environ.setdefault("PITATO_ROOT", ROOT)
+os.environ.setdefault("PITATO_AHEAD", "0")     # (a stream in pieces as the player's given it by name, not from this
+                                               #  machine's own address for it, pitato/ahead.py: the tests look at
+                                               #  what each player's given. test_ahead has it on)
 os.environ.setdefault("PITATO_AS_ROOT", "1")   # (the players and games as root, as before: the tests' folders are
                                                #  root's. test_as_you has them run as you)
 os.environ["PITATO_DMI"] = os.path.join(SP, "no-dmi")   # (no firmware description of a PC's: a Pi, as the tests

@@ -834,6 +834,10 @@ class WebScreen:
             return self.web_fish_feed(cmd)
         if c == "fishgrid":                            # (...or the tanks arranged)
             return self.web_fish_grid(cmd)
+        if c == "soundboard":                          # (the web page's Soundboard changed something: looked at now)
+            return self.board_web(cmd)
+        if c == "band":                                # (the Band: what another of yours in it says, or asks)
+            return self.web_band(cmd)
         if c == "open":
             app = str(cmd.get("app") or "")
             app = RENAMED.get(app, app)                # (by what it was called before)

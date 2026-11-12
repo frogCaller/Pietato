@@ -22,8 +22,8 @@ from ..tv import channel_row, ia_row, live_pick, SHELVES
 from .games import fold, game_matches
 from .progs import prog_path
 
-COOL_SKIP = ("Group chat", "LED backlight", "Clock", "Notes", "Fortune Cookie", "htop", "Konami code")   # Apps' that aren't for
-                                                                                       # "show me something cool"
+COOL_SKIP = ("Group chat", "LED backlight", "Soundboard", "Band", "Clock", "Notes", "Fortune Cookie", "htop",
+             "Konami code")                            # Apps' that aren't for "show me something cool"
 COOL_THE = ("Game of Life", "Mandelbrot Set", "Fish Tank")   # ("Here's the Game of Life")
 MUSIC_WORDS = ("music", "song", "songs", "album", "albums", "playlist", "tunes", "track", "tracks", "artist", "band",
                "radio", "station", "stations", "fm")

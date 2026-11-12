@@ -205,7 +205,13 @@ def state_now():
         shown["first"] = lines[v["top"]] if v.get("top", 0) < len(lines) else ""
     target = m.handoff_target()
     party = m.party or {}
+    gig = getattr(m, "gig", None)
+    band = {"lead": gig.lead, "with": gig.leader_name, "mine": list(gig.mine), "my": gig.my, "plan": gig.plan,
+            "synced": gig.lead or gig.offset is not None, "who": gig.who, "ready": len(gig.ready),
+            "does": {k: list(v) for k, v in gig.does.items()}, "members": sorted(x["name"] for x in gig.members.values()),
+            "playing": gig.proc is not None and gig.sound_ok is True} if gig is not None else None
     return json.dumps({"game": run.game["path"] if run else None, "kind": m.kind, "view": m.view,
+                       "page": g.LIBRARY[m.tab]["name"] if m.view == "list" else m.view, "band": band,
                        "watching": (run.watching or {}).get("with") if run and run.watching else None,
                        "together": {k: v for k, v in (run.together or {}).items() if k in ("with", "host", "state")}
                        if run else None, "lobby": [(e["host"], e["title"]) for e in m.lobby_entries()],

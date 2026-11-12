@@ -42,6 +42,7 @@ import base64
 import hashlib
 import hmac
 import http.client
+import importlib.util
 import io
 import ipaddress
 import json
@@ -94,7 +95,8 @@ KINDS = {   # what goes where when the page picks for you
               ".ngc", ".ngpc", ".npc", ".gcm", ".rvz", ".wia", ".wbfs", ".ciso", ".gcz"],
 }
 SETTINGS_FILES = ["radio.txt", "streams.txt", "streams.m3u", "finance.txt", "crypto.txt", "camera.txt", "bot.txt",
-                  "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt"]   # media mode's settings: in static/
+                  "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt",   # media mode's settings: in static/
+                  "soundboard.txt"]
 PRIVATE = {"webui.txt", "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt",   # passwords and keys:
            "retroachievements.txt"}                                                            # never shown
 INLINE = set(KINDS["music"] + KINDS["videos"] + KINDS["pictures"] + [".pdf", ".txt", ".md"])
@@ -316,7 +318,8 @@ def host_ok():
 PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "computers",
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
-              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party")     # Pietatos ask these
+              "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party",     # Pietatos ask these
+              "/api/band")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1219,6 +1222,23 @@ def party():
     return pi_reply(ask_pi("POST", "/party", cmd, timeout=8))
 
 
+BAND_KEYS = ("kind", "token", "port", "members", "want", "plan", "seat", "who", "does", "person", "you", "what")
+
+
+@app.post("/api/band")
+def band():
+    """The Band (Apps > Band: pitato/band.py, screens/band.py): another of your Pietatos that's started one asks this
+    one to join it, then says the plan (the song, when it started, this one's instrument); or, to the one that started
+    it, another in it says what it's doing, asks for an instrument, or says it's left."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or body.get("kind") not in ("start", "join", "plan", "status", "seat", "ask",
+                                                              "leave", "stop"):
+        return jsonify(ok=False, error="What's that?"), 400
+    cmd = {k: body[k] for k in BAND_KEYS if k in body}
+    cmd["from"] = request.remote_addr
+    return pi_reply(ask_pi("POST", "/band", cmd, timeout=8))
+
+
 # ---- your Pietatos' group chat (pitato/circle.py, screens/group.py) -------------------------------------------------
 @app.route("/api/group", methods=["GET", "POST"])
 def group_chat():
@@ -1479,6 +1499,284 @@ def draw():
             out.update(ok=False, error=why or "The Pi couldn't show it")
             return jsonify(out), answer[0] if answer[0] != 200 else 409
     return jsonify(out)
+
+
+# ---- the Soundboard (Apps > Soundboard): its sounds and banks, from the page -------------------------------------
+# Your sounds are files in ~/Soundboard (wav, mp3, ogg), and which is on which button of which bank is in
+# static/soundboard.txt (pitato/soundbank.py reads and writes it, here and in media mode). A change made here is
+# written at once and media mode's told, so the Soundboard on the screen has it straight away.
+SOUND_TURN = threading.Lock()                   # (the banks' file: one change at a time)
+SOUND_TYPES = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg"}
+SOUND_REC_MOST = 16 << 20                       # bytes of a recording a page sends (a WAV: half a minute, and more)
+_SOUNDBANK = []
+
+
+def soundbank():
+    """pitato/soundbank.py (this runs on its own, not as part of the package): beside this in the Pietato folder;
+    installed, in the pitato folder beside this, where setup.sh puts it with the starter sounds."""
+    if not _SOUNDBANK:
+        path = os.path.join(HERE, "soundbank.py")
+        if not os.path.isfile(path):
+            path = os.path.join(HERE, "pitato", "soundbank.py")
+        spec = importlib.util.spec_from_file_location("pitato_soundbank", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _SOUNDBANK.append(mod)
+    return _SOUNDBANK[0]
+
+
+def sound_folder(B):
+    """Your Soundboard folder (made if it isn't there)."""
+    folder = os.path.join(HOME, B.FOLDER)
+    os.makedirs(folder, exist_ok=True)
+    return os.path.realpath(folder)
+
+
+def sound_keep(B, banks, off):
+    """The banks, written to static/soundboard.txt: a new file, swapped in."""
+    tmp = os.path.join(STATIC, f".{B.FILE}.{uuid.uuid4().hex[:8]}.part")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(B.dumps(banks, off))
+        os.replace(tmp, os.path.join(STATIC, B.FILE))
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def sound_banks(B, folder):
+    """(the banks, the sounds taken off their buttons, your sounds' files) as they are now. A sound of yours that's
+    new goes on My sounds' first free button, and the file's written to say so (as media mode does)."""
+    files = B.scan(folder)
+    try:
+        with open(os.path.join(STATIC, B.FILE), encoding="utf-8", errors="replace") as f:
+            text = f.read(1_000_000)
+    except FileNotFoundError:
+        text = None
+    banks, off, placed = B.arrange(text, [name for name, _, _ in files], B.starter_sounds())
+    if placed:
+        sound_keep(B, banks, off)
+    return banks, off, files
+
+
+def sound_state(B, banks, off, files, **more):
+    """What the page's Soundboard shows: the banks, and every sound there is (yours, the newest first, then the
+    starter pack's), each with the button it's on."""
+    starters = B.starter_sounds()
+    at = {sid: [i, pad] for i, b in enumerate(banks) for pad, sid in b["pads"].items() if sid}
+    sounds = [{"id": name, "name": B.title(name), "size": size, "at": at.get(name)} for name, _, size in reversed(files)]
+    sounds += [{"id": sid, "name": B.title(sid), "starter": True, "at": at.get(sid)} for sid in starters]
+    return dict({"ok": True, "pads": list(B.PADS), "banks": banks, "sounds": sounds, "folder": "~/" + B.FOLDER,
+                 "most": B.FILES_MOST, "banks_most": B.BANKS_MOST, "rec_secs": B.REC_MOST,
+                 "starters_off": len(B.starters_off(banks, starters))}, **more)
+
+
+def sound_told():
+    """Media mode told something's changed: its Soundboard, if it's open, looks now (and in a second anyway)."""
+    ask_pi("POST", "/soundboard", {"changed": True}, timeout=2)
+
+
+def sound_trim(B, path):
+    """A page's recording (a WAV file), its silence trimmed, where it is. Why not, or None."""
+    try:
+        rate, x = B.read_wav(path, most=B.REC_MOST + 15)
+        y = B.trimmed(x, rate)
+    except ImportError:
+        return None                                    # (no numpy here: kept as it came)
+    except (ValueError, OSError):
+        return "That isn't a recording"
+    if y is None or len(y) < rate // 10:
+        return "Nothing was heard"
+    B.write_wav(path, y[:int(B.REC_MOST * rate)], rate)
+    return None
+
+
+@app.get("/api/soundboard")
+def soundboard():
+    if request.headers.get("X-Pitato-Page") != "1":
+        return Response("Only the page asks for that", 403)
+    B = soundbank()
+    try:
+        with SOUND_TURN:
+            banks, off, files = sound_banks(B, sound_folder(B))
+    except OSError as ex:
+        return jsonify(error=f"The Soundboard's sounds can't be read ({ex.strerror or ex})"), 500
+    return jsonify(sound_state(B, banks, off, files))
+
+
+@app.get("/api/soundboard/sound")
+def soundboard_sound():
+    """One of its sounds, to hear in the browser: ?id= (a file in your Soundboard folder, or Starter/...)."""
+    B = soundbank()
+    sid = request.args.get("id", "")
+    try:
+        folder = sound_folder(B)
+    except OSError:
+        abort(404)
+    path = B.path_of(sid, folder)
+    if not path:
+        abort(404)
+    full = os.path.realpath(path)
+    root = os.path.realpath(B.starter_dir()) if B.is_starter(sid) else os.path.realpath(HOME)
+    if not inside(root, full) or not os.path.isfile(full) or private(os.path.basename(full)):
+        abort(404)
+    resp = send_file(full, mimetype=SOUND_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream"),
+                     conditional=True)
+    resp.headers["Cache-Control"] = "private, no-cache"
+    return resp
+
+
+@app.put("/api/soundboard/sound")
+def soundboard_add():
+    """A sound added to your Soundboard folder (the request's body): a wav, mp3 or ogg file (?name=), put on My
+    sounds' first free button, or on the one asked for (&bank=2&pad=a). ?rec=1: a recording the page made (a WAV),
+    its silence trimmed, called Recording 1, 2..."""
+    if request.headers.get("X-Pitato-Page") != "1":
+        return Response("Only the page asks for that", 403)
+    B = soundbank()
+    rec = request.args.get("rec") == "1"
+    name = "recording.wav" if rec else clean_name(request.args.get("name", ""))
+    if B.sound_name(name) is None:
+        return jsonify(error="A sound's a wav, mp3 or ogg file"), 415
+    size, most = request.content_length, SOUND_REC_MOST if rec else B.SOUND_BYTES
+    if not size or size < 0:
+        return jsonify(error="There's nothing in it"), 400
+    if size > most:
+        return jsonify(error=f"That's too big for a sound ({most >> 20} MB at most)"), 413
+    try:
+        folder = sound_folder(B)
+    except OSError:
+        return jsonify(error="Your Soundboard folder can't be made"), 500
+    if size > shutil.disk_usage(folder).free - SPARE:
+        return jsonify(error="Not enough space on the Pi"), 507
+    tmp = os.path.join(folder, f".{uuid.uuid4().hex[:8]}.part")
+    got = 0
+    try:
+        with open(tmp, "wb") as f:
+            while got < size:
+                chunk = request.stream.read(min(CHUNK, size - got))
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+        if got != size:
+            raise OSError("cut short")
+        why = sound_trim(B, tmp) if rec else None
+        if why:
+            os.remove(tmp)
+            return jsonify(error=why), 422
+        with SOUND_TURN:
+            taken = os.listdir(folder)
+            if sum(1 for n in taken if B.sound_name(n)) >= B.FILES_MOST:
+                os.remove(tmp)
+                return jsonify(error=f"That's as many sounds as it takes ({B.FILES_MOST})"), 409
+            if rec:
+                name = B.recording_name(taken)
+            elif name.lower() in {n.lower() for n in taken}:
+                name = B.free_name(taken, *os.path.splitext(name))
+            os.replace(tmp, os.path.join(folder, name))
+            banks, off, files = sound_banks(B, folder)
+            i, pad = request.args.get("bank", ""), request.args.get("pad")
+            if pad in B.PADS and i.isdigit() and B.put(banks, off, name, int(i), pad, swap=False):
+                sound_keep(B, banks, off)
+    except OSError as ex:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return jsonify(error="The sound didn't arrive whole" if str(ex) == "cut short"
+                       else f"It couldn't be kept ({ex.strerror or ex})"), 400 if str(ex) == "cut short" else 500
+    sound_told()
+    return jsonify(sound_state(B, banks, off, files, id=name))
+
+
+@app.post("/api/soundboard")
+def soundboard_do():
+    """Its sounds and banks changed: {"do": "put", "id", "bank", "pad"} a sound on a button (what was there comes
+    off it; "swap": true, from another button: the two change places), "bank_put" on a bank's first free one,
+    "lift" taken off its button, "rename" and "delete" for a sound of yours, "bank_add", "bank_rename",
+    "bank_delete" (its sounds stay), "bank_move" ("to"), "starter" (the starter pack's sounds that are on no
+    button, back on buttons)."""
+    if not request.is_json:                         # JSON only: another site's form can't post here
+        abort(415)
+    data = request.get_json(silent=True) or {}
+    B = soundbank()
+    do, sid, pad, more = data.get("do"), data.get("id"), data.get("pad"), {}
+    i = data["bank"] if type(data.get("bank")) is int else -1
+    try:
+        with SOUND_TURN:
+            folder = sound_folder(B)
+            banks, off, files = sound_banks(B, folder)
+            mine = {name for name, _, _ in files}
+            known = mine | set(B.starter_sounds())
+            if do == "put":
+                if sid not in known or not B.put(banks, off, sid, i, pad, swap=data.get("swap") is True):
+                    return jsonify(error="There's no such sound, or no such button"), 404
+            elif do == "bank_put":
+                if sid not in known or not 0 <= i < len(banks):
+                    return jsonify(error="There's no such sound, or no such bank"), 404
+                was = B.where(banks, sid)
+                if was is None or was[0] != i:
+                    free = B.free_pad(banks[i])
+                    if free is None:
+                        return jsonify(error=f"{banks[i]['name']} is full: drop it on a button there"), 409
+                    B.put(banks, off, sid, i, free)
+            elif do == "lift":
+                if not B.lift(banks, off, i, pad):
+                    return jsonify(error="There's no such button"), 404
+            elif do == "rename":
+                if sid not in mine:
+                    return jsonify(error="There's no such sound of yours"), 404
+                ext = os.path.splitext(sid)[1]
+                stem = clean_name(str(data.get("name") or ""))
+                if stem.lower().endswith(ext.lower()):
+                    stem = stem[:-len(ext)]
+                new = stem.strip() + ext
+                if B.sound_name(new) is None:
+                    return jsonify(error="That name won't do"), 400
+                if new != sid:
+                    if new.lower() != sid.lower() and new.lower() in {n.lower() for n in os.listdir(folder)}:
+                        return jsonify(error="There's a sound called that already"), 409
+                    os.rename(os.path.join(folder, sid), os.path.join(folder, new))
+                    B.renamed(banks, off, sid, new)
+                    files = B.scan(folder)
+                more["id"] = new
+            elif do == "delete":
+                if sid not in mine:
+                    return jsonify(error="There's no such sound of yours"), 404
+                os.remove(os.path.join(folder, sid))
+                B.forget(banks, off, sid)
+                files = B.scan(folder)
+            elif do == "bank_add":
+                n = B.bank_add(banks, str(data.get("name") or ""))
+                if n is None:
+                    return jsonify(error=f"That's as many banks as there can be ({B.BANKS_MOST})"), 409
+                more["bank"] = n
+            elif do == "bank_rename":
+                if not B.bank_rename(banks, i, str(data.get("name") or "")):
+                    return jsonify(error="That name won't do"), 400
+            elif do == "bank_delete":
+                if not B.bank_drop(banks, off, i):
+                    return jsonify(error="There's no such bank"), 404
+            elif do == "bank_move":
+                if type(data.get("to")) is not int or not B.bank_move(banks, i, data["to"]):
+                    return jsonify(error="There's no such bank"), 404
+                more["bank"] = data["to"]
+            elif do == "starter":
+                count, first = B.starter_back(banks, B.starter_sounds())
+                if not count:
+                    return jsonify(error="The starter pack's sounds are all on buttons already"), 409
+                more["bank"] = first
+            else:
+                return jsonify(error="Unknown request"), 400
+            sound_keep(B, banks, off)
+    except OSError as ex:
+        return jsonify(error=f"It couldn't be done ({ex.strerror or ex})"), 500
+    sound_told()
+    return jsonify(sound_state(B, banks, off, files, **more))
 
 
 # ---- the Bot at work: your coding agent, acted out --------------------------------------

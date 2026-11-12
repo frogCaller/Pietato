@@ -13,6 +13,7 @@ Settings writes most of them for you.
 | `pihole.txt` | `address =` and `password =`: the Pi-hole page writes them when you sign in there |
 | `jellyfin.txt` | `server =` if your Jellyfin server isn't found by itself, and `user =` and `password =` if you'd rather not use Quick Connect |
 | `webui.txt` | `password =` if you want the web page to ask for one, `hosts =` other names you open it by |
+| `soundboard.txt` | the [Soundboard](apps.md#soundboard)'s banks: a bank's name in `[brackets]`, then `button = sound` for each of its buttons. The Soundboard and the web page write it |
 
 Plex signs in with a code at plex.tv/link. Jellyfin signs in with a Quick Connect code: in Jellyfin on
 your phone or computer, open your profile, then Quick Connect, and type the code.

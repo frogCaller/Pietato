@@ -55,4 +55,5 @@ newest version. [Setting it up](docs/setup.md) has the rest: setup.sh's options,
 
 MIT, see [LICENSE](LICENSE). The fonts in `static/fonts` (Atkinson Hyperlegible Next and Inter) have their
 own license, `OFL.txt`. The console pictures in `pitato/icons/consoles` are RetroArch's, under CC BY 4.0:
-see `CREDITS.txt` there.
+see `CREDITS.txt` there. The Soundboard's starter sounds in `pitato/sounds` are in the public domain (CC0):
+`CREDITS.txt` there too.

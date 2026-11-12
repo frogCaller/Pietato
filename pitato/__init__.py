@@ -45,6 +45,13 @@
   clock.py          Apps' Clock
   notes.py          Apps' Notes: what you type on a keyboard (screens/notes.py: its files, the keyboard, its buttons)
   fortune.py        Apps' Fortune Cookie: a new fortune with A (screens/fortune.py: its buttons)
+  soundboard.py     Apps' Soundboard: a sound on every button (screens/soundboard.py: its buttons, recording)
+  soundbank.py      ...its sounds (sounds/: the starter pack, public domain) and its banks' file
+  soundplay.py      ...its player, a process of its own, as you: the sounds mixed for aplay, and recording
+  bandstage.py      Apps' Band: your Pietatos play together, each its own instrument (screens/band.py: the others in
+                    it, its buttons, who decides)
+  band.py           ...the music: the songs, each instrument's parts, the song's shape, the dice
+  bandplay.py       ...its player (soundplay.py's, and more): each note heard at its moment; the instruments, made
   mandelbrot.py     the Mandelbrot set
   snake.py          Snake, and its AI's thread
   games.py          your own games: finding them and their emulators, one while it runs

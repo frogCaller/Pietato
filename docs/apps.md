@@ -9,7 +9,8 @@ Pietato starts on a home screen of apps:
   for Home Assistant's IP address and a long-lived token (Settings > Home changes them later), or you can put them
   in on the web page's Settings
 - **TV**: Plex (Continue watching, Watchlist, Live TV with news and sports), Jellyfin, about 250 old
-  cartoons and 150 old films from the Internet Archive, and your own streams
+  cartoons and 150 old films from the Internet Archive, and your own streams. Live channels and Plex videos are
+  fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
 - **Music** and **Radio** (on Now playing, SELECT puts on lofi art: a quiet scene on the whole screen, and
   HOME has [Party mode](#party-mode)),
   **Photos** (filters, delete), **Videos** (picks up where you left off)
@@ -24,6 +25,7 @@ Pietato starts on a home screen of apps:
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type
 - **Apps**: [Group chat](#group-chat), the [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a
+  [Soundboard](#soundboard), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
@@ -142,6 +144,48 @@ for a moment, to tell them apart. A board that had the sketch before this needs 
 
 For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
 library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.
+
+## Soundboard
+
+Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
+once as you like, and one pressed again starts again. L and R go through the banks of eight, and SELECT stops
+them all. B is a button like the others there, so the way back is START, then B. START's card also has the bank
+and the volume. The sounds play wherever Settings > Sound sends them.
+
+It comes with three banks of starter sounds: Starter, Drums and Arcade. Your own are wav, mp3 or ogg files in the
+`Soundboard` folder of your home folder. Put one there and a moment later it's on the first free button of a bank
+called My sounds.
+
+With a USB microphone plugged in, START's card has Record a sound. Press A when you're done, and the silence
+before and after is trimmed. Then press the button it should go on: L and R pick another bank first, SELECT
+plays it back, and START can record it again or delete it.
+
+The web page's Library has a Soundboard tab that adds, records, renames and deletes sounds, adds banks, and puts
+sounds on buttons: drag one onto a button or a bank, or on a phone tap the sound, then the button. Recording there
+uses the phone's or computer's microphone, on the secure page. What you change is on the Pietato's Soundboard at
+once. Which sound is on which button is kept in `static/soundboard.txt`.
+
+The starter sounds are made by a script, `pitato/sounds/make.py`, and are in the public domain (CC0): see
+`pitato/sounds/CREDITS.txt`.
+
+## Band
+
+Apps > Band makes a band of your Pietatos: drums, bass, guitar and keys. Open it on one and the others that are
+on join in, each taking an instrument and playing it through its own speaker, in step. The one it was opened on
+plays whatever nobody has taken, so a Pietato on its own is the whole band. Others join only with Settings >
+Share with other Pietatos on, and not while they're in a game, a video or the terminal.
+
+SELECT starts the band, with a bar counted in, and stops it. The d-pad's four and A, B, X and Y play the
+instrument marked on the page, and L and R pick another. A, B, X and Y follow the bar's chord, so they always
+fit; the d-pad's four are notes of the song. While you play an instrument, the Pietato leaves it to you. B is a
+note there, so the way back is START, then B. START's card also has the song (Rock, Blues, Funk or Chill), the
+tempo and the volume. With others in the band it has Timing too: a TV or a Bluetooth speaker takes a moment with
+its sound, so if one Pietato sounds behind the rest, ◀ on Timing there plays it a little earlier.
+
+Each player decides what to do with its next four bars: play its part, play busier or simpler, sit out, play a
+fill or take a solo. Dice decide that. With a [Bot](bot.md) set up and a decision model on its computer, the
+model decides instead, and START's card has Who decides to pick the model or go back to dice. The model is asked
+four bars ahead, and the band never waits for it.
 
 ## Fish Tank
 

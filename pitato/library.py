@@ -29,8 +29,8 @@ LIBRARY = [
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
      "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Fish Tank",
-                  "LED backlight", "Mandelbrot Set", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire",
-                  "htop"]},                            # (LED backlight: on a Pi that can have one, screens/glow.py)
+                  "LED backlight", "Soundboard", "Band", "Mandelbrot Set", "Konami code", "cmatrix", "hollywood",
+                  "nyancat", "cacafire", "htop"]},     # (LED backlight: on a Pi that can have one, screens/glow.py)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
     {"name": "Settings", "type": "settings", "empty": ""},
@@ -83,6 +83,10 @@ LIBRARY = [
      "about": "Your fish, and your other Pietatos'", "empty": ""},
     {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
      "about": "The LEDs behind your TV", "empty": ""},
+    {"name": "Soundboard", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "SFX",   # (soundboard.py)
+     "about": "A sound on every button", "empty": ""},
+    {"name": "Band", "type": "sim", "sim": "band", "parent": "Apps", "badge": "JAM",           # (bandstage.py)
+     "about": "Your Pietatos play together", "empty": ""},
     {"name": "Mandelbrot Set", "type": "sim", "sim": "mandel", "parent": "Apps", "badge": "ZOOM",
      "about": "Dives into the famous fractal", "empty": ""},
     {"name": "Konami code", "type": "konami", "parent": "Apps", "badge": "CHEAT",   # (screens/konami.py)

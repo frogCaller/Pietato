@@ -38,6 +38,8 @@ available from Raspberry Pi OS and Debian (`apt-get source <package>`).
   Monoton): SIL Open Font License 1.1, in `static/fonts/OFL.txt`
 - The console pictures in `pitato/icons/consoles`: RetroArch's, under CC BY 4.0, in
   `pitato/icons/consoles/CREDITS.txt`
+- The Soundboard's starter sounds in `pitato/sounds`: made for Pietato by `make.py` there (nobody else's
+  recordings), in the public domain under CC0 1.0, in `pitato/sounds/CREDITS.txt`
 
 ## Only on a PC
 

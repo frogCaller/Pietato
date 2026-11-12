@@ -214,7 +214,8 @@ check(f"...it keeps up: {fps:.1f} frames a second", g.SIM_FPS - 3 <= fps <= g.SI
 press(e.BTN_SELECT, 0.4)
 check("SELECT: back beside its numbers", not m.sim_full() and (m.sims["fish"].w, m.sims["fish"].h) == (436, 342))
 press(e.BTN_EAST, 0.3)
-press(e.BTN_DPAD_DOWN)
+for _ in range(3):                                 # (past the Soundboard and the Band)
+    press(e.BTN_DPAD_DOWN)
 press(e.BTN_SOUTH, 0.5)
 check(f"B, down to the Mandelbrot Set, A ({g.LIBRARY[m.tab]['name']})",
       m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "mandel")

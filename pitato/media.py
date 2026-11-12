@@ -98,6 +98,8 @@ from .screens.group import GroupScreen
 from .screens.fishtank import FishScreen
 from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
+from .screens.soundboard import SoundboardScreen
+from .screens.band import BandScreen, Brain as BandBrain
 from .screens.glow import GlowScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
@@ -112,7 +114,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen, LobbyScreen,
-            PartyScreen, GlowScreen):
+            PartyScreen, GlowScreen, SoundboardScreen, BandScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -243,6 +245,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.prompts.on_ask = self.prompt_asked     # ...and its requests to use a tool, for you to answer here
         self.prompt_draft = ""       # ...one you haven't sent yet
         self.sims = {}               # Apps' sims, by key (each made the first time it's opened)
+        self.board = None            # the Soundboard, once it's been opened (screens/soundboard.py)
+        self.gig = None              # the Band, while its page is up (screens/band.py)
+        self.band_brain = BandBrain()   # ...and who decides for its players: a decision model on your bot's computer
         self.brain = SnakeBrain()     # Snake's AI: a decision model on your bot's computer
         self.brain_asked = None       # (game, step, round) it was last asked about
         self.brain_round = 0          # (one more each time it wakes up: an answer from before isn't used)
@@ -1580,6 +1585,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
         self.glow_tick(now)                            # (your LED backlights: this one's music on them)
+        self.board_tick(now)                           # (Apps > Soundboard: its player, with its page; its sounds)
+        self.band_tick(now)                            # (Apps > Band: its player, the others in it, each bar ahead)
         if self.prog is not None:
             self.prog_tick()
         if self.chromium is not None:
@@ -1793,6 +1800,12 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             done = bool(length) and pos > length * 0.9
             if quick:
                 self.player_report(self.proc, f"a {self.vod_name(it)} video")
+            if quick and it and self.ahead_gave_up():  # (played with some in hand, and it wouldn't: as before, then)
+                self.plex_restart(self.plex_base)
+                return
+            if quick:
+                self.ahead_not_it()                    # (nor as before: so it wasn't how it was played)
+            self.ahead_stop()
             self.proc = None
             self.plex_finish(it, pos, self.plex_session, done)
             self.kind, self.cur = None, None
@@ -1825,6 +1838,11 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 return
             if quick and was in ("live", "video") and self.lenient_again(p):
                 return                                 # (FFmpeg turned it down for its pieces' links: not to mind)
+            if quick and was in ("live", "video") and self.cur and self.queue and self.ahead_gave_up():
+                self.play(self.queue, self.qi, start=0 if was == "live" else None, show=False)
+                return                                 # (played with some in hand, and it wouldn't: as before, then)
+            if quick:
+                self.ahead_not_it()                    # (nor as before: so it wasn't how it was played)
             if was == "live" and not quick and self.live_again(now):
                 return                                 # (it had been playing: tuned in again)
             online = bool(self.cur) and self.cur["src"].startswith("ia:")
@@ -1838,6 +1856,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.play(self.queue, i, show=False)  # (on to the next, wherever you are)
             else:
                 self.kind = None
+                self.ahead_stop()
                 if was not in LISTEN_KINDS or self.view == "now":
                     self.view = "list"
                 self.dirty = True
