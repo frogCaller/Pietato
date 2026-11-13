@@ -44,7 +44,7 @@ for w, h in ((1920, 1080), (1280, 720)):
             m.press("right")
         else:
             m.press("left")
-            m.open_app([t["name"] for t in g.LIBRARY].index("Game of Life"))   # (Orbits: gone)
+            m.open_app([t["name"] for t in g.LIBRARY].index("Rock Paper Scissors"))
         parts.clear()
         for _ in range(25):
             m.dirty = True

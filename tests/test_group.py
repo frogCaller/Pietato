@@ -302,7 +302,8 @@ class FB:
 g.Framebuffer = FB
 json.dump({"settings": {"name": "Den", "accent": "Teal"}}, open(g.STATE_FILE, "w"))
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
-check("Apps has Group chat, first", next(t for t in g.LIBRARY if t["name"] == "Apps")["children"][0] == "Group chat"
+APPS = next(t for t in g.LIBRARY if t["name"] == "Apps")["children"]
+check(f"Apps has Group chat, after the Fish Tank ({APPS[:6]})", APPS[APPS.index("Fish Tank") + 1] == "Group chat"
       and g.LIBRARY[m.tab_index("chat")]["parent"] == "Apps")
 now = time.time()
 K = "http://10.0.0.21:5432"

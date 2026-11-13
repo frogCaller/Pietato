@@ -115,8 +115,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 Ollama 0.35 or newer: told what each move would do (deadly, trapped, risky or safe, and
                 nearer the apple or not), it picks the snake's moves, asked about where the snake will be by
                 the time it answers; the game never waits for it (Keeps up: how many of the snake's
-                moves it decided in time; for the rest it goes straight on). X again, and it's yours.
-                START picks the model.
+                moves it decided in time; for the rest it goes straight on). Beside the board, its decisions
+                as it makes them: the snake's four moves, each with what it was told about it in a word,
+                and the one it picked bright. X again, and it's yours. START picks the model.
                 Your own games, in the Games folder: Game Boy, GBA, NES, SNES, Genesis, Master System, Game Gear,
                 Neo Geo, Neo Geo Pocket, PlayStation and (on a Pi 4 or 5) N64, PSP, DS and Dreamcast play here
                 (HOME is a game's menu: save states, discs, players, the picture (Fill: the whole screen, an N64
@@ -185,9 +186,18 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
     Rock Paper Scissors - pieces bounce around, and one hit by its counter switches sides until
                 one team is left; left and right pick a winner before the first capture (drawn 20
                 times a second, or 30 or 60 where a frame leaves the machine the time)
-    Game of Life - Conway's rules (or HighLife, Day & Night, Seeds), cells coloured by age
     Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
                 next; A calls it, X feeds it (the web page arranges the tanks)
+    The Cookie  - one cookie between all your Pietatos: only one has it (a small one by its clock says so),
+                and another takes it by beating it at one throw of rock paper scissors (a win: it's theirs;
+                a loss or the same throw: it stays). Their Bots try by themselves, one of them about every
+                ten minutes (not at night, in a game, or with the group chat quiet), each with a habit of
+                its own; the one that takes it says so in the group chat. Its page: who has it, each one's
+                last throws, and yours: left rock, up paper, right scissors (with the cookie here and the
+                page open, another's try waits a few seconds for your throw). Its holder off for an hour:
+                it goes to the one that's waited longest. One that wins three throws in a row or more: the
+                one it just beat may say it's cheating (it isn't), and they argue about it in the group
+                chat (pitato/cookie.py; POST /api/cookie)
     LED backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
                 TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
                 the edges of the game on whichever of your Pietatos it follows (pitato/glow.py: a UDP
@@ -217,10 +227,7 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 the tempo, the volume, and who decides what each player does with its next four bars: dice,
                 or a decision model on your bot's computer (asked four bars ahead, never waited for).
                 pitato/band.py has the music, pitato/bandplay.py plays it (a process of its own, as you)
-    Mandelbrot Set - dives into the set to one well-known place after another, down to a tiny copy
-                of the set or as deep as the numbers go; or the d-pad explores it: A zooms in,
-                Y out, for as long as they're held
-                A pauses, X gives it a poke, Y starts it again, START has its options
+                In a world to watch, A pauses, X gives it a poke, Y starts it again, START has its options
     cmatrix     - Linux's own cmatrix, on the whole screen, the buttons its keys: left and right its
                 colour, up and down its speed, A pauses, X bold, Y mixed speeds, SELECT rainbow, and
                 B (or HOME) stops it

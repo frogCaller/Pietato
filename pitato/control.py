@@ -251,6 +251,12 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 except Exception as ex:
                     print(f"group chat: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
+            if cmd["cmd"] == "cookie":                 # another of yours tries for the cookie: answered here (it
+                try:                                   # may wait a few seconds for your throw), off the main loop
+                    return self.reply(200, media.web_cookie(cmd))
+                except Exception as ex:
+                    print(f"the cookie: {ex!r}", flush=True)
+                    return self.reply(500, {"error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "computer":               # another computer's files: it can take a while, so here
                 try:
                     return self.reply(200, media.web_computer(cmd))

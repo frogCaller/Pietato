@@ -1,6 +1,8 @@
 """The main loop: terminal mode (buttons as keys) and media mode, and starting up."""
+import os
 import selectors
 import signal
+import threading
 import time
 from evdev import ecodes as e, UInput
 
@@ -16,6 +18,7 @@ from .pilot import changes, PILOT_MOST, Pilots
 
 
 NEVER = float("inf")
+EXIT_WAIT = 10.0  # seconds it has to tidy up when it's told to stop (the Pi shutting down): then it goes as it is
 HOT_HELD = 10.0  # HOME down in the menus this long without letting go: as if it had (◀ or ▶ go as themselves)
 WEB_HOLD_LOST = 1.0  # a button held down on the web page's remote, in a game: let go of here when the page hasn't said
                      # it's still held for this long (the page closed, or its WiFi gone)
@@ -626,6 +629,8 @@ def run(ui, media, control=None, stop=None):
 
             keys_check()
             found(pads.scan(time.monotonic()))
+            if pads.switched_off(time.monotonic()):    # (a GPi Case's switch is off, and the Pi's still on: its
+                media.power_off()                      #  change was missed, or the Pi didn't go when it was asked)
             if pilots.sessions:
                 pilot_take(pilots.check(time.monotonic()))   # (one gone quiet: what it held let go of; then it's gone)
             media.tick()
@@ -676,13 +681,26 @@ def main():
     media.share_start()                            # (your other Pietatos told it's here: what it fetches, shared)
     media.eyes_start()                             # (a USB camera plugged in: someone moving is you, here: group chat)
     media.dock_start()                             # (a GPi Case 2: its dock watched, the picture following it)
+    media.power_start()                            # (a GPi Case: its power switch's pin watched, as well as its key)
     media.glow_start()                             # (Apps > LED backlight: its LED grid lit)
     media.lamps_start()                            # (lights of your own on the network, an ESP32's LED: found)
     media.chromium_leftover()                      # (Chromium, if the last Pietato left it running: closed)
     control = Control()
     serve_control(media, control, key=control_key())
 
+    leaving = []
+
+    def gone():
+        time.sleep(EXIT_WAIT)
+        print("stopping: still tidying up, so it goes as it is", flush=True)
+        os._exit(0)
+
     def on_term(*_):
+        """Told to stop (the Pi's shutting down, or Pietato's being started again): it tidies up and goes. Whatever
+        that gets stuck on, it's gone EXIT_WAIT seconds on: a shutdown never waits long for it."""
+        if not leaving:
+            leaving.append(threading.Thread(target=gone, daemon=True, name="leaving"))
+            leaving[0].start()
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, on_term)
 

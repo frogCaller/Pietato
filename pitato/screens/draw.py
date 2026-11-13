@@ -12,6 +12,7 @@ from ..handheld import battery, is_handheld
 from ..library import LIBRARY, LISTEN_KINDS
 from ..screen import slow_pi
 from ..home import mix
+from ..cookiepage import cookie_mark
 from .chromium import CHROME_HELP, CHROME_NOTES
 
 
@@ -87,7 +88,7 @@ class DrawScreen:
             "note": f(FONT, 72), "mono_s": f(FONT_MONO, 15), "mono_l": f(FONT_MONO, 20),
             "head": f(FONT_BOLD, 18), "status": f(FONT, 13), "status_b": f(FONT_BOLD, 13),
             "code": f(FONT_MONO, 44), "price": f(FONT_BOLD, 46), "mid": f(FONT_BOLD, 24),
-            "small_b": f(FONT_BOLD, 15), "label": f(FONT, 14), "temp": f(FONT_BOLD, 72),
+            "small_b": f(FONT_BOLD, 15), "label": f(FONT, 14), "label_b": f(FONT_BOLD, 14), "temp": f(FONT_BOLD, 72),
             "home_clock": f(FONT_THIN, 52), "wx_temp": f(FONT_THIN, 52), "home_ampm": f(FONT_UI, 17),
             "home_date": f(FONT_UI, 17), "home_label": f(FONT_UI, 14), "home_foot": f(FONT_UI, 15),
             "home_pop_head": f(FONT_UI_BOLD, 11), "home_pop_title": f(FONT_UI_BOLD, 18), "home_pop_sub": f(FONT_UI, 14),
@@ -303,7 +304,8 @@ class DrawScreen:
     def status_signature(self):
         t = cpu_temp()
         sig = (time.strftime("%H:%M"), wifi_bars(wifi_quality()),
-               None if t is None else round(t), self.kind, self.meta.get("song"), self.assist_status())
+               None if t is None else round(t), self.kind, self.meta.get("song"), self.cookie_here(),
+               self.assist_status())                   # (cookie_here: the cookie's on this one, a small one by the time)
         return sig + (battery(),) if is_handheld() else sig   # (an RK3326 handheld's battery: its level, on the bar)
 
     def status_bar(self, d, clock=True):
@@ -311,9 +313,13 @@ class DrawScreen:
         y = self.STATUS_H // 2 + 1
         if clock:
             d.text((20, y), self.clock_text(), font=F["status_b"], fill=BODY, anchor="lm")
+            after = 20 + d.textlength(self.clock_text(), font=F["status_b"])
+            if self.cookie_here():                     # (the cookie's here: a small one, after the time)
+                cookie_mark(d, after + 17, y, 6)
+                after += 24
             timer = self.assist_status()               # (a timer of yours, running: how long it has left)
             if timer:                                  # (an hourglass, then how long)
-                tx = 20 + d.textlength(self.clock_text(), font=F["status_b"]) + 18
+                tx = after + 18
                 d.line((tx, y - 6, tx + 10, y - 6), fill=ACCENT, width=2)
                 d.line((tx, y + 6, tx + 10, y + 6), fill=ACCENT, width=2)
                 d.line((tx + 1.5, y - 5, tx + 5, y, tx + 8.5, y - 5), fill=ACCENT, width=1)

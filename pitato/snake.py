@@ -32,6 +32,7 @@ SNAKE_AI_BEHIND = 0.5      # less than this share of the moves decided by it: it
 SNAKE_AI_JUDGE = 100       # ...once a game's gone on this many moves
 SNAKE_AI_SAYS = ("Which way should the snake go next? Never pick a deadly move, and avoid trapped and risky "
                  "ones. Of the safe moves, pick one that eats the apple, or else one that gets closer to it.")
+SNAKE_AI_HINT = "X lets the AI play. Its decisions show here as it makes them."   # beside the board, while you play
 # Snake's picture in the Games list: a board this many cells across and down, the snake on it (tail first), the
 # way it's going, and the apple it's about to eat
 SNAKE_CARD = (5, ((0, 3), (1, 3), (2, 3), (2, 2), (2, 1), (3, 1)), (1, 0), (4, 1))
@@ -60,6 +61,19 @@ def snake_card(size, fine=1):
     return out.resize((size, size), Image.LANCZOS)
 
 
+def snake_brief(told):
+    """What the AI's told about a move (one of situation's choices), in a word or two for the page: "deadly",
+    "dead end" (trapped), "risky"; or, of a safe one, what it does about the apple ("the apple": it eats it,
+    "closer", "further", "no closer"; "safe" when there's none left)."""
+    if not told.startswith("Safe"):
+        return {"Deadly": "deadly", "Trapped": "dead end", "Risky": "risky"}.get(told.split(":")[0], "")
+    for said, words in (("eats the apple", "the apple"), ("no closer", "no closer"), ("closer", "closer"),
+                        ("further", "further")):
+        if said in told:
+            return words
+    return "safe"
+
+
 class Snake(Sim):
     """Snake: the d-pad steers it to the apples, and each one it eats makes it longer, until it runs
     into itself (or a wall: Walls can wrap round instead). A game: ready (A or the d-pad starts it), on,
@@ -71,6 +85,7 @@ class Snake(Sim):
     options = SNAKE_OPTIONS             # (and AI: the decision models on your bot's computer, once found)
     restart_for = ("board", "walls")
     holds = True                        # (it follows the d-pad itself: no key repeat)
+    look_now = True                     # (the AI's decisions beside the board: each shown as it's made)
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
@@ -80,6 +95,7 @@ class Snake(Sim):
         self.ai_model = ""              # ...which
         self.ai_waking = False          # ...waiting for its first move (the game waits too)
         self.ai_ms = None               # how long its moves take to come, of late (ms)
+        self.ai_sure = None             # ...and how sure it says it is of them, of late (0 to 1), if it says
         self.ai_want = False            # X pressed: it takes over once a decision model is found
         self.ai_lost = 0                # its moves lost in a row
         self.games = 0                  # (each game's number: a move meant for one isn't used in the next)
@@ -104,6 +120,7 @@ class Snake(Sim):
         self.new_best = False
         self.ai_used = self.ai          # (a game the AI had a hand in counts towards its best, not yours)
         self.plan = {}                  # the AI's moves, decided ahead: {k: its move after the k-th step}
+        self.decided = None             # ...the last it decided, for the page: (its pick, ((move, in a word)...))
         self.ai_moves = self.ai_kept = 0    # (moves made while it plays, and those it picked in time)
         self.again = SNAKE_AI_AGAIN     # (the AI's game over: seconds until it plays again)
         self.games += 1
@@ -222,6 +239,14 @@ class Snake(Sim):
         self.phase, self.why, self.paused = "over", why, False
         return "over"
 
+    def decide(self, pick, choices, sure=None):
+        """A move the AI picked, of those it was told about (choices: situation's), and how sure it says it is
+        (0 to 1, or None): kept for the page, which shows its decisions as it makes them."""
+        self.decided = (pick, tuple((name, snake_brief(choices[name])) for name in SNAKE_DIRS if name in choices))
+        if sure is not None:
+            sure = max(0.0, min(1.0, sure))
+            self.ai_sure = sure if self.ai_sure is None else self.ai_sure * 0.8 + sure * 0.2
+
     # what's shown
     def stats(self):
         if not self.ai:
@@ -230,7 +255,12 @@ class Snake(Sim):
         return [("Score", str(self.apples)), ("AI best", str(self.ai_best)), ("Length", str(len(self.body))),
                 ("AI", name if len(name) <= 13 else name[:12] + "…"),
                 ("Decides in", "…" if self.ai_ms is None else f"{self.ai_ms:,.0f} ms"),
-                ("Keeps up", f"{round(100 * self.ai_kept / self.ai_moves)}%" if self.ai_moves else "…")]
+                ("Keeps up", f"{round(100 * self.ai_kept / self.ai_moves)}%" if self.ai_moves else "…")] + (
+                    [] if self.ai_sure is None else [("How sure", f"{round(100 * self.ai_sure)}%")])
+
+    def look(self):
+        """Beside the board, while the AI plays: its last decision (the page draws it again when it changes)."""
+        return self.decided if self.ai else None
 
     def keeps_up(self):
         """The share of the snake's moves (this game) the AI decided in time: None, too soon to say."""
@@ -523,7 +553,8 @@ class SnakeBrain:
     def __init__(self):
         self.cv = threading.Condition()
         self.job = None                 # ("models", server) or ("move", server, model, state, choices, tag, timeout)
-        self.done = []                  # what came back, for the main loop: (kind, tag, answer, ms, error)
+        self.done = []                  # what came back, for the main loop: (kind, tag, answer, ms, error), and
+                                        # for a move, how sure of it the model says it is (0 to 1, or None)
         self.models, self.models_for, self.models_at = [], "", -1e9    # the decision models, from where, when
         self.thread = None
 
@@ -564,8 +595,8 @@ class SnakeBrain:
                     out = ("models", None, found, 0.0, "")
                 else:
                     _, server, model, state, choices, tag, timeout = job
-                    pick, _ = ollama_decide(server, model, state, SNAKE_AI_SAYS, choices, timeout)
-                    out = ("move", tag, pick, (time.monotonic() - t0) * 1000, "")
+                    pick, sure = ollama_decide(server, model, state, SNAKE_AI_SAYS, choices, timeout)
+                    out = ("move", tag, pick, (time.monotonic() - t0) * 1000, "", sure)
             except Exception as ex:                    # (it says why; the game carries on regardless)
                 out = (job[0], job[5] if job[0] == "move" else None, None, 0.0, str(ex) or repr(ex))
             with self.cv:

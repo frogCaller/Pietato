@@ -5,21 +5,21 @@ import time
 from ..theme import ACCENT, BG, BODY, co_mix, LINE, look, MUTED, PILL, PILL_TEXT, ROW, TEXT
 from ..library import LIBRARY
 from ..sims import (
-    Life, RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
+    RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
     SIM_FLOOR, SIM_FULL, SIM_IN, SIM_PANEL)
 from ..fishtank import FishTank, fish_default
 from ..backlight import Backlight
 from ..clock import Clock
-from ..mandelbrot import Mandelbrot
 from ..notes import Notes
 from ..fortune import Fortune
-from ..snake import Snake
+from ..snake import Snake, SNAKE_AI_HINT
 from ..soundboard import Soundboard
 from ..bandstage import BandStage
+from ..cookiepage import CookiePage
 
 
-SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, Life, FishTank, Backlight, Soundboard, BandStage,
-                           Mandelbrot, Snake)}
+SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, FishTank, Backlight, Soundboard, BandStage,
+                           CookiePage, Snake)}
 CLOCK_KEYS = {"a": "look", "up": "colour", "down": "colour", "left": "font", "right": "font",
               "x": "background", "y": "date"}    # the Clock's buttons: the option each changes (its seconds: START's)
 
@@ -52,9 +52,10 @@ class SimScreen:
     def sim_full(self):
         """Full screen: just the sim, on the whole screen (for every sim). Not the LED backlight's page on a Pietato
         with no LEDs of its own: what it says is beside its box and at its foot, and full screen has neither. Nor the
-        Soundboard: its page is the whole of it already, and SELECT there stops the sounds."""
+        Soundboard: its page is the whole of it already, and SELECT there stops the sounds. Nor The Cookie: its
+        buttons are along the bottom."""
         return (self.setting("sim_full") == "On" and not self.sim_plain() and not self.board_tab()
-                and not self.band_tab())
+                and not self.band_tab() and not self.cookie_tab())
 
     def sim_plain(self):
         """This page is the LED backlight's on a Pietato with no LEDs of its own: your ESP32 boards' page."""
@@ -118,6 +119,8 @@ class SimScreen:
             self.board_page(s)                                 # (its bank and buttons, as they are: screens/soundboard.py)
         if kind is BandStage:
             self.band_page(s)                                  # (who's on what, the chord, your buttons: screens/band.py)
+        if kind is CookiePage:
+            self.cookie_page(s)                                # (who has it, what's just happened: screens/cookie.py)
         return s
 
     def sim_set_full(self, on):
@@ -157,11 +160,12 @@ class SimScreen:
             got = self.press_glow(s, name, repeat)
             if got is not False:
                 return got
+        if s.key == "cookie":                          # (The Cookie: your throw, screens/cookie.py)
+            got = self.press_cookie(s, name, repeat)
+            if got is not False:
+                return got
         if name in ("b", "l", "r"):
             return "pass"
-        if s.key == "mandel" and name in Mandelbrot.MOVES and self.press_mandel(s, name, repeat):
-            self.dirty = True
-            return None
         if s.key == "snake" and name in ("up", "down", "left", "right", "a", "x", "y", "start"):
             if not repeat:
                 self.press_snake(s, name)
@@ -230,36 +234,10 @@ class SimScreen:
         self.toast(f"{label}: {new}", 2)
         self.dirty = True
 
-    def press_mandel(self, s, name, repeat):
-        """The Mandelbrot Set: exploring, the d-pad moves round it and A zooms in, Y out, for as long as
-        they're held; on the tour, the d-pad starts exploring from where it is. True if it took the press."""
-        if s.phase != "explore":
-            if name not in ("up", "down", "left", "right") or repeat:
-                return False
-            self.set_setting("sim_mandel_mode", "Explore")
-            s.configure({"mode": "Explore"})
-            self.toast("Exploring. START has the tour", 3)
-        if repeat:                                     # (held down on the web page)
-            s.nudge(name)
-            return True
-        if name == "a" and s.ex and s.ex["L"] >= s.DEEPEST:
-            self.toast("As deep as it can go", 2)
-        elif name == "y" and s.ex and s.ex["L"] <= 0:
-            self.toast("That's the whole set", 2)
-        s.hold(name)
-        return True
-
-    def on_mandel_page(self):
-        """The Mandelbrot Set is on screen (its options closed)."""
-        return self.on_sim_page() and self.sim_opts is None and LIBRARY[self.tab].get("sim") == "mandel"
-
     def takes_repeats(self, name):
         """A press held down on the web page goes on and on here (beyond the usual arrows in lists): Chromium's
-        pointer and its scrolling too."""
-        if self.chromium_shown():
-            return name in ("up", "down", "left", "right", "l", "r")
-        s = self.sims.get("mandel")
-        return (self.on_mandel_page() and s is not None and s.phase == "explore" and name in Mandelbrot.MOVES)
+        pointer and its scrolling."""
+        return self.chromium_shown() and name in ("up", "down", "left", "right", "l", "r")
 
     def press_sim_opts(self, s, name, repeat):
         """START's card: up and down pick a row, left and right change it, A or B closes it."""
@@ -413,25 +391,30 @@ class SimScreen:
 
     def sim_numbers(self, s, sig):
         """Beside a sim's box: its name, what it is, its numbers and (for some) a chart. The words that
-        don't change are kept, drawn again when sig changes."""
+        don't change are kept, drawn again when sig changes. Snake: while the AI plays, its decisions there
+        instead (screens/snake.py); while you do, a word about that."""
         from ..fine import Image, ImageDraw
         world, panel, _ = self.sim_layout()
         W, H = panel[2] - panel[0], panel[3] - panel[1]
         stats = s.stats()
         top = 10
+        deciding = s.key == "snake" and s.ai
         if self.sim_still[0] != sig:
             img = Image.new("RGB", (W, H), BG)
             d = ImageDraw.Draw(img)
             self.sim_text(img, (0, top + 2), LIBRARY[self.tab].get("title") or LIBRARY[self.tab]["name"], "head",
                           TEXT, BG)
             y = top + 28
-            for line in self.wrap(d, s.blurb, self.fonts["status"], W, lines=6):
+            words = "" if deciding else SNAKE_AI_HINT if s.key == "snake" else s.blurb
+            for line in self.wrap(d, words, self.fonts["status"], W, lines=6) if words else ():
                 self.sim_text(img, (0, y), line, "status", MUTED, BG)
                 y += 17
             for k, (label, _) in enumerate(stats):
                 self.sim_text(img, (0, 154 + k * 24), label, "label", MUTED, BG)
             self.sim_still = (sig, img)
         img = self.sim_still[1].copy()
+        if deciding:
+            self.snake_deciding(img, s, top + 30)
         for k, (_, value) in enumerate(stats):
             y = 154 + k * 24
             if value.isdigit():
@@ -444,23 +427,11 @@ class SimScreen:
             box = (0, 154 + len(stats) * 24, W - 1, 154 + len(stats) * 24 + 66)
             d.rounded_rectangle(box, radius=6, fill=SIM_FLOOR, outline=LINE)
             self.sim_chart(d, *chart, box)
-            return img
-        pw, ph = W - 10, round((W - 10) * (world[3] - world[1]) / (world[2] - world[0]))
-        got = s.inset(pw, ph)
-        if got:                                        # (the Mandelbrot Set: where the dive is)
-            pic, words = got
-            x, y = 5, 154 + len(stats) * 24 - 4
-            if self.sim_mask is None or self.sim_mask.size != (pw, ph):     # (its round corners)
-                self.sim_mask = Image.new("L", (pw, ph), 0)
-                ImageDraw.Draw(self.sim_mask).rounded_rectangle((0, 0, pw - 1, ph - 1), radius=6, fill=255)
-            img.paste(pic, (x, y), self.sim_mask)
-            ImageDraw.Draw(img).rounded_rectangle((x - 1, y - 1, x + pw, y + ph), radius=7, outline=LINE)
-            self.sim_text(img, (W / 2, y + ph + 15), words, "status", MUTED, BG, anchor="m")
         return img
 
     def sim_overlay(self, s):
         """The card over the box, if there's one, as (picture, where): START's options; Paused; a sim's
-        note (Life when it settles); in Rock Paper Scissors the moment to pick a winner, and who won.
+        note (Snake's start and its game over); in Rock Paper Scissors the moment to pick a winner, and who won.
         Full screen: just START's options."""
         if self.sim_opts is not None and s.key == "glow":   # (the LED backlight's card: screens/glow.py)
             key = self.glow_card_key()
@@ -663,7 +634,8 @@ class SimScreen:
                 sig = (s.key, self.tab, tuple(label for label, _ in s.stats()), ACCENT)
                 pkey = (sig, tuple(s.stats()), len(s.history), s.look())
             old = self.sim_panel[0]
-            fresh = not bare and (old is None or old[0] != sig or (pkey != old and now - self.sim_panel[2] >= 0.25))
+            fresh = not bare and (old is None or old[0] != sig or (s.look_now and pkey[-1] != old[-1])
+                                  or (pkey != old and now - self.sim_panel[2] >= 0.25))
             if fresh:
                 self.sim_panel = (pkey, self.rps_scores(s, sig) if s.key == "rps" else self.sim_numbers(s, sig), now)
         img = self.sim_base[1].copy()

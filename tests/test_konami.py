@@ -128,7 +128,7 @@ def code(*names):
 # ---- Apps', and its page ----------------------------------------------------------------------------------
 names = g.LIBRARY[SIMI]["children"]
 check(f"Apps: Konami code, after its worlds and before Linux's programs ({names})",
-      names.index("Konami code") == names.index("Mandelbrot Set") + 1 and names.index("cmatrix")
+      names.index("Konami code") == names.index("Band") + 1 and names.index("cmatrix")
       == names.index("Konami code") + 1)
 m.tab, m.view = SIMI, "list"
 m.load_tab(SIMI)

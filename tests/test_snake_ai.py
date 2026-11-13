@@ -5,7 +5,8 @@ stand-in that takes so long to answer (each move made right where it was picked 
 up with every move; a slow one told it can't; late answers not used), then X in media mode against a
 stand-in Ollama on 'your bot's computer' (only its decision models offered; the model woken first; the
 game never waiting for a slow one; one that keeps failing given up; another picked on START's card; no
-Bot set up, no decision models, an Ollama too old), in real time."""
+Bot set up, no decision models, an Ollama too old), in real time. Beside the board, its decisions as it makes
+them where Snake's description was: each move in a word or two, its pick bright, drawn again at once for each."""
 import json, os, random, re, shutil, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -136,6 +137,43 @@ setup(s, [(3, 10), (2, 10), (1, 10)], (-1, 0), (0, 10))
 _, slow = s.situation(gap=2)
 check(f"...but an apple by the wall isn't (it's worth it, and its next move turns it): {slow['left']!r}",
       slow["left"] == "Safe: it eats the apple." and slow["up"].startswith("Safe") and slow["down"].startswith("Safe"))
+
+# ...and each in a word or two, for the page; a decision, kept for it
+SAID = {"Deadly: the snake runs into the wall.": "deadly", "Deadly: the snake runs into its own body.": "deadly",
+        "Trapped: it's a dead end with room for only 2 cells. It gets further from the apple (34 moves away).": "dead end",
+        "Trapped: it's a dead end with room for only 2 cells. It eats the apple.": "dead end",
+        "Risky: it must turn soon. Going on straight, it runs into the wall in 3 moves. "
+        "It gets further from the apple (30 moves away).": "risky",
+        "Risky: it must turn soon. Going on straight, it runs into its own body in 2 moves. "
+        "It gets closer to the apple (4 moves away).": "risky",
+        "Safe: it eats the apple.": "the apple", "Safe: it gets closer to the apple (13 moves away).": "closer",
+        "Safe: it gets closer to the apple (1 move away).": "closer",
+        "Safe, but it gets further from the apple (15 moves away).": "further",
+        "Safe, but it gets no closer to the apple (9 moves away).": "no closer", "Safe.": "safe"}
+got = {k: g.snake_brief(k) for k in SAID}
+check(f"each move in a word or two, for the page: {sorted(set(got.values()))}", got == SAID)
+WORDS = set(SAID.values())
+s = game()
+setup(s, [(21, 2), (22, 2), (23, 2)], (1, 0), (0, 0))
+_, choices = s.situation()
+s.ai = True
+check(f"no decision yet: nothing of one to show ({s.look()}, {s.stats()[-1]})", s.look() is None and s.decided is None
+      and [k for k, _ in s.stats()] == ["Score", "AI best", "Length", "AI", "Decides in", "Keeps up"])
+s.decide("up", choices, 0.5)
+check(f"a decision, kept for the page: its pick, and each move it chose between in a word ({s.look()})",
+      s.look() == ("up", (("up", "closer"), ("down", "further"), ("right", "deadly"))))
+check(f"...and how sure it says it is ({s.stats()[-1]})", s.stats()[-1] == ("How sure", "50%"))
+s.decide("down", choices, 1.0)
+check(f"...of late: {s.stats()[-1]}", s.stats()[-1] == ("How sure", "60%") and s.look()[0] == "down")
+s.decide("up", choices)
+check(f"...a model that doesn't say: left as it was ({s.stats()[-1]})", s.stats()[-1] == ("How sure", "60%"))
+s.decide("up", choices, 7)
+check(f"...one that says something silly: no more than all the way ({s.ai_sure:.2f})", abs(s.ai_sure - 0.68) < 1e-9)
+s.ai = False
+check("...yours again: nothing of the AI's to show", s.look() is None and len(s.stats()) == 3)
+s.ai = True
+s.restart()
+check("a new game: its last decision gone with the old one", s.decided is None and s.look() is None)
 
 # looking ahead: where the snake will be
 s = game()
@@ -304,6 +342,7 @@ class Brain:
     def __init__(self, took):
         self.took, self.t = took, 0.0
         self.asks, self.coming, self.back = [], [], []
+        self.taken = 0                 # (moves that came back)
         self.models, self.models_for, self.models_at = [], "", 0.0
 
     def busy(self):
@@ -325,11 +364,13 @@ class Brain:
 
     def take(self):
         out, self.back = self.back, []
+        self.taken += sum(1 for o in out if o[0] == "move" and not o[4])
         return out
 
 
 made, watched = [], []                 # each move the snake being watched made: (game, step, head, way, its pick)
-real_step = g.Snake.step
+shown = []                             # each decision kept for the page: (its pick, in its plan by then, the words)
+real_step, real_decide = g.Snake.step, g.Snake.decide
 
 
 def watching(self):
@@ -338,7 +379,14 @@ def watching(self):
     return real_step(self)
 
 
+def deciding(self, pick, choices, sure=None):
+    real_decide(self, pick, choices, sure)
+    if watched and self is watched[0]:
+        shown.append((pick, pick in self.plan.values() and pick == policy(choices), self.decided))
+
+
 g.Snake.step = watching
+g.Snake.decide = deciding
 NAMES = {v: k for k, v in g.SNAKE_DIRS.items()}
 
 
@@ -356,7 +404,7 @@ def play(took, secs, speed="Normal", dt=0.05, then=None):
     s.values["speed"] = speed
     s.rng = random.Random(7)
     s.restart()
-    made.clear(); watched[:] = [s]
+    made.clear(); shown.clear(); watched[:] = [s]
     m.snake_ai_start(s)
     t, ends = 0.0, []
     while t < secs:
@@ -382,6 +430,13 @@ check(f"...it keeps up with the game ({share:.0%} of the moves its own), a move 
       f"({max(job[5][1] for job in m.brain.asks) - s.steps if s.games == 1 else '-'})", share >= 0.95)
 check(f"...and plays: {s.ai_best} apples, its games ending {ends or 'never'}", s.ai_best >= 4 and "the wall" not in ends)
 check(f"...nothing said about keeping up ({m.msg!r})", "keep up" not in (m.msg or ""))
+check(f"...each move it decided kept for the page as it came, its pick as the model made it ({len(shown)} of "
+      f"{m.brain.taken}), each move it chose between in a word or two ({shown[-1][2] if shown else None})",
+      len(shown) >= len(used) and len(shown) >= m.brain.taken - 2 and all(ok for _, ok, _ in shown)
+      and all(pick == d[0] and 2 <= len(d[1]) <= 3 and all(n in g.SNAKE_DIRS and w in WORDS for n, w in d[1])
+              for pick, _, d in shown))
+check(f"...a model that doesn't say how sure it is: no word of that ({s.stats()[-1]})", s.ai_sure is None
+      and [k for k, _ in s.stats()][-1] == "Keeps up")
 m, s, used, wrong, ends, share = play(0.25, 24)
 check(f"a slow model (250 ms a move, 111 ms a move in the game): the moves it picked are still made right where it "
       f"picked them ({len(used)} moves, {len(wrong)} anywhere else)", len(used) > 15 and not wrong)
@@ -394,6 +449,8 @@ check(f"...at Slow, it keeps up ({share:.0%} of the moves its own, {len(wrong)} 
 m, s, used, wrong, ends, share = play(0.02, 12, then=0.5)
 check(f"a model slower than it's reckoned: a move that comes too late isn't made anywhere else ({len(used)} moves, "
       f"{len(wrong)} anywhere else)", used and not wrong and share < 0.9)
+check(f"...nor shown as a decision: only those it made in time are ({len(shown)} of the {m.brain.taken} that came back)",
+      shown and len(shown) < m.brain.taken and all(ok for _, ok, _ in shown))
 
 # a move that comes while it's paused; another model picked, with a move from the last one on its way
 m, s = media()
@@ -467,7 +524,102 @@ m.render_sim()
 check(f"a frame: its move used, made, and the next asked straight away ({s.steps} steps, {m.brain.asks[-1][5]})",
       s.steps == 1 and s.ai_kept == 1 and len(m.brain.asks) == 2 and m.brain.asks[-1][5][1] >= 1)
 m.press("b")
-g.Snake.step = real_step
+g.Snake.step, g.Snake.decide = real_step, real_decide
+
+
+# beside the board: a word about the AI while you play; while it does, its decisions as it makes them
+def beside(m):
+    """What's drawn beside the board from here on ([(the words, their font, their colour)]), and each part of the
+    screen sent."""
+    words, boxes = [], []
+    real_text, real_part = m.sim_text, m.fb.show_part
+    m.sim_text = lambda img, xy, text, font, fill, bg, anchor="l": (
+        words.append((text, font, fill)), real_text(img, xy, text, font, fill, bg, anchor))[1]
+    m.fb.show_part = lambda img, box: (boxes.append(tuple(box)), real_part(img, box))[1]
+    return words, boxes
+
+
+def frame(m):
+    """A frame, a hundredth of a second after the last: the words and the parts sent in it alone."""
+    words.clear(); boxes.clear()
+    m.sim_t = time.monotonic() - 0.01
+    m.render_sim()
+
+
+def moves_drawn():
+    """The snake's moves as they're drawn there: {move: (font, colour)}, and [(what's beside each, its colour)]."""
+    return ({t.lower(): (f, c) for t, f, c in words if t.lower() in g.SNAKE_DIRS},
+            [(t, c) for t, f, c in words if f == "small" and (t in WORDS or t == "–")])
+
+
+m, s = media()
+words, boxes = beside(m)
+frame(m)
+said = " ".join(t for t, f, _ in words if f == "status")
+check(f"while you play, beside the board: a word about the AI where Snake's description was ({said!r})",
+      said == g.SNAKE_AI_HINT and all(c == g.MUTED for _, f, c in words if f == "status")
+      and not any("Steer" in t or "longer" in t for t, _, _ in words) and not moves_drawn()[0])
+wrapped = []
+real_wrap = m.wrap
+m.wrap = lambda d, text, *a, **k: (wrapped.append(text), real_wrap(d, text, *a, **k))[1]
+m.press("start")
+frame(m)
+check("...the description's on START's card, as ever", m.sim_opts is not None and g.Snake.blurb in wrapped
+      and "Steer with the d-pad" in g.Snake.blurb)
+m.press("b")
+m.wrap = real_wrap
+m.brain, m.snake_ai_model = Brain(0.01), lambda: "nimble:latest"
+m.snake_ai_start(s)
+frame(m)
+names, vals = moves_drawn()
+check(f"X, while the AI wakes: the snake's four moves there instead, none picked yet ({names})",
+      list(names) == list(g.SNAKE_DIRS) and all(v == ("label", g.MUTED) for v in names.values()) and not vals
+      and not any(f == "status" for _, f, _ in words))
+m.brain.tick(1.0)
+frame(m)
+pick, told = s.decided or (None, ())
+told = dict(told)
+names, vals = moves_drawn()
+TINTS = {"the apple": g.DONE, "risky": g.accent_for("Gold"), "dead end": g.accent_for("Gold"), "deadly": g.WARN}
+check(f"its first decision: drawn that very frame, its pick bright and the rest not ({pick}: {[t for t, _ in vals]})",
+      pick in told and names.get(pick) == ("label_b", g.TEXT)
+      and all(names.get(n) == ("label", g.MUTED) for n in g.SNAKE_DIRS if n != pick)
+      and vals == [(told.get(n, "–"), TINTS.get(told[n], g.TEXT) if n == pick else g.MUTED) for n in g.SNAKE_DIRS])
+check(f"...each move with what it was told about it, in a word; back the way it came isn't one ({told})",
+      len(told) == 3 and "left" not in told and [t for t, _ in vals][2] == "–")
+frame(m)                                           # (its buttons changed as it woke: the whole screen, once)
+box, _, dirty = m.sim_layout()
+frame(m)
+check(f"a frame with no new decision: nothing beside the board drawn again, the board alone sent ({boxes})",
+      not words and boxes == [box])
+other = next(n for n in told if n != pick)
+s.decide(other, m.brain_told[1])
+frame(m)
+names, vals = moves_drawn()
+check(f"another decision, a hundredth of a second later: drawn again at once, sent with the board ({other}, {boxes})",
+      names.get(other) == ("label_b", g.TEXT) and names.get(pick) == ("label", g.MUTED) and boxes == [dirty])
+s.decide(other, m.brain_told[1])
+frame(m)
+check("...the same again: nothing to draw", not words and boxes == [box])
+s.apples += 1
+frame(m)
+check("...its numbers alone are drawn every quarter of a second, as ever", not words and boxes == [box])
+s.decided = ("up", (("up", "the apple"), ("left", "deadly"), ("right", "risky")))
+frame(m)
+_, vals = moves_drawn()
+check(f"the apple, picked: in green ({vals})", vals == [("the apple", g.DONE), ("–", g.MUTED), ("deadly", g.MUTED),
+                                                         ("risky", g.MUTED)])
+for name, word, colour in (("left", "deadly", g.WARN), ("right", "risky", g.accent_for("Gold"))):
+    s.decided = (name, s.decided[1])
+    frame(m)
+    _, vals = moves_drawn()
+    check(f"...a {word} move, picked: in a colour of its own ({[c for t, c in vals if t == word]})",
+          (word, colour) in vals and colour not in (g.TEXT, g.MUTED) and ("the apple", g.MUTED) in vals)
+m.press("x")
+frame(m)
+said = " ".join(t for t, f, _ in words if f == "status")
+check("X again, yours: the word about the AI is back", not s.ai and said == g.SNAKE_AI_HINT and not moves_drawn()[0])
+m.press("b")
 
 # ---- X, against the stand-in Ollama, in real time ---------------------------------------------------------------
 # no Bot set up
@@ -510,8 +662,11 @@ check("...each a choice of moves, with what each would do, and the game as it st
       and "apple" in body["state"] and "snake" in body["state"]
       and all(v.split(":")[0].split(",")[0] in ("Deadly", "Trapped", "Risky", "Safe") for v in q["criteria"].values()))
 stats = s.stats()
-check(f"...beside the board: {stats}", [k for k, _ in stats] == ["Score", "AI best", "Length", "AI", "Decides in", "Keeps up"]
-      and stats[3][1] == "nimble" and stats[4][1].endswith(" ms") and stats[5][1].endswith("%"))
+check(f"...beside the board: {stats}", [k for k, _ in stats] == ["Score", "AI best", "Length", "AI", "Decides in", "Keeps up",
+                                                                  "How sure"]
+      and stats[3][1] == "nimble" and stats[4][1].endswith(" ms") and stats[5][1].endswith("%") and stats[6][1] == "60%")
+check(f"...and its last decision: {s.decided}", s.decided is not None and s.decided[0] in dict(s.decided[1])
+      and all(n in g.SNAKE_DIRS and w in WORDS for n, w in s.decided[1]))
 hints = [label for _, label, *_ in m.sim_hints(s)]
 check(f"...its buttons: {hints}", hints == ["You play", "Pause", "New game", "Options"])
 m.msg = None

@@ -1,5 +1,5 @@
 """Apps' Clock: on its own (when its picture changes, the dial's hands where the time says, the digital
-look's figures, 12 or 24 hours), then in media mode: in Apps' list after Group chat, in the middle of the page with no
+look's figures, 12 or 24 hours), then in media mode: first in Apps' list, in the middle of the page with no
 box, a frame a second (not twenty), A switching the look (kept), START's options, full screen, the battery saver
 leaving it on, B back."""
 import math, os, shutil, sys, time
@@ -260,9 +260,8 @@ m.home_sel = [a for a, _ in m.home_apps()].index("Apps")
 m.press("a")
 SIMI = m.tab
 rows = [it["title"] for it in m.tab_items()]
-check(f"the Clock first in Apps' list, after Group chat: {rows[:3]}", rows[:2] == ["Group chat", "Clock"]
-      and m.sels.get(SIMI, 0) == 0 and m.tab_items()[1].get("sub") == "The time and the date")
-m.press("down")
+check(f"the Clock first in Apps' list: {rows[:3]}", rows[0] == "Clock"
+      and m.sels.get(SIMI, 0) == 0 and m.tab_items()[0].get("sub") == "The time and the date")
 m.dirty = True
 m.flush()
 m.fb.last.save(SP + "/clock_list.png")
@@ -432,7 +431,7 @@ m.press("start"); m.press("down"); m.press("down"); m.press("right"); m.press("b
 frames(1.1)
 check(f"Seconds Off once more: its next frame a while away ({m.sim_next - fake[0]:.0f} s)", m.sim_next - fake[0] > 5)
 m.press("b")
-check("B: back to the list, the Clock picked", m.tab == SIMI and m.sels[SIMI] == 1)
+check("B: back to the list, the Clock picked", m.tab == SIMI and m.sels[SIMI] == 0)
 m.press("down")
 check("the next one down is Notes", m.tab_items()[m.sels[SIMI]]["title"] == "Notes")
 m.press("down")

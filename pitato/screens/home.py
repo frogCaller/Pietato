@@ -9,6 +9,7 @@ from ..home import (CARD, CARD_LINE, draw_bright_icon, draw_glyph, draw_icon, ho
                     TILE_BOTTOM, TILE_TOP, wall_ink, wallpaper)
 from ..weather import wx_icon_name, wx_words
 from ..fine import made_fine, scale
+from ..cookiepage import cookie_mark
 from .draw import FOOT_NOTE
 
 LABEL = (214, 219, 226)      # Glass: an app's name under its tile
@@ -498,12 +499,14 @@ class HomeScreen:
             for x in (37, 43):
                 d.line((x, cy - 9, x, cy - 4), fill=ink["body"], width=2)
             say(d, (57, cy + 1), date, F["home4_date"], ink["body"], "lm", ink)
+            after = (57 + d.textlength(date, font=F["home4_date"]), cy + 1)
         elif style == "Bright":
             say(d, (23, 68), hm, F["home1_clock"], ink["text"], "ls", ink)
             if twelve:
                 say(d, (23 + d.textlength(hm, font=F["home1_clock"]) + 9, 50), time.strftime("%p", t),
                     F["home1_ampm"], ink["body"], "ls", ink)
             say(d, (25, 96), date, F["home1_date"], ink["body"], "ls", ink)
+            after = (25 + d.textlength(date, font=F["home1_date"]), 89)
         else:
             x = self.HOME_X - 2                        # (the figures' own margin)
             say(d, (x, 66), hm, F["home_clock"], ink["text"], "ls", ink)
@@ -511,6 +514,9 @@ class HomeScreen:
                 say(d, (x + d.textlength(hm, font=F["home_clock"]) + 9, 47), time.strftime("%p", t),
                     F["home_ampm"], ink["text"], "ls", ink)
             say(d, (self.HOME_X, 95), date, F["home_date"], ink["date"], "ls", ink)
+            after = (self.HOME_X + d.textlength(date, font=F["home_date"]), 89)
+        if self.cookie_here():                         # (the cookie's on this one: a small one, after the date)
+            cookie_mark(d, after[0] + 18, after[1], 7)
 
     def home_playing(self, img, d):
         """What's playing, top right, for a few seconds."""

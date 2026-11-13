@@ -467,6 +467,7 @@ class Touch:
 # ---- input: controllers ---------------------------------------------------------
 CHORD_WAIT = 0.25   # no HOME button: how long SELECT or START waits to see if the other comes
 SCAN_EVERY = 2.0    # seconds between looks for controllers plugged in
+POWER_LOOK = 5.0    # seconds between looks at where a GPi Case's power switch is (its changes are listened for too)
 
 # a GPi Case's own buttons are a USB controller inside it, and now and then they don't come on as the Pi starts
 # (switching it off and on again brings them back). Not there a while after start-up: the case's USB is unplugged and
@@ -754,6 +755,8 @@ class Pads:
         self.power = {}              # path -> PowerKey: the case's power switch
         self.gpi = gpi_case_set_up()
         self.power_told = False
+        self.power_next, self.power_was = 0.0, False   # (the switch itself looked at: when next, and how it was)
+        self.power_on_seen = False                     # (...and it's been seen on: only then does off mean switched off)
         self.next_scan = 0.0
         self.saved = self.load()     # model -> the buttons set up for it
         self.case_next = time.monotonic() + CASE_WAIT if self.gpi else None   # (a GPi Case: its own buttons looked
@@ -883,6 +886,33 @@ class Pads:
         self.case_check(now)
         return new
 
+    def switched_off(self, now):
+        """A GPi Case's power switch is off, and was the last time it was looked at too (POWER_LOOK seconds ago), with
+        the Pi still on. Its switch stays where it's put, so off means the Pi should be shutting down: its change
+        was missed, or the Pi was asked and didn't go. True then, each time it's looked at: the main loop has the Pi
+        shut down (again). Only once it's been seen on since this started: one that reads off from the start (a pin
+        held low, a case that isn't what it seems) is left alone, or the Pi would shut down every time it started.
+        And only a GPi Case's: any other power key is a button, let go of again."""
+        if not self.gpi or now < self.power_next:
+            return False
+        self.power_next = now + POWER_LOOK
+        off = None
+        for switch in list(self.power.values()):
+            try:
+                off = bool(off) or e.KEY_POWER in switch.dev.active_keys()
+            except (OSError, AttributeError, TypeError):
+                continue
+        if off is None:                                # (none there, or none that can be asked)
+            self.power_was = False
+            return False
+        if not off:
+            self.power_on_seen = True
+        elif not self.power_on_seen and not self.power_was:
+            print("power switch: it reads off already, with the Pi just started: only its changing is gone by",
+                  flush=True)
+        was, self.power_was = self.power_was, off
+        return off and was and self.power_on_seen
+
     def case_check(self, now):
         """A GPi Case: no USB controller (its own buttons are one, inside it) a while after start-up, and the case's USB
         is unplugged and plugged in again, as the kernel can (on a thread: it takes a moment), CASE_TRIES times at most.
@@ -933,6 +963,8 @@ class Pads:
 # ---- input: the case's power switch ---------------------------------------------------
 BUS_HOST = 0x19                  # a device on the Pi's own pins, rather than USB or Bluetooth
 HALT_WAIT = 30.0                 # how long 'Shutting down' waits for the Pi to go before giving up
+HALT_TIDY = 8.0                  # the power switch, off: seconds ending what's playing may take (a game saves) before
+                                 # the Pi's asked to shut down regardless
 def gpi_case_set_up():
     """True when setup.sh set this Pi up for a GPi Case, the 2W or the GPi Case 2 (its part of config.txt is there)."""
     return case_kind() is not None

@@ -130,26 +130,18 @@ def tour(which):
     m = g.Media()
     m.enter()
 
-    def shot(name, fresh=True, ready=None):
+    def shot(name, fresh=True):
         got = {}
         while time.localtime().tm_sec >= 57:           # (both drawn in the same minute: the clocks on them alike)
             time.sleep(0.2)
         for s in (1, FB.s):
             FB.s = s
             m.fine_scale()
-            if ready is not None:                      # (what it works out for the screen's size, worked out first:
-                m.dirty = True                         #  the Mandelbrot's pictures, at each size anew; its dive not
-                m.sim_t = None                         #  a frame further on by the second drawing, as it was when
-                try:                                   #  its thread had the first picture ready in time)
-                    m.flush()
-                    ready()
-                except Exception:
-                    pass
             m.dirty = True
             m.sim_t = None                             # (Apps' worlds stand still from one drawing to the next: on a
-            m.sim_panel = (None, None, 0.0)            #  slow machine a Game of Life's cells had moved on by then.
-            try:                                       #  The numbers beside them as they are now in both: they're
-                m.flush()                              #  drawn again only every quarter of a second)
+            m.sim_panel = (None, None, 0.0)            #  slow machine a world had moved on by then. The numbers
+            try:                                       #  beside them as they are now in both: they're drawn again
+                m.flush()                              #  only every quarter of a second)
             except Exception as ex:
                 import traceback
                 problems.append(f"{which} {name} at {s}: {ex!r}")
@@ -286,8 +278,8 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "LED backlight",
-                 "LED backlight strip", "LED backlight boards"):
+    for name in ("Rock Paper Scissors", "Fish Tank", "Snake", "LED backlight", "LED backlight strip",
+                 "LED backlight boards"):
         try:
             if name == "LED backlight boards":          # (a Pietato with no LEDs of its own: its ESP32 boards' picture,
                 import pitato.glow as GLOW              #  an LED each in its own colour, with their names)
@@ -314,12 +306,7 @@ def tour(which):
             for _ in range(5):
                 m.tick()
                 time.sleep(0.02)
-            if name == "Mandelbrot Set":               # (it's made as it's first drawn: drawn once, so it's there to
-                m.dirty = True                         #  be told to finish its pictures. Before, nothing waited for
-                m.sim_t = None                         #  them, and the two drawings were of an empty box, or of an
-                m.flush()                              #  empty box and its first picture when its thread was quick)
-            mb = m.sims.get("mandel") if name == "Mandelbrot Set" else None
-            shot("sim_" + name.lower().replace(" ", "_"), ready=mb.finish if mb is not None else None)
+            shot("sim_" + name.lower().replace(" ", "_"))
             m.press("b")
         except Exception as ex:
             problems.append(f"{which} sim {name}: {ex!r}")
@@ -331,7 +318,7 @@ def tour(which):
                 vars(m).pop("glow_can", None)
     # full screen (SELECT), one of them
     try:
-        tab("Game of Life")
+        tab("Fish Tank")
         m.press("select")
         for _ in range(5):
             m.tick(); time.sleep(0.02)

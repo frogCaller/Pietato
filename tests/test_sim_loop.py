@@ -2,9 +2,7 @@
 Paper Scissors runs at about SIM_FPS frames a second to begin with, mostly sending just its box, and a couple of
 seconds on as often as the machine has the time for (30 or 60: test_quick_frames.py has how that's worked out);
 START's card stops the frames; leaving it stops them too; full screen, the same; the Fish Tank keeps up full
-screen too at SIM_FPS, and so does the
-Mandelbrot Set while its own thread works out its pictures. Exploring it: buttons held down (no key
-repeat), and the web page's remote, a press at a time or held."""
+screen too at SIM_FPS. A button held down on the web page's remote is one press in Apps' worlds."""
 import os, sys, time, shutil, threading
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -157,8 +155,7 @@ check(f"the d-pad to its icon ({apps[m.home_sel]})", apps[m.home_sel] == "Apps")
 press(e.BTN_SOUTH, 0.3)
 check("A opens it: the list of sims", m.tab_type() == "group" and g.LIBRARY[m.tab]["name"] == "Apps")
 SIMI = m.tab
-press(e.BTN_DPAD_DOWN, 0.2)                    # (past Group chat, the Clock, Notes and the Fortune Cookie)
-press(e.BTN_DPAD_DOWN, 0.2)
+press(e.BTN_DPAD_DOWN, 0.2)                    # (past the Clock, Notes and the Fortune Cookie)
 press(e.BTN_DPAD_DOWN, 0.2)
 press(e.BTN_DPAD_DOWN, 0.2)
 press(e.BTN_SOUTH, 0.3)
@@ -225,8 +222,7 @@ check(f"...{fps:.1f} frames a second to begin with, each the whole screen", g.SI
 got = settled("the whole screen")
 check("...each the whole screen still", got and all(b == "whole" for b in got))
 press(e.BTN_EAST, 0.3)
-for _ in range(2):
-    press(e.BTN_DPAD_DOWN)
+press(e.BTN_DPAD_DOWN)
 press(e.BTN_SOUTH, 0.5)
 check(f"B, down to the Fish Tank, A: full screen too ({g.LIBRARY[m.tab]['name']})",
       m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "fish" and m.sim_full())
@@ -236,65 +232,14 @@ fps = len(since(t0)) / 2.0
 check(f"...it keeps up: {fps:.1f} frames a second", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
 press(e.BTN_SELECT, 0.4)
 check("SELECT: back beside its numbers", not m.sim_full() and (m.sims["fish"].w, m.sims["fish"].h) == (436, 342))
-press(e.BTN_EAST, 0.3)
-for _ in range(3):                                 # (past the Soundboard and the Band)
-    press(e.BTN_DPAD_DOWN)
-press(e.BTN_SOUTH, 0.5)
-check(f"B, down to the Mandelbrot Set, A ({g.LIBRARY[m.tab]['name']})",
-      m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "mandel")
-Mb = m.sims["mandel"]
-t0 = time.monotonic()
-time.sleep(3.0)
-fps = len(since(t0)) / 3.0
-check(f"...it keeps up while its thread works out its pictures: {fps:.1f} frames a second (levels {sorted(Mb.levels)})",
-      g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2 and len(Mb.levels) >= 2 and Mb.L > 0.2)
-press(e.BTN_SELECT, 0.4)
-t0 = time.monotonic()
-time.sleep(3.0)
-fps = len(since(t0)) / 3.0
-check(f"...full screen too: {fps:.1f} frames a second (levels {sorted(Mb.levels)} at {Mb.w} x {Mb.h})",
-      g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2 and (Mb.w, Mb.h) == (640, 480) and Mb.levels)
-press(e.BTN_SELECT, 0.4)
-
-# exploring: the d-pad and A and Y, held
-Mb.finish()
-time.sleep(0.3)
-cx, cy, W = Mb.here()
-L0 = Mb.L
-t0 = time.monotonic()
-pad.send((e.EV_KEY, e.BTN_DPAD_RIGHT, 1)); time.sleep(1.0); pad.send((e.EV_KEY, e.BTN_DPAD_RIGHT, 0)); time.sleep(0.2)
-moved = (Mb.here()[0] - cx) / W
-fps = len(since(t0)) / 1.2
-check(f"right, held: exploring from where the tour was, on that way ({moved:.2f} of the view), {fps:.1f} frames a second",
-      Mb.phase == "explore" and m.setting("sim_mandel_mode") == "Explore" and 0.5 <= moved <= 0.85
-      and g.SIM_FPS - 4 <= fps <= g.SIM_FPS + 2)
-here = Mb.here()
-time.sleep(0.4)
-check("...let go: it stays put", Mb.here() == here and not Mb.held)
-pad.send((e.EV_KEY, e.BTN_SOUTH, 1)); time.sleep(1.0); pad.send((e.EV_KEY, e.BTN_SOUTH, 0)); time.sleep(0.2)
-check(f"A, held: in ({Mb.L - L0:.2f} levels)", 0.9 <= Mb.L - L0 <= 1.45)
-L1 = Mb.L
-pad.send((e.EV_KEY, e.BTN_WEST, 1)); time.sleep(0.5); pad.send((e.EV_KEY, e.BTN_WEST, 0)); time.sleep(0.2)
-check(f"Y, held: out ({L1 - Mb.L:.2f} levels)", 0.4 <= L1 - Mb.L <= 0.85)
-x0 = Mb.here()[0]
-ctl.ask({"cmd": "press", "button": "left"})
-step = (x0 - Mb.here()[0]) / Mb.here()[2]
-for _ in range(5):
-    ctl.ask({"cmd": "press", "button": "left", "repeat": True})
-steps = (x0 - Mb.here()[0]) / Mb.here()[2]
-check(f"the web page's remote: a press, a small step ({step:.2f}); held, a step each time ({steps:.2f})",
-      abs(step - 0.08) < 1e-6 and abs(steps - 0.48) < 1e-6 and not Mb.held)
-L2 = Mb.L
-for _ in range(4):
-    ctl.ask({"cmd": "press", "button": "a", "repeat": True})
-check(f"...A held there: in a little each time ({Mb.L - L2:.2f})", abs(Mb.L - L2 - 0.6) < 1e-6)
-press(e.BTN_START, 0.3)
-press(e.BTN_DPAD_RIGHT)
-press(e.BTN_EAST, 0.4)
-check("START, Mode: back on the tour", Mb.phase == "dive" and m.setting("sim_mandel_mode") == "Tour")
+calls = []
+real_call = m.aquarium.call
+m.aquarium.call = lambda: (calls.append(1), real_call())[1]
+ctl.ask({"cmd": "press", "button": "a"})
 for _ in range(3):
     ctl.ask({"cmd": "press", "button": "a", "repeat": True})
-check("...where A held on the web page is just the one press", not Mb.paused)
+check(f"the web page's remote: A calls your fish; held down there, it's still the one press ({len(calls)})",
+      len(calls) == 1)
 press(e.BTN_MODE, 0.4)
 check("Home on its own: still the app, not the console", m.active and m.view == "list")
 pad.send((e.EV_KEY, e.BTN_MODE, 1)); time.sleep(0.06)

@@ -1,8 +1,6 @@
-"""Apps' little worlds: Rock Paper Scissors and the Game of Life, and what they share (the Fish Tank:
-fishtank.py)."""
+"""Apps' little worlds: what they share, and Rock Paper Scissors (the Fish Tank: fishtank.py)."""
 import math
 import random
-from collections import deque
 
 from .theme import co_mix
 from .fine import detail, made_fine
@@ -12,8 +10,7 @@ from .fine import detail, made_fine
 # Each sim runs in a box beside its numbers, or on the whole screen (SELECT, or START's Full screen). A
 # pauses, X gives it a poke, Y starts it again, START has its options, B goes back to the list.
 # Rock Paper Scissors: pieces bounce around, and one hit by its counter switches sides until one team is
-# left (pick a winner before the first capture). Game of Life: see its blurb below; fishtank.py for the Fish
-# Tank, mandelbrot.py for the Mandelbrot Set.
+# left (pick a winner before the first capture). fishtank.py has the Fish Tank.
 SIM_FLOOR = (21, 27, 33)                      # the box
 SIM_BOX = (12, 78, 452, 424)                  # ...on the GPi Case's screen (a wider one: the box is wider)
 SIM_IN = 2                                    # pieces keep this far in from its wall
@@ -54,6 +51,7 @@ class Sim:
     smooth = False                  # it moves smoothly: drawn more often where the machine has the time (SIM_SMOOTH)
     bare = False                    # drawn on the page itself, in the middle: no box, no numbers beside it
     paced = False                   # its picture changes now and then (frame_in says when), not frame by frame
+    look_now = False                # what look() says is drawn the moment it changes (the numbers: 4 times a second)
     backdrop = SIM_FLOOR            # what's behind it on the whole screen
 
     def __init__(self, w, h, rng=None, values=None):
@@ -122,10 +120,6 @@ class Sim:
         """The card goes at the top of the box instead (out of the way of something at the foot)."""
         return False
 
-    def inset(self, w, h):
-        """(a picture w x h, a line under it) for beside the box instead of a chart, or None."""
-        return None
-
     def hints(self):
         """Its buttons along the bottom, if it has its own: [(button, what it does)], or None."""
         return None
@@ -139,20 +133,6 @@ class Sim:
         self.history.append((self.clock, tuple(counts)))
         if len(self.history) > 400:              # a long run: every other point
             self.history = self.history[:-1:2] + self.history[-1:]
-
-    def np_rng(self):
-        import numpy as np
-        return np.random.default_rng(self.rng.randrange(1 << 30))
-
-    @staticmethod
-    def regrid(old, rows, cols, fill):
-        """A board made bigger or smaller round its middle: what fits is kept, new edges come from
-        fill(shape)."""
-        new = fill((rows, cols)).astype(old.dtype)
-        h, w = min(rows, old.shape[0]), min(cols, old.shape[1])
-        ny, nx, oy, ox = (rows - h) // 2, (cols - w) // 2, (old.shape[0] - h) // 2, (old.shape[1] - w) // 2
-        new[ny:ny + h, nx:nx + w] = old[oy:oy + h, ox:ox + w]
-        return new
 
 
 # ---- Rock Paper Scissors ---------------------------------------------------------------------------------
@@ -545,157 +525,3 @@ class RockPaperScissors(Sim):
                 except Exception:                      # (a PIL that has it another way: its paste, from now on)
                     RPS_QUICK[0], core = False, None
             img.paste(s, (ox + int(x + 0.5), oy + int(y + 0.5)) if fs == 1 else (ox + x, oy + y), s)
-
-
-# ---- Game of Life ----------------------------------------------------------------------------------------
-LIFE_RULES = {"Life": ({3}, {2, 3}), "HighLife": ({3, 6}, {2, 3}),          # born with, lives on with
-              "Day & Night": ({3, 6, 7, 8}, {3, 4, 6, 7, 8}), "Seeds": ({2}, set())}
-LIFE_SOUP = {"Life": 0.3, "HighLife": 0.3, "Day & Night": 0.5, "Seeds": 0.04}   # how full it starts
-
-
-def life_colours():
-    """Each cell's colour by its age (1..255), then a cell just gone, fading (256..263)."""
-    import numpy as np
-    lut = np.zeros((264, 3), np.uint8)
-    lut[0] = SIM_FLOOR
-    stops = [(1, (236, 255, 226)), (3, (150, 236, 196)), (10, (70, 196, 186)), (30, (64, 132, 214)),
-             (80, (88, 90, 196)), (255, (110, 72, 170))]
-    for (a0, c0), (a1, c1) in zip(stops, stops[1:]):
-        for a in range(a0, a1 + 1):
-            lut[a] = co_mix(c0, c1, (a - a0) / (a1 - a0))
-    for k in range(8):
-        lut[256 + k] = co_mix(SIM_FLOOR, (46, 84, 96), (k + 1) / 9)
-    return lut
-
-
-class Life(Sim):
-    """Conway's Game of Life (and three other rules), on a board whose edges meet. Cells are coloured by
-    age; when the board settles (or dies out) it starts again by itself."""
-    key = "life"
-    blurb = "A cell lives on, dies or is born by how many of its eight neighbours are alive."
-    poke_label = "Add life"
-    options = (("rules", "Rules", tuple(LIFE_RULES), "Life"),
-               ("cells", "Cells", ("Small", "Large"), "Small"),
-               ("speed", "Speed", ("Slow", "Normal", "Fast"), "Normal"))
-    restart_for = ("rules", "cells")
-    CELL = {"Small": 4, "Large": 7}                 # px
-    GENS = {"Slow": 5, "Normal": 12, "Fast": 25}    # generations a second
-    WAIT = 4.0                                      # seconds a settled board shows, then a new one
-
-    def __init__(self, w, h, rng=None, values=None):
-        super().__init__(w, h, rng, values)
-        self.lut = life_colours()
-        self.restart()
-
-    def restart(self):
-        import numpy as np
-        super().restart()
-        c = self.CELL[self.values["cells"]]
-        self.cols, self.rows = max(8, self.w // c), max(8, self.h // c)
-        alive = self.np_rng().random((self.rows, self.cols)) < LIFE_SOUP[self.values["rules"]]
-        self.age = alive.astype(np.uint16)
-        self.gone = np.zeros((self.rows, self.cols), np.uint8)
-        self.gen, self.carry = 0, 0.0
-        self.seen = deque(maxlen=60)                # recent boards, to see it repeat
-        self.steady, self.last_pop = 0, -1
-        self.ended, self.wait = None, 0.0
-        self.sample((self.alive(),))
-
-    def refit(self, w, h):
-        """Full screen, and back: the board grows or shrinks round its middle (new edges: new soup)."""
-        import numpy as np
-        c = self.CELL[self.values["cells"]]
-        rows, cols = max(8, h // c), max(8, w // c)
-        rnd, soup = self.np_rng(), LIFE_SOUP[self.values["rules"]]
-        self.age = self.regrid(self.age, rows, cols, lambda sh: rnd.random(sh) < soup)
-        self.gone = self.regrid(self.gone, rows, cols, lambda sh: np.zeros(sh, np.uint8))
-        self.w, self.h, self.rows, self.cols = w, h, rows, cols
-        self.seen.clear()
-        self.steady = 0
-
-    def alive(self):
-        return int((self.age > 0).sum())
-
-    def update(self, dt):
-        if self.paused or dt <= 0:
-            return None
-        if self.ended:
-            self.wait -= dt
-            if self.wait <= 0:
-                self.restart()
-                return "next"
-            return None
-        self.clock += dt
-        self.carry = min(self.carry + dt * self.GENS[self.values["speed"]], 4)
-        while self.carry >= 1 and not self.ended:
-            self.carry -= 1
-            self.step()
-        self.sampled += dt
-        if self.sampled >= SIM_SAMPLE:
-            self.sampled = 0.0
-            self.sample((self.alive(),))
-        return "ended" if self.ended else None
-
-    def step(self):
-        import numpy as np
-        born, stay = LIFE_RULES[self.values["rules"]]
-        a = self.age > 0
-        n = np.zeros(a.shape, np.uint8)
-        for dy in (-1, 0, 1):
-            row = np.roll(a, dy, 0)
-            for dx in (-1, 0, 1):
-                if dy or dx:
-                    n += np.roll(row, dx, 1)
-        b, s = np.zeros(9, bool), np.zeros(9, bool)
-        b[list(born)] = True
-        s[list(stay)] = True
-        new = (~a & b[n]) | (a & s[n])
-        self.gone = np.where(a & ~new, 8, np.where(self.gone > 0, self.gone - 1, 0)).astype(np.uint8)
-        self.age = np.where(new, np.minimum(self.age + 1, 255), 0).astype(np.uint16)
-        self.gen += 1
-        pop = int(new.sum())
-        h = hash(new.tobytes())
-        if pop == 0:
-            self.end("Everything died")
-        elif h in self.seen:
-            self.end("Settled")
-        self.seen.append(h)
-        self.steady = self.steady + 1 if abs(pop - self.last_pop) <= max(2, pop // 200) else 0
-        self.last_pop = pop
-        if self.steady >= 400 and not self.ended:      # (a few gliders going round for ever)
-            self.end("Settled")
-
-    def end(self, why):
-        self.ended, self.wait = (why, self.gen), self.WAIT
-
-    def poke(self):
-        """X: a patch of new life somewhere."""
-        ph, pw = min(16, self.rows), min(16, self.cols)
-        y, x = self.rng.randrange(self.rows - ph + 1), self.rng.randrange(self.cols - pw + 1)
-        patch = self.np_rng().random((ph, pw)) < 0.4
-        view = self.age[y:y + ph, x:x + pw]
-        view[patch & (view == 0)] = 1
-        if self.ended:
-            self.ended, self.seen, self.steady = None, deque(maxlen=60), 0
-
-    def draw(self, img, x0, y0):
-        import numpy as np
-        from PIL import Image
-        idx = np.where(self.age > 0, self.age,
-                       np.where(self.gone > 0, 255 + (9 - self.gone.astype(np.uint16)), 0))
-        c = self.CELL[self.values["cells"]]
-        pic = Image.fromarray(self.lut[np.minimum(idx, 263)], "RGB").resize((self.cols * c, self.rows * c),
-                                                                             Image.NEAREST)
-        img.paste(pic, (x0 + (self.w - self.cols * c) // 2, y0 + (self.h - self.rows * c) // 2))
-
-    def stats(self):
-        return [("Generation", str(self.gen)), ("Alive", str(self.alive())), ("Rules", self.values["rules"])]
-
-    def chart(self):
-        return self.history, [(150, 236, 196)], max(1, self.rows * self.cols // 3)
-
-    def note(self):
-        if not self.ended:
-            return None
-        why, gen = self.ended
-        return why, f"After {gen} generations. A new one in {max(1, math.ceil(self.wait))} s"

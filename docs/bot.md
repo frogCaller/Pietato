@@ -54,7 +54,9 @@ what it's showing, and any other button takes you back to where you were. Settin
 it off, or keeps it to games.
 
 If that computer has a decision model (Ollama 0.35 or newer: `ollama pull nimble`), press X in
-Snake and the model plays. Pick which one in Snake's options (START), and Slow if it can't keep up.
+Snake and the model plays. Beside the board you see its decisions as it makes them: the snake's moves,
+what it was told about each, and the one it picked. Pick which model in Snake's options (START), and
+Slow if it can't keep up.
 
 It can also play your games for you: in a game, open its menu with Home and press ▶ on AI player to
 pick a decision model. Your buttons wait while it plays. It gets a game going by itself, the way you

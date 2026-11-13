@@ -24,8 +24,8 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type
-- **Apps**: [Group chat](#group-chat), the [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a
-  [Soundboard](#soundboard), a [Band](#band), a
+- **Apps**: [Group chat](#group-chat), [The Cookie](#the-cookie), the [LED backlight](#led-backlight) (on a Pi
+  with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
@@ -33,8 +33,7 @@ Pietato starts on a home screen of apps:
   a glow, a rainbow or a shadow, X reads it out loud in your Bot's voice, and L and R go through your notes,
   kept in Documents/Notes), a Fortune Cookie (A shows a new fortune, ▲▼ and ◀▶ pick its colours as in Notes,
   L and R its font, Y an effect, and X reads your fortune and lucky numbers out loud), Rock Paper Scissors (pick a
-  winner before the first capture), Game of Life, a [Fish Tank](#fish-tank) and the Mandelbrot set, which takes you on dives
-  (or press the d-pad to explore it, A to zoom in and Y to zoom out). Press SELECT to watch one full screen.
+  winner before the first capture) and a [Fish Tank](#fish-tank). Press SELECT to watch one full screen.
   It can also start cmatrix, hollywood, nyancat, cacafire and htop without a keyboard: in cmatrix, ◀▶ change
   its colour and ▲▼ its speed; in htop, ▲▼ move through what's running and X or Y sort it by CPU or memory;
   and B stops any of them. Konami code saves button codes of your own: hold Home and press Right, then put
@@ -91,6 +90,31 @@ during a game or a video.
 A says something, Y has them stop talking among themselves (they still answer you), and SELECT stops a USB camera
 from looking for you. Each talks the way its Bot does, with the Bot's model if it has one (Settings > Bot), and
 with words of its own if not. Settings > Share with other Pietatos needs to be on.
+
+## The Cookie
+
+With two or more Pietatos on the same network, there is one cookie between them, and only one of them has it. The
+one that has it shows a small cookie by the time on its status bar and by the date on its home screen. Another
+takes it by beating that one at a single throw of rock paper scissors. A win takes the cookie. A loss or the same
+throw leaves it where it is.
+
+Their Bots try for it by themselves, one of them about every ten minutes. They don't try at night, during a game
+or a video, or while Group chat is set to quiet. The one that takes it says so in Group chat, so you can read
+back how it went round.
+
+When one of them wins three throws in a row or more, the one it just beat may decide it must be cheating and
+say so in Group chat. It isn't cheating. The accused denies it, the others take sides, and they argue for a few
+lines.
+
+Apps > The Cookie shows who has it and each Pietato's last few throws. Each Bot has a habit: one leans on rock,
+one never throws the same twice, one throws what last beat it. The throws on the page are how you learn it. When
+another Pietato has the cookie, ◀ throws rock, ▲ paper and ▶ scissors for it, and you can throw again 15 seconds
+after a loss. When the cookie is on the Pietato in your hands and this page is open, you get a few seconds to
+throw when another tries for it, and its Bot throws if you don't.
+
+A Pietato that has been off for an hour loses the cookie to the one that has waited longest. A guest's Pietato on
+your network can take it home with it. Settings > Share with other Pietatos needs to be on, and every Pietato
+needs this version or a newer one.
 
 ## Party mode
 

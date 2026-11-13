@@ -54,7 +54,7 @@ toasts = []
 was_toast = m.toast
 m.toast = lambda text, secs=4: (toasts.append(text), was_toast(text, secs))[1]
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
-check(f"Apps has Notes, after the Clock ({apps['children'][:3]})", apps["children"][1:3] == ["Clock", "Notes"])
+check(f"Apps has Notes, after the Clock ({apps['children'][:3]})", apps["children"][:2] == ["Clock", "Notes"])
 ni = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Notes")
 
 

@@ -144,9 +144,9 @@ m.open_keyboard("Name", "", lambda t: None)
 keys, bar = draw()
 check(f"a box to type in: its buttons ({keys})", bar and "A" in keys and "START" in keys)
 m.close_keyboard(False)
-life = next(i for i, t in enumerate(g.LIBRARY) if t.get("sim") == "life")
-m.tab, m.view = life, "list"
-m.load_tab(life)
+world = next(i for i, t in enumerate(g.LIBRARY) if t.get("sim") == "rps")
+m.tab, m.view = world, "list"
+m.load_tab(world)
 check(f"a sim: its own (SELECT's full screen) ({sizes()})", sizes() == (26, 68, 76, 48) and not m.full_app())
 m.sim_close()
 

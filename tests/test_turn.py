@@ -307,7 +307,7 @@ check(f"...the real mplayer: the picture turned ({im.size if im else None}: tall
       f"that lies wide (off by {diff:.2f} on average), where you are in it written over it before it's turned",
       im is not None and im.size == (400, 711) and diff < 2 and osd > 100)
 
-# ---- turned while Game of Life's open (its pictures kept for the old size: made afresh) -------------------------
+# ---- turned while Rock Paper Scissors is open (its pictures kept for the old size: made afresh) ---------------------
 for full in ("Off", "On"):
     path = f"{S}/fb_live_{full}"
     open(path, "wb").write(bytes(480 * 800 * 4))
@@ -322,7 +322,7 @@ for full in ("Off", "On"):
     m.state["settings"]["app_full"] = full
     m.enter()
     names = [t["name"] for t in g.LIBRARY]
-    m.open_app(names.index("Game of Life"))
+    m.open_app(names.index("Rock Paper Scissors"))
     for _ in range(3):
         m.dirty = True
         m.flush()
@@ -332,7 +332,7 @@ for full in ("Off", "On"):
     m.set_setting("turn", "90°")
     m.dirty = True
     m.flush()
-    m.open_app(names.index("Game of Life"))
+    m.open_app(names.index("Rock Paper Scissors"))
     err = None
     try:
         for _ in range(3):
@@ -341,7 +341,7 @@ for full in ("Off", "On"):
     except Exception as ex:
         err = ex
     feet = [v.size for v in m.sim_feet.values()]
-    check(f"turned while Game of Life's open (Full screen apps {full}): drawn afresh at the new size, no error "
+    check(f"turned while Rock Paper Scissors is open (Full screen apps {full}): drawn afresh at the new size, no error "
           f"({m.sim_base[1].size if m.sim_base[1] else None}, its buttons {feet})", err is None and m.sim_base[1].size ==
           (800, 480) and all(w == 800 for w, _ in feet))
     m.set_setting("turn", "Off")

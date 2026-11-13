@@ -233,8 +233,7 @@ def tour(which):
     except Exception as ex:
         problems.append(f"{which} bot work: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set", "Snake", "LED backlight",
-                 "LED backlight strip"):
+    for name in ("Rock Paper Scissors", "Fish Tank", "Snake", "LED backlight", "LED backlight strip"):
         try:
             if name.startswith("LED backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
                 from types import SimpleNamespace
@@ -261,7 +260,7 @@ def tour(which):
                 m.set_setting("glow_shape", "8x8 grid")
     # full screen (SELECT), one of them
     try:
-        tab("Game of Life")
+        tab("Fish Tank")
         m.press("select")
         for _ in range(5):
             m.tick(); time.sleep(0.02)

@@ -45,6 +45,9 @@
   clock.py          Apps' Clock
   notes.py          Apps' Notes: what you type on a keyboard (screens/notes.py: its files, the keyboard, its buttons)
   fortune.py        Apps' Fortune Cookie: a new fortune with A (screens/fortune.py: its buttons)
+  cookie.py         Apps' The Cookie: one between your Pietatos, taken by a throw of rock paper scissors: its rules
+                    (screens/cookie.py: who throws when, your others asked through their web pages)
+  cookiepage.py     ...its page, and the small cookie on the status bar of the one that has it
   soundboard.py     Apps' Soundboard: a sound on every button (screens/soundboard.py: its buttons, recording)
   soundbank.py      ...its sounds (sounds/: the starter pack, public domain) and its banks' file
   soundplay.py      ...its player, a process of its own, as you: the sounds mixed for aplay, and recording
@@ -52,7 +55,6 @@
                     it, its buttons, who decides)
   band.py           ...the music: the songs, each instrument's parts, the song's shape, the dice
   bandplay.py       ...its player (soundplay.py's, and more): each note heard at its moment; the instruments, made
-  mandelbrot.py     the Mandelbrot set
   snake.py          Snake, and its AI's thread
   games.py          your own games: finding them and their emulators, one while it runs
   consoles.py       ...the Games tab's icon for each console: RetroArch's picture of it (icons/consoles), on a tile

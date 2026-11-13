@@ -278,7 +278,7 @@ HOME_ICONS = {    # tab name -> (its colour: its tile's tint, a line about it)
     "Files": ((102, 128, 174), "Your files, and your other computers'"),
     "Camera": ((128, 135, 148), "Your cameras: watch, steer, take pictures"),
     "Bot": ((210, 138, 76), "Does what you ask, and chats with you"),
-    "Apps": ((118, 125, 140), "Rock paper scissors, fractals and more"),
+    "Apps": ((118, 125, 140), "Rock paper scissors, a fish tank and more"),
     "Finance": ((184, 142, 66), "Stocks and coins: prices and charts"),
     "System": ((128, 135, 148), "Temperature, WiFi, storage"),
     "Settings": ((134, 140, 152), "WiFi, Bluetooth, background, sound, controllers"),

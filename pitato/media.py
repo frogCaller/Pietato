@@ -48,8 +48,8 @@ from .update import Updater
 from .computers import Computers
 from .www import Loader as PageLoader
 from .gpicase import (busy, case_kind, DOCK_MOST, DOCK_QUIET, DOCK_SETTLE_IN, DOCK_SETTLE_OUT, DOCK_WINDOW,
-                      DockWatch, dock_tried, note_dock_restart, started_on_tv)
-from .inputs import HALT_WAIT, KeyReader, show_shutdown_lines
+                      DockWatch, dock_tried, note_dock_restart, started_on_tv, SwitchWatch)
+from .inputs import HALT_TIDY, HALT_WAIT, KeyReader, show_shutdown_lines
 from .screens.sims import SIMS
 from .screens.draw import DrawScreen
 from .screens.home import HomeScreen
@@ -95,6 +95,7 @@ from .screens.together import TogetherScreen
 from .screens.konami import KonamiScreen
 from .screens.pilot import PilotScreen
 from .screens.group import GroupScreen
+from .screens.cookie import CookieScreen
 from .screens.fishtank import FishScreen
 from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
@@ -113,8 +114,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
-            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen, LobbyScreen,
-            PartyScreen, GlowScreen, SoundboardScreen, BandScreen):
+            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, CookieScreen, FishScreen,
+            LobbyScreen, PartyScreen, GlowScreen, SoundboardScreen, BandScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -250,6 +251,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.band_brain = BandBrain()   # ...and who decides for its players: a decision model on your bot's computer
         self.brain = SnakeBrain()     # Snake's AI: a decision model on your bot's computer
         self.brain_asked = None       # (game, step, round) it was last asked about
+        self.brain_told = None        # ...and (that, what it was told about each move there), for the page
         self.brain_round = 0          # (one more each time it wakes up: an answer from before isn't used)
         self.brain_frame = 1.0 / SIM_FPS  # seconds a frame takes, of late (an answer's used on the next)
         self.brain_warned = set()     # models it's said can't keep up
@@ -292,7 +294,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.sim_feet = {}                       # the buttons along the bottom, for each set of them
         self.sim_still = (None, None)            # the numbers' words: (what they say, them)
         self.sim_tiles = {}                      # pictures of words and figures, kept
-        self.sim_mask = None                     # the round corners of a picture beside the box
         self.friend_scroll = 0       # how far back the conversation is scrolled (pixels)
         self.friend_seen = len(self.friend.log)
         self.friend_opened_at = 0.0
@@ -344,6 +345,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.np_until = 0.0          # what's playing shows on the home screen until then (monotonic)
         self.case = case_kind()      # the GPi Case this Pi's in: "2w", "2" (the GPi Case 2), or None
         self.gpi_case = self.case == "2w"   # the 2W's speaker: given silence in the terminal (player.py)
+        self.power_pin = None        # a GPi Case's power switch: its pin, watched too (power_start)
         self.dock = None             # the GPi Case 2's dock: its pin, watched (dock_start)
         self.dock_on_tv = None       # ...the picture since the Pi started: on the TV, or the case's screen
         self.dock_tried = None       # ...the restart before this start-up was for it ("tv", "case"), and didn't take
@@ -470,7 +472,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                                     # your Pietatos controlling this one, the same)
         self.lock = threading.Lock()
         self.state = {"pos": {}, "dur": {}, "settings": {}, "radio": {}, "cam_turn": {}, "cam_flip": {},
-                      "cam_flip_v": {}, "www": {}, "pilot": {}}   # (pilot: another's web page password, by its address)
+                      "cam_flip_v": {}, "www": {}, "pilot": {},   # (pilot: another's web page password, by its address)
+                      "cookie": {}}                               # (cookie: The Cookie, as it's known here)
         self.fonts = None
         self.load_state()
         self.camera.turns = self.state["cam_turn"]   # (a camera's picture turned: kept with the rest)
@@ -491,6 +494,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                                lambda: "C" if self.setting("units") == "°C" else "F", pie=self.pie)
         self.weather.on_change = self.weather_drawn
         self.group_setup()                             # (Apps > Group chat: your Pietatos talking: screens/group.py)
+        self.cookie_setup()                            # (Apps > The Cookie: one between them: screens/cookie.py)
         self.fish_setup()                              # (Apps > Fish Tank: its fish lives on: screens/fishtank.py)
         self.camera.on_fish = self.fish_heard          # (...and hears your others' where theirs are)
 
@@ -619,7 +623,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
     def holds_buttons(self):
         """Pages that follow buttons held down themselves (no key repeat)."""
-        return self.on_camera_page() or self.on_mandel_page() or (
+        return self.on_camera_page() or (
             self.on_sim_page() and self.sim_opts is None and getattr(SIMS.get(LIBRARY[self.tab].get("sim")), "holds", False))
 
     def tick_limit(self):
@@ -1082,14 +1086,31 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
     def power_off(self):
         """The case's power switch is off: the Pi shuts down, as with Shut down in the menu. In
-        media mode the screen says so; in the terminal the Pi's own shutdown lines show there."""
+        media mode the screen says so; in the terminal the Pi's own shutdown lines show there. What's playing is
+        ended first (a game saved), then the Pi's asked; and if ending things gets stuck, it's asked all the same,
+        HALT_TIDY seconds on: nothing here keeps the Pi on."""
         if time.monotonic() < self.halting:
             return                                     # on its way already
         print("power switch: off, shutting down", flush=True)
-        self.rest_end()
         self.halting, self.halt_note = time.monotonic() + HALT_WAIT, "The Pi didn't shut down"
+        once = threading.Lock()
+
+        def ask():
+            if not once.acquire(blocking=False):
+                return                                 # (asked already)
+            if not system_stopping():                  # (unless systemd-logind saw it first)
+                try:
+                    subprocess.Popen(["systemctl", "poweroff"], stdin=subprocess.DEVNULL)
+                except OSError as ex:
+                    print(f"power switch: couldn't shut down ({ex})", flush=True)
+
+        late = threading.Timer(HALT_TIDY, ask)         # (still tidying up by then: asked from there)
+        late.daemon = True
+        late.start()
+        shown = self.active and self.fb is not None
         try:
-            if self.active and self.fb is not None:
+            self.rest_end()
+            if shown:
                 if self.learn:
                     self.cancel_learn("")
                 self.chromium_close()
@@ -1102,12 +1123,19 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             else:
                 show_shutdown_lines()                  # first: systemd may be on its way already
                 self.save_state()                      # (music stops as the service does)
+        except Exception as ex:                        # (the Pi's going off all the same)
+            print(f"power switch: {ex!r} while tidying up", flush=True)
+            if shown:
+                self.goodbye()
         finally:
-            if not system_stopping():                  # (unless systemd-logind saw it first)
-                try:
-                    subprocess.Popen(["systemctl", "poweroff"], stdin=subprocess.DEVNULL)
-                except OSError as ex:
-                    print(f"power switch: couldn't shut down ({ex})", flush=True)
+            late.cancel()
+            ask()
+
+    def power_start(self):
+        """In a GPi Case: its power switch's pin watched from now on, as well as the key the kernel makes of it (the
+        key said nothing on a GPi Case 2W, switched off, though the Pi was listening)."""
+        if self.case and self.power_pin is None:
+            self.power_pin = SwitchWatch()
 
     # -- the GPi Case 2's dock ------------------------------------------------------------------------------
     def dock_start(self):
@@ -1549,8 +1577,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
         colour (Settings > Accent colour: a dot in it beside its name on your other Pietatos, to tell apart two of
         the same name). full: the one told straight to each of yours (not to everyone on the network), for the group
-        chat too: what it's doing, what it's made of, and how long ago you were last noticed here; and the game it's
-        playing, for their home screens' lobby (screens/lobby.py)."""
+        chat too: what it's doing, what it's made of, and how long ago you were last noticed here; the game it's
+        playing, for their home screens' lobby (screens/lobby.py); and the cookie (screens/cookie.py)."""
         beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
         if full:
             beacon.update(doing=self.group_doing(), hw=self.group_hardware())
@@ -1566,6 +1594,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             grid = self.glow_beacon()                  # (its LED backlight: for your others to light)
             if grid is not None:
                 beacon["glow"] = grid
+            try:
+                beacon["cookie"] = self.cookie_beacon()   # (the cookie, as it's known here: screens/cookie.py)
+            except Exception:
+                pass
         return beacon
 
     def web_shared(self):
@@ -1635,6 +1667,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.pilot_on() or (self.view == "list" and self.tab_type() == "pilot"):
             self.pilot_tick(now)                       # (Home > Control another Pietato)
         self.group_tick(now)                           # (Apps > Group chat: your Pietatos talking, and its pop-ups)
+        self.cookie_tick(now)                          # (Apps > The Cookie: who has it; its Bot's try for it)
         self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
@@ -1673,6 +1706,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.dirty = True
         self.hush_tick(now)                           # (the GPi Case's speaker, quiet in the terminal)
         self.dock_tick(now)                           # (the GPi Case 2 in its dock, or out: the picture follows)
+        if self.power_pin is not None and now >= self.halting and self.power_pin.off(now):
+            self.power_off()                           # (a GPi Case's switch, off by its pin: the kernel said nothing)
         self.sound_tick(now)                          # (Bluetooth headphones come or go: the sound goes with them)
         self.settle_tick(now)                         # (a player started paused: paused once it listens)
         self.music_back(now)                          # (music a game or a video stopped, back after it)
@@ -1921,8 +1956,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.dirty = True
 
     def release(self, name):
-        """Button let go: stops the camera turning or zooming, or the Mandelbrot Set moving, or goes to
-        the game (or Chromium)."""
+        """Button let go: stops the camera turning or zooming, or goes to the game (or Chromium)."""
         if self.chromium_shown():
             self.release_chromium(name)
             return
@@ -1932,9 +1966,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.on_camera_page():
             self.camera.release(name)
             self.dirty = True
-        s = self.sims.get("mandel")
-        if s is not None:
-            s.release(name)
 
     def press(self, name, repeat=False):
         """Returns 'exit' when media mode should close."""

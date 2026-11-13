@@ -28,8 +28,8 @@ LIBRARY = [
     {"name": "Finance", "type": "finance", "files": [settings_glob("finance.txt")], "empty": ""},
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
-     "children": ["Group chat", "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Game of Life", "Fish Tank",
-                  "LED backlight", "Soundboard", "Band", "Mandelbrot Set", "Konami code", "cmatrix", "hollywood",
+     "children": ["Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "Group chat",
+                  "The Cookie", "LED backlight", "Soundboard", "Band", "Konami code", "cmatrix", "hollywood",
                   "nyancat", "cacafire", "htop"]},     # (LED backlight: on a Pi that can have one, screens/glow.py)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
@@ -67,8 +67,6 @@ LIBRARY = [
     {"name": "Snake", "type": "sim", "sim": "snake", "parent": "Games", "badge": "EAT", "title": "Snake",
      "about": "Eat the apples, don't crash", "empty": ""},
     # inside Apps
-    {"name": "Group chat", "type": "chat", "parent": "Apps", "badge": "CHAT",   # (screens/group.py, circle.py)
-     "about": "Your Pietatos, talking", "empty": ""},
     {"name": "Clock", "type": "sim", "sim": "clock", "parent": "Apps", "badge": "TIME",
      "about": "The time and the date", "empty": ""},
     {"name": "Notes", "type": "sim", "sim": "notes", "parent": "Apps", "badge": "NOTE",   # (pitato/notes.py)
@@ -77,18 +75,18 @@ LIBRARY = [
      "about": "A new fortune with A", "empty": ""},
     {"name": "Rock Paper Scissors", "type": "sim", "sim": "rps", "parent": "Apps", "badge": "RPS",
      "about": "Last team standing", "empty": ""},
-    {"name": "Game of Life", "type": "sim", "sim": "life", "parent": "Apps", "badge": "LIFE",
-     "about": "Cells live, die and are born", "empty": ""},
     {"name": "Fish Tank", "type": "sim", "sim": "fish", "parent": "Apps", "badge": "FISH",   # (fishtank.py)
      "about": "Your fish, and your other Pietatos'", "empty": ""},
+    {"name": "Group chat", "type": "chat", "parent": "Apps", "badge": "CHAT",   # (screens/group.py, circle.py)
+     "about": "Your Pietatos, talking", "empty": ""},
+    {"name": "The Cookie", "type": "sim", "sim": "cookie", "parent": "Apps", "badge": "YUM",   # (cookie.py,
+     "about": "One cookie between your Pietatos", "empty": ""},                                  # screens/cookie.py)
     {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
      "about": "The LEDs behind your TV", "empty": ""},
     {"name": "Soundboard", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "SFX",   # (soundboard.py)
      "about": "A sound on every button", "empty": ""},
     {"name": "Band", "type": "sim", "sim": "band", "parent": "Apps", "badge": "JAM",           # (bandstage.py)
      "about": "Your Pietatos play together", "empty": ""},
-    {"name": "Mandelbrot Set", "type": "sim", "sim": "mandel", "parent": "Apps", "badge": "ZOOM",
-     "about": "Dives into the famous fractal", "empty": ""},
     {"name": "Konami code", "type": "konami", "parent": "Apps", "badge": "CHEAT",   # (screens/konami.py)
      "about": "Button codes that do things", "empty": ""},
     # (Linux's own cmatrix, hollywood, nyancat, cacafire and htop: A starts one, on the whole screen)

@@ -63,7 +63,7 @@ def stop():
 
 
 m.prog_stop = stop
-SIMS = ["Rock Paper Scissors", "Game of Life", "Fish Tank", "Mandelbrot Set"]
+SIMS = ["Rock Paper Scissors", "Fish Tank"]
 PROGS = ["cmatrix", "hollywood", "nyancat", "cacafire"]
 
 
@@ -77,7 +77,7 @@ def showing():
 # none of Linux's programs installed: just Apps' own
 SA.prog_path = lambda name: None
 names = [t["name"] for t in m.cool_choices()]
-check(f"none of Linux's programs here: Apps' own four ({names})", names == SIMS)
+check(f"none of Linux's programs here: Apps' own two worlds to watch ({names})", names == SIMS)
 SA.prog_path = lambda name: "/usr/bin/" + name
 names = [t["name"] for t in m.cool_choices()]
 check(f"...all of them installed: those too, but never the Clock or htop ({names})", names == SIMS + PROGS)
@@ -107,7 +107,7 @@ for _ in range(60):
     seen.append(now)
     last = now
 check(f"asked 60 more times: never the same one twice in a row ({again})", again)
-check(f"...all eight in turn, never the Clock or htop ({sorted(set(seen))})", set(seen) == set(SIMS + PROGS))
+check(f"...all six in turn, never the Clock or htop ({sorted(set(seen))})", set(seen) == set(SIMS + PROGS))
 
 # a sim on already: not that one
 again = set()
@@ -126,30 +126,29 @@ m.assist_heard("show me something cool")
 check(f"nyancat on: stopped first ({stopped}), something else on ({showing()})", stopped == ["nyancat"]
       and showing() != "nyancat")
 
-# what it says: the Game of Life's name and what it is
+# what it says: the Fish Tank's name and what it is
 real = SA.random.choice
-SA.random.choice = lambda seq: next((t for t in seq if isinstance(t, dict) and t.get("name") == "Game of Life"),
+SA.random.choice = lambda seq: next((t for t in seq if isinstance(t, dict) and t.get("name") == "Fish Tank"),
                                     seq[0])
 started.append(None); m.cool_last = None; m.web_tab("Weather")
 m.assist_heard("show me something cool")
 SA.random.choice = real
-check(f"...said as: {spoken[-1]!r}", spoken[-1] == "Here's the Game of Life: cells live, die and are born.")
+check(f"...said as: {spoken[-1]!r}", spoken[-1] == "Here's the Fish Tank: your fish, and your other Pietatos'.")
 m.dirty = True
 m.flush()
-m.fb.last.save(S + "/life.png")
-check(f"...on the screen: the Game of Life's page ({g.LIBRARY[m.tab]['name']}, {m.view})",
-      g.LIBRARY[m.tab]["name"] == "Game of Life" and m.view == "list")
+m.fb.last.save(S + "/fish.png")
+check(f"...on the screen: the Fish Tank's page ({g.LIBRARY[m.tab]['name']}, {m.view})",
+      g.LIBRARY[m.tab]["name"] == "Fish Tank" and m.view == "list")
 
-# none installed, a sim on: only the other three
+# none installed, a world on: only the other one
 SA.prog_path = lambda name: None
 started.append(None); m.cool_last = None
 picks = set()
 for _ in range(30):
-    m.web_tab("Mandelbrot Set"); m.cool_last = None
+    m.web_tab("Rock Paper Scissors"); m.cool_last = None
     m.assist_heard("show me something cool")
     picks.add(showing())
-check(f"nothing of Linux's here, the Mandelbrot Set on: the other three ({sorted(picks)})",
-      picks == {"Rock Paper Scissors", "Game of Life", "Fish Tank"})
+check(f"nothing of Linux's here, Rock Paper Scissors on: the other one ({sorted(picks)})", picks == {"Fish Tank"})
 
 # its model asking for it ("[[show me something cool]]"), in its own words
 m.cool_last = None

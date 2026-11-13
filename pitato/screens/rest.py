@@ -77,8 +77,7 @@ class RestScreen:
             self.proc_owns_screen() or self.game is not None or self.prog is not None or self.chromium_shown()
             or self.learn or self.view in ("keys", "update", "learn", "keepres", "wait", "sketch", "game", "gamemenu",
                                             "chromenu", "chromehow")
-            or (self.view == "list" and (self.on_camera_page() or self.on_coder_page() or self.on_sim_page()
-                                         or self.on_mandel_page()))
+            or (self.view == "list" and (self.on_camera_page() or self.on_coder_page() or self.on_sim_page()))
             or (self.view == "photo" and self.v.get("slideshow")) or (self.now_art() and not self.paused)
             or getattr(self, "remote_pad", None) is not None
             or getattr(self, "pilot_out", None) is not None   # (controlling another of yours: its buttons go there)

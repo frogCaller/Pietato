@@ -3,6 +3,7 @@ using its answers."""
 import math
 import time
 
+from ..theme import accent_for, BG, DONE, MUTED, TEXT, WARN
 from ..snake import (
     Snake, SNAKE_AI_AHEAD, SNAKE_AI_BEHIND, SNAKE_AI_FRESH, SNAKE_AI_GUESS, SNAKE_AI_SPARE, SNAKE_AI_TRIES,
     SNAKE_AI_WAIT, SNAKE_AI_WAKE, SNAKE_DIRS, SNAKE_OPTIONS, SNAKE_SPEEDS)
@@ -98,15 +99,15 @@ class SnakeScreen:
     def snake_ai_wake(self, s):
         """The game waits for the AI's first move (its model wakes up on the other computer), and it
         decides from where the snake is: any turns still to come are dropped."""
-        s.ai_waking, s.ai_ms, s.turns, s.plan = True, None, [], {}
+        s.ai_waking, s.ai_ms, s.ai_sure, s.turns, s.plan, s.decided = True, None, None, [], {}, None
         if s.phase == "on":
             s.paused = True
         self.brain_round += 1
-        self.brain_asked = None
+        self.brain_asked = self.brain_told = None
 
     def snake_ai_take(self, s):
         """Each frame, before the game moves on: what came back from the AI, put to use."""
-        for kind, tag, answer, ms, error in self.brain.take():
+        for kind, tag, answer, ms, error, *more in self.brain.take():
             if kind == "models":
                 self.brain_looking = False
                 if not error:
@@ -143,6 +144,9 @@ class SnakeScreen:
                     s.ai_used = True
             if tag[1] >= s.steps:
                 s.plan[tag[1]] = answer                # (made when the snake gets there)
+                told = self.brain_told                 # (what it chose between: shown beside the board)
+                if told is not None and told[0] == tag and answer in told[1]:
+                    s.decide(answer, told[1], more[0] if more else None)
             # (else it came too late for where it was asked about: the snake went straight on)
 
     def snake_ai_ask(self, s):
@@ -183,6 +187,23 @@ class SnakeScreen:
         if self.brain.ask(("move", self.brain_server, s.ai_model, state, choices, tag,
                            SNAKE_AI_WAKE if s.ai_waking else SNAKE_AI_WAIT)):
             self.brain_asked = tag
+            self.brain_told = (tag, choices)
+
+    def snake_deciding(self, img, s, top):
+        """Beside the board, while the AI plays: the snake's four moves, each with what the AI was told about it
+        the last time it decided (–: back the way it came, which isn't a move), and the one it picked bright. Its
+        pick in a colour of its own when it's the apple, or one it shouldn't have (risky, a dead end: gold; deadly:
+        red). Kept pictures of the words, as the numbers are: it's drawn again for each decision."""
+        pick, told = s.decided or (None, ())
+        told = dict(told)
+        tints = {"the apple": DONE, "risky": accent_for("Gold"), "dead end": accent_for("Gold"), "deadly": WARN}
+        for k, name in enumerate(SNAKE_DIRS):
+            y, mine = top + k * 24, name == pick
+            self.sim_text(img, (0, y), name.capitalize(), "label_b" if mine else "label", TEXT if mine else MUTED, BG)
+            words = told.get(name, "–") if told else ""
+            if words:
+                self.sim_text(img, (img.width, y), words, "small", tints.get(words, TEXT) if mine else MUTED, BG,
+                              anchor="r")
 
     def snake_keeping_up(self, s):
         """It can't keep up with the game (after a while): said once, for each model."""

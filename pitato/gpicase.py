@@ -24,6 +24,11 @@ DOCK_QUIET = 60.0              # nothing in the first minute after media mode st
 DOCK_WINDOW, DOCK_MOST = 600.0, 2   # at most this many restarts for the dock in that many seconds: then it isn't
                                     # followed till media mode starts again (a TV that drops the line as the Pi starts)
 DOCK_FILE = os.path.join(os.path.dirname(STATE_FILE), "dock-restart.json")   # restarts for the dock: where to, when
+POWER_PIN = 26                 # the power switch's pin (setup.sh's gpio-shutdown line): low once it's switched off
+POWER_EVERY = 2.0              # seconds between looks at it
+POWER_ARM = 10.0               # high that long on end (the switch on): from then on...
+POWER_SETTLE = 2.5             # ...low that long (two looks running) means it's been switched off
+POWER_BLIND = 3                # looks in a row with no telling, to start with: it isn't looked at any more
 DEVICE_TREE = "/proc/device-tree"
 DPKG_LOCKS = ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock")
 PROC_LOCKS = "/proc/locks"
@@ -66,6 +71,76 @@ def pin_level(pin=DOCK_PIN):
     if m:
         return m.group(1) == "1"
     return None
+
+
+def input_level(pin=POWER_PIN):
+    """An input pin's level now: True (high) or False (low). None when there's no telling (neither pinctrl nor
+    raspi-gpio), or it isn't an input: a pin put to another use (the screen's, say) says nothing of a switch."""
+    m = re.search(r"^\s*%d:\s*ip\b[^|\n]*\|\s*(hi|lo)\b" % pin, run_out(["pinctrl", "get", str(pin)]), re.M)
+    if m:                                              # 26: ip    pu | hi // GPIO26 = input  (a Pi Zero 2 W: --,
+        return m.group(1) == "hi"                      #                                          not pu)
+    m = re.search(r"\bGPIO %d: level=([01])\b[^\n]*\bfunc=INPUT\b" % pin, run_out(["raspi-gpio", "get", str(pin)]))
+    if m:                                              # GPIO 26: level=1 fsel=0 func=INPUT pull=UP
+        return m.group(1) == "1"
+    return None
+
+
+class SwitchWatch:
+    """A GPi Case's power switch, by its pin itself, looked at every POWER_EVERY on a thread of its own (pinctrl takes
+    a moment). The kernel makes a key of the pin, and that's listened for (inputs.py's PowerKey); this is for when
+    the key says nothing though the pin changed. Off: the pin low for POWER_SETTLE seconds, once it's been high for
+    POWER_ARM on end since this started (the switch seen on). A pin that's low from the start is never taken for a
+    switch turned off (the Pi would shut down every time it started), and one that can't be read isn't looked at
+    any more. What it finds goes in the log, once."""
+
+    def __init__(self, read=input_level, every=POWER_EVERY, arm=POWER_ARM, settle=POWER_SETTLE, start=True):
+        self.read, self.every, self.arm, self.settle = read, every, arm, settle
+        self.level, self.since = None, time.monotonic()
+        self.armed, self.blind, self.told = False, False, False
+        self.looks, self.read_once = 0, False          # (looks so far; one of them told its level)
+        self.lock = threading.Lock()
+        self.done = threading.Event()
+        self.thread = None
+        if start:
+            self.thread = threading.Thread(target=self.run, daemon=True, name="power-pin")
+            self.thread.start()
+
+    def run(self):
+        while not self.done.is_set() and not self.blind:
+            self.look(time.monotonic())
+            self.done.wait(self.every)
+
+    def look(self, now):
+        """One look at the pin."""
+        try:
+            level = self.read()
+        except Exception as ex:                        # (never stops for good over that)
+            print(f"power switch: {ex!r}", flush=True)
+            level = None
+        with self.lock:
+            self.looks += 1
+            self.read_once = self.read_once or level is not None
+            if level != self.level:
+                self.level, self.since = level, now
+            if not self.read_once and self.looks >= POWER_BLIND:   # (never once, from the start: later, a look that
+                self.blind = True                                  #  fails is just a look that failed)
+                print(f"power switch: its pin (GPIO {POWER_PIN}) can't be read here: the kernel's word for it is gone "
+                      "by alone", flush=True)
+            elif level is False and not self.armed and not self.told:
+                self.told = True
+                print(f"power switch: its pin (GPIO {POWER_PIN}) is low already, as this starts: watched once "
+                      "it's been high a while", flush=True)
+            elif level is True and not self.armed and now - self.since >= self.arm:
+                self.armed = True
+                print(f"power switch: its pin (GPIO {POWER_PIN}) is watched too", flush=True)
+
+    def off(self, now):
+        """The switch has been turned off: the pin low long enough, having been high before."""
+        with self.lock:
+            return self.armed and self.level is False and now - self.since >= self.settle
+
+    def close(self):
+        self.done.set()
 
 
 def node_on(name):

@@ -319,7 +319,7 @@ PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "comp
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party",     # Pietatos ask these
-              "/api/band")
+              "/api/band", "/api/cookie")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1252,6 +1252,19 @@ def group_chat():
     since = request.args.get("since", "0")[:24]
     return pi_reply(ask_pi("GET", "/group?" + urllib.parse.urlencode({"since": since, "from": request.remote_addr or ""}),
                            timeout=8))
+
+
+# ---- the cookie between your Pietatos (pitato/cookie.py, screens/cookie.py) -------------------------------------------
+@app.post("/api/cookie")
+def cookie_try():
+    """Another of your Pietatos tries for the cookie: its throw of rock paper scissors, answered with this one's and
+    how it went (someone at this one's page for it is given a few seconds to throw, so the answer can take that long).
+    Pietato answers only one of yours (one it's heard lately, at this address)."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(ok=False, error="What's that?"), 400
+    cmd = {k: body.get(k) for k in ("id", "name", "n", "throw", "you", "wins")}
+    return pi_reply(ask_pi("POST", "/cookie", dict(cmd, **{"from": request.remote_addr}), timeout=10))
 
 
 # ---- another of your Pietatos controlling this one with its buttons (pitato/pilot.py) --------------------------------

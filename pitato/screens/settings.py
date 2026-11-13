@@ -355,7 +355,7 @@ class SettingsScreen:
         forgotten: they were for the menus' size before."""
         self.sim_base, self.sim_panel, self.sim_card = (None, None, None), (None, None, 0.0), (None, None)
         self.sim_shown, self.sim_head, self.sim_feet = (None, None, 0.0, 0.0), (None, None), {}
-        self.sim_still, self.sim_mask = (None, None), None
+        self.sim_still = (None, None)
         self.coder_base, self.coder_shown = (None, None, None), (None, None, 0.0, 0.0)
         self.wall, self.home_base = (None, None), (None, None)
 
