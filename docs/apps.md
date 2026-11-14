@@ -47,7 +47,7 @@ Pietato starts on a home screen of apps:
 - **System**: a dashboard of the Pi's temperature, how busy it is, its memory, storage and network. SELECT
   shows it as a list instead, with Update software, Reboot and Shut down
 - **Settings**: WiFi, Bluetooth, the home screen's style, background, colours, video size, a TV or monitor's
-  resolution, battery saver, sound, controller
+  resolution, battery saver, sound, an OLED screen's music bars, controller
 - Settings > Background changes the home screen's background: dark ones, colourful ones like Sunset, Candy
   and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and A shows
   them all to pick from
@@ -58,6 +58,8 @@ Pietato starts on a home screen of apps:
   the same, and L and R still switch apps
 - If your screen is mounted on its side or upside down, Settings > Rotate screen turns the picture to
   match: the apps, games, videos and the console
+- With a Waveshare 2.23inch OLED HAT on the Pi's pins, Settings > [OLED screen](#oled-screen) shows bars
+  that move with your music
 - On a 1080p or 4K TV, a Pi 4 or 5 (or a PC) draws the menus in the TV's finer detail, so text, icons and
   pictures stay sharp
 - On a battery (in a GPi Case, or on a laptop), the screen goes dark after three minutes with nothing
@@ -178,6 +180,23 @@ for a moment, to tell them apart. A board that had the sketch before this needs 
 For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
 library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.
 For its Serial Monitor, set Tools > USB CDC On Boot to Enabled before you upload.
+
+## OLED screen
+
+A [Waveshare 2.23inch OLED HAT](https://www.waveshare.com/wiki/2.23inch_OLED_HAT) on the Pi can show bars that
+move with your music. Press the HAT onto the Pi's pins, wired as it comes (SPI), and set Settings > OLED screen
+to Music bars. Its bars come up once to show it's lit. The first time, it turns on the Pi's SPI if it isn't on,
+and asks you to restart.
+
+The setting is there on a Pi with a TV or monitor on HDMI. It isn't on a Pi in a GPi Case, whose screen uses
+those pins, or on a PC or a handheld.
+
+- The bars follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
+- They're the same at any volume, and dark when nothing plays.
+- With the OLED on, music takes a moment longer to start: it plays through the player that knows when each
+  sound is heard, as it does for an LED backlight's beat.
+- The HAT uses the pin an [LED backlight](#led-backlight)'s LEDs are wired to, so turning one on turns the
+  other off. ESP32 boards' LEDs work alongside it.
 
 ## Soundboard
 

@@ -324,7 +324,8 @@ class PartyScreen:
         pre, you = as_you(home_dir())
         beat = self.glow_beat if self.glow_beats_wanted() else None   # (an LED grid pulsing to it: screens/glow.py)
         player = PartyPlayer(src, at, pos=pos, device=aplay_device(None, place[0]), volume=self.volume,
-                             clock=time.monotonic if lead else self.party_clock, pre=pre, you=you, on_beat=beat)
+                             clock=time.monotonic if lead else self.party_clock, pre=pre, you=you, on_beat=beat,
+                             on_sound=self.oled_heard)   # (an OLED screen's bars: screens/oled.py)
         proc = PartyProc(player, title=title, artist=artist, length=length, lead=lead, control=self.party_control)
         if not lead:
             self.queue, self.qi = [it], 0

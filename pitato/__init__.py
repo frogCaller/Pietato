@@ -80,6 +80,7 @@ Beside them, each run on its own:
                     imported for this Pi's own USB cameras (on 127.0.0.1 only)
   hear.py           what a USB microphone hears, made out by Vosk (listen.py starts it, as you)
   coder_hooks.py    Claude Code's hooks, telling the Bot what it's doing (the web page hands it out)
+  oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music
   agent_link.py     OpenClaw or Hermes, connected both ways: your prompts from the Bot at work to it and its
                     answers back, and a skill with which it works this Pietato (the web page hands it out)
   convert_videos.sh videos made smaller on your computer (the Pi does it by itself too)

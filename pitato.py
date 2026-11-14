@@ -271,6 +271,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 headphones or a speaker while they're connected, else a USB speaker while it's plugged
                 in, else a TV on HDMI (a monitor that says it has no sound: the headphone jack), else
                 the Pi's own; or HDMI, headphones, a USB speaker...; a microphone isn't listed),
+                OLED screen (a Pi with its pins free, on a TV or monitor: a Waveshare 2.23inch OLED HAT
+                on them shows bars that move with your songs and stations, which play through party
+                mode's player for it: pitato/oled.py; not with an LED backlight's LEDs on the same pin),
                 controller, swap A and B, start-up, and a random song at start-up. Bluetooth headphones
                 gone while something plays: it pauses (A plays on through the Pi), a game's menu comes up.
 

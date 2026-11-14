@@ -362,12 +362,15 @@ class PartyPlayer:
     pre and you, as_you's); aplay plays it, its first sound at that time, the rest kept in step: where it is in it is a
     sum of the clock from then on (paused: as it was, till it plays on)."""
 
-    def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None, on_beat=None):
+    def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None, on_beat=None,
+                 on_sound=None):
         self.src, self.pos0 = src, max(0.0, float(pos or 0))
         self.late = 0.0                                # seconds later than it's played here that it's heard (the web
                                                        # page's Sound here: its listener's a moment behind the Pi)
         self.beats = (Beats(PARTY_RATE, lambda when, hard: on_beat(when + self.late, hard))   # (an LED grid's, as
                       if on_beat is not None else None)                                       #  they're heard: glow.py)
+        self.on_sound = on_sound                       # what it plays, said as it's written (the samples, when the
+                                                       # first is heard, the volume they're at): an OLED's bars
         self.clock = clock or time.monotonic
         self.device, self.volume = device, volume
         self.lock = threading.Lock()
@@ -527,6 +530,12 @@ class PartyPlayer:
                     except Exception as ex:
                         print(f"party: no beats ({ex!r})", flush=True)
                         self.beats = None
+                if self.on_sound is not None:          # (...and the sound itself: an OLED screen's bars)
+                    try:
+                        self.on_sound(data, head + self.late, self.volume / 100.0)
+                    except Exception as ex:
+                        print(f"party: its sound isn't said ({ex!r})", flush=True)
+                        self.on_sound = None
                 pending += data
             if pending:                                # (all of it, in order: what the pipe can't take yet, next time)
                 try:

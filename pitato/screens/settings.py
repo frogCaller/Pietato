@@ -72,8 +72,8 @@ class SettingsScreen:
 
     def settings_root_rows(self):
         """Settings' first page: Sound's outputs are this Pi's (and Bluetooth headphones connected to it), Resolution is
-        there for a TV or monitor, and Rotate screen for any screen but the GPi Case's own (unless it's turned already:
-        to turn it back)."""
+        there for a TV or monitor, Rotate screen for any screen but the GPi Case's own (unless it's turned already:
+        to turn it back), and OLED screen on a Pi with its pins free (screens/oled.py)."""
         rows = []
         for key, label, choices in SETTINGS:
             if key == "sound":
@@ -82,6 +82,8 @@ class SettingsScreen:
                 continue
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
                     and self.setting("turn") in (None, "Off"):
+                continue
+            elif key == "oled" and not self.oled_can():
                 continue
             rows.append((key, label, choices))
         return rows
@@ -143,6 +145,8 @@ class SettingsScreen:
             self.pick_sound(value)
         elif key.startswith("glow_"):
             self.glow_pick(key, value)                 # (the LED backlight's grid, as it's set now)
+        elif key == "oled":
+            self.oled_pick(value)                      # (the OLED HAT: lit, or dark)
         else:
             self.set_setting(key, value)
 
@@ -768,6 +772,7 @@ class SettingsScreen:
                      self.ha_value() if key == "homeassistant" else
                      self.sound_value() if key == "sound" else
                      self.saver_value() if key == "battery" else
+                     self.oled_value() if key == "oled" else
                      self.res_value() if key == "resolution" else self.setting(key))
             x1 = W - 28
             if extra and on:                          # ◀ value ▶

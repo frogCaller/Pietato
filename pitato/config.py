@@ -55,6 +55,7 @@ WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings >
               "Sky", "Peach", "Mint", "Lemon", "Bubblegum",         # words go dark over them); and the rest. How each
               "Rainbow", "Snow", "Space", "Black", "Picture"]       # looks: home.py's WALLS
 SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Video size; Y while a video plays
+OLED_CHOICES = ["Off", "Music bars"]               # Settings > OLED screen (screens/oled.py)
 SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you are and the temperature's units are
                # Weather's: START there)
     ("wifi", "WiFi", None),
@@ -75,6 +76,8 @@ SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you
     ("attract", "Attract mode", ["On", "Games only", "Off"]),   # left idle, plugged in: the Bot gets bored and
                                                             # finds something to do (screens/attract.py)
     ("sound", "Sound", None),
+    ("oled", "OLED screen", OLED_CHOICES),   # a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with
+                                             # your music (only on a Pi with its pins free: screens/oled.py)
     ("pad", "Controller", None),
     ("pad_swap", "Swap A and B", ["Off", "On"]),   # on the controller in hand (kept with its buttons, not here)
     ("friend", "Bot", None),
@@ -96,8 +99,8 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "glow_on": "Off", "glow_colour": "Off", "glow_follow": "Any of yours", "glow_bright": "25%",
                     "glow_beat": "On", "glow_shape": "8x8 grid", "glow_turn": "0°", "glow_mirror": "On",
                     "glow_wiring": "Rows", "glow_count": "60", "glow_start": "Bottom left", "glow_way": "Clockwise",
-                    "glow_bottom": "Yes"}
-                                                    # (Apps > LED backlight: screens/glow.py)
+                    "glow_bottom": "Yes",             # (Apps > LED backlight: screens/glow.py)
+                    "oled": "Off"}
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,
                   "Minimal": "Glass"}                                                               # and one gone)

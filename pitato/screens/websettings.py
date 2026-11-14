@@ -116,7 +116,8 @@ class WebSettingsScreen:
         sound = choice("sound", "Sound", root["sound"][1], value=self.sound_shown())   # (Bluetooth headphones, by
         if sound["value"] == "Auto" and self.sound_value() != "Auto":                   # name, while they have it)
             sound["note"] = self.sound_value()     # (Auto: HDMI, say)
-        sec("sound", "Sound and video", [sound, choice("screen", "Video size", SCREEN_MODES)])
+        sec("sound", "Sound and video", [sound, choice("screen", "Video size", SCREEN_MODES),
+                                         self.web_oled_row() if "oled" in root else None])
         sec("start", "Starting up", [choice("start"), choice("start_song")])
         sec("share", "Other Pietatos", [
             {"key": "name", "label": "This Pietato's name", "kind": "text", "value": self.setting("name") or "",
@@ -391,7 +392,7 @@ class WebSettingsScreen:
             return {"ok": True}
         if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "look",
                    "sound", "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery",
-                   "share", "attract") \
+                   "share", "attract", "oled") \
                 or key.startswith("game_picture_") or key in GLOW_KEYS:
             return self.web_pick(key, value)
         handler = getattr(self, "web_set_" + key, None)

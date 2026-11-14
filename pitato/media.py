@@ -102,6 +102,7 @@ from .screens.party import PartyScreen
 from .screens.soundboard import SoundboardScreen
 from .screens.band import BandScreen, Brain as BandBrain
 from .screens.glow import GlowScreen
+from .screens.oled import OledScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -115,7 +116,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, CookieScreen, FishScreen,
-            LobbyScreen, PartyScreen, GlowScreen, SoundboardScreen, BandScreen):
+            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BandScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -1086,6 +1087,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.camera.stop()
         self.camera.close()
         self.glow_stop()                               # (the LED backlight's LEDs dark)
+        self.oled_stop()                               # (...and the OLED screen)
         self.lamps_stop()
         self.glow_station_end()
         if self.active and self.fb is not None and system_stopping():

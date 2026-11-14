@@ -234,10 +234,10 @@ class GlowScreen:
         if repeat:
             return None
         if name == "a":
-            self.glow_pick("glow_on", "Off" if self.glow_setting("glow_on") == "On" else "On")
+            took = self.glow_pick("glow_on", "Off" if self.glow_setting("glow_on") == "On" else "On")
             if self.glow_setting("glow_on") != "On":
                 self.toast("LEDs off", 2)
-            elif self.glow_grid is not None:
+            elif self.glow_grid is not None and not took:   # (an OLED screen turned off for them: that's said)
                 self.toast("LEDs on", 2)
         elif name in ("left", "right"):
             names = [n for n, _ in COLOURS]
@@ -356,6 +356,11 @@ class GlowScreen:
         return True
 
     def glow_pick(self, key, value):
+        """One of its settings picked. The LEDs on: an OLED screen on this Pi goes off (Settings > OLED screen,
+        screens/oled.py: it's on the same pin), and that's said (True)."""
+        took = key == "glow_on" and value == "On" and self.setting("oled") not in (None, "Off")
+        if took:
+            self.oled_pick("Off")
         self.set_setting(key, value)
         if key == "glow_on":
             if value == "On":
@@ -366,6 +371,9 @@ class GlowScreen:
             self.glow_apply()
         self.share_news()                              # (your others: what it wants of them, now)
         self.glow_seen = 0.0
+        if took:
+            self.toast("The OLED screen is off: the LEDs use its pin", 4)
+        return took
 
     # -- the grid ----------------------------------------------------------------------------------------------------
     def lamps_start(self):
@@ -594,12 +602,14 @@ class GlowScreen:
 
     def glow_catch(self, now):
         """Music that began before any light that wants its beats was heard (the song at start-up, mostly) is on the
-        plain player, which finds none. Once one turns up, a song that's only just begun is moved to party mode's
-        player: from where it is, after a moment's quiet, once for each song. One well under way plays on as it is
-        (the next has its beats)."""
+        plain player, which finds none (or on party mode's with none found: there for an OLED screen's bars alone,
+        screens/oled.py). Once one turns up, a song that's only just begun is moved to party mode's player: from
+        where it is, after a moment's quiet, once for each song. One well under way plays on as it is (the next has
+        its beats)."""
         p = self.proc
-        plain = (p is not None and not isinstance(p, PartyProc) and self.kind in LISTEN_KINDS and p.poll() is None
-                 and 0 <= self.qi < len(self.queue))
+        plain = (p is not None and (not isinstance(p, PartyProc)
+                                    or getattr(getattr(p, "player", None), "beats", True) is None)
+                 and self.kind in LISTEN_KINDS and p.poll() is None and 0 <= self.qi < len(self.queue))
         if not plain:
             self.glow_moved = None
             return
@@ -627,7 +637,7 @@ class GlowScreen:
         if out is None:
             out = self.glow_out = GlowOut()
             out.aim(self.glow_to, self.glow_to_lamps)
-        music = isinstance(self.proc, PartyProc) and self.kind in LISTEN_KINDS and not self.paused
+        music = self.glow_music_on() and not self.paused
         if not music:
             out.music(rgb)
         out.event("beat", strength, at=at, lamps=self.glow_setting("glow_beat") != "Off")
@@ -665,6 +675,13 @@ class GlowScreen:
             t -= self.party_clock() - time.monotonic()  # (the leader's clock, as this one's)
         out.event("beat", strength, at=t, lamps=self.glow_setting("glow_beat") != "Off")   # (a grid: its own say)
 
+    def glow_music_on(self):
+        """Music's on party mode's player for your LEDs: in a party, or with its beats found. (One that's there for
+        an OLED screen's bars alone, screens/oled.py, isn't theirs to show: as on the plain player.)"""
+        p = self.proc
+        return (isinstance(p, PartyProc) and self.kind in LISTEN_KINDS
+                and (self.party is not None or getattr(getattr(p, "player", None), "beats", True) is not None))
+
     def glow_tick(self, now):
         """(Media mode's main loop.) Music on party mode's player: its colour, now and then, to your grids (the beats
         go as they're found); a station passed through here: its song's name, and let go of once it's not played."""
@@ -675,7 +692,7 @@ class GlowScreen:
         if playing and getattr(self.proc, "player", None) is not None:   # (its sound on the web page, Sound here: its
             used = getattr(self, "sound_used", None) or ("",)           #  beats as that one's listener hears them)
             self.proc.player.late = web_late() if used[0] == "web" else 0.0
-        if playing and self.glow_to and not self.paused and now - self.glow_music_at >= GLOW_MUSIC:
+        if self.glow_music_on() and self.glow_to and not self.paused and now - self.glow_music_at >= GLOW_MUSIC:
             if self.glow_out is None:
                 self.glow_out = GlowOut()
                 self.glow_out.aim(self.glow_to, self.glow_to_lamps)
