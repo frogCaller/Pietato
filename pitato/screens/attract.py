@@ -95,12 +95,13 @@ class AttractScreen:
 
     def attract_ready(self, now):
         """Time for the Bot to get bored: Settings > Attract mode on; media mode up and left idle long enough, on the
-        home screen or a list, with nothing playing, and running on mains power (the battery saver off)."""
+        home screen or a list, with nothing playing, and running on mains power (the battery saver off), with a
+        screen to do it on."""
         return (self.setting("attract") != "Off" and self.active and self.fb is not None and not self.resting
                 and self.view in ("home", "list") and self.proc is None and self.game is None and self.prog is None
                 and not self.chromium_up() and not self.learn and now - self.stirred >= ATTRACT_AFTER
                 and now >= getattr(self, "attract_wait", 0.0) and not self.worth_watching(now)
-                and not self.saver_on())
+                and not self.rests())
 
     def attract_games(self, bad=()):
         """The games it can play by itself here: your own, drawn in 2D (a 3D one's too much for a game nobody's
@@ -318,7 +319,7 @@ class AttractScreen:
         if gone:                                       # (something else took the screen, a song from the web page,
             self.attract = None                        #  say: it's left as it is)
             return
-        if self.stirs != a["stirs"] or self.setting("attract") == "Off" or not self.active or self.saver_on():
+        if self.stirs != a["stirs"] or self.setting("attract") == "Off" or not self.active or self.rests():
             self.attract_stop()                        # (someone's here, or it's to stop)
             return
         if kind == "game":

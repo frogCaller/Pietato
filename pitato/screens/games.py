@@ -515,10 +515,11 @@ class GameScreen:
         self.game_open({"src": g["path"], "title": g["title"], "system": g["system"],
                         "whose": self.whose_last(save_name(g["path"]))})   # (as it was played last: nobody's asked)
 
-    @staticmethod
-    def game_cant(g):
+    def game_cant(self, g):
         """Why a game won't start here, and for how long to say so: (words, seconds), or None. (Its path "": its
         console's games.)"""
+        if self.no_screen():                           # (a Pi with nothing on HDMI: nowhere for its picture)
+            return "There's no screen here for a game", 4
         name = system(g["system"])[2]
         core = find_core(g["system"])
         if not core:

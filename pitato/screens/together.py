@@ -359,7 +359,7 @@ class TogetherScreen:
                 or not (link or TOKEN.fullmatch(key)) or not isinstance(file, str) or (file and not TOKEN.fullmatch(file))
                 or (not link and mine is None and not file)):
             return {"ok": False, "error": "What's that?"}
-        if not self.web_ready():
+        if not self.web_ready() or self.no_screen():   # (none: found out as media mode started, if it wasn't up)
             return {"ok": False, "error": "There's no screen to show it on"}
         if self.attract_on():
             self.attract_stop()

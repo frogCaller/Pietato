@@ -1,10 +1,11 @@
 """Settings > Screen > Waveshare 2.23 OLED (pitato/oled.py): a Waveshare 2.23inch OLED HAT on this Pi's pins, showing
-bars that move with your music. Only on a Pi with its pins free: one on a TV or monitor, not one in a GPi Case (its
-screen has the pins), a PC or a handheld. The bars are the music player's sound: with the OLED on, a song or a station
-plays through party mode's player (party.py: it knows when each bit of it is heard), on its own, as it does for an LED
-backlight's beat (screens/glow.py), and is shown as it's heard. The HAT is on the Pi's SPI, and an LED backlight's
-LEDs are wired to the same pin (GPIO 10): one of them at a time, so turning one on turns the other off. The first
-time, the Pi's SPI is turned on in config.txt (if it isn't), and it's lit after a restart."""
+bars that move with your music. Only on a Pi with its pins free: one on a TV or monitor, or with no screen at all
+(the web page's Settings has it then), not one in a GPi Case (its screen has the pins), a PC or a handheld. The bars
+are the music player's sound: with the OLED on, a song or a station plays through party mode's player (party.py: it
+knows when each bit of it is heard), on its own, as it does for an LED backlight's beat (screens/glow.py), and is
+shown as it's heard. The HAT is on the Pi's SPI, and an LED backlight's LEDs are wired to the same pin (GPIO 10): one
+of them at a time, so turning one on turns the other off. The first time, the Pi's SPI is turned on in config.txt (if
+it isn't), and it's lit after a restart."""
 import errno
 import os
 import time

@@ -201,7 +201,11 @@ class WebScreen:
                 out = (buf.getvalue(), "image/png")
         else:
             key = None
-            img = grab_screen(640)
+            if self.no_screen():                       # (no screen, and nothing drawn yet: black, for a moment)
+                from PIL import Image
+                img = Image.new("RGB", (fb.w, fb.h))
+            else:
+                img = grab_screen(640)
             buf = io.BytesIO()
             if self.proc_owns_screen():
                 img.save(buf, "JPEG", quality=82)
@@ -871,8 +875,8 @@ class WebScreen:
                     todo.append(it)
             if not todo or i is None:
                 return {"error": "That can't be played"}
-            if not self.web_ready():
-                return {"error": "There's no screen to play it on"}
+            if not self.web_ready() or (self.no_screen() and todo[i]["kind"] not in LISTEN_KINDS):
+                return {"error": "There's no screen to play it on"}   # (none at all, or none for a video)
             if self.web_tab(str(cmd.get("where") or "")) is None and self.view == "home":
                 self.view = "list"
             self.play(todo, i)

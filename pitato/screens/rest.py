@@ -5,7 +5,8 @@ main loop looks around once a second, and Wi-Fi saves its power too. Music and r
 it (that press does nothing else), as does the web page (the screen's picture watched there, or anything done there)
 or the bot hearing its wake phrase. Never while there's something to watch: a video, a game, a program, the camera,
 the Bot at work, a sim, a slideshow, lofi art with a song playing, the keyboard, or the web page looking at the
-screen."""
+screen. A Pietato with no screen (media.py's no_screen) rests whatever the battery saver says, as soon as nobody's
+at its web page: the menus are drawn for the page alone, so there's nothing to draw them for."""
 import threading
 import time
 
@@ -16,6 +17,7 @@ from ..system import wifi_dev
 REST_AFTER = 180.0      # seconds with nothing happening before the screen rests
 REST_READING = 600.0    # ...with a photo, a PDF or a text open (you may be reading it)
 REST_WATCHED = 30.0     # seconds since the web page last asked for the screen's picture: someone's watching it
+REST_UNSEEN = 30.0      # seconds with nothing happening before one with no screen rests (nobody's at its web page)
 REST_TICK = 1.0         # seconds between the main loop's looks around while it rests
 BATTERY_LOOK = 10.0     # seconds between looks at whether it's on its battery (Auto)
 
@@ -67,28 +69,37 @@ class RestScreen:
                 self.rest_wake = True
                 self.wake()
 
+    def rests(self):
+        """It may rest: the battery saver's on, or there's no screen here (nothing's drawn for nobody)."""
+        return self.no_screen() or self.saver_on()
+
     def rest_after(self):
+        if self.no_screen():
+            return REST_UNSEEN
         return REST_READING if self.view in ("photo", "pdf", "text", "filemenu", "mediamenu") else REST_AFTER
 
     def worth_watching(self, now):
         """Something on the screen to watch, or that's being worked: it doesn't rest (and the wait for rest starts again
-        when it's done)."""
-        return bool(
-            self.proc_owns_screen() or self.game is not None or self.prog is not None or self.chromium_shown()
-            or self.learn or self.view in ("keys", "update", "learn", "keepres", "wait", "sketch", "game", "gamemenu",
-                                            "chromenu", "chromehow")
-            or (self.view == "list" and (self.on_camera_page() or self.on_coder_page() or self.on_sim_page()))
-            or (self.view == "photo" and self.v.get("slideshow")) or (self.now_art() and not self.paused)
+        when it's done). With no screen there's nothing to watch but on the web page: only what's being worked."""
+        worked = bool(
+            self.learn or self.view in ("update", "learn", "keepres", "wait")
             or getattr(self, "remote_pad", None) is not None
             or getattr(self, "pilot_out", None) is not None   # (controlling another of yours: its buttons go there)
             or self.voice.speaking or now < getattr(self, "web_mic_until", 0.0)
             or now - self.web_watched < REST_WATCHED or now < self.halting)
+        if worked or self.no_screen():
+            return worked
+        return bool(
+            self.proc_owns_screen() or self.game is not None or self.prog is not None or self.chromium_shown()
+            or self.view in ("keys", "sketch", "game", "gamemenu", "chromenu", "chromehow")
+            or (self.view == "list" and (self.on_camera_page() or self.on_coder_page() or self.on_sim_page()))
+            or (self.view == "photo" and self.v.get("slideshow")) or (self.now_art() and not self.paused))
 
     def rest_tick(self, now):
         """The main loop: the screen rests after a while with nothing happening (the battery saver on), and wakes when
         it's asked to, or when there's something to watch after all."""
         if self.resting:
-            if self.rest_wake or not self.active or self.worth_watching(now) or not self.saver_on():
+            if self.rest_wake or not self.active or self.worth_watching(now) or not self.rests():
                 self.rest_end()
             return
         if not self.active or self.fb is None:
@@ -96,7 +107,7 @@ class RestScreen:
         if self.worth_watching(now):
             self.stirred = now
             return
-        if now - self.stirred >= self.rest_after() and self.saver_on():
+        if now - self.stirred >= self.rest_after() and self.rests():
             self.rest_start()
 
     def rest_start(self):
@@ -111,6 +122,9 @@ class RestScreen:
         hdmi_sound = sound_on_hdmi(sound_route(self.setting("sound")))   # (a TV's own sound: kept on, so just black)
         self.screen_off = not hdmi_sound and bool(getattr(self.fb, "power", None) and self.fb.power(False))
         self.rest_pollers(False)
+        if self.no_screen():                           # (no screen: Wi-Fi as it is, for the web page to come back by)
+            print("resting: no screen, and nobody at the web page", flush=True)
+            return
         dev = wifi_dev()
         was = wifi_power_save(dev)
         self.rest_wifi = dev if was is False else None   # (it's put back as it was, after)

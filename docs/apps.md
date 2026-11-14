@@ -190,8 +190,8 @@ move with your music. Press the HAT onto the Pi's pins, wired as it comes (SPI),
 Waveshare 2.23 OLED to Music bars. Its bars come up once to show it's lit. The first time, it turns on the Pi's
 SPI if it isn't on, and asks you to restart.
 
-The setting is there on a Pi with a TV or monitor on HDMI. It isn't on a Pi in a GPi Case, whose screen uses
-those pins, or on a PC or a handheld.
+The setting is there on a Pi, with a TV on HDMI or with no screen at all (turn it on in the web page's Settings
+then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC or a handheld.
 
 - The bars follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
 - They're the same at any volume, and dark when nothing plays.

@@ -452,6 +452,8 @@ class PlayerScreen:
         web page with Play here on: it plays there instead, if it can.)"""
         if self.here_take(queue, i):
             return
+        if queue[i]["kind"] not in LISTEN_KINDS and self.needs_screen("a video"):
+            return                                     # (no screen: music and radio play, a video has nowhere to)
         if queue[i]["kind"] in ("plexvideo", "jfvideo"):
             return self.play_plex(queue, i)
         self.stop()

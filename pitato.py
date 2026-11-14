@@ -7,6 +7,10 @@ monitor on HDMI, or the GPi Case's own. The menus are drawn at 640x480 (a little
 scaled up to fit; on a 1080p or 4K screen, a Pi 4 or 5 or a PC draws them in its finer detail (pitato/fine.py:
 sharp text, icons and pictures, laid out the same). In the GPi
 Case 2's dock (the TV on), the picture's on the TV: docked or taken out, the Pi restarts with it there.
+With no screen at all (a Pi with nothing on HDMI) media mode runs all the same, its menus drawn in memory for the
+web page, which shows them and works them (pitato/screen.py's NoScreen): everything but what draws on the screen
+itself, a video or a game. It rests while nobody's at the page; a screen that turns up later is looked for, and
+takes the menus.
 It works on a PC (Intel or AMD) with Ubuntu or Debian too: the PC starts in it, like a console, and System >
 Desktop starts its desktop instead, till the PC restarts (pitato/system.py's is_pc).
 
@@ -267,8 +271,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 words) and full screen apps (just the app's name along the top, no bars or buttons)),
                 Screen (a page too: video size, a TV or monitor's resolution, rotate screen (a screen on
                 its side: the menus, games, videos and the terminal turned 90°, 180° or 270°) and
-                Waveshare 2.23 OLED (a Pi with its pins free, on a TV or monitor: that OLED HAT on them
-                shows bars that move with your songs and stations, which play through party mode's
+                Waveshare 2.23 OLED (a Pi with its pins free, on a TV or monitor or with no screen: that OLED
+                HAT on them shows bars that move with your songs and stations, which play through party mode's
                 player for it: pitato/oled.py; not with an LED backlight's LEDs on the same pin)), clock,
                 battery saver (Auto: on its battery, in a GPi Case or a laptop, the screen goes dark
                 after three minutes with nothing happening; music plays on, and any button wakes it),

@@ -13,6 +13,7 @@ behind Remote. Its Hotkey is the controller's HOME (a game's menu, say), while H
 goes to the home screen. In a game, a button you hold on the remote (or your keyboard's arrows) stays held
 till you let go, as on a controller. When the Pi has a box to type in, one comes up under the screen too, so you
 can type on your phone or computer. Further down, you can set up controllers and pair Bluetooth devices.
+A Pi with no screen works the same from here: Screen shows the menus it would have.
 
 When the Pi is at its terminal instead of media mode, Screen on the secure page (below) shows the
 terminal. Type the password you sign in to the Pi with, and you can use it from there: click it and

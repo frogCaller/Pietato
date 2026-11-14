@@ -28,6 +28,10 @@ In the GPi Case 2's dock, with the TV on, the picture is on the TV: put the case
 and the Pi restarts with the picture where it should be. The case's buttons don't work in the dock, so use a
 USB or Bluetooth controller there.
 
+A Pi with no screen at all works too. Use it from the [web page](web-page.md), whose Screen shows its menus.
+Music and radio play as ever, and LED backlights and an OLED's bars follow them. A video or a game needs a
+screen, so turn on Play here to have it on the web page instead.
+
 ## Running it again
 
 Run it again whenever you like. What you left out stays out (with Update software too) until you put it back

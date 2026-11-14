@@ -97,7 +97,7 @@ class GroupScreen:
                 board, kind = pc_name(), "pc"
             else:
                 board, kind = pi_model(), "pi"
-            fb = self.fb
+            fb = self.fb if not self.no_screen() else None   # (no screen: it doesn't say it has one)
             screen = (getattr(fb, "real_w", 0), getattr(fb, "real_h", 0)) if fb is not None else None
             hw = hardware(board, kind, screen, CASES.get(getattr(self, "case", None), ""))
             self.group_hw = (now, hw)

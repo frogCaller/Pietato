@@ -837,7 +837,7 @@ class HandoffScreen:
             return {"ok": True, "have": bool(mine), "guest": True} if why is None else {"ok": False, "error": why}
         if why:
             return {"ok": False, "error": why}
-        if not self.web_ready():
+        if not self.web_ready() or self.no_screen():   # (none: found out as media mode started, if it wasn't up)
             return {"ok": False, "error": "There's no screen to show it on"}
         whose = savesync.whose_id(cmd.get("whose"))
         if whose is None:                              # (one from before saves were each Pietato's own)
@@ -932,7 +932,7 @@ class HandoffScreen:
         if got is None:
             return {"ok": False, "error": "What's that?"}
         kind, title, src, pos = got
-        if not self.web_ready():
+        if not self.web_ready() or (self.no_screen() and kind not in LISTEN_KINDS):   # (none, or none for a video)
             return {"ok": False, "error": "There's no screen to show it on"}
         it = {"kind": kind, "src": src, "title": title, "key": "handoff:" + title, "label": f"{title} (from {host})"}
         self.soon_jobs.append(lambda: self.handoff_play(it, pos, url))

@@ -1249,3 +1249,26 @@ class Framebuffer:
         self.close_memory()
         self.mem = None
         self.f.close()
+
+
+class NoScreen:
+    """Where a Framebuffer would be, on a Pi with no screen (nothing on HDMI: no /dev/fb0). The menus are drawn all
+    the same, the GPi Case's size, and kept for the web page, which shows them and works them. There's nowhere for
+    what draws on the screen itself: a video, a game, Chromium."""
+    w, h = real_w, real_h = Framebuffer.W, Framebuffer.H
+    same = True                                       # (as they're drawn: nothing's scaled)
+
+    def __init__(self):
+        self.last = None                              # the last menu picture, for the web page
+        self.frames = Framebuffer.count
+
+    def show(self, img):
+        self.last = img
+        Framebuffer.count += 1
+        self.frames = Framebuffer.count
+
+    def show_part(self, img, box):
+        self.show(img)
+
+    def close(self):
+        pass

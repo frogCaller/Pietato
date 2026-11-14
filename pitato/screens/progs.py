@@ -11,7 +11,7 @@ import termios
 import time
 
 from ..library import MEDIA_VT
-from ..screen import terminal_turn_now
+from ..screen import NoScreen, terminal_turn_now
 from .player import quiet_child
 
 CM_COLOURS = "@!#$%^&"   # cmatrix's keys for its colours: its own green, then red, yellow, blue, magenta, cyan, white
@@ -97,6 +97,9 @@ class ProgScreen:
 
     def prog_start(self, name):
         if self.prog is not None:
+            return
+        if isinstance(self.fb, NoScreen):              # (no screen: nowhere for the console to draw it)
+            self.toast(f"There's no screen here for {name}", 4)
             return
         own = PROG_OWN.get(name)
         path = prog_path(name)

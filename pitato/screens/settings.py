@@ -107,8 +107,10 @@ class SettingsScreen:
 
     def settings_page_value(self, page):
         """A page of settings' row on the first page: a word of what's in it (Appearance: the background; Screen: its
-        size now)."""
-        return (self.setting("wallpaper") or "") if page == "appearance" else self.res_here()
+        size now, or that there's none)."""
+        if page == "appearance":
+            return self.setting("wallpaper") or ""
+        return "No screen" if self.no_screen() else self.res_here()
 
     def sound_value(self):
         """Settings > Sound's row: Auto says where the sound goes now (Bluetooth headphones, a USB speaker, HDMI...);

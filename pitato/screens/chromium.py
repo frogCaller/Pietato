@@ -75,6 +75,8 @@ class ChromiumScreen:
         if not self.chromium_here():
             self.toast("Chromium needs a Pi 4 or 5, with it put in by setup.sh", 4)
             return
+        if self.needs_screen("Chromium"):
+            return
         st = self.state.setdefault("www", {})
         if not st.get("chromium_seen"):                # (the first time: how it works, then A opens it)
             st["chromium_seen"] = True

@@ -19,7 +19,7 @@ from .system import SysHistory, has_desktop, is_pc, on_pc, system_info, system_n
 from .handheld import has_emulationstation
 from .bluetooth import Bluetooth
 from . import screen as screen_out
-from .screen import Framebuffer, slow_pi, sound_away
+from .screen import Framebuffer, NoScreen, slow_pi, sound_away
 from .fine import scale as drawing_scale, set_scale as set_drawing_scale
 from .library import (
     BOOT_SONG_WAIT, fit_box, LIBRARY, LISTEN_KINDS, MEDIA_VT, PLAYING, read_streams, SCREEN_KINDS, SCREEN_SAY,
@@ -107,6 +107,7 @@ from .screens.oled import OledScreen
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
 VT_WAKE = 0.5                  # seconds on the terminal's console, on the way to media mode's, waking a PC's screen
+SCREEN_LOOK = 5.0              # seconds between looks for a screen, where there's none (screen_tick)
 
 
 class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, JellyfinScreen,
@@ -232,6 +233,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.stirred = time.monotonic()   # ...when something last happened (a button, the web page)
         self.web_watched = 0.0       # ...when the web page last asked for the screen's picture (someone's watching)
         self.screen_off = False      # ...the screen's picture turned off while it rests
+        self.screen_look = 0.0       # no screen (no_screen): when one's next looked for
         self.rest_wifi = None        # ...Wi-Fi's own power saving, turned on while it rests (its name: to turn off after)
         self.coder = Coder()         # the Bot at work: your coding agent, acted out
         self.coder.on_change = self.coder_changed
@@ -913,6 +915,37 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 or (self.game is not None and self.view == "game")
                 or self.prog is not None or self.chromium_shown())
 
+    def no_screen(self):
+        """There's no screen here (screen.py's NoScreen: a Pi with nothing on HDMI). Media mode's for the web page
+        alone: its Screen shows the menus, and works them."""
+        return isinstance(self.fb, NoScreen)
+
+    def needs_screen(self, what):
+        """Something that draws on the screen itself (a video, a game, one of Apps' programs, Chromium), asked for
+        where there's none: said, on the web page too, and True."""
+        if not self.no_screen():
+            return False
+        self.web_said = f"There's no screen here for {what}"
+        self.toast(self.web_said, 4)
+        return True
+
+    def screen_tick(self, now):
+        """No screen: looked for every few seconds. One's there now (a TV plugged in since): the menus go on it, where
+        they were."""
+        if now < self.screen_look or not self.no_screen():
+            return
+        self.screen_look = now + SCREEN_LOOK
+        try:
+            fb = Framebuffer()
+        except Exception:                              # (none yet)
+            return
+        print("a screen's turned up: the menus are on it now", flush=True)
+        self.fb = fb
+        self.rest_end()                                # (awake, if it was resting with nobody at the web page)
+        self.forget_drawn()                            # (the menus may be another size on it)
+        self.fine_scale()
+        self.dirty = True
+
     def fine_scale(self):
         """The menus drawn as finely as the screen has pixels for (fine.py: 2 on a 4K TV, 1 on the GPi Case), or as a
         web page showing the screen big wants them (web_fine: twice, where this machine draws that quickly)."""
@@ -978,11 +1011,16 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             from PIL import Image, ImageDraw, ImageFont  # noqa: F401
             import numpy  # noqa: F401
             self.load_fonts()
-            self.fb = Framebuffer()
+            try:
+                self.fb = Framebuffer()
+            except Exception as ex:                    # (no screen: nothing on HDMI, so no /dev/fb0, or one it can't
+                self.fb = NoScreen()                   # draw on. The menus are drawn all the same, for the web page)
+                self.screen_look = time.monotonic() + SCREEN_LOOK
+                print(f"no screen ({ex}): the menus are drawn for the web page", flush=True)
             if getattr(self.fb, "power", None):        # (on, whatever it was left as: a rest that didn't end)
                 self.fb.power(True)
             self.fine_scale()
-        except Exception as ex:      # missing package or no framebuffer
+        except Exception as ex:      # (a missing package)
             print(f"media mode unavailable: {ex}", flush=True)
             self.fb = None
             return
@@ -1693,6 +1731,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.chromium_tick(now)
         if self.web_mic_until or self.web_mic_was:     # (a web page's microphone: come, or gone)
             self.web_mic_tick()
+        self.screen_tick(now)                          # (no screen: one that's turned up)
         if self.active and self.fb is not None and now >= self.fine_look:   # (a web page showing the screen big, or
             self.fine_look = now + 1.0                                       # not any more: drawn more or less finely)
             if max(getattr(self.fb, "s", 1), self.web_fine()) != drawing_scale():
