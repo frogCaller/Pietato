@@ -138,12 +138,14 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 looking at the screen (pitato/anygame.py): it gets the game going by itself (Start, then
                 A, through its title screen, menus and text), then plays an action game by instinct, many
                 times a second (pitato/instincts.py: racing, platformers, fighting, shooters), any other a
-                button at a time, the game going on at its own speed, with your Bot's model as its coach
-                (pitato/coach.py: the kind of game, what its buttons do, what to aim for and how, kept in
-                Games/Saves/<game>.ai-notes.txt with your tips); Pokémon Emerald (the English cartridge)
-                from the game's memory too (pitato/emerald.py): the story step by step, battles, text,
-                questions, walking where the story goes, healing and training on the way. Your buttons
-                wait while it plays, and Games/Saves/<game>.ai.log has what it saw and picked.
+                button at a time, the game going on at its own speed (a platformer too, where its
+                instincts get it no further), with your Bot's model as its coach (pitato/coach.py: the
+                kind of game, what its buttons do, what to aim for and how, and what it's learned by
+                playing, a Learned: line each, kept in Games/Saves/<game>.ai-notes.txt with your tips);
+                Pokémon Emerald (the English cartridge) from the game's memory too (pitato/emerald.py):
+                the story step by step, battles, text, questions, walking where the story goes, healing
+                and training on the way. Your buttons wait while it plays, and
+                Games/Saves/<game>.ai.log has what it saw and picked.
                 START on the list finds a game by name (or console), B all again.
                 Another of your Pietatos playing a game: the home screen says which, top right; X watches
                 it (this one runs the same game from its buttons alone: pitato/netplay.py), SELECT joins it
@@ -178,7 +180,11 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 can POST to the web page's /coder?pose=typing, and a WAV to /coder/say is said out
                 loud. At work, A types a prompt for Claude Code (which takes it through
                 coder_hooks.py's channel), Y rings the bell, X turns its sounds off, up and down
-                set the volume, START shows how to connect an agent
+                set the volume, START shows how to connect an agent. OpenClaw and Hermes are
+                connected by agent_link.py, run on their computer: it gives them a skill that works
+                this Pi as the web page's remote does, and (listen) hands them the prompts you type
+                at work and shows what they answer on a card (up and down through a long one, X
+                reads it out, B closes it, SELECT shows it again)
   Apps        - little worlds to watch, each in a box beside its numbers or full screen (SELECT):
     Clock       - the time and the date in the middle of the page: a dial (the date under its middle) or big
                 figures (AM or PM and the seconds beside them, the date under them); A switches between
@@ -188,36 +194,41 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 times a second, or 30 or 60 where a frame leaves the machine the time)
     Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
                 next; A calls it, X feeds it (the web page arranges the tanks)
-    The Cookie  - one cookie between all your Pietatos: only one has it (a small one by its clock says so),
-                and another takes it by beating it at one throw of rock paper scissors (a win: it's theirs;
-                a loss or the same throw: it stays). Their Bots try by themselves, one of them about every
-                ten minutes (not at night, in a game, or with the group chat quiet), each with a habit of
-                its own; the one that takes it says so in the group chat. Its page: who has it, each one's
-                last throws, and yours: left rock, up paper, right scissors (with the cookie here and the
-                page open, another's try waits a few seconds for your throw). Its holder off for an hour:
-                it goes to the one that's waited longest. One that wins three throws in a row or more: the
-                one it just beat may say it's cheating (it isn't), and they argue about it in the group
-                chat (pitato/cookie.py; POST /api/cookie)
+    The Cookie  - your Pietatos play each other at rock paper scissors for cookies: the one that got the
+                last cookie (a small one by its clock says so) is the one to beat, and another that beats
+                it at one throw gets a cookie, and is the one to beat next (a loss: the one it played gets
+                another; the same throw: nobody does). A cookie's eaten, never taken: "Den got a cookie".
+                Their Bots play by themselves, one of them about every ten minutes (not at night, in a
+                game, or with the group chat quiet), each with a habit of its own; the one that gets a
+                cookie says so in the group chat. Its page: who got the last, each one's last throws, and
+                yours: left rock, up paper, right scissors (on the one to beat, with the page open,
+                another's throw waits a few seconds for yours). That one off for an hour: the one that's
+                waited longest gets the next. One that wins three throws in a row or more: the one it just
+                beat may say it's cheating (it isn't), and they argue about it in the group chat
+                (pitato/cookie.py; POST /api/cookie)
     LED backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
                 TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
                 the edges of the game on whichever of your Pietatos it follows (pitato/glow.py: a UDP
                 packet each picture), red for a hit (lives or health going down, in its RetroAchievements
                 rich presence; or the controller shaken), gold for an achievement, and pulsing to music
-                (party mode's player finds the beats); the rest of the time, a colour you pick (or a
-                rainbow, or dark). A turns it on or off, left and right pick its colour, up and down its
-                brightness, START has the rest (Follows: Nobody keeps it to your colour; Shape: a grid, or
-                a strip: how many LEDs, where it starts, which way it goes, along the bottom or not); the
-                web page's Library has it too. An ESP32 board's own LED joins in over WiFi, on any Pietato
+                (party mode's player finds the beats) and to the Soundboard's sounds; the rest of the time,
+                a colour you pick (or a rainbow, or dark). A turns it on or off, left and right pick its
+                colour, up and down its brightness, START has the rest (Follows: Nobody keeps it to your
+                colour; Shape: a grid, or a strip: how many LEDs, where it starts, which way it goes, along
+                the bottom or not); the web page's Library has it too. An ESP32 board's own LED joins in
+                over WiFi, on any Pietato
                 (esp32/pietato_led: it says it's there, and is lit as a grid is; one with no LEDs of its
                 own has this page for them while a board's on, an LED drawn for each: A is their pulse to
                 music; the web page's Library lists the boards, and gives each a colour of its own, which
-                the board keeps)
+                the board keeps). The song at start-up begins before a board's heard: it's moved to the
+                player that finds its beats once one is, and on it from the start the next time
     Soundboard  - a sound on every button: the d-pad's four and A, B, X and Y each play theirs (as many
                 at once as you like; pressed again, one starts again), L and R go through the banks of
                 eight, SELECT stops them all, START has the bank, the volume and (with a USB microphone)
                 Record a sound, and B there goes back. A starter pack comes with it (pitato/sounds: made
                 by a script, public domain); your own are wav, mp3 or ogg files in ~/Soundboard, on a
-                button a moment after they're put there. Its player's a process of its own, as you
+                button a moment after they're put there. Each lights your LEDs as it's heard: a pulse in
+                its button's colour, kept while it plays. Its player's a process of its own, as you
                 (pitato/soundplay.py); the web page's Library has it too (add, record, rename, delete,
                 drag onto buttons and banks), and which sound is on which button is static/soundboard.txt
     Band        - your Pietatos play together, each its own instrument (drums, bass, guitar, keys) through

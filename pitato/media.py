@@ -237,7 +237,14 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.coder.on_news = self.coder_news
         self.coder.sound_ok = self.coder_may_sound
         self.coder_help = False      # its card on connecting an agent (START)
+        self.coder_help_page = 0     # ...which one: Claude Code's (0), or OpenClaw's and Hermes's (1)
         self.coder_where = None      # ...and what that says: the web page's addresses, whether it has a password
+        self.coder_reply = None      # what your agent last answered (agent_link.py sends it): {"n", "text", "agent",
+                                     # "failed", "open": its card is up, "top": the first line shown, "most": the
+                                     # last that can be, "lines": (how wide, its words as lines), "covers": its
+                                     # card is over the Bot}
+        self.coder_reply_n = 0       # ...how many there have been
+        self.coder_reply_aloud = False   # ...and it's being read out loud (X)
         self.coder_base = (None, None, None)        # the tab without the coder: (what it shows, it, behind the coder)
         self.coder_shown = (None, None, 0.0, 0.0)   # the last frame: (that, the screen's count, when, when whole)
         self.coder_next = 0.0        # when its next frame is due
@@ -473,7 +480,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lock = threading.Lock()
         self.state = {"pos": {}, "dur": {}, "settings": {}, "radio": {}, "cam_turn": {}, "cam_flip": {},
                       "cam_flip_v": {}, "www": {}, "pilot": {},   # (pilot: another's web page password, by its address)
-                      "cookie": {}}                               # (cookie: The Cookie, as it's known here)
+                      "cookie": {},                               # (cookie: The Cookie, as it's known here)
+                      "glow": {}}                                 # (glow: lights on your network that had this one's
+                                                                  #  beats, the last time it ran: screens/glow.py)
         self.fonts = None
         self.load_state()
         self.camera.turns = self.state["cam_turn"]   # (a camera's picture turned: kept with the rest)
@@ -1812,8 +1821,12 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.dirty = True                     # time to take the little picture away
             if self.camera.action and 3 <= now - self.cam_said[1] < 7:
                 self.dirty = True                     # and a message that has had its turn
-        if self.on_coder_page() and not self.coder_help and now >= self.coder_next:
-            co = self.coder
+        if self.coder_reply_aloud and not self.voice.speaking:
+            self.coder_reply_aloud = False             # (its answer's been read out: X reads it again)
+            self.dirty = True
+        still = (self.coder_reply_shown() or {}).get("covers") and self.coder_ask_shown() is None   # (a long answer's
+        if self.on_coder_page() and not self.coder_help and not still and now >= self.coder_next:  # card is over the
+            co = self.coder                                                                        # Bot: nothing moves)
             fps = 4 if co.asleep else CODER_FPS.get(co.anim, 6)
             if self.fb is not None and not getattr(self.fb, "same", True) and self.pi_slow:
                 fps = min(fps, 5)                      # (a Pi Zero on a TV: each frame scaled up costs it more)

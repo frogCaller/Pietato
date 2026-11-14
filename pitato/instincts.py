@@ -89,7 +89,10 @@ TITLE_KINDS = (
      r"policenauts|phoenix wright|ace attorney|harry potter|lord of the rings|indiana jones|dino crisis|"
      r"alone in the dark|clock tower|fear effect|syphon filter|medievil|\becco\b|little big adventure|"
      r"illusion of time|light crusader|story of thor|dark savior|brave fencer|threads of fate|"
-     r"neutopia|golden axe warrior|crusader of centy|soleil|oracle of|minish|wind waker|majora|ocarina", "adventure"),
+     r"neutopia|golden axe warrior|crusader of centy|soleil|oracle of|minish|wind waker|majora|ocarina|"
+     r"shrek (2|the third|forever)|lost vikings", "adventure"),   # (...and platformers that are puzzles: things to
+                                            # carry, characters to switch between. Running and jumping alone gets
+                                            # nowhere in them)
     (r"mario|sonic|mega ?man|rockman|kirby|castlevania|metroid|donkey kong|yoshi|wario ?land|adventure island|"
      r"bonk|crash bandicoot|spyro|banjo|rayman|jazz jackrabbit|earthworm jim|aladdin|lion king|ninja gaiden|"
      r"shinobi|kid icarus|ducktales|chip .?n.? dale|prince of persia|commander keen|pitfall|bubsy|gex\b|croc\b|"
@@ -110,7 +113,7 @@ TITLE_KINDS = (
      r"ratchet|sly (cooper|raccoon|2|3)|daxter|loco ?roco|megaman|speedy gonzales|super star wars|"
      r"empire strikes back|return of the jedi|hook\b|home alone|addams family|wayne'?s world|cool world|"
      r"james bond jr|rocketeer|robocop|terminator|alien ?(3|³)|predator|judge dredd|demolition man|"
-     r"lost vikings|claymates|skyblazer|hagane|run saber|magic sword|black tiger|ghost'?n|maximo|"
+     r"claymates|skyblazer|hagane|run saber|magic sword|black tiger|ghost'?n|maximo|"
      r"pac-?land|wardner|new zealand story|rainbow islands|snow bros|rod ?land|parasol stars|"
      r"super pitfall|jungle hunt|pooyan|circus charlie|mappy|kangaroo|popeye|ice climber|kung fu kid|"
      r"astro boy|lady sia|drill dozer|wario ?ware|scurge|ty the tasmanian|frogger'?s adventures|"
@@ -245,10 +248,10 @@ def grey(a):
     return a.mean(axis=2)
 
 
-def shift(prev, cur, most, axis=1):
+def shift(prev, cur, most, axis=1, errs=None):
     """How far the picture moved between two grey ones: (shift, how well it matched there, and with none). + when
     what's on it moved left (or up): the view moving right (or down). The middle rows only (not a score along the
-    top)."""
+    top). errs: a dict that's given how well it matched at each shift tried."""
     h = cur.shape[0]
     rows = slice(int(h * 0.15), int(h * 0.95))
     p, c = prev[rows], cur[rows]
@@ -262,6 +265,8 @@ def shift(prev, cur, most, axis=1):
         else:
             a, b = c[:, -s:], p[:, :n + s]
         err = float(np.abs(a - b).mean())
+        if errs is not None:
+            errs[s] = err
         if s == 0:
             zero_err = err
         if best_err is None or err < best_err - 1e-6 or (abs(err - best_err) <= 1e-6 and abs(s) < abs(best)):
@@ -478,6 +483,12 @@ class Platformer(Instinct):
     of it: not just how most games go), it presses that every so often too."""
 
     BLOCKED = 3               # looks in a row not moving on, holding that way: blocked
+    FAR = 16                  # pixels (of its small picture) beyond where the view's been: new ground
+    PAST = 32                 # ...and this much beyond that again, the decision model playing: that's past what
+                              # stopped it (a third of the screen across)
+    CUT = (0.5, 24, 0.5)      # the screen's changed altogether (another room, a life lost, a menu): this share of
+                              # its small picture this much lighter or darker (of 255) than this many seconds
+                              # before, with nothing scrolled by between
     HOP = (1.4, 3.0)          # seconds between hops, at random
     JUMPS = (0.30, 0.45, 0.6, 0.6)   # how long jumps are held, try by try (a longer press jumps higher)
     BACK_FOR = 0.5
@@ -488,7 +499,20 @@ class Platformer(Instinct):
         self.next_hop = None
         self.blocked = self.tries = 0
         self.going = 0                             # looks in a row moving on
-        self.shots = 0
+        self.scrolled = 0                          # ...and in all: a level that scrolls by as it's run through
+        self.pos = 0.0                             # where the view is: how far it's scrolled by on balance (pixels
+        self.lo = self.hi = 0.0                    # of its small picture: + to the right); the furthest it's been
+        self.far_at = None                         # each way (the ground it's covered: back over it isn't getting
+                                                   # anywhere, whichever way it's told the level goes); and when
+                                                   # that last grew (pitato/anygame.py: no new ground for a long
+        self.shots = 0                             # while, and the decision model's handed the game)
+        self.goal = None                           # the decision model playing (hand): where's past what stopped
+        self.cut, self.ref = False, None           # this (beyond the ground covered, either way); whether the
+                                                   # screen's changed altogether since; and the look that's told by:
+                                                   # (its grey picture, when, where the view was then)
+        self.holding = None                        # the way it held last ("right", "left"), for scroll()
+        self.drift = (None, 0.0)                   # ...the way the view last moved, and when
+        self.ticked = None                         # when it last played a moment (tick)
 
     def gap_ahead(self, a):
         """The floor ahead drops away: low down in front, the background's colour (from high up the screen), where
@@ -533,14 +557,20 @@ class Platformer(Instinct):
         back = OPPOSITE[self.way]
         if self.next_hop is None:
             self.next_hop = now + random.uniform(*self.HOP)
+        if self.far_at is None:                               # (just begun, or its own to play again: no new
+            self.far_at = now                                 #  ground is counted from now)
+        elif self.ticked is not None and now - self.ticked > 1.0:
+            self.far_at += now - self.ticked                  # (not its to play meanwhile, as the game was got going
+        self.ticked = now                                     #  again: that's not time it got no further in)
+        moving_on = False
+        s = self.scroll(prev, g, now, self.holding)
         if now < self.back_until:
-            self.said = "Backing off for a run-up"
+            self.said, self.holding = "Backing off for a run-up", back
             return [self.step((run,), (back,))]
-        moving_on, s = False, None
-        if prev is not None and prev.shape == g.shape:
-            s = motion(prev, g, max(3, a.shape[1] // 10))
+        if s is not None:
             moving_on = (s if self.way == "right" else -s) >= 1
         self.going = self.going + 1 if moving_on else 0
+        self.scrolled += moving_on
         jumping = now < self.jump_until
         if not jumping and now >= self.rest_until:
             self.blocked = 0 if moving_on else self.blocked + 1
@@ -555,7 +585,7 @@ class Platformer(Instinct):
                 why = "hop"
             if why == "blocked" and self.tries >= len(self.JUMPS):
                 self.tries, self.blocked = 1, 0     # (jumping hasn't done it: back off, for a run-up)
-                self.back_until = now + self.BACK_FOR
+                self.back_until, self.holding = now + self.BACK_FOR, back
                 return [self.step((run,), (back,))]
             if why:
                 held = self.JUMPS[min(self.tries, len(self.JUMPS) - 1)] if why == "blocked" else \
@@ -571,11 +601,69 @@ class Platformer(Instinct):
             self.tries = 0
         if not jumping:
             self.said = "Running"
+        self.holding = self.way
         return [self.step((run, jump if jumping else None, shoot), (self.way,))]
 
     def stuck(self, now):
         """Got nowhere for a while: the other way for a few seconds (the level may go that way)."""
         self.back_until = now + 3.0
+
+    def scroll(self, prev, g, now, held=None):
+        """How far the view's moved since the last look, as motion() has it (pixels of its small picture: + when
+        what's on it moved left; None with no look before this one), and counted into where the view is and the
+        ground it's covered. For that count, scenery that repeats (a tiled floor under a plain sky) is told apart
+        by the way it's going: of shifts that match about as well, the one the way that's held (held: "right",
+        "left"; None: not known, so the way the view last moved)."""
+        if prev is None or prev.shape != g.shape:
+            return None
+        errs = {}
+        best, err, err0 = shift(prev, g, max(3, g.shape[1] // 10), errs=errs)
+        s = best if err < 0.85 * err0 else 0
+        by = s
+        way = held or (self.drift[0] if now - self.drift[1] <= 0.5 else None)
+        if s and way and (s > 0) != (way == "right"):
+            alike = [t for t, e in errs.items() if t and (t > 0) == (way == "right") and e <= 1.2 * err + 0.05
+                     and e < 0.85 * err0]
+            if alike:
+                by = min(alike, key=lambda t: (errs[t], abs(t)))
+        if by:
+            self.drift = ("right" if by > 0 else "left", now)
+            self.pos += by
+            if self.pos > self.hi + self.FAR:
+                self.hi, self.far_at = self.pos, now
+            elif self.pos < self.lo - self.FAR:
+                self.lo, self.far_at = self.pos, now
+        return s
+
+    def hand(self):
+        """The decision model plays from here, a move at a time (pitato/anygame.py: this covered no new ground),
+        and watch() takes its looks meanwhile. Past what stopped this is PAST beyond the ground it's covered."""
+        self.goal = (self.lo - self.FAR - self.PAST, self.hi + self.FAR + self.PAST)
+        self.cut, self.ref = False, None
+
+    def watch(self, look, now, held=None):
+        """A look, while the decision model plays (held: the way its move holds, if it holds one): how far the
+        level's scrolled by is counted on, and whether the screen's changed altogether (most of it unlike half a
+        second before, with nothing scrolled by between: another room, a life lost, a menu)."""
+        g = grey(small(look))
+        prev, self.prev = self.prev, g
+        self.scroll(prev, g, now, held)
+        ref = self.ref
+        if ref is None or ref[0].shape != g.shape:
+            self.ref = (g, now, self.pos)
+        elif now - ref[1] >= self.CUT[2]:
+            share, by, _ = self.CUT
+            if abs(self.pos - ref[2]) < 2 and float((np.abs(g - ref[0]) > by).mean()) >= share:
+                self.cut = True
+            self.ref = (g, now, self.pos)
+
+    def past(self):
+        """...and it's past what stopped this: the view's beyond all the ground this had covered."""
+        return self.goal is not None and not self.goal[0] < self.pos < self.goal[1]
+
+    def unhand(self):
+        """Its own to play again: no new ground is counted from now."""
+        self.goal = self.far_at = None
 
 
 class Fighter(Instinct):

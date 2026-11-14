@@ -314,7 +314,7 @@ class DrawScreen:
         if clock:
             d.text((20, y), self.clock_text(), font=F["status_b"], fill=BODY, anchor="lm")
             after = 20 + d.textlength(self.clock_text(), font=F["status_b"])
-            if self.cookie_here():                     # (the cookie's here: a small one, after the time)
+            if self.cookie_here():                     # (it got the last cookie: a small one, after the time)
                 cookie_mark(d, after + 17, y, 6)
                 after += 24
             timer = self.assist_status()               # (a timer of yours, running: how long it has left)

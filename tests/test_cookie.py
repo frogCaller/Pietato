@@ -1,15 +1,17 @@
-"""The Cookie (pitato/cookie.py, cookiepage.py, screens/cookie.py; nearby.py's beacons; webui.py's /api/cookie): one
-cookie between your Pietatos. Its rules first: the cookie as one says it is, kept to what's expected; which of two is
-the cookie; each Bot's habit at rock paper scissors (always the same Bot's, and never one that locks the cookie between
-two of them); whose a cookie is that its holder has left. Then three Pietatos, wired to each other here: none bakes one
-straight away, then the one to; two baked at once become one; a Bot's try for it, won (the cookie's the taker's, on all
-of them, and it says so in the group chat), lost and tied (it stays), too soon after the last, and sent to one that
-hasn't got it; not from one that isn't yours, nor with sharing off; a holder gone quiet for an hour (the one that's
-waited longest has it), back again (it finds out), and one that's heard but doesn't answer; two with the same id (an
-SD card copied); not at night, in a game, or with the group chat quiet. Its page: where it is, your throw for it
-(◀▲▶), another's try waiting for yours (and its Bot's, if you don't), the small cookie on the status bar and the
-home screen of the one that has it. Last, for real: this one's try sent to another Pietato's web page
-(peer_pietato.py), and what it says in the group chat getting there."""
+"""The Cookie (pitato/cookie.py, cookiepage.py, screens/cookie.py; nearby.py's beacons; webui.py's /api/cookie): your
+Pietatos play each other at rock paper scissors for cookies. Its rules first: who got the last cookie, as one says it,
+kept to what's expected; which of two is right; each Bot's habit at rock paper scissors (always the same Bot's, and
+never one that locks two of them); which gets the next when the one that got the last has gone quiet; and its words:
+a cookie's got, never taken. Then three Pietatos, wired to each other here: none gets the first straight away, then
+the one to; two that did at once become one; a Bot's throw, won (it got a cookie, as all of them know, and it says so
+in the group chat), lost and tied, too soon after the last, and sent to one that isn't the one to beat; not from one
+that isn't yours, nor with sharing off; the one that got the last gone quiet for an hour (the one that's waited
+longest gets the next), back again (it finds out), and one that's heard but doesn't answer; two with the same id (an
+SD card copied); one that wins again and again, called a cheat by the one it beat, and the argument that follows; not
+at night, in a game, or with the group chat quiet. Its page: who got the last, your throw (◀▲▶), another's throw
+waiting for yours (and its Bot's, if you don't), the small cookie on the status bar and the home screen of the one
+that got the last. Last, for real: this one's throw sent to another Pietato's web page (peer_pietato.py), and what it
+says in the group chat getting there."""
 import importlib, json, os, random, shutil, subprocess, sys, time, urllib.parse
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 S = SP + "/tcookie"
@@ -117,13 +119,13 @@ for h1 in CK.COOKIE_HABITS:                           # (one Bot trying for anot
             beat1, beat2 = (b if res == "lost" else beat1), (a if res == "won" else beat2)
         if won < 30:
             stuck.append((h1, h2, won))
-check(f"no two habits lock the cookie between them: either takes it from the other often enough ({stuck})", not stuck)
+check(f"no two habits lock the cookies between them: either beats the other often enough ({stuck})", not stuck)
 said = {n: sum(CK.cookie_accuses(n, rng) for _ in range(2000)) for n in (1, 2, 3, 4, 9)}
 check(f"one that's won again and again: called a cheat by the one it beat never before its third win in a row, then "
       f"more often than not, and likelier the longer it goes on (of 2000: {said})", said[1] == said[2] == 0
       and 1080 <= said[3] <= 1320 and said[3] < said[4] < said[9] and 1700 <= said[9] <= 1900)
-check("a cookie its holder has left: the one that's waited longest has it; of two the same, the lower id; nobody on, "
-      "none",
+check("the one that got the last gone quiet: the one that's waited longest gets the next; of two the same, the lower "
+      "id; nobody on, none",
       CK.cookie_heir([(IC, 4), (IA, 7), (IB, 0)]) == IB and CK.cookie_heir([(IC, 2), (IA, 2), (IB, 5)]) == IA
       and CK.cookie_heir([]) is None)
 check("the night, from 11 to 7", [h for h in range(24) if CK.cookie_night(h, (23, 7))] == [0, 1, 2, 3, 4, 5, 6, 23]
@@ -133,14 +135,24 @@ check("in words", [CK.cookie_beat_words(*x) for x in ("pr", "sp", "rs")]
       and [CK.cookie_ago(x) for x in (5, 89, 90, 3599, 3600, 86400, 3 * 86400)]
       == ["just now", "just now", "1 min ago", "59 min ago", "1 h ago", "24 h ago", "3 days ago"])
 lines = {CK.cookie_line(rec(5, IA, "Den", "Kitchen", "pr"), random.Random(k)) for k in range(40)}
-check(f"what the one that's got it says: whose it was, and the throws ({sorted(lines)[0]!r} and {len(lines) - 1} more)",
-      len(lines) == len(CK.COOKIE_TOOK) and all("Kitchen" in x and "cookie" in x and "rock" in x for x in lines))
+check(f"what the one that's got a cookie says: that it got one, which it beat, and the throws ({sorted(lines)[0]!r} "
+      f"and {len(lines) - 1} more)", len(lines) == len(CK.COOKIE_WON)
+      and all("Kitchen" in x and "got a cookie!" in x and "rock" in x for x in lines))
 you = {CK.cookie_line(rec(5, IA, "Den", "Kitchen", "sp", you=True), random.Random(k)) for k in range(40)}
-check(f"...with your throw: the two of you ({sorted(you)})", all(x.split()[0] in ("We", "The") and "Scissors beat paper"
-                                                                  in x for x in you) and len(you) == 2)
-check("...one that was left; one just baked",
-      all("Kitchen" in CK.cookie_line(rec(5, IA, "Den", "Kitchen", "left"), random.Random(k)) for k in range(9))
-      and CK.cookie_line(rec(1, IA, "Den"), random.Random(1)) == "I baked a cookie. Come and take it.")
+check(f"...with your throw: the two of you ({sorted(you)})", all(x.startswith("We ") and "Kitchen" in x
+                                                                  and "got a cookie!" in x for x in you)
+      and len(you) == 2)
+after = {CK.cookie_line(rec(5, IA, "Den", "Kitchen", "left"), random.Random(k)) for k in range(9)}
+check(f"...the one before it gone quiet ({sorted(after)[0]!r}); the first one ('I got a cookie!')",
+      all("Kitchen" in x and x.endswith("I got a cookie!") for x in after)
+      and CK.cookie_line(rec(1, IA, "Den"), random.Random(1)) == "I got a cookie!")
+BAD = __import__("re").compile(r"\b(take|takes|took|taken|steal|steals|stole|stolen|bake|bakes|baked)\b|"
+                               r"(has|have|keeps|kept) (the|a) cookie|stays here|come and|changed hands|"
+                               r"left (it|the cookie)|the cookie's (here|mine|ours)", __import__("re").I)
+said_words = list(CK.COOKIE_WON + CK.COOKIE_YOU_WON + CK.COOKIE_NEXT + CK.COOKIE_GOT) + [
+    x for name, pool in C.LINES.items() if name.startswith(("cookie", "cheat")) for x in pool]
+check(f"none of their words for it ({len(said_words)}) is of a cookie taken, kept, or to come and take: a cookie's got",
+      len(said_words) > 30 and not [x for x in said_words if BAD.search(x)])
 
 # ---- your Pietatos' beacons ----------------------------------------------------------------------------------------
 news = NB.group_news({"id": "b" * 12, "hw": {"b": "Pi 4"}, "cookie": says}, {}, now)
@@ -278,11 +290,11 @@ look(D, A)
 check(f"...the one with the lowest id does; and, after five minutes, whichever ({knows(A)}, {knows(D)})",
       knows(A) == (1, IA) and knows(D) == (1, IC) and A.cookie_here() and D.cookie_here())
 check(f"it says so in the group chat ({[x['text'] for x in chat(A)]})",
-      [x["text"] for x in chat(A)] == ["I baked a cookie. Come and take it."] and chat(A)[0]["kind"] == "chat"
+      [x["text"] for x in chat(A)] == ["I got a cookie!"] and chat(A)[0]["kind"] == "chat"
       and any(who == "Den" and msg["topic"] == "cookie" for who, _, msg in SAID))
 tell()
 look()
-check("two baked at once: one of them is the cookie, on all three (two never both have it for long)",
+check("two got the first at once: one of them is the one to beat, on all three (never two for long)",
       [knows(m) for m in ALL] == [(1, IA)] * 3 and A.cookie_here() and not B.cookie_here() and not D.cookie_here())
 check("...and the one that had the other doesn't say so again", len(chat(D)) == 1 and len(chat(A)) == 1)
 
@@ -297,15 +309,15 @@ check("a Bot's try for it, when that's due: its throw, sent to the one that has 
       and POSTS == [("10.0.0.21", {"id": IB, "name": "Kitchen", "n": 1, "throw": "p", "you": False, "wins": 0,
                                    "from": "10.0.0.22"})])
 r = B.state["cookie"]["rec"]
-check(f"paper beats rock: the cookie's the taker's, as both know at once ({r})",
+check(f"paper beats rock: the winner got a cookie, as both know at once ({r})",
       knows(A) == knows(B) == (2, IB) and B.cookie_here() and not A.cookie_here() and r["from"] == "Den"
       and r["how"] == "pr" and r["you"] is False and r["name"] == "Kitchen")
 check("...each Bot's throw kept with its last few, and what beat the one that lost",
       A.state["cookie"]["throws"] == "r" and A.state["cookie"]["beat"] == "p" and B.state["cookie"]["throws"] == "p"
       and B.state["cookie"]["beat"] == "" and B.share_beacon("Kitchen", full=True)["cookie"]["throws"] == "p")
-check(f"...and a win in a row for the one that took it, told with the rest ({wins()})", wins() == [0, 1, 0]
+check(f"...and a win in a row for the one that got it, told with the rest ({wins()})", wins() == [0, 1, 0]
       and B.share_beacon("Kitchen", full=True)["cookie"]["wins"] == 1)
-check(f"...the one that took it says so in the group chat, once ({[x['text'] for x in chat(B)]})",
+check(f"...the one that got it says so in the group chat, once ({[x['text'] for x in chat(B)]})",
       len(chat(B)) == 1 and "Den" in chat(B)[0]["text"] and chat(B)[0].get("about") == "Den" and not chat(A)[1:])
 check(f"...and its Bot's next try isn't for a while: one of them about every ten minutes, between them all "
       f"({B.cookie_try_at - before:.0f} s)", 2 * 480 <= B.cookie_try_at - before <= 2 * 720 + 5)
@@ -320,7 +332,7 @@ check("when the cookie last got to each, for whose it is if it's left: told with
 POSTS.clear()
 check("a try that loses: the cookie stays", D.cookie_try() and settle() and knows(B) == (2, IB) and B.cookie_here()
       and POSTS[0][1]["throw"] == "r" and D.state["cookie"]["beat"] == "p" and D.cookie_deaf is False)
-check("...another straight after it: too soon (its holder takes one from each every few seconds)",
+check("...another straight after it: too soon (the one to beat plays one from each every few seconds)",
       D.cookie_try() and settle() and len(POSTS) == 2 and knows(B) == (2, IB) and D.state["cookie"]["throws"] == "r"
       and 0 < D.cookie_wait - time.monotonic() <= SC.COOKIE_GAP)
 B.cookie_tries.clear()
@@ -347,7 +359,7 @@ got = B.web_cookie({"from": "10.0.0.23", "id": IC, "name": "TV", "n": 1, "throw"
 check("...nor for a cookie that's moved on since (its count's another)", got["got"] == "gone" and knows(B) == (2, IB)
       and B.cookie_here())
 
-# its holder gone quiet
+# the one that got the last, gone quiet
 jobs()
 tell()
 look()
@@ -361,16 +373,16 @@ def quiet(m, url, secs):
 
 quiet(A, KU, 3000); quiet(D, KU, 3000)
 look(A, D)
-check("its holder not heard for 50 minutes: it's still its", knows(A) == knows(D) == (2, IB))
+check("the one to beat not heard for 50 minutes: it still is", knows(A) == knows(D) == (2, IB))
 quiet(A, KU, 3700); quiet(D, KU, 3700)
 A.cookie_up = time.monotonic() - 30
 look(D, A)
-check("...for an hour: not taken by one that isn't the one to (two have waited as long: the lower id's), nor by that "
-      "one when it's only just started", knows(A) == knows(D) == (2, IB))
+check("...for an hour: the next isn't got by one that isn't the one to (two have waited as long: the lower id's), "
+      "nor by that one when it's only just started", knows(A) == knows(D) == (2, IB))
 A.cookie_up = time.monotonic() - 500
 look(D, A)
 r = A.state["cookie"]["rec"]
-check(f"...then it's taken ({r})", knows(A) == (3, IA) and A.cookie_here() and r["how"] == "left"
+check(f"...then it gets the next ({r})", knows(A) == (3, IA) and A.cookie_here() and r["how"] == "left"
       and r["from"] == "Kitchen" and "Kitchen" in chat(A)[-1]["text"] and knows(D) == (2, IB))
 tell(A)
 look(D)
@@ -383,13 +395,13 @@ check("the one that was off, back: it finds the cookie's moved on, and hasn't go
 # one that's heard, but doesn't answer
 DOWN.add("10.0.0.21")
 throws(B, "p")
-check("a holder that doesn't answer a try (its web page's off)", B.cookie_try() and settle() and B.cookie_deaf
+check("one to beat that doesn't answer a try (its web page's off)", B.cookie_try() and settle() and B.cookie_deaf
       and knows(B) == (3, IA))
 B.state["cookie"] = dict(B.state["cookie"], seen=time.time() - 3700)
 D.state["cookie"] = dict(D.state["cookie"], seen=time.time() - 3700)
 look(B, D)
-check("...for an hour, heard all the while: not taken by the one it didn't answer (another has waited longer), nor by "
-      "one that hasn't asked it", knows(B) == knows(D) == (3, IA))
+check("...for an hour, heard all the while: the next isn't got by the one it didn't answer (another has waited "
+      "longer), nor by one that hasn't asked it", knows(B) == knows(D) == (3, IA))
 throws(D, "p")
 check("...that one's try isn't answered either", D.cookie_try() and settle() and D.cookie_deaf)
 D.state["cookie"] = dict(D.state["cookie"], seen=time.time() - 3700)
@@ -416,7 +428,7 @@ check(f"another of yours with this one's id (an SD card copied): a new one here,
       f"({new_a})", new_a != IA and CK.cookie_whose(new_a) and knows(A) == (6, new_a) and A.cookie_here())
 tell()
 look()
-check("...so one of the two has it, not both (and it doesn't say it took it again)", A.cookie_here()
+check("...so one of the two is the one to beat, not both (and it doesn't say it got one again)", A.cookie_here()
       and not B.cookie_here() and not D.cookie_here() and [knows(m) for m in ALL] == [(6, new_a)] * 3
       and len(chat(A)) == said_a)
 B.state["cookie"] = dict(B.state["cookie"], id=IB)
@@ -445,7 +457,7 @@ check(f"the one with the cookie keeps it twice running: nothing said of it ({win
 ok = tries(B, "s", A)
 check(f"...a third time: the one it's just beaten says it must be cheating, a few seconds on ({JOBS})", ok
       and wins() == [3, 0, 0] and len(JOBS) == 1 and JOBS[0][0] == "Kitchen" and JOBS[0][2] == "cheat"
-      and JOBS[0][3] == {"about": "Den", "wins": 3, "got": "kept"} and 4 <= JOBS[0][1] <= 12)
+      and JOBS[0][3] == {"about": "Den", "wins": 3} and 4 <= JOBS[0][1] <= 12)
 ok = tries(D, "r", A)
 check("...a tie: still three, and nothing more said", ok and wins() == [3, 0, 0] and len(JOBS) == 1)
 B.state["settings"]["group_talk"] = "Off"
@@ -454,9 +466,9 @@ B.state["settings"]["group_talk"] = "On"
 check(f"...a fourth, with the group chat quiet: not said ({wins()})", ok and wins() == [4, 0, 0] and len(JOBS) == 1)
 D.state["cookie"] = dict(D.state["cookie"], wins=2)
 ok = tries(D, "p", A)
-check(f"one that's won twice takes the cookie with its third: the one it took it from says so ({JOBS[-1:]})", ok
+check(f"one that's won twice gets a cookie with its third: the one it beat says so ({JOBS[-1:]})", ok
       and D.cookie_here() and wins() == [0, 0, 3] and len(JOBS) == 2 and JOBS[1][0] == "Den"
-      and JOBS[1][3] == {"about": "TV", "wins": 3, "got": "got"})
+      and JOBS[1][3] == {"about": "TV", "wins": 3})
 SC.cookie_accuses = real_accuses
 for m in ALL:
     del m.circle.schedule
@@ -502,13 +514,15 @@ for m in ALL:
     m.cookie_try_at = time.monotonic() + 1e6
 
 # ---- kept, and told to their Bots' models --------------------------------------------------------------------------
-check(f"for their Bots' models: what the cookie is, and who has it ({B.cookie_fact()[-20:]!r})",
-      B.cookie_fact().endswith("Right now Den has it") and A.cookie_fact().endswith("Right now you have it")
+check(f"for their Bots' models: how cookies are got, and who got the last ({B.cookie_fact()[-58:]!r})",
+      B.cookie_fact().endswith("Den got the last one, and is the one to beat for the next")
+      and A.cookie_fact().endswith("You got the last one, and are the one to beat for the next")
+      and not BAD.search(B.cookie_fact())
       and B.cookie_fact() in B.group_extra()["facts"])
 line = dict(chat(A)[0], id="c" * 16, t=time.time())
 got = C.clean_msg(line)
 check("a line about the cookie, from another of yours: kept as one", got["topic"] == "cookie")
-check("...answered by the one it was taken from, or by another, in words for it",
+check("...answered by the one that was beaten, or by another, in words for it",
       C.reply_pool({"target_topic": "cookie", "me_about": True}) == "cookie_me"
       and C.reply_pool({"target_topic": "cookie"}) == "cookie_re"
       and all(C.builtin_line("reply", {"target_topic": "cookie", "me_about": k, "speaker": "Den"}, random.Random(n))
@@ -565,14 +579,14 @@ try:
     runs = []
     for seed in range(1, 9):
         made = circles(seed)
-        made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3, "got": "kept"})
+        made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3})
         go(made, 200)
         runs.append(made["Den"].lines())
     first = [r[0] for r in runs if r]
     check(f"one says another's cheating: a line to it, and about it ({sorted({m['text'] for m in first})[:3]}...)",
           len(first) == 8 and all(m["name"] == "Den" and m["topic"] == "cheat" and m["about"] == "Kitchen"
                                   and m["to"] == "Kitchen" and not m.get("re")
-                                  and m["text"] in pool("cheat", about="Kitchen", got="kept", wins=3) for m in first)
+                                  and m["text"] in pool("cheat", about="Kitchen", wins=3) for m in first)
           and len({m["text"] for m in first}) >= 3)
     by_id = [{m["id"]: m for m in r} for r in runs]
 
@@ -602,27 +616,27 @@ try:
     for r in sorted(runs, key=len)[-3:]:
         print("       " + " / ".join(f"{m['name']}: {m['text']}" for m in r))
     made = circles(21)
-    made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3, "got": "got"})
+    made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3})
     go(made, 200)
-    made["TV"].schedule(0, "cheat", {"about": "Kitchen", "wins": 4, "got": "kept"})
+    made["TV"].schedule(0, "cheat", {"about": "Kitchen", "wins": 4})
     go(made, 200)
     again = [m for m in made["Den"].lines() if m["topic"] == "cheat" and not m.get("re")]
     clock.t += C.CHEAT_GAP
-    made["TV"].schedule(0, "cheat", {"about": "Kitchen", "wins": 5, "got": "kept"})
+    made["TV"].schedule(0, "cheat", {"about": "Kitchen", "wins": 5})
     go(made, 200)
     later = [m for m in made["Den"].lines() if m.get("topic") == "cheat" and not m.get("re")]
     check(f"they don't have that argument twice in a row ({len(again)}); a while on, they may ({len(later)})",
           len(again) == 1 and len(later) == 2 and later[1]["name"] == "TV")
     made = circles(22, talk=False)
-    made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3, "got": "kept"})
+    made["Den"].schedule(0, "cheat", {"about": "Kitchen", "wins": 3})
     go(made, 120)
     check("nor at all with the group chat quiet", made["Den"].lines() == [])
     made = circles(23)
-    made["Den"].schedule(300, "cheat", {"about": "Kitchen", "wins": 3, "got": "got"})
-    took = made["Kitchen"].new("I took the cookie from Den. Paper beats rock.", topic="cookie", about="Den")
+    made["Den"].schedule(300, "cheat", {"about": "Kitchen", "wins": 3})
+    won = made["Kitchen"].new("I got a cookie! Paper beats rock, Den.", topic="cookie", about="Den")
     made["Den"].rng = type("R", (), {"random": lambda self: 0.0, "uniform": lambda self, a, b: a})()
-    made["Den"].receive(took)
-    check("one that's about to say the taker's cheating doesn't answer its line about taking it as well",
+    made["Den"].receive(won)
+    check("one that's about to say the winner's cheating doesn't answer its line about its cookie as well",
           [how for _, how, _ in made["Den"].jobs] == ["cheat"])
 finally:
     C.time = real_time
@@ -661,9 +675,11 @@ ci = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "The Cookie")
 check(f"Apps has The Cookie, after Group chat ({apps[5:8]})", apps[apps.index("Group chat") + 1] == "The Cookie"
       and g.LIBRARY[ci]["sim"] == "cookie" and g.LIBRARY[ci]["parent"] == "Apps" and "The Cookie" in g.COOL_SKIP
       and g.app_named("the cookie") == "The Cookie")
-toasts = []
+toasts, SHOWN = [], []
 A.load_fonts(); A.fb = FB(); A.active = True
-A.toast = lambda text, secs=4: toasts.append(text)
+A.toast = lambda text, secs=4: (toasts.append(text), SHOWN.append(text))[0]
+real_page = A.cookie_page
+A.cookie_page = lambda s: (real_page(s), SHOWN.extend(s.head), SHOWN.extend(r[1] for r in s.rows))[0]
 A.status_sig = A.status_signature()
 DOUGH = np.array(PG.COOKIE_DOUGH)
 
@@ -692,15 +708,15 @@ s = A.sim_game()
 page = shot()
 check(f"opened: its page ({s.head})", s.key == "cookie" and A.cookie_tab() and A.cookie_shown() and s.bare and s.paced
       and FB.last.size == (640, 480))
-check(f"the cookie's here: drawn at its top, and in this one's row ({dough(page, (14, 78, 84, 156))} px, "
-      f"{dough(page, (580, 170, 630, 240))} px), its row first", s.here and s.head[0] == "The cookie's here"
+check(f"this one got the last cookie: said, and one drawn at its top and in its row "
+      f"({dough(page, (14, 78, 84, 156))} px, {dough(page, (580, 170, 630, 240))} px), its row first", s.here
+      and s.head == ("Den got a cookie", "Its Bot beat TV just now, paper over rock.")
       and dough(page, (14, 78, 84, 156)) > 600 and dough(page, (580, 170, 630, 240)) > 60
       and [(r[0], r[1], r[4]) for r in s.rows]
       == [("Den", "This one", True), ("Kitchen", "", False), ("TV", "", False)])
-check(f"...each one's last throws beside it, how many times it's changed hands, and nothing to throw for "
-      f"({[r[3] for r in s.rows]}, {s.moves}, {hints(s)})", [r[3] for r in s.rows]
+check(f"...each one's last throws beside it, and nothing to throw for ({[r[3] for r in s.rows]}, {hints(s)})",
+      [r[3] for r in s.rows]
       == [A.state["cookie"]["throws"], B.state["cookie"]["throws"], D.state["cookie"]["throws"]]
-      and s.moves == A.state["cookie"]["rec"]["n"] - 1 >= 5
       and hints(s) == ["B"] and s.frame_in(0) == PG.COOKIE_STILL)
 A.state["cookie"] = dict(A.state["cookie"], wins=3)
 A.pie.heard[url_of(B)]["cookie"]["wins"] = 5
@@ -717,8 +733,8 @@ check(f"a small one on its status bar, and on its home screen after the date ({b
       bar > 20 and by_date > 30 and A.status_signature()[-1] == A.assist_status())
 A.open_app(ci)
 A.press("left")
-check(f"a throw with the cookie here: nothing to take ({toasts[-1:]})", toasts[-1:] == ["The cookie's here already"]
-      and not A.cookie_trying)
+check(f"a throw on the one that got the last: it's for the others to beat it ({toasts[-1:]})",
+      toasts[-1:] == ["The others have to beat this one next"] and not A.cookie_trying)
 
 # another's try, with its page open: your throw
 SC.COOKIE_ANSWER = 30
@@ -742,11 +758,11 @@ asked = until(lambda: A.cookie_ask is not None, each=lambda: jobs(A))
 page = shot()
 s = A.sim_game()
 check(f"another's try, with its page open here: it waits for your throw ({s.head})", asked
-      and s.head[0] == "Kitchen wants the cookie" and s.head[1].startswith("Throw to keep it.")
+      and s.head[0] == "Kitchen wants a cookie" and s.head[1].startswith("Throw to win another.")
       and hints(s) == ["◀", "▲", "▶"] and 0.05 <= s.frame_in(0) <= 1.0 and B.cookie_trying == "bot")
 A.press("up")
-check("...▲, paper: beats its rock, and the cookie stays here", settle() and A.cookie_here() and knows(B)[1] == IA
-      and A.sim_game().head == ("Your paper beat Kitchen's rock", "The cookie stays here.")
+check("...▲, paper: beats its rock, and this one gets another", settle() and A.cookie_here() and knows(B)[1] == IA
+      and A.sim_game().head == ("Your paper beat Kitchen's rock", "Den got another cookie.")
       and A.state["cookie"]["throws"][-1:] != "s" and B.state["cookie"]["beat"] == "p")
 B.cookie_tries.clear(); A.cookie_tries.clear()
 throws(B, "p")
@@ -757,9 +773,9 @@ A.next_status = 99.0
 A.press("left")
 done = settle()
 r = A.state["cookie"]["rec"]
-check(f"...◀, rock, against paper: lost, and it has the cookie ({A.sim_game().head})", asked and done
+check(f"...◀, rock, against paper: lost, and it gets a cookie ({A.sim_game().head})", asked and done
       and not A.cookie_here() and B.cookie_here() and r["how"] == "pr" and r["from"] == "Den"
-      and A.sim_game().head == ("Kitchen's paper beat your rock", "Kitchen has the cookie now."))
+      and A.sim_game().head == ("Kitchen's paper beat your rock", "Kitchen got a cookie."))
 check("...its status bar looked at again at once (the small cookie's gone from it)", A.next_status == 0.0)
 page = shot()
 A.view = "home"
@@ -770,14 +786,14 @@ check("...gone from its top, its status bar, its home screen and its row: the pl
       dough(page, (14, 78, 84, 156)) == 0 and dough(page, (60, 2, 130, 26)) == 0 and not A.sim_game().here
       and dough(home, (0, 60, 400, 110)) == 0
       and [r[:2] + r[4:5] for r in A.sim_game().rows]
-      == [("Den", "This one", False), ("Kitchen", "Took it from Den just now", True), ("TV", "", False)])
+      == [("Den", "This one", False), ("Kitchen", "Beat Den just now", True), ("TV", "", False)])
 
 # your try for it
 tell()
 A.cookie_news = None
 s = A.sim_game()
-check(f"another has it: who, and your buttons ({s.head}, {hints(s)})", s.head
-      == ("Kitchen has the cookie", "Throw rock, paper or scissors to take it.") and hints(s) == ["◀", "▲", "▶"])
+check(f"another got the last: who, and your buttons ({s.head}, {hints(s)})", s.head
+      == ("Kitchen got a cookie", "Beat it at rock paper scissors to win one.") and hints(s) == ["◀", "▲", "▶"])
 A.cookie_tries.clear(); B.cookie_tries.clear()
 throws(B, "r")
 POSTS.clear()
@@ -785,8 +801,9 @@ A.press("right")
 check("▶, scissors: your throw, sent as yours", A.cookie_trying == "you" and settle()
       and POSTS[-1][1]["throw"] == "s" and POSTS[-1][1]["you"] is True)
 s = A.sim_game()
-check(f"...its rock beats them: it keeps the cookie, and you can't throw again at once ({s.head})",
-      s.head[0] == "Kitchen's rock beat your scissors" and s.head[1].startswith("Kitchen keeps the cookie. Again in ")
+check(f"...its rock beats them: it gets another, and you can't throw again at once ({s.head})",
+      s.head[0] == "Kitchen's rock beat your scissors"
+      and s.head[1].startswith("Kitchen got another cookie. Again in ")
       and B.cookie_here() and 0.05 <= s.frame_in(0) <= 1.0 and A.state["cookie"]["throws"][-1:] != "s")
 n = len(POSTS)
 toasts.clear()
@@ -796,14 +813,15 @@ A.cookie_wait = 0.0
 B.cookie_tries.clear()
 A.press("up")
 done = settle()
-check(f"▲, paper, once you may: beats its rock, and the cookie's here ({A.sim_game().head})", done and A.cookie_here()
-      and not B.cookie_here() and A.sim_game().head == ("Your paper beat Kitchen's rock", "The cookie's here now.")
+check(f"▲, paper, once you may: beats its rock, and this one gets a cookie ({A.sim_game().head})", done
+      and A.cookie_here()
+      and not B.cookie_here() and A.sim_game().head == ("Your paper beat Kitchen's rock", "Den got a cookie!")
       and A.state["cookie"]["rec"]["you"] is True and knows(B)[1] == IA)
 check(f"...this one says so in the group chat, as the two of you ({chat(A)[-1]['text']!r})",
-      chat(A)[-1]["text"].split()[0] in ("We", "The") and "Kitchen" in chat(A)[-1]["text"])
+      chat(A)[-1]["text"].startswith("We ") and "Kitchen" in chat(A)[-1]["text"])
 A.cookie_news = None
-check(f"...and its page says how it came here ({A.sim_game().head})", A.sim_game().head[0] == "The cookie's here"
-      and A.sim_game().head[1].startswith("You took it from Kitchen just now, paper over rock"))
+check(f"...and its page says how ({A.sim_game().head})", A.sim_game().head
+      == ("Den got a cookie", "You beat Kitchen just now, paper over rock."))
 
 # its Bot's, if you don't throw; and with its page shut
 SC.COOKIE_ANSWER = 0.3
@@ -847,8 +865,8 @@ A.cookie_news = None
 A.state["cookie"] = dict(A.state["cookie"], rec=rec(9, IC, "TV", "Den", "left"))
 A.pie.heard[url_of(D)]["seen"] = time.time() - 500
 s = A.sim_game()
-check(f"its holder off: said, and its row ({s.head})", s.head == ("TV has the cookie", "It's off. After an hour off, "
-                                                                 "the cookie moves on.") and hints(s) == ["B"]
+check(f"the one that got the last, off: said, and its row ({s.head})", s.head
+      == ("TV got a cookie", "It's off. After an hour off, another gets one.") and hints(s) == ["B"]
       and ("TV", "Off", None, "", True, False) in s.rows)
 A.pie.hear("10.0.0.24", {"pietato": 1, "id": "e" * 12, "port": 5432, "host": "Attic", "accent": "", "hw": {"b": "Pi 3"},
                          "doing": "on"})
@@ -859,7 +877,7 @@ check(f"none yet ({A.sim_game().head[0]!r})", A.sim_game().head[0] == "No cookie
 for u in list(A.pie.heard):
     A.pie.heard[u]["seen"] = time.time() - 500
 s = A.sim_game()
-check(f"no other on ({s.head[0]!r}): nothing listed", s.head[0] == "It takes two Pietatos" and s.rows == []
+check(f"no other on ({s.head[0]!r}): nothing listed", s.head[0] == "It needs two Pietatos" and s.rows == []
       and hints(s) == ["B"])
 A.state["settings"]["share"] = "Off"
 A.state["cookie"] = dict(A.state["cookie"], rec=rec(9, A.state["cookie"]["id"], "Den"))
@@ -867,6 +885,11 @@ check(f"sharing off ({A.sim_game().head[0]!r}): out of it, and no small cookie o
       A.sim_game().head[0] == "Sharing is off" and not A.cookie_here() and A.share_beacon("Den", full=True)["cookie"])
 A.state["settings"]["share"] = "On"
 shot()
+words = sorted({x for x in SHOWN if x} | {x["text"] for m in ALL for x in chat(m)})
+check(f"all its page showed and all they said of it here ({len(words)} lines): never of a cookie taken or kept",
+      len(words) > 25 and not [x for x in words if BAD.search(x)])
+for x in words:
+    print(f"       {x}")
 A.press("b")
 check("B: back to Apps' list, The Cookie picked", A.view == "list" and g.LIBRARY[A.tab]["name"] == "Apps"
       and A.tab_items()[A.sels[A.tab]]["title"] == "The Cookie")

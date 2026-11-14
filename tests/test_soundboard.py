@@ -17,6 +17,7 @@ from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; th
 sys.path.insert(0, TESTS)
 import numpy as np
 import pietato_all as g
+import pitato.glow as G
 import pitato.soundbank as B
 import pitato.soundboard as SBD
 import pitato.listen as L
@@ -884,6 +885,98 @@ check(f"each of the eight buttons plays the sound that's on it, and its tile lig
       f"(most of its {area} pixels: {[(p_, n_) for p_, _, n_, _ in ok_each]}; the others', their marks alone)",
       all(ok and lit > area * 0.6 and others < area * 0.15 for _, ok, lit, others in ok_each))
 check("...SELECT stopped each", not b.playing)
+
+
+# your LEDs, lit by its sounds as they are by music (screens/glow.py's glow_flash)
+class Lights:
+    """(Where this one's colours and beats go, noted: what GlowOut sends.)"""
+
+    def __init__(self):
+        self.to, self.said = (), []
+
+    def aim(self, to, lamps=()):
+        self.to = tuple(to)
+
+    def music(self, rgb):
+        self.said.append(("colour", tuple(rgb), time.monotonic()))
+
+    def event(self, name, strength=1.0, at=None, lamps=True):
+        self.said.append((name, at, lamps, strength))
+
+    def close(self):
+        pass
+
+
+def board_on():
+    """An ESP32 board on your network says it's there (as it does every couple of seconds)."""
+    m.glow_lamps.take(G.lamp_packet("ESP32 A1B2C3", 1, 1.0), "127.0.0.1", m.glow_lamps.clock())
+    m.glow_seen = 0.0
+
+
+m.press("up")
+spin(1.0, lambda: sid(want["up"]) in b.playing)
+m.press("select")
+spin(1.0, lambda: not b.playing)
+check("no LEDs about (no grid here, no board on your network): its sounds as ever, nothing sent anywhere",
+      m.glow_out is None and b.hue is None and not m.glow_beats_wanted())
+m.lamps_port = 0
+m.lamps_start()
+board_on()
+lights = m.glow_out = Lights()
+mark = log_lines()
+m.press("down")                                        # (Sad horn: a couple of seconds of it)
+spin(1.5, lambda: sid(want["down"]) in b.playing and heard_at(mark) is not None)
+heard = heard_at(mark)
+hues = [x for x in lights.said if x[0] == "colour"]
+beats = [x for x in lights.said if x[0] == "beat"]
+out = (beats[0][1] - heard) * 1000 if beats and heard else 999
+check(f"a board on your network: a button's sound lights it, in the button's own colour as an LED shows it "
+      f"({hues[0][1] if hues else None}: {g.PAD_LIGHT['down']}), with a beat due as the sound's heard ({out:+.0f} ms "
+      f"from it; the sound card's buffer: {b.buffer} s)", len(hues) >= 1 and hues[0][1] == G.colour_of("Purple")
+      and len(beats) == 1 and beats[0][2] is True and beats[0][3] == 1.0 and abs(out) < 25
+      and lights.to == (("127.0.0.1", G.GLOW_PORT),) and b.buffer == 0.032)
+spin(1.3)
+hues = [x for x in lights.said if x[0] == "colour"]
+gaps = [round(b_[2] - a_[2], 2) for a_, b_ in zip(hues, hues[1:])]
+check(f"...its colour said again while it plays, twice a second, so the board keeps it ({gaps})",
+      len(hues) >= 3 and all(0.4 <= x <= 0.8 for x in gaps) and all(x[1] == hues[0][1] for x in hues)
+      and len([x for x in lights.said if x[0] == "beat"]) == 1)
+m.press("select")
+spin(1.0, lambda: not b.playing and b.hue is None)
+n = len(lights.said)
+spin(0.8)
+check("...stopped: no more of it (the board fades by itself)", b.hue is None and len(lights.said) == n)
+board_on()
+lights.said.clear()
+m.press("a"); m.press("x")
+spin(0.3)
+got = [(x[0], x[1]) for x in lights.said if x[0] == "colour"][:2]
+check(f"...two buttons, one after the other: each its own colour and its own beat ({got})",
+      got == [("colour", G.colour_of("Red")), ("colour", G.colour_of("Pink"))]
+      and len([x for x in lights.said if x[0] == "beat"]) == 2)
+m.press("select")
+spin(1.0, lambda: not b.playing and b.hue is None)
+board_on()
+lights.said.clear()
+m.proc, m.kind = object.__new__(g.PartyProc), "audio"  # (a song playing too, on the player that finds its beats)
+m.press("up")
+m.proc, m.kind = None, None
+spin(0.3)
+check(f"...music playing as well: a beat with the sound, in the music's colour (the button's isn't said) "
+      f"({[x[0] for x in lights.said]})", [x[0] for x in lights.said] == ["beat"] and b.hue is None)
+m.press("select")
+spin(1.0, lambda: not b.playing)
+board_on()
+lights.said.clear()
+m.set_setting("glow_beat", "Off")
+m.press("up")
+spin(0.3)
+check("...Pulse to music off (Apps > LED backlight): its sounds light nothing", lights.said == [] and b.hue is None)
+m.set_setting("glow_beat", "On")
+m.press("select")
+spin(1.0, lambda: not b.playing)
+m.lamps_stop()
+m.glow_out, m.glow_to, m.glow_seen = None, (), 0.0
 m.press("x"); m.press("up"); m.press("a")
 spin(1.0, lambda: len(b.playing) == 3)
 check(f"three pressed one after another: all three at once ({sorted(x.split('/')[1] for x in b.playing)})",

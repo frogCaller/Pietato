@@ -410,12 +410,16 @@ check("START: how to connect an agent", m.coder_help)
 m.dirty = True; m.flush()
 m.fb.last.save(SP + "/coder_help.png")
 hints = m.coder_hints(co.snapshot(time.monotonic()))
-check(f"...B closes it ({hints})", hints == [("B", "Close")])
+check(f"...B closes it; left and right: its other card, for OpenClaw and Hermes ({hints})",
+      hints == [("◀▶", "OpenClaw, Hermes"), ("B", "Close")])
 m.press("b")
 check("...closed, still on its page", not m.coder_help and m.view == "list" and m.tab == ci)
 m.press("start")
 m.press("left")
-check("left and right do nothing while the card is up", m.coder_help and m.bot_mode() == "work")
+other = m.coder_help_page
+m.press("right")
+check("left and right change the card while it's up (Claude Code's, OpenClaw's and Hermes's), and nothing else",
+      m.coder_help and m.bot_mode() == "work" and (other, m.coder_help_page) == (1, 0))
 m.press("b")
 m.press("b")
 check("B: home", m.view == "home")

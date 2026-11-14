@@ -272,7 +272,7 @@ if [ "$CAMERA" = yes ]; then
   exit 0
 fi
 
-for f in pitato.py pitato/app.py pitato/webui.py pitato/coder_hooks.py templates/index.html; do
+for f in pitato.py pitato/app.py pitato/webui.py pitato/coder_hooks.py pitato/agent_link.py templates/index.html; do
   if [ ! -f "$HERE/$f" ]; then
     echo "$f isn't here. Run this from the Pietato folder."
     exit 1
@@ -1655,6 +1655,7 @@ step "Installing the web page (port 5432, and 5443 for its secure page)"
 install -d /usr/local/share/pitato/templates
 install -m 644 "$HERE/pitato/webui.py" /usr/local/share/pitato/
 install -m 644 "$HERE/pitato/coder_hooks.py" /usr/local/share/pitato/    # (the page hands it to Claude Code's computer)
+install -m 644 "$HERE/pitato/agent_link.py" /usr/local/share/pitato/     # (...and this one to OpenClaw's or Hermes's)
 install -m 644 "$HERE/templates/index.html" "$HERE/templates/play.html" "$HERE/templates/play.js" \
   /usr/local/share/pitato/templates/                                     # (play: a game on your phone, Play here)
 install -d /usr/local/share/pitato/static/fonts    # the typefaces: the page's, and the home screen's (without them: the system's)

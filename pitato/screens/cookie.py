@@ -1,20 +1,21 @@
-"""The Cookie (pitato/cookie.py: its rules; pitato/cookiepage.py: its page): media mode's part. Which Pietato has it is
-kept here and told to your others in this one's beacon (straight to each of them, every 20 seconds, with the group
-chat's), and what theirs say is looked at every few seconds: a newer cookie than the one known here is this one's word
-for it too. One that's never been: baked by one of them, once two that play have heard each other. One whose holder
-hasn't been heard for an hour: it goes to the one that's waited longest, of those on.
+"""The Cookie (pitato/cookie.py: its rules; pitato/cookiepage.py: its page): media mode's part. Who got the last cookie
+(the one to beat for the next) is kept here and told to your others in this one's beacon (straight to each of them,
+every 20 seconds, with the group chat's), and what theirs say is looked at every few seconds: a later one than the one
+known here is this one's word for it too. None yet: one of them gets the first, once two that play have heard each
+other. The one that got the last not heard for an hour: the one that's waited longest, of those on, gets the next.
 
-A try for it: the one that wants it sends its throw to the holder's web page (POST /api/cookie, from your network
-only: webui.py, control.py), which answers with its own and how it went; a win, and the cookie's told as the taker's
-from then on (the holder says so at once, to all of them). Their Bots try by themselves, one of them about every ten
-minutes: not at night, not while this one's in a game or a video, and not while the group chat's quiet. You try from
-its page (◀ rock, ▲ paper, ▶ scissors); with the cookie here and its page open, another's try waits a few seconds
-for your throw, and its Bot throws if you don't. The one that's just got it says so in the group chat.
+A throw for one: the one that wants a cookie sends its throw to the web page of the one to beat (POST /api/cookie,
+from your network only: webui.py, control.py), which answers with its own and how it went; a win, and it's told as
+the one that got a cookie from then on (the one it beat says so at once, to all of them). Their Bots play by
+themselves, one of them about every ten minutes: not at night, not while this one's in a game or a video, and not
+while the group chat's quiet. You play from its page (◀ rock, ▲ paper, ▶ scissors); on the one to beat, with its
+page open, another's throw waits a few seconds for yours, and its Bot throws if you don't. The one that's just got
+a cookie says so in the group chat. Everything it shows and says is of cookies got (and eaten), never of one taken:
+"Den got a cookie", "I got a cookie!".
 
-Each keeps how many throws in a row it's won (taking the cookie, or keeping it; a tie changes nothing), and says so
-with its throw and its answer. One that's just been beaten by another on its third win in a row or more may say, a
-few seconds on, that it must be cheating: a line in the group chat (pitato/circle.py's "cheat"), which the accused
-and your others answer."""
+Each keeps how many throws in a row it's won (a tie changes nothing), and says so with its throw and its answer. One
+that's just been beaten by another on its third win in a row or more may say, a few seconds on, that it must be
+cheating: a line in the group chat (pitato/circle.py's "cheat"), which the accused and your others answer."""
 import math
 import random
 import threading
@@ -24,26 +25,26 @@ import uuid
 from ..circle import NIGHT, ON_WITHIN
 from ..config import clean_name
 from ..cookie import (
-    cookie_accuses, cookie_ago, cookie_bot_throw, cookie_count, cookie_habit, cookie_heir, cookie_line, cookie_newer,
-    cookie_night, cookie_rec, cookie_result, cookie_says, cookie_took, cookie_whose, COOKIE_KEPT, COOKIE_SUSPECT,
+    cookie_accuses, cookie_ago, cookie_beat, cookie_bot_throw, cookie_count, cookie_habit, cookie_heir, cookie_line,
+    cookie_newer, cookie_night, cookie_rec, cookie_result, cookie_says, cookie_whose, COOKIE_KEPT, COOKIE_SUSPECT,
     COOKIE_THROW)
 from ..cookiepage import COOKIE_STILL
 from ..library import LIBRARY, SCREEN_KINDS
 from ..savesync import post_json
 from ..theme import accent_for, ACCENTS
 
-COOKIE_TICK = 5.0             # seconds between its looks (who has it, whether its Bot's try is due)
-COOKIE_SETTLE = 60            # seconds after it starts before it bakes one (your others' word of theirs comes first):
-COOKIE_SETTLE_ANY = 300       # ...the one of them with the lowest id; after this long, whichever
-COOKIE_GRACE = 120            # ...and before it takes one its holder has left
-COOKIE_DROP = 3600            # a holder not heard for this long has left it
+COOKIE_TICK = 5.0             # seconds between its looks (who got the last cookie, whether its Bot's throw is due)
+COOKIE_SETTLE = 60            # seconds after it starts before it gets the first cookie (your others' word comes
+COOKIE_SETTLE_ANY = 300       # first): the one of them with the lowest id; after this long, whichever
+COOKIE_GRACE = 120            # ...and before it gets the next, the one that got the last gone quiet
+COOKIE_DROP = 3600            # the one that got the last cookie, not heard for this long: another gets the next
 COOKIE_EVERY = (480, 720)     # seconds between their Bots' tries, all of them together (each waits as many times as
                               # long as there are of them trying)
 COOKIE_FIRST = (60, 600)      # ...this one's first, after it starts
 COOKIE_AGAIN = (20, 300)      # ...and after the night, or a game: not all of them at once
-COOKIE_GAP = 15               # seconds between one Pietato's tries, at least (the holder's rule; yours too)
-COOKIE_ANSWER = 6             # seconds you have to throw, when another tries for the one here
-COOKIE_ASK_WAIT = 12          # seconds the holder has to answer a try (your throw there takes a few)
+COOKIE_GAP = 15               # seconds between one Pietato's tries, at least (the rule of the one it plays; yours too)
+COOKIE_ANSWER = 6             # seconds you have to throw, when another plays this one for a cookie
+COOKIE_ASK_WAIT = 12          # seconds the one to beat has to answer a try (your throw there takes a few)
 COOKIE_SHOW = 8               # seconds what's just happened stays at the top of its page
 COOKIE_ACCUSE_WAIT = (4, 12)  # seconds after a throw before the one beaten says the winner's cheating
 COOKIE_KEYS = {"left": "r", "up": "p", "right": "s"}   # its page's buttons: ◀ rock, ▲ paper, ▶ scissors
@@ -55,8 +56,8 @@ class CookieScreen:
     def cookie_setup(self):
         self.cookie_lock = threading.RLock()   # the cookie as it's known here, and a try being answered
         self.cookie_rng = random.Random()
-        self.cookie_up = time.monotonic()      # when this started (it waits a little before baking one, or taking
-                                               # one that's been left)
+        self.cookie_up = time.monotonic()      # when this started (it waits a little before it gets the first, or
+                                               # the next after one that's gone quiet)
         self.cookie_next = 0.0                 # when it next looks (monotonic)
         self.cookie_try_at = self.cookie_up + self.cookie_rng.uniform(*COOKIE_FIRST)   # ...and its Bot next tries
         self.cookie_held = False               # its Bot may not try just now (the night, a game)
@@ -108,7 +109,7 @@ class CookieScreen:
         return me
 
     def cookie_here(self):
-        """The cookie's here (with sharing off, this one's out of it: no)."""
+        """This one got the last cookie (with sharing off, it's out of it: no)."""
         st = getattr(self, "state", {}).get("cookie") or {}
         rec = st.get("rec")
         return bool(rec) and rec["at"] == st.get("id") and self.setting("share") != "Off"
@@ -167,14 +168,15 @@ class CookieScreen:
                 print(f"the cookie: {ex!r}", flush=True)
 
     def cookie_fact(self):
-        """A line on the cookie for their Bots' models (the group chat's): what it is, and who has it."""
+        """A line on the cookies for their Bots' models (the group chat's): how they're got, and who got the last."""
         st = self.state["cookie"]
         rec = st.get("rec")
         if rec is None:
             return ""
-        who = "you have it" if rec["at"] == st.get("id") else f"{rec['name']} has it"
-        return ("The cookie: there's one between all of you, and whoever beats its holder at rock paper scissors "
-                f"takes it. Right now {who}")
+        mine = rec["at"] == st.get("id")
+        return ("Cookies: you all play each other at rock paper scissors, and whoever wins a throw gets a cookie (and "
+                f"eats it). {'You' if mine else rec['name']} got the last one, and {'are' if mine else 'is'} the one "
+                "to beat for the next")
 
     # -- the main loop -----------------------------------------------------------------------------------------------
     def cookie_tick(self, now):
@@ -190,9 +192,10 @@ class CookieScreen:
             print(f"the cookie: {ex!r}", flush=True)
 
     def cookie_look(self, now):
-        """The cookie as your others say it is: a newer one than this one's is this one's too. None anywhere: baked
-        here, if this is the one to. Its holder not heard for an hour: taken, if it's this one's now. Its holder on:
-        this one's Bot tries for it, when that's due."""
+        """Who got the last cookie, as your others say: a later one than this one knows of is this one's word for it
+        too. None yet anywhere: this one gets the first, if it's the one to. The one that got the last not heard for
+        an hour: this one gets the next, if it's the one to. That one on: this one's Bot plays it for one, when
+        that's due."""
         wall = time.time()
         heard = self.cookie_heard()
         said = [h["cookie"] for h in heard if h["cookie"] is not None]
@@ -274,16 +277,14 @@ class CookieScreen:
             self.state["cookie"] = dict(st, wins=wins)
         return wins
 
-    def cookie_suspect(self, name, wins, took):
-        """(Any thread.) Another's just beaten this one, its wins-th throw won in a row (took: it took the cookie
-        with it; else it kept it). From its third, perhaps this one says it must be cheating (it isn't): in the group
-        chat, a few seconds on, where the accused and your others answer (circle.py). Not while the group chat's
-        quiet. True if it's to be said."""
+    def cookie_suspect(self, name, wins):
+        """(Any thread.) Another's just beaten this one, its wins-th throw won in a row (a cookie for each). From its
+        third, perhaps this one says it must be cheating (it isn't): in the group chat, a few seconds on, where the
+        accused and your others answer (circle.py). Not while the group chat's quiet. True if it's to be said."""
         if (self.setting("share") == "Off" or self.setting("group_talk") == "Off"
                 or not cookie_accuses(wins, self.cookie_rng)):
             return False
-        self.circle.schedule(self.cookie_rng.uniform(*COOKIE_ACCUSE_WAIT), "cheat",
-                             {"about": name, "wins": wins, "got": "got" if took else "kept"})
+        self.circle.schedule(self.cookie_rng.uniform(*COOKIE_ACCUSE_WAIT), "cheat", {"about": name, "wins": wins})
         return True
 
     def cookie_say(self, head, sub, again=False):
@@ -325,7 +326,7 @@ class CookieScreen:
 
     def cookie_tried(self, name, throw, you, got):
         """(Main loop.) The holder's answer to this one's try: how it went, said at the top of its page; won, the
-        cookie's here."""
+        cookie's this one's (it got it)."""
         now = time.monotonic()
         self.cookie_trying = ""
         res = got.get("got") if isinstance(got, dict) and got.get("ok") is True else None
@@ -337,8 +338,8 @@ class CookieScreen:
             if not you:
                 self.cookie_threw(throw, theirs if res == "lost" else "")
             self.cookie_streak(res)
-            if res == "lost":                          # (its holder's won again: suspicious, after a few)
-                self.cookie_suspect(name, cookie_count(got.get("wins"), 9999) or 0, took=False)
+            if res == "lost":                          # (the one it played has won again: suspicious, after a few)
+                self.cookie_suspect(name, cookie_count(got.get("wins"), 9999) or 0)
             self.cookie_wait = 0.0 if res == "won" else now + COOKIE_GAP
             if res == "won":
                 with self.cookie_lock:
@@ -346,24 +347,24 @@ class CookieScreen:
                             and cookie_newer(new, self.state["cookie"].get("rec"))):
                         self.cookie_set(new)
                 self.cookie_say(f"{my.capitalize()} {mine_w} beat {name}'s {COOKIE_THROW[theirs]}",
-                                "The cookie's here now.")
+                                f"{self.own_name()} got a cookie!")
             elif res == "lost":
-                self.cookie_say(f"{name}'s {COOKIE_THROW[theirs]} beat {my} {mine_w}", f"{name} keeps the cookie.",
+                self.cookie_say(f"{name}'s {COOKIE_THROW[theirs]} beat {my} {mine_w}", f"{name} got another cookie.",
                                 again=you)
             else:
-                self.cookie_say(f"Both threw {mine_w}", f"{name} keeps the cookie.", again=you)
+                self.cookie_say(f"Both threw {mine_w}", "No cookie this time.", again=you)
         elif res == "wait":
             secs = got.get("wait")
             secs = secs if isinstance(secs, int) and not isinstance(secs, bool) and 0 < secs <= COOKIE_GAP else 3
             self.cookie_wait = now + secs
             if you:
-                self.cookie_say("Too soon", f"{name} takes a throw every {COOKIE_GAP} seconds.", again=True)
+                self.cookie_say("Too soon", f"{name} plays one throw every {COOKIE_GAP} seconds.", again=True)
         elif res == "gone":
             with self.cookie_lock:
                 if cookie_newer(new, self.state["cookie"].get("rec")):
                     self.cookie_set(new)
             if you:
-                self.cookie_say(f"{name} doesn't have it any more", "It moved on a moment ago.")
+                self.cookie_say("Too late", "Another got a cookie a moment ago.")
         elif you:
             self.cookie_say(f"{name} didn't answer", "Try again in a moment.")
         self.cookie_redraw()
@@ -422,12 +423,13 @@ class CookieScreen:
             if res == "won":
                 self.cookie_set({"n": rec["n"] + 1, "at": who, "name": name, "t": time.time(),
                                  "from": self.own_name(), "how": throw + mine, "you": cmd.get("you") is True})
-                self.cookie_suspect(name, (cookie_count(cmd.get("wins"), 9999) or 0) + 1, took=True)
-                news = (f"{name}'s {theirs_w} beat {my} {mine_w}", f"{name} has the cookie now.")
+                self.cookie_suspect(name, (cookie_count(cmd.get("wins"), 9999) or 0) + 1)
+                news = (f"{name}'s {theirs_w} beat {my} {mine_w}", f"{name} got a cookie.")
             elif res == "lost":
-                news = (f"{my.capitalize()} {mine_w} beat {name}'s {theirs_w}", "The cookie stays here.")
+                news = (f"{my.capitalize()} {mine_w} beat {name}'s {theirs_w}",
+                        f"{self.own_name()} got another cookie.")
             else:
-                news = (f"Both threw {mine_w}", "The cookie stays here.")
+                news = (f"Both threw {mine_w}", "No cookie this time.")
             rec = self.state["cookie"].get("rec")
         self.soon(lambda: self.cookie_say(*news))
         self.wake()
@@ -472,20 +474,20 @@ class CookieScreen:
 
     @staticmethod
     def cookie_story(rec, wall, here=True):
-        """How the cookie came to where it is, in a line: at the top of its page (here), or a few words under its
-        holder's name on another's."""
+        """How the last cookie was got, in a line: at the top of the page of the one that got it (here), or a few
+        words under its name on another's."""
         ago = cookie_ago(wall - rec["t"]) if 0 < rec["t"] <= wall + 300 else ""
         ago = " " + ago if ago else ""
         other, how = rec["from"], rec["how"]
-        if cookie_took(how) and other:
+        if cookie_beat(how) and other:
             if not here:
-                return f"Took it from {other}{ago}"
-            return (f"{'You' if rec['you'] else 'Its Bot'} took it from {other}{ago}, {COOKIE_THROW[how[0]]} over "
+                return f"Beat {other}{ago}"
+            return (f"{'You' if rec['you'] else 'Its Bot'} beat {other}{ago}, {COOKIE_THROW[how[0]]} over "
                     f"{COOKIE_THROW[how[1]]}.")
         if how == "left" and other:
-            return f"{other} left it behind{ago}." if here else f"{other} left it behind{ago}"
+            return f"After {other} went quiet{ago}" + ("." if here else "")
         if how == "new":
-            return f"Baked{ago}." if here else f"Baked it{ago}"
+            return f"The first one{',' + ago if ago else ''}" + ("." if here else "")
         return ""
 
     def cookie_page(self, s):
@@ -505,8 +507,8 @@ class CookieScreen:
         can = False
         if ask is not None:
             left = max(0, math.ceil(ask["until"] - now))
-            head = f"{ask['name']} wants the cookie"
-            sub = "Thrown." if ask["throw"] else f"Throw to keep it. This one's Bot does in {left} s."
+            head = f"{ask['name']} wants a cookie"
+            sub = "Thrown." if ask["throw"] else f"Throw to win another. This one's Bot does in {left} s."
             can = not ask["throw"]
         elif news is not None and now < news["until"]:
             head, sub = news["head"], news["sub"]
@@ -516,22 +518,23 @@ class CookieScreen:
         elif not share:
             head, sub = "Sharing is off", "Settings > Share with other Pietatos turns it on."
         elif rec is None and peers:
-            head, sub = "No cookie yet", "One of your Pietatos bakes it in a minute or two."
+            head, sub = "No cookie yet", "One of your Pietatos gets the first in a minute or two."
         elif rec is None:
-            head = "It takes two Pietatos"
-            sub = "Update your others, and they play." if older else "One cookie goes between them. No other is on."
+            head = "It needs two Pietatos"
+            sub = ("Update your others, and they play." if older
+                   else "They play each other for cookies. No other is on.")
         elif here:
-            head, sub = "The cookie's here", self.cookie_story(rec, wall)
+            head, sub = f"{self.own_name()} got a cookie", self.cookie_story(rec, wall)
         elif holder is not None:
-            head, can = f"{holder['name']} has the cookie", True
-            sub = f"Throw again in {wait} s." if wait else "Throw rock, paper or scissors to take it."
+            head, can = f"{holder['name']} got a cookie", True
+            sub = f"Throw again in {wait} s." if wait else "Beat it at rock paper scissors to win one."
         else:
-            head, sub = f"{rec['name']} has the cookie", "It's off. After an hour off, the cookie moves on."
+            head, sub = f"{rec['name']} got a cookie", "It's off. After an hour off, another gets one."
         if self.cookie_trying and ask is None:           # (a try on its way: yours, or its Bot's)
-            sub, can = (f"Waiting for {holder['name'] if holder else 'its holder'}…" if self.cookie_trying == "you"
-                        else "This one's Bot is trying for it…"), False
+            other = holder["name"] if holder else rec["name"] if rec else "it"
+            sub, can = (f"Waiting for {other}…" if self.cookie_trying == "you"
+                        else "This one's Bot is playing for one…"), False
         s.head, s.here, s.until = (head, sub), here, self.cookie_until
-        s.moves = rec["n"] - 1 if rec is not None else 0
         hues = dict(ACCENTS)
 
         def hue(name):
@@ -546,8 +549,8 @@ class CookieScreen:
                          st.get("throws") or "", here, True))
             if rec is not None and not here and holder is None:
                 rows.append((rec["name"], "Off", None, "", True, False))
-            for p in sorted(peers, key=lambda p: p["id"] != (rec or {}).get("at")):   # (the one that has it, first:
-                has = rec is not None and p["id"] == rec["at"]                        # how it came by it, under it)
+            for p in sorted(peers, key=lambda p: p["id"] != (rec or {}).get("at")):   # (the one that got the last,
+                has = rec is not None and p["id"] == rec["at"]                        # first: how, under its name)
                 word = streak(p["wins"], self.cookie_story(rec, wall, here=False) if has else "")
                 rows.append((p["name"], word, hue(p["accent"]), p["throws"], has, True))
             rows += [(name, "Update it to play", None, "", False, True) for name in older]
@@ -575,7 +578,7 @@ class CookieScreen:
         if self.setting("share") == "Off" or rec is None:
             return None
         if rec["at"] == st.get("id"):
-            self.toast("The cookie's here already", 2)
+            self.toast("The others have to beat this one next", 3)
         elif self.cookie_trying:
             pass
         elif now < self.cookie_wait:

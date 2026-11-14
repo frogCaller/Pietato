@@ -7,7 +7,9 @@ moment it's due by the sender's clock (not before), a game's colours (their blen
 gold, dark again once it's quiet; nothing for a packet that isn't one; one Pietato followed at a time. A strip of LEDs
 instead: all of them that colour. Then media mode: a light found is one of the places a game's colours and music's
 beats go, and music's played for its beat while one's there (unless Pulse to music is off: Apps > LED backlight has
-that, on a Pietato with no LEDs of its own too while a board's on); however many there are, a
+that, on a Pietato with no LEDs of its own too while a board's on); the song at start-up, which begins before the
+network's up and any board's heard (moved to that player once one is, and on it from the start the next time, the
+boards remembered); however many there are, a
 game's pictures go to a couple of them at a time, in turn (a beat to all at once), and a board that gets them only now
 and then keeps its colour between them. A colour of its own: told it by a Pietato (the web page's LED backlight), it
 shows it a moment, says it back at once, keeps it through a power cut (written only when it changes), and is lit in
@@ -390,6 +392,15 @@ if BOARD and prog:
     check(f"...and it dies away ({at(leds, 3.45)}, then {at(leds, 3.95)})",
           sum(base) < sum(at(leds, 3.45)) < sum(peak) and near(at(leds, 3.95), base))
     check(f"...the music stopped: dark again ({at(leds, 9.4)})", at(leds, 9.4) == (0, 0, 0))
+    RED = (255, 0, 0)                                  # (a Soundboard's sound: its colour, and a beat with it)
+    leds, _, _, _ = run(prog, ["wifi 1", "t 5.0", packet(PI, G.music_packet(RED, 5.0 + AHEAD)),
+                               packet(PI, G.event_packet("beat", 1.0, 5.0 + AHEAD, 5.0 + AHEAD)), "t 5.02", "t 5.6",
+                               "t 9.0"])
+    first, glow = at(leds, 5.02), at(leds, 5.6)
+    check(f"a beat that comes with music's first colour (a Soundboard's sound, the LED dark till then): as bright as "
+          f"any, at once, in that colour ({first}); then the colour while it's kept ({glow}), and dark again "
+          f"({at(leds, 8.9)})", first is not None and first[0] >= 40 and first[1] < first[0] / 4
+          and near(glow, seen([v * 0.4 for v in RED])) and at(leds, 8.9) == (0, 0, 0))
 
     # ---- a game: its colours, a hit, an achievement ----------------------------------------------------------------
     colours = np.zeros((8, 8, 3), dtype=np.uint8)
@@ -912,6 +923,187 @@ check("...its other buttons: nothing (there's no card of LEDs to set here), B go
       and m.press_glow(page, "b", False) is False)
 m.press_glow(page, "a", False)
 check("...A again: on", m.setting("glow_beat") == "On" and m.glow_beats_wanted())
+
+# ---- the song at start-up (Settings > Random song at start-up): playing before the network's up -----------------------
+import wave
+os.makedirs(S + "/bin", exist_ok=True)
+open(S + "/bin/aplay", "w").write('''#!/usr/bin/env python3
+import sys, time
+args = sys.argv[1:]
+rate = int(args[args.index("-r") + 1]) if "-r" in args else 48000
+inp, start, played = sys.stdin.buffer, None, 0
+while True:
+    data = inp.read(rate // 100 * 4)
+    if not data:
+        break
+    start = start or time.monotonic()
+    played += len(data) // 4
+    wait = start + played / rate - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+''')
+os.chmod(S + "/bin/aplay", 0o755)
+os.environ["PATH"] = S + "/bin:" + os.environ["PATH"]
+for t in g.LIBRARY:
+    if "dirs" in t:
+        t["dirs"] = [x.replace("/home/*", HOME) for x in t["dirs"]]
+RATE = 48000
+tt = np.arange(RATE * 14) / RATE
+sig = 0.05 * np.sin(2 * np.pi * 440 * tt) + 0.02 * np.random.default_rng(1).standard_normal(len(tt))
+for kick in np.arange(0.5, 14, 0.5):                   # (a kick drum twice a second)
+    on = (tt >= kick) & (tt < kick + 0.25)
+    x = tt[on] - kick
+    sig[on] += 0.6 * np.sin(2 * np.pi * (60 + 40 * np.exp(-x * 30)) * x) * np.exp(-x * 12)
+KICKS = HOME + "/Music/Kicks.wav"
+with wave.open(KICKS, "wb") as w:
+    w.setnchannels(2); w.setsampwidth(2); w.setframerate(RATE)
+    w.writeframes((np.stack([sig, sig], -1) * 0.8 * 32767).astype("<i2").tobytes())
+spawned = []
+
+
+class Plain:
+    """(The plain player, mplayer: started, as far as media mode knows.)"""
+
+    def __init__(self):
+        self.stdin = open(os.devnull, "w")
+        self.stdout, self.stderr = iter(()), iter(())
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        self.returncode = 0
+        return 0
+
+    def kill(self):
+        self.returncode = -9
+
+
+def spawn(self, args, target):
+    self.started = time.monotonic()
+    self.proc = Plain()
+    spawned.append(target)
+
+
+g.PlayerScreen.spawn = spawn
+
+
+class Lights:
+    """(Where a Pietato's colours and beats go, noted: what GlowOut sends.)"""
+
+    def __init__(self):
+        self.to, self.said = (), []
+
+    def aim(self, to, lamps=()):
+        self.to = tuple(to)
+
+    def music(self, rgb):
+        self.said.append("colour")
+
+    def event(self, name, strength=1.0, at=None, lamps=True):
+        self.said.append(name if lamps else name + ", not for the boards")
+
+    def close(self):
+        pass
+
+
+def board_says(mm, there=True):
+    """A board says it's there, to that Pietato (or it's not been heard: the network's still coming up)."""
+    with mm.glow_lamps.lock:
+        mm.glow_lamps.heard.clear()
+    if there:
+        mm.glow_lamps.take(G.lamp_packet("ESP32 A1B2C3", 1, 1.0), "127.0.0.1", mm.glow_lamps.clock())
+    mm.glow_seen = mm.glow_mind_at = 0.0
+
+
+def goes(mm, secs):
+    end = time.monotonic() + secs
+    while time.monotonic() < end:
+        mm.glow_tick(time.monotonic())
+        time.sleep(0.02)
+
+
+def player(mm):
+    return type(mm.proc).__name__
+
+
+board_says(m, False)
+m.state["glow"].clear()
+m.glow_net_seen = False
+m.random_song()
+check(f"the song at start-up, no board heard yet (the network's still coming up) and none remembered: on the plain "
+      f"player, which finds no beats ({player(m)})", player(m) == "Plain" and spawned == [KICKS] and m.queue_random
+      and not m.glow_beats_wanted())
+m.pos = 3.2                                            # (where the plain player says it's got to)
+board_says(m)
+m.glow_tick(time.monotonic())
+check(f"...a board says it's there a few seconds in: the song's moved to the player that finds its beats, from "
+      f"where it was ({player(m)}, {getattr(getattr(m.proc, 'player', None), 'pos0', None)} s in), your queue as it "
+      f"was", player(m) == "PartyProc" and spawned == [KICKS] and abs(m.proc.player.pos0 - 3.2) < 0.01
+      and m.queue_random and m.queue[m.qi]["src"] == KICKS and m.proc.player.beats is not None)
+check(f"...and that there are boards is kept for the next start-up ({json.load(open(g.STATE_FILE)).get('glow')})",
+      m.state["glow"] == {"lights": True} and json.load(open(g.STATE_FILE)).get("glow") == {"lights": True})
+lights = m.glow_out = Lights()
+m.glow_seen = 0.0
+goes(m, 3.0)
+check(f"...the board has its beats from then on ({lights.said.count('beat')} in three seconds, and its colour)",
+      lights.said.count("beat") >= 3 and "colour" in lights.said and lights.to == (("127.0.0.1", G.GLOW_PORT),))
+m.stop()
+m.glow_out = None
+board_says(m, False)
+m.play([g.item(KICKS, "Kicks", "audio", KICKS)], 0, show=False)
+m.started -= g.GLOW_CATCH + 1                          # (a minute and more ago)
+board_says(m)
+m.glow_tick(time.monotonic())
+check(f"a song well under way when a board turns up: left as it is, on the plain player (the next has its beats) "
+      f"({player(m)})", player(m) == "Plain" and spawned == [KICKS, KICKS])
+m.stop()
+board_says(m, False)
+m.play([g.item(KICKS, "Kicks", "audio", KICKS)], 0, show=False)
+m.party_play = lambda it, kind, target, start: spawn(m, [], target)   # (it can't be played there, whyever)
+board_says(m)
+for _ in range(3):
+    m.glow_mind_at = 0.0
+    m.glow_tick(time.monotonic())
+del m.party_play
+check(f"...one that can't be moved: tried once, not again and again ({len(spawned)} started in all)",
+      player(m) == "Plain" and len(spawned) == 4)
+m.stop()
+m2 = g.Media()                                         # (started again: what it kept is read)
+m2.lamps_port = 0
+m2.lamps_start()
+lights = m2.glow_out = Lights()
+m2.random_song()
+check(f"started again, the boards remembered: the song at start-up is on the player that finds its beats from the "
+      f"start, before any board's heard ({player(m2)})", m2.glow_expected() and player(m2) == "PartyProc"
+      and len(spawned) == 4 and m2.proc.player.beats is not None and m2.queue_random and not m2.glow_early)
+goes(m2, 1.5)
+quiet = list(lights.said)
+board_says(m2)
+goes(m2, 3.0)
+check(f"...nothing's sent while none is heard ({quiet}); once one says it's there, it has the song's beats, with no "
+      f"break in the song ({lights.said.count('beat')} in three seconds)", quiet == []
+      and lights.said.count("beat") >= 3 and "colour" in lights.said and player(m2) == "PartyProc" and len(spawned) == 4)
+m2.stop()
+board_says(m2, False)
+m2.glow_net_seen, m2.glow_since = False, time.monotonic() - g.GLOW_FORGET - 1   # (on five minutes, and no board)
+m2.glow_tick(time.monotonic())
+m2.random_song()
+check(f"a start with none of them for five minutes: taken to be gone, and the song at start-up is on the plain "
+      f"player again ({player(m2)}, {json.load(open(g.STATE_FILE)).get('glow')})", player(m2) == "Plain"
+      and m2.state["glow"] == {"lights": False} and json.load(open(g.STATE_FILE)).get("glow") == {"lights": False})
+m2.stop()
+m2.state["glow"]["lights"] = True
+m2.set_setting("glow_beat", "Off")
+m2.random_song()
+check(f"...and with Pulse to music off, they're not waited for ({player(m2)})", not m2.glow_expected()
+      and player(m2) == "Plain")
+m2.stop()
+m2.lamps_stop()
+m.save_state()                                         # (the first one's again, as the rest of this goes by it)
+board_says(m)
+m.glow_lamps.take(G.lamp_packet("another", 1, 1.0), "10.0.0.81", m.glow_lamps.clock())
 
 # ---- the web page, in a real browser: Library > LED backlight lists the boards, a colour for each --------------------
 

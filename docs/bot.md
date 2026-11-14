@@ -67,7 +67,9 @@ gas and steers along the road, runs and jumps over gaps and enemies, attacks and
 firing. The model says which way to go and helps with menus, but the game doesn't wait for it, and
 it plays on when the model's slow or says nothing. It knows what kind of game many are from their
 names; for the rest, your Bot's model says. In other games the model looks at the screen and picks
-the next button to press, while the game goes on at its own speed.
+the next button to press, while the game goes on at its own speed. It does that in a platformer too,
+where running and jumping has got it no further for half a minute (a ledge that wants a crate, a gate
+with a switch): the model takes over there, a button at a time, until it's past.
 
 It plays Pokémon Emerald (the English cartridge) best, as there it reads the game's memory too. It
 knows the story (out of the truck, the clock, your rival, Professor Birch, and on badge by badge) and
@@ -80,6 +82,14 @@ button does and how it's played well; then every so often, and whenever it gets 
 screen and works out what to aim for. What it works out goes in `Games/Saves`, in a file ending in
 `.ai-notes.txt`, for next time. You can add your own tips there, under Tips, and change its Kind: line
 if it got the kind of game wrong. What it saw and picked goes there too, in a file ending in `.ai.log`.
+
+It learns a little as it plays. When it was stuck and then got on, your Bot's model writes one line in
+those notes on what did it, and when it's been stuck a long while, one on what it tried. The lines start
+Learned:, and it's told them every time it plays that game after, so they add up from one game to the
+next (it keeps the newest 24). They're its guesses from what it saw, so some will be wrong: change or
+delete any of them. It can't tell a lost life or a finished level from the screen by itself, so it
+learns little from those: only when the screen changes altogether while the model is working a
+platformer out does it ask your Bot's model what happened.
 
 If you pick a voice in its Character (Voice), it says its replies out loud with
 [Piper](https://github.com/rhasspy/piper), which runs on the Pi. The first time, the Pi
@@ -137,3 +147,56 @@ If channels aren't available to you yet, Claude Code says so when it starts.
   and send a WAV to `POST /coder/say` to have it said out loud.
 
 At work, A types a prompt, Y rings the bell, X turns its sounds off, and START shows these steps.
+
+## OpenClaw and Hermes
+
+If you run [OpenClaw](https://github.com/openclaw/openclaw) or
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) on a computer, you can connect it too, both
+ways. Run this on the computer it runs on:
+
+```
+curl -O http://<your Pi's IP address>:5432/agent_link.py
+python3 agent_link.py <your Pi's IP address>
+```
+
+It gives your agent a skill for your Pietato, in `~/.openclaw/skills` and `~/.hermes/skills` (whichever
+you have). With it your agent can see the Pi's screen, press its buttons, open its apps and play your
+music, videos and radio there: ask it "what's my Pietato playing?" or "put some jazz on the Pietato".
+Hermes lists its skills when it starts, so restart it once.
+
+To send your agent prompts from the Pi, keep this running on that computer:
+
+```
+python3 agent_link.py listen
+```
+
+Then press A at work, type a prompt, and press START. The Bot acts out that your agent is working, and
+what it answers shows on a card: up and down move through a long answer, X reads it out loud, B closes
+it, and SELECT shows it again. Your agent carries on the same conversation each time; `listen --new`
+starts a new one.
+
+`listen` hands your prompts to your agent through its own API on that computer, which has to be on:
+
+- OpenClaw: set `gateway.http.endpoints.chatCompletions.enabled` to `true` in
+  `~/.openclaw/openclaw.json`.
+- Hermes: put `API_SERVER_ENABLED=true` and `API_SERVER_KEY=` with a key of 16 characters or more in
+  `~/.hermes/.env`, then run `hermes gateway`.
+
+A few more things:
+
+- Your agent's API and its key stay on its computer: the script fetches your prompts from the Pi, and
+  the Pi never reaches into the computer.
+- The skill works the Pi the way the web page's remote does. Prompts, and answers to what Claude Code
+  asks, only come from the Pi's own buttons: the skill can't send them.
+- If your web page has a password, add `--password` and the password.
+- With both agents on one computer, `listen --agent hermes` (or `openclaw`) picks one.
+- With several Pietatos, set each one up the same way. The skill's commands and `listen` take `--on`
+  and a Pietato's name.
+- Keep one listener running for a Pietato, not two. With Claude Code's channel running for it too, a
+  prompt goes to whichever of them asks for it first.
+- Another agent that speaks OpenAI's chat API works with `listen --url`, `--key` and `--model`.
+- `--remove` forgets your Pietato there and takes the skill out again.
+
+START at work shows these steps too: left and right change between Claude Code's and these.
+It was tried with OpenClaw 2026.9 and Hermes Agent 0.19: a later version of either may need something
+different.

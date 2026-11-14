@@ -1,5 +1,5 @@
-"""Pretend games for the AI player's tests (tests/test_instincts.py, tests/test_start_screens.py), and a way to play
-them in the game's own time. Race: a pseudo-3D racing game. Level: a side-scrolling platformer. Room: a top-down room
+"""Pretend games for the AI player's tests (tests/test_instincts.py, tests/test_start_screens.py,
+tests/test_learned.py), and a way to play them in the game's own time. Race: a pseudo-3D racing game. Level: a side-scrolling platformer. Room: a top-down room
 (an RPG's: nothing moves till you walk). Flow: any of them from its start, the way real games start: logos, a title
 screen, menus, pages of text, a name to put in, a coin, a moment with nothing to press; then the game, where Start
 pauses it. flows(): a few such starts, by name. Pretend decision models: one that isn't answering, one that knows

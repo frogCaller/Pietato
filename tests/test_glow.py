@@ -260,6 +260,11 @@ check(f"an achievement: gold ({img[0, 0].round().tolist()}, {img[4, 4].round().t
       img[:, :, 0].mean() > 150 and img[:, :, 1].mean() > 100 and img[:, :, 2].mean() < 100)
 img = settle(G.FADE_AFTER + 4 * G.FADE_TAU + G.GOLD_SECS)
 check(f"nothing new a while: dark ({img.max():.1f})", img.max() < 10)
+grid.take(G.music_packet((255, 0, 0), clk.t + SENDER), "10.0.0.8", clk.t)   # (a Soundboard's sound: its colour, and a
+send(G.event_packet, "10.0.0.8", "beat", 1.0, clk.t + SENDER)               #  beat with it, the grid dark till then)
+first = grid.render(clk.t + 0.01)
+check(f"a beat that comes with music's first colour (a Soundboard's sound, on a dark grid): as bright as any, at "
+      f"once, in that colour ({first[2, 2].round().tolist()})", first[2, 2, 0] > 200 and 30 < first[2, 2, 1] < 70)
 music = G.music_packet((96, 170, 228), clk.t + SENDER)
 grid.take(music, "10.0.0.8", clk.t)
 img = settle(1.0)

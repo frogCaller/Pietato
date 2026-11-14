@@ -632,12 +632,52 @@ ASK_GRACE = 1.5            # ...one this new isn't settled by your agent's word 
 VERDICT_KEEP = 30          # seconds your answer goes to your agent each time it asks (in case one was lost on the way)
 ASK_ID = re.compile(r"[a-km-z]{5}")   # Claude Code's ids for its requests: five lowercase letters, never an l
 ASK_TOOL_MAX, ASK_ABOUT_MAX, ASK_PREVIEW_MAX = 64, 500, 2000   # characters kept of a request's tool, words, details
+REPLY_MAX = 6000           # characters kept of what your agent answers (agent_link.py sends it: POST /coder/reply)
+REPLY_STEP = 3             # lines up or down each press moves through an answer
+REPLY_AGENT_MAX = 24       # characters of its name ("Hermes says")
 
 
 def ask_text(text, most):
     """A request's words, fit to show: printable, on one line, most characters at most (the rest: …)."""
     text = " ".join("".join(c if c.isprintable() else " " for c in str(text or "")).split())
     return text if len(text) <= most else text[:most - 1].rstrip() + "…"
+
+
+def reply_text(text, most=REPLY_MAX):
+    """An answer's words, fit to show: printable, its lines kept (no more than one empty one in a row), most
+    characters at most (the rest: …)."""
+    lines = ["".join(c if c.isprintable() else " " for c in line).rstrip()
+             for line in str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    out = []
+    for line in lines:
+        if line or (out and out[-1]):
+            out.append(line)
+    text = "\n".join(out).strip()
+    return text if len(text) <= most else text[:most - 1].rstrip() + "…"
+
+
+def reply_lines(text, fits, width):
+    """An answer's words as lines no wider than width (fits: how wide some words are), its own lines and the
+    empty ones between them kept; a word too long for a line is cut across lines."""
+    out = []
+    for para in text.split("\n"):
+        cur = ""
+        for word in para.split():
+            both = (cur + " " + word).strip()
+            if fits(both) <= width:
+                cur = both
+                continue
+            if cur:
+                out.append(cur)
+            while fits(word) > width and len(word) > 1:
+                n = len(word) - 1
+                while n > 1 and fits(word[:n]) > width:
+                    n -= 1
+                out.append(word[:n])
+                word = word[n:]
+            cur = word
+        out.append(cur)
+    return out
 
 
 class AgentPrompts:

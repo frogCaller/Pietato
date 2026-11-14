@@ -6,7 +6,11 @@ and the ESP32 boards on your network (esp32/pietato_led: found by themselves; th
 a colour of its own, which the board keeps). A game's colours come from its emulator
 (told where they go: glow ADDRESS:PORT...); music's beats from its player, when one of your grids or boards wants them:
 a song or a station then plays through party mode's player (party.py: it knows when each bit of it is heard), on its
-own, as if it were a party."""
+own, as if it were a party. A song is put on one player or the other as it starts, and at start-up the song
+(Settings > Random song at start-up) starts before the network's up and any light on it is heard: so lights on your
+network that had this one's beats are remembered for the next start (glow_expected), and a song that's only just
+begun on the plain player is moved over when one turns up (glow_catch). The Soundboard's sounds light them too
+(glow_flash: a pulse in the button's colour as each is heard)."""
 import re
 import secrets
 import threading
@@ -51,6 +55,9 @@ GLOW_LEAD = 0.8              # seconds from a song being started to its playing,
 GLOW_SOON = 0.05             # ...and from A to its pausing there
 GLOW_QUIET = 3.0             # seconds with no station on that player: the one passed through here let go of
 NAMED_KEEP = 10.0            # seconds an address's name is kept (the grid asks it for every packet)
+GLOW_MIND = 2.0              # seconds between looks at whether a light on your network wants this one's beats
+GLOW_CATCH = 60.0            # seconds into a song that it's still moved to party mode's player, when one turns up
+GLOW_FORGET = 300.0          # seconds in with none of them: the ones it had last time are taken to be gone
 
 
 class GlowScreen:
@@ -65,6 +72,11 @@ class GlowScreen:
     glow_to = ()             # your grids (and this one's), and the lights of your own: [(address, port)]
     glow_to_lamps = ()       # ...the lights among them
     glow_names = None        # address -> (name, when looked up)
+    glow_early = False       # the song at start-up's being started: lights it had last time are on their way
+    glow_mind_at = 0.0       # when it next looks for lights on your network that want its beats
+    glow_since = None        # ...and when it first did
+    glow_net_seen = False    # ...one has, since it started
+    glow_moved = None        # the song last moved to party mode's player for one that turned up (once each)
 
     # -- what it is --------------------------------------------------------------------------------------------------
     def glow_can(self):
@@ -536,11 +548,16 @@ class GlowScreen:
     def glow_beats_wanted(self):
         """One of your grids (this one's too) follows this one and pulses to its music, or a light of your own's on the
         network (unless Pulse to music is off here): its music played on party mode's player, which knows when each
-        beat's heard."""
+        beat's heard. The song at start-up too, when lights on your network had its beats last time (glow_expected)."""
         beat = self.glow_setting("glow_beat") != "Off"
         if self.glow_grid is not None and beat and self.glow_follows() in (ANY, THIS_ONE):
             return True
-        if beat and self.lamps_on():
+        return self.glow_net_lights() or (self.glow_early and self.glow_expected())
+
+    def glow_net_lights(self):
+        """A light on your network wants this one's beats: an ESP32 board (unless Pulse to music is off here), or
+        another of yours' grid that follows this one and pulses to music."""
+        if self.glow_setting("glow_beat") != "Off" and self.lamps_on():
             return True
         pie = getattr(self, "pie", None)
         if pie is None or self.setting("share") == "Off":
@@ -550,6 +567,77 @@ class GlowScreen:
         with pie.lock:
             grids = [h.get("glow") for u, h in pie.heard.items() if u in names and h.get("glow")]
         return any(g["beat"] and (g["follow"] in ("", me) or g["follow"].startswith(me + " (")) for g in grids)
+
+    def glow_expected(self):
+        """Lights on your network had this one's beats the last time it ran (kept: state's glow). At start-up none
+        is heard yet (the WiFi's still coming up, and a board says it's there only every couple of seconds), so the
+        song then goes on party mode's player all the same: they have its beats from their first word."""
+        return bool(self.state["glow"].get("lights")) and self.glow_setting("glow_beat") != "Off"
+
+    def glow_mind(self, now):
+        """(Media mode's main loop: every few seconds.) Whether a light on your network wants this one's beats: kept
+        for the next start-up (glow_expected; forgotten once it's been on a while with none), and a song that's only
+        just begun without its beats is moved to the player that finds them (glow_catch)."""
+        if now < self.glow_mind_at:
+            return
+        self.glow_mind_at = now + GLOW_MIND
+        if self.glow_since is None:
+            self.glow_since = now
+        lights = self.glow_net_lights()
+        kept = bool(self.state["glow"].get("lights"))
+        self.glow_net_seen = self.glow_net_seen or lights
+        if lights != kept and (lights or (not self.glow_net_seen and now - self.glow_since >= GLOW_FORGET)):
+            with self.lock:
+                self.state["glow"]["lights"] = lights
+            self.save_state()
+        self.glow_catch(now)
+
+    def glow_catch(self, now):
+        """Music that began before any light that wants its beats was heard (the song at start-up, mostly) is on the
+        plain player, which finds none. Once one turns up, a song that's only just begun is moved to party mode's
+        player: from where it is, after a moment's quiet, once for each song. One well under way plays on as it is
+        (the next has its beats)."""
+        p = self.proc
+        plain = (p is not None and not isinstance(p, PartyProc) and self.kind in LISTEN_KINDS and p.poll() is None
+                 and 0 <= self.qi < len(self.queue))
+        if not plain:
+            self.glow_moved = None
+            return
+        src = self.queue[self.qi].get("src")
+        if (self.party is not None or self.paused or now - self.started > GLOW_CATCH or src == self.glow_moved
+                or not self.glow_beats_wanted()):
+            return
+        self.glow_moved = src                          # (once: if it's on the plain player after this, there it stays)
+        pos = (self.pos or 0.0) if self.kind == "audio" else 0.0
+        print("glow: a light that wants its beat has turned up: the song's moved to the player that finds them",
+              flush=True)
+        self.play(self.queue, self.qi, start=max(0.0, pos), show=False)
+
+    def glow_flash(self, rgb, at=None, strength=1.0):
+        """(The Soundboard, as one of its sounds starts.) Your grids and lights lit by it, as music lights them: a
+        beat, shown at `at` (when the sound's heard), in that colour (music playing as well: in the music's). Only
+        where music's beat is wanted (Pulse to music; a grid that follows this one). True: its colour's theirs now,
+        and is said again while the sound plays (glow_hue)."""
+        if not self.glow_beats_wanted():
+            return False
+        self.glow_look(time.monotonic())
+        if not self.glow_to:
+            return False
+        out = self.glow_out
+        if out is None:
+            out = self.glow_out = GlowOut()
+            out.aim(self.glow_to, self.glow_to_lamps)
+        music = isinstance(self.proc, PartyProc) and self.kind in LISTEN_KINDS and not self.paused
+        if not music:
+            out.music(rgb)
+        out.event("beat", strength, at=at, lamps=self.glow_setting("glow_beat") != "Off")
+        return not music
+
+    def glow_hue(self, rgb):
+        """(The Soundboard, while a sound plays.) Its colour again, to your grids and lights: kept while it's said."""
+        out = self.glow_out
+        if out is not None and out.to:
+            out.music(rgb)
 
     def glow_look(self, now):
         if now - self.glow_seen >= GLOW_LOOK:
@@ -580,6 +668,7 @@ class GlowScreen:
     def glow_tick(self, now):
         """(Media mode's main loop.) Music on party mode's player: its colour, now and then, to your grids (the beats
         go as they're found); a station passed through here: its song's name, and let go of once it's not played."""
+        self.glow_mind(now)
         playing = isinstance(self.proc, PartyProc) and self.kind in LISTEN_KINDS
         if playing or self.glow_out is not None:
             self.glow_look(now)

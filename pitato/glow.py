@@ -758,10 +758,12 @@ class Grid:
             dt = 0.0 if self.last_t is None else max(0.0, min(0.5, now - self.last_t))
             self.last_t = now
             lit = self.follow != NOBODY                # (nobody's games: just its own colour)
+            coming = None                              # (music's colour, as it will be once it's come in)
             if lit and now - self.frame_at < FADE_AFTER:
                 goal, tau = self.target, TAU
             elif lit and self.music is not None and now - self.music_at < FADE_AFTER:
                 goal, tau = np.broadcast_to(self.music * MUSIC_BASE, self.shown.shape), TAU * 3
+                coming = goal
             elif isinstance(self.colour, str):
                 goal, tau = rainbow(self.rows, self.cols, now, wheel=self.on_strip is not None), COLOUR_TAU
             elif self.colour is not None:
@@ -770,13 +772,14 @@ class Grid:
                 goal, tau = np.zeros_like(self.shown), FADE_TAU
             self.shown += (goal - self.shown) * (1 - math.exp(-dt / tau))
             img = self.shown.copy()
-            for at, name, s in self.events:
-                age = now - at
-                if age < 0:
+            lift = img if coming is None else np.maximum(img, coming)   # (what a beat brightens: music's colour as it
+            for at, name, s in self.events:                              # will be, so one that comes with the first
+                age = now - at                                           # of it, a Soundboard's sound, is as bright
+                if age < 0:                                              # as any)
                     continue
                 if name == "beat":
                     p = s * math.exp(-age / BEAT_TAU)
-                    img = img * (1 + BEAT_GAIN * p) + 60 * p
+                    img = img + lift * (BEAT_GAIN * p) + 60 * p
                 elif name == "hit" and age < HIT_SECS:
                     r = s * (1 - age / HIT_SECS) ** 2
                     img = img * (1 - r) + RED * r

@@ -23,7 +23,7 @@ Pietato starts on a home screen of apps:
 - **Bot**: does what you ask, like setting a timer, adding to your list or playing some music, and chats
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
-  and sends it prompts you type
+  and sends it prompts you type. OpenClaw and Hermes can work the Pi too, and their answers show on it
 - **Apps**: [Group chat](#group-chat), [The Cookie](#the-cookie), the [LED backlight](#led-backlight) (on a Pi
   with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
@@ -93,28 +93,29 @@ with words of its own if not. Settings > Share with other Pietatos needs to be o
 
 ## The Cookie
 
-With two or more Pietatos on the same network, there is one cookie between them, and only one of them has it. The
-one that has it shows a small cookie by the time on its status bar and by the date on its home screen. Another
-takes it by beating that one at a single throw of rock paper scissors. A win takes the cookie. A loss or the same
-throw leaves it where it is.
+With two or more Pietatos on the same network, they play each other at rock paper scissors for cookies. A win gets
+a cookie, and the Bot that wins it eats it, so a cookie is never taken from anyone. The one that got the last
+cookie shows a small cookie by the time on its status bar and by the date on its home screen, and it's the one the
+others have to beat for the next. Beat it at a single throw and you get a cookie. Lose and it gets another. The
+same throw gets nobody one.
 
-Their Bots try for it by themselves, one of them about every ten minutes. They don't try at night, during a game
-or a video, or while Group chat is set to quiet. The one that takes it says so in Group chat, so you can read
-back how it went round.
+Their Bots play by themselves, one of them about every ten minutes. They don't play at night, during a game or a
+video, or while Group chat is set to quiet. The one that gets a cookie says so in Group chat ("I got a cookie!"),
+so you can read back who got them.
 
 When one of them wins three throws in a row or more, the one it just beat may decide it must be cheating and
 say so in Group chat. It isn't cheating. The accused denies it, the others take sides, and they argue for a few
 lines.
 
-Apps > The Cookie shows who has it and each Pietato's last few throws. Each Bot has a habit: one leans on rock,
-one never throws the same twice, one throws what last beat it. The throws on the page are how you learn it. When
-another Pietato has the cookie, ◀ throws rock, ▲ paper and ▶ scissors for it, and you can throw again 15 seconds
-after a loss. When the cookie is on the Pietato in your hands and this page is open, you get a few seconds to
-throw when another tries for it, and its Bot throws if you don't.
+Apps > The Cookie shows who got the last cookie and each Pietato's last few throws. Each Bot has a habit: one
+leans on rock, one never throws the same twice, one throws what last beat it. The throws on the page are how you
+learn it. When another Pietato got the last cookie, ◀ throws rock against it, ▲ paper and ▶ scissors, and you
+can throw again 15 seconds after a loss. When the Pietato in your hands got the last one and this page is open,
+you get a few seconds to throw when another plays it, and its Bot throws if you don't.
 
-A Pietato that has been off for an hour loses the cookie to the one that has waited longest. A guest's Pietato on
-your network can take it home with it. Settings > Share with other Pietatos needs to be on, and every Pietato
-needs this version or a newer one.
+When the one that got the last cookie has been off for an hour, the one that has waited longest gets the next,
+so there's always one to beat. A guest's Pietato on your network can play too. Settings > Share with other
+Pietatos needs to be on, and every Pietato needs this version or a newer one.
 
 ## Party mode
 
@@ -129,8 +130,9 @@ Pietatos needs to be on.
 
 An 8x8 grid of WS2812B LEDs behind your TV, or a strip of them round its edges, can light up with the colours
 along the edges of the game you're playing, on whichever of your Pietatos it follows. It flashes red when you're
-hit, gold when you unlock an achievement, and pulses to music. A hit is a game's lives or health going down in its
-RetroAchievements rich presence, or a game shaking the controller, so it shows in the games those cover.
+hit, gold when you unlock an achievement, and pulses to music and to the [Soundboard](#soundboard)'s sounds. A hit
+is a game's lives or health going down in its RetroAchievements rich presence, or a game shaking the controller, so
+it shows in the games those cover.
 
 To wire it to the Pi behind the TV (not one in a GPi Case, whose screen uses those pins), connect DIN to GPIO 10
 (pin 19) and GND to a ground pin. Power the LEDs with 5 V from their own supply, since they can draw more than a
@@ -142,7 +144,7 @@ Pi's SPI and asks you to restart.
 The page shows the LEDs as they're lit. ◀▶ pick their colour for whenever no game or music is lighting them:
 warm white, white, red, orange, yellow, green, teal, blue, purple, pink or a rainbow. Off keeps them dark. ▲▼
 set how bright they are. START has the rest: which Pietato it follows (any of yours that's playing, by default,
-or Nobody to keep it to your colour), and whether it pulses to music.
+or Nobody to keep it to your colour), and whether it pulses to music (the Soundboard's sounds go by that too).
 
 Shape sets a grid or a strip. For a grid, Turn, Mirror and Wiring match how it's put up. For a strip, set how
 many LEDs it has (up to 300), where its first LED is, which way it goes round as you look at the TV, and whether
@@ -153,7 +155,10 @@ too.
 An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato_led/pietato_led.ino` in the
 Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
 any ESP32 with an RGB LED). It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
-takes a game's colours, a hit's red and an achievement's gold. Its LED is amber while it looks for your WiFi,
+takes a game's colours, a hit's red and an achievement's gold. With Settings > Random song at start-up on, the
+song is playing before the board is heard, so the first time the song skips for a moment as the board joins in;
+after that the Pietato remembers it has boards, and they have the beat from the start. Its LED is amber while it
+looks for your WiFi,
 green for a couple of seconds once it's on it, and then dark till something plays. If it doesn't do that, the
 Arduino IDE's Serial Monitor (at 115200) says what it's doing every ten seconds: whether it's on your WiFi, and
 whether a Pietato is lighting it.
@@ -180,6 +185,10 @@ Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and
 once as you like, and one pressed again starts again. L and R go through the banks of eight, and SELECT stops
 them all. B is a button like the others there, so the way back is START, then B. START's card also has the bank
 and the volume. The sounds play wherever Settings > Sound sends them.
+
+If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
+its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
+turns that off too.
 
 It comes with three banks of starter sounds: Starter, Drums and Arcade. Your own are wav, mp3 or ogg files in the
 `Soundboard` folder of your home folder. Put one there and a moment later it's on the first free button of a bank

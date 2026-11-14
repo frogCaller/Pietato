@@ -322,7 +322,7 @@ class GroupScreen:
         if msg["who"] == "you" or msg["kind"] == "talk" or not self.group_pop_ok():
             return
         if msg.get("topic") == "cookie" and not msg.get("re") and self.cookie_shown():
-            return                                    # (the cookie's changed hands: its page says so already)
+            return                                    # (one of them's got a cookie: its page says so already)
         self.group_pops.append((time.monotonic(), msg))
         while len(self.group_pops) > GROUP_POPS:
             self.group_pops.popleft()

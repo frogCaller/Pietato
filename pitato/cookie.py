@@ -1,23 +1,26 @@
-"""The Cookie: one cookie between all your Pietatos (and a guest's, while it's on your network). Only one has it at a
-time. Another takes it by beating the one that has it at one throw of rock paper scissors: a win and it's theirs, a
-loss or the same throw and it stays where it is. Their Bots try for it by themselves now and then; on the one in your
-hands you can throw instead (Apps > The Cookie).
+"""The Cookie: your Pietatos (and a guest's, while it's on your network) play each other at rock paper scissors for
+cookies. One of them is the one to beat: the one that got the last cookie. Another that beats it at one throw gets a
+cookie, and is the one to beat from then on; a loss, and the one it played gets another; the same throw, and nobody
+does. A cookie's eaten as it's got: none is ever taken from anyone, and nothing a Pietato shows or says puts it that
+way ("Den got a cookie", "I got a cookie!"). Their Bots play by themselves now and then; on the one in your hands you
+can throw instead (Apps > The Cookie).
 
 This is its rules, with nothing of media mode in them:
 - which Pietato is which: an id of its own for each (16 hex digits, made once and kept);
-- the cookie as a Pietato knows it: {"n": how many times it's been somewhere new (1: just baked), "at": its holder's
-  id, "name": its holder's name, "t": when it got there, "from": whose it was before, "how": "new" (baked), "left"
-  (its holder went quiet, and it moved on) or the two throws that took it, the winner's first ("pr": paper over
-  rock), "you": a person threw the winner's}. Every Pietato keeps the one it knows and tells your others in its
-  beacon; of two, the one that's been somewhere new more times is the cookie (the same number: the one whose holder's
-  id is lower), so two never both have it for long, and one that was off finds out as it comes back;
+- who got the last cookie, as a Pietato knows it ("the cookie", in the code): {"n": how many times that's been another
+  one (1: the first), "at": its id, "name": its name, "t": when, "from": the one it beat for it (or the one before
+  it), "how": "new" (the first cookie: nobody was beaten for it), "left" (the one before it went quiet for an hour,
+  and this one got the next) or the two throws that won it, the winner's first ("pr": paper over rock), "you": a
+  person threw the winner's}. Every Pietato keeps the one it knows and tells your others in its beacon; of two, the
+  one with the higher n is right (the same n: the one whose id is lower), so two are never both the one to beat for
+  long, and one that was off finds out as it comes back;
 - each Bot's habit at rock paper scissors, from its id (so it's always the same Bot's): one leans on a throw, one
   never throws the same twice, one throws what last beat it, one goes round in order. Its last few throws are told
   with the cookie, for your other Pietatos' pages to show: that's how you learn it;
-- whose a cookie is when its holder has left it: of those that are on, the one that's waited longest;
-- how many throws in a row a Pietato has won (taking the cookie, or keeping it), told with the cookie too: from its
-  third, the one it's just beaten may say it must be cheating (it isn't), and your others take sides in the group
-  chat (circle.py's "cheat").
+- which gets the next cookie when the one that got the last has gone quiet: of those that are on, the one that's
+  waited longest;
+- how many throws in a row a Pietato has won, told with the cookie too: from its third, the one it's just beaten may
+  say it must be cheating (it isn't), and your others take sides in the group chat (circle.py's "cheat").
 (screens/cookie.py: media mode's part, who throws when. cookiepage.py: its page.)"""
 import hashlib
 import math
@@ -36,12 +39,13 @@ COOKIE_HABIT = 0.75           # ...one that copies, or goes round: it does this 
                               # so two Bots' habits never lock the cookie between them)
 COOKIE_SUSPECT = 3            # wins in a row from which the one just beaten may say the winner's cheating,
 COOKIE_ACCUSE = (0.6, 0.15, 0.9)   # ...how likely: at that many; more with each win after; at most
-COOKIE_TOOK = ("I took the cookie from {other}. {beats}.", "The cookie's mine. My {mine} beat {other}'s {theirs}.",
-               "Got the cookie off {other}: {mine} over {theirs}.")
-COOKIE_YOU_TOOK = ("We took the cookie from {other}. {beats}.", "The cookie's ours. {beats}, {other}.")
-COOKIE_LEFT = ("{other} left the cookie behind. It's mine now.", "{other} went quiet, so the cookie's with me.")
-COOKIE_NEW = ("I baked a cookie. Come and take it.",)
-COOKIE_FOUND = ("The cookie's with me now.",)
+COOKIE_WON = ("I got a cookie! {beats}, {other}.", "I got a cookie! My {mine} beat {other}'s {theirs}.",
+              "I beat {other}, and got a cookie! {Mine} over {theirs}.")   # (what the one that's got a cookie says)
+COOKIE_YOU_WON = ("We got a cookie! {beats}, {other}.",                    # (...with your throw)
+                  "We beat {other}, and I got a cookie! {Mine} over {theirs}.")
+COOKIE_NEXT = ("{other}'s been gone a while. I got a cookie!",             # (...the one before it gone quiet)
+               "No sign of {other}, so I got a cookie!")
+COOKIE_GOT = ("I got a cookie!",)                                          # (...the first one)
 
 
 def cookie_whose(x):
@@ -53,8 +57,8 @@ def cookie_count(v, most=10 ** 9):
     return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= most else None
 
 
-def cookie_took(how):
-    """how is two throws, the first beating the second ("pr")."""
+def cookie_beat(how):
+    """how is two throws, the first beating the second ("pr"): a cookie won by them."""
     return isinstance(how, str) and len(how) == 2 and how[0] in COOKIE_BEATS and COOKIE_BEATS[how[0]] == how[1]
 
 
@@ -68,13 +72,13 @@ def cookie_rec(raw):
     t, how = raw.get("t"), raw.get("how")
     ok = isinstance(t, (int, float)) and not isinstance(t, bool) and math.isfinite(t) and 0 < t < 1e11
     return {"n": n, "at": at, "name": clean_name(raw.get("name"), 40) or "A Pietato", "t": float(t) if ok else 0.0,
-            "from": clean_name(raw.get("from"), 40), "how": how if how in ("new", "left") or cookie_took(how) else "",
+            "from": clean_name(raw.get("from"), 40), "how": how if how in ("new", "left") or cookie_beat(how) else "",
             "you": raw.get("you") is True}
 
 
 def cookie_newer(a, b):
-    """a is the cookie, not b (either may be None: no cookie known): it's been somewhere new more times; the same
-    number of times, the one whose holder's id is lower. False for the same one twice."""
+    """a is who got the last cookie, not b (either may be None: none known): its n is higher; the same n, the one
+    whose id is lower. False for the same one twice."""
     if a is None:
         return False
     if b is None:
@@ -83,8 +87,8 @@ def cookie_newer(a, b):
 
 
 def cookie_says(me, rec, had, throws, wins=0):
-    """What a Pietato's beacon says of the cookie (to your others): which it is, the cookie as it knows it, how many
-    times the cookie had moved when it last got here (0: it never has), its Bot's last few throws, and how many throws
+    """What a Pietato's beacon says of the cookie (to your others): which it is, who got the last one as it knows it,
+    that one's n when this one last got one itself (0: it never has), its Bot's last few throws, and how many throws
     in a row it's won."""
     out = {"id": me, "had": had, "throws": throws[-COOKIE_KEPT:], "wins": wins}
     if rec is not None:
@@ -140,9 +144,9 @@ def cookie_accuses(wins, rng):
 
 
 def cookie_heir(cands):
-    """A cookie its holder has left: whose it is now, of those that are on. cands: (id, how many times the cookie had
-    moved when it last got there: 0 for never) for each. The one that's waited longest; of two the same, the lower
-    id. None with nobody on."""
+    """The one that got the last cookie has gone quiet: which gets the next, of those that are on. cands: (id, the
+    cookie's n when it last got one: 0 for never) for each. The one that's waited longest; of two the same, the
+    lower id. None with nobody on."""
     return min(cands, key=lambda c: (c[1], c[0]))[0] if cands else None
 
 
@@ -170,12 +174,13 @@ def cookie_ago(secs):
 
 
 def cookie_line(rec, rng):
-    """What the one that's just got the cookie says in the group chat."""
+    """What the one that's just got a cookie says in the group chat: that it got one (never that it took one)."""
     other, how = rec.get("from") or "", rec.get("how") or ""
-    if cookie_took(how) and other:
-        pool = COOKIE_YOU_TOOK if rec.get("you") else COOKIE_TOOK
-        return rng.choice(pool).format(other=other, mine=COOKIE_THROW[how[0]], theirs=COOKIE_THROW[how[1]],
-                                       beats=cookie_beat_words(how[0], how[1]))
+    if cookie_beat(how) and other:
+        mine = COOKIE_THROW[how[0]]
+        return rng.choice(COOKIE_YOU_WON if rec.get("you") else COOKIE_WON).format(
+            other=other, mine=mine, Mine=mine.capitalize(), theirs=COOKIE_THROW[how[1]],
+            beats=cookie_beat_words(how[0], how[1]))
     if how == "left" and other:
-        return rng.choice(COOKIE_LEFT).format(other=other)
-    return rng.choice(COOKIE_NEW if how == "new" else COOKIE_FOUND)
+        return rng.choice(COOKIE_NEXT).format(other=other)
+    return rng.choice(COOKIE_GOT)

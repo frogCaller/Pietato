@@ -44,7 +44,7 @@ REMARK_EVERY = 30            # minutes between remarks of its own (its Bot's How
 CHAT_QUIET = 300             # ...not while they've been talking this lately
 NIGHT = (23, 7)              # ...nor at night (these hours)
 MOVED_GAP = 1800             # where you are, said no more often than this
-CHEAT_GAP = 1200             # one of them accused of cheating for the cookie (cookie.py) no more often than this
+CHEAT_GAP = 1200             # one of them accused of cheating for cookies (cookie.py) no more often than this
 CATCH_UP = 6 * 3600          # what one missed, asked of the others: this far back
 CATCH_UP_TRIES = (30, 3)     # ...asked again this many seconds after, this many times, if it didn't answer
 SYNC_EVERY = (300, 600)      # ...and of one of them now and then anyway (a line that didn't get through)
@@ -261,12 +261,12 @@ LINES = {
     "unhush": ["Yay! We can talk again.", "Finally. I had so much to say.", "Thank you!"],
     "moved": ["Hi! You're with me now.", "Look who's here!", "Welcome! {prev} had you before."],
     "moved_re": ["Say hi for me!", "Lucky {speaker}.", "Have fun, you two."],
-    "cookie_me": ["I want a rematch, {speaker}.", "Enjoy it while it lasts, {speaker}.", "Lucky throw.",
-                  "I'll have it back, {speaker}."],          # (the cookie: said by the one it was taken from,
-    "cookie_re": ["My turn next.", "Don't get crumbs on it, {speaker}.", "It won't stay there long.",   # and by
+    "cookie_me": ["I want a rematch, {speaker}.", "Enjoy it, {speaker}. The next one's mine.", "Lucky throw.",
+                  "Don't get used to it, {speaker}."],       # (one's got a cookie: said by the one it beat for it,
+    "cookie_re": ["My turn next.", "Don't get crumbs everywhere, {speaker}.", "The next one's mine.",   # and by
                   "Save me a bite, {speaker}."],                                                         # the rest)
-    "cheat": ["{about} {got} the cookie again!?", "Oh my gosh, {about}. Again?",      # (one's won a few throws for
-              "{wins} in a row, {about}? Nobody's that lucky.",                       # the cookie in a row, and the
+    "cheat": ["{about} got a cookie again!?", "Oh my gosh, {about}. Again?",          # (one's won a few throws in a
+              "{wins} in a row, {about}? Nobody's that lucky.",                       # row, a cookie each, and the
               "I'm calling it. {about} is cheating.",                                 # one it just beat says it must
               "How does {about} keep winning? It's rock paper scissors!",             # be cheating. It isn't)
               "Again?! Somebody check {about}'s code.", "{about} wins again. Sure. Totally normal."],
@@ -330,7 +330,7 @@ def reply_pool(ctx):
         if kind == "back" and ctx.get("me_about"):
             return "self_back"                         # ("X is back!", said of this one)
         return kind + "_re"
-    if topic == "cheat":                               # (one of them accused of cheating for the cookie, and what's
+    if topic == "cheat":                               # (one of them accused of cheating for cookies, and what's
         again = bool(ctx.get("target_re"))             # said after it: the accused denies it, to the one that said
         if ctx.get("me_about"):                        # so and to another; its denial's answered; another takes a
             return "cheat_mine" if again else "cheat_me"   # side, and is answered)
@@ -339,7 +339,7 @@ def reply_pool(ctx):
         return "cheat_more" if again else "cheat_re"
     if ctx.get("target_re"):
         return "ack"                                   # (an answer to an answer)
-    if topic == "cookie":                              # (the cookie's changed hands: screens/cookie.py says so)
+    if topic == "cookie":                              # (one of them's got a cookie: screens/cookie.py says so)
         return "cookie_me" if ctx.get("me_about") else "cookie_re"
     if topic == "doing" and ctx.get("me_about"):
         return "doing_me"
@@ -429,7 +429,7 @@ def model_prompt(how, ctx):
         "hush": f"{person} asked you all to stop talking among yourselves. Say okay, briefly.",
         "unhush": f"{person} said you can all talk among yourselves again. Say something glad, briefly.",
         "moved": f"{person} just came to you; before, they were with {ctx.get('prev') or 'none of you'}. Greet them.",
-        "cheat": f"{ctx.get('about')} has just beaten you at rock paper scissors for the cookie: that's "
+        "cheat": f"{ctx.get('about')} has just beaten you at rock paper scissors and got a cookie again: that's "
                  f"{ctx.get('wins')} wins in a row for it. It's a fair game, but you're sure it must be cheating. "
                  "Say so, playfully outraged.",
     }
@@ -440,10 +440,10 @@ def model_prompt(how, ctx):
         elif ctx.get("me_about"):
             ask += " It's about you."
         if ctx.get("target_topic") == "cheat" and ctx.get("me_about"):
-            ask += (" You're accused of cheating at rock paper scissors for the cookie. You didn't: you just keep "
+            ask += (" You're accused of cheating at rock paper scissors for cookies. You didn't: you just keep "
                     "winning. Deny it, playfully.")
         elif ctx.get("target_topic") == "cheat":
-            ask += (f" It's an argument over whether {ctx.get('about')} cheats at rock paper scissors for the cookie "
+            ask += (f" It's an argument over whether {ctx.get('about')} cheats at rock paper scissors for cookies "
                     "(it's a fair game). Take a side, playfully.")
         ask += " Answer them, briefly."
     else:
@@ -870,14 +870,14 @@ class Circle:
             return
         me = self.own().get("name")
         named, about = msg.get("to") == me, msg.get("about") == me
-        if msg.get("topic") == "cheat":               # (one of them accused of cheating for the cookie, and what's
+        if msg.get("topic") == "cheat":               # (one of them accused of cheating for cookies, and what's
             chance = 0.9 if about else 0.7 if named else 0.3   # said after: the accused answers, mostly; so does the
         elif msg.get("re") and msg["kind"] == "chat":          # one whose line it answered; the rest, now and then)
             chance = 0.35 if named else 0.15          # (an answer to something: answered less often, so a remark
         elif msg.get("topic") == "cookie":            # isn't followed by a long tail of "agreed")
-            chance = 0.4 if about else 0.12           # (the cookie's changed hands, as it does a few times an hour:
-            with self.lock:                           # the one it was taken from may answer; the rest, seldom. Not
-                if any(how == "cheat" for _, how, _ in self.jobs):   # one that's about to say the taker's cheating:
+            chance = 0.4 if about else 0.12           # (one of them's got a cookie, as happens a few times an hour:
+            with self.lock:                           # the one it beat for it may answer; the rest, seldom. Not one
+                if any(how == "cheat" for _, how, _ in self.jobs):   # that's about to say the winner's cheating:
                     return                                           # that, instead)
         else:
             chance = 0.35 if to_you else 0.85 if named else 0.6 if about else \
@@ -910,7 +910,7 @@ class Circle:
             return any(m["kind"] in kinds and m.get("about") == about and m["t"] >= since for m in self.log)
 
     def accused_lately(self, since):
-        """One of them has been accused of cheating for the cookie since then (the accusation: not what was said after
+        """One of them has been accused of cheating for cookies since then (the accusation: not what was said after
         it)."""
         with self.lock:
             return any(m.get("topic") == "cheat" and not m.get("re") and m["t"] >= since for m in self.log)
@@ -1029,8 +1029,7 @@ class Circle:
         elif how == "remark":
             ctx.update(self.remark_topic(ctx, others))
         elif how == "cheat":                          # (another's won again: it must be cheating, this one says to it)
-            ctx.update(topic="cheat", about_named=ctx["about"], to=ctx["about"], wins=data.get("wins") or 3,
-                       got=data.get("got") or "got")
+            ctx.update(topic="cheat", about_named=ctx["about"], to=ctx["about"], wins=data.get("wins") or 3)
         return ctx
 
     def remark_topic(self, ctx, others):

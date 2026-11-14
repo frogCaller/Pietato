@@ -37,6 +37,10 @@ anything else, and a WAV to POST /coder/say to have it said out loud. Prompts ty
 other way: coder_hooks.py --channel, which Claude Code runs, asks for them at POST /coder/prompts. It
 passes on Claude Code's permission prompts too (POST /coder/ask), and your answers on the Pi go back with
 the prompts. With a password, these send it as a token (Authorization: Bearer ...).
+An agent that answers in words (OpenClaw, Hermes) is connected by agent_link.py (handed out at
+/agent_link.py): run on its computer, it asks for your prompts the same way, hands them to the agent,
+and sends what it answers back (POST /coder/reply) for the Bot at work to show. It also gives the agent
+a skill that works this Pietato through the page's own requests.
 """
 import base64
 import hashlib
@@ -121,6 +125,8 @@ CLIP_MAX = 8 << 20                                      # bytes of a clip to say
 CLIP_TURN = threading.Lock()                            # clips take turns (the next waits, unread)
 HOOK_MAX = 32 << 20                                     # bytes of a hook's report read (a big edit's is big)
 ASK_MAX = 64 << 10                                      # bytes of your agent's request to use a tool
+REPLY_BYTES = 64 << 10                                  # ...and of what it answers to a prompt
+HANDED_OUT = ("/coder_hooks.py", "/agent_link.py")      # the scripts for your agent's computer: nothing private in them
 HOOK_SETTLES = {"PostToolBatch", "PostToolUseFailure", "PermissionDenied", "Stop", "StopFailure", "UserPromptSubmit",
                 "SessionStart", "SessionEnd", "PreCompact"}   # (after these, its requests from before are answered)
 HOOK_READS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "NotebookRead"}   # Claude Code's tools that read
@@ -374,7 +380,7 @@ def check_password():
     if request.path in APP_FILES:                      # (the page as an app on a phone's home screen: its name and
         return None                                    #  icon, nothing private, asked for before any password is)
     pw = settings().get("password")
-    if not pw or request.path == "/coder_hooks.py":    # (that script has nothing private in it)
+    if not pw or request.path in HANDED_OUT:           # (those scripts have nothing private in them)
         return None
     if coder_path():                                   # your agent: the password, as a token
         scheme, _, token = (request.headers.get("Authorization") or "").strip().partition(" ")
@@ -1930,14 +1936,37 @@ def coder_prompts():
     return coder_reply(ask_pi("POST", "/coder/prompts?" + query, b"", timeout=wait + 10))
 
 
+@app.post("/coder/reply")
+def coder_reply_said():
+    """What your agent answered to a prompt you sent from the Pi (agent_link.py passes it on from OpenClaw or
+    Hermes): {"text": its words, "agent": its name, "failed": it couldn't answer}. The Bot at work shows it."""
+    if (request.content_length or 0) > REPLY_BYTES:
+        return jsonify(ok=False, error="too big"), 413
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(ok=False, error="JSON, please"), 400
+    body = {k: data.get(k) for k in ("text", "agent", "failed")}
+    return coder_reply(ask_pi("POST", "/coder/reply", body, timeout=5))
+
+
+def handed_out(name):
+    """A script for your agent's computer (setup.sh puts them next to this one)."""
+    path = os.path.join(HERE, name)
+    if not os.path.isfile(path):
+        return Response(f"{name} isn't here: run sudo bash setup.sh again", 404, content_type="text/plain")
+    return send_file(path, mimetype="text/x-python", as_attachment=True, download_name=name)
+
+
 @app.get("/coder_hooks.py")
 def coder_hooks():
-    """The script that connects Claude Code to the Bot at work, for the computer it runs on (setup.sh
-    puts it next to this one)."""
-    path = os.path.join(HERE, "coder_hooks.py")
-    if not os.path.isfile(path):
-        return Response("coder_hooks.py isn't here: run sudo bash setup.sh again", 404, content_type="text/plain")
-    return send_file(path, mimetype="text/x-python", as_attachment=True, download_name="coder_hooks.py")
+    """The script that connects Claude Code to the Bot at work, for the computer it runs on."""
+    return handed_out("coder_hooks.py")
+
+
+@app.get("/agent_link.py")
+def agent_link():
+    """...and the one that connects OpenClaw or Hermes, both ways."""
+    return handed_out("agent_link.py")
 
 
 # ---- small pictures for the list ------------------------------------------------------

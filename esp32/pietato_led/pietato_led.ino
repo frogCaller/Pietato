@@ -1,9 +1,10 @@
 /*
   Pietato LED: an ESP32's own light, lit by your Pietatos over WiFi.
 
-  It pulses to the music one of them plays, takes the colours of a game, flashes red when you're hit and gold
-  for an achievement. There's nothing to set up on the Pietatos: the board says it's there every couple of
-  seconds, and whichever of them is playing lights it. As many boards as you like can do this at once.
+  It pulses to the music one of them plays (and to its Soundboard's sounds), takes the colours of a game, flashes
+  red when you're hit and gold for an achievement. There's nothing to set up on the Pietatos: the board says it's
+  there every couple of seconds, and whichever of them is playing lights it. As many boards as you like can do this
+  at once.
 
   To put it on a board (an ESP32-S3 dev board, or any ESP32 with an RGB LED):
     1. In the Arduino IDE, pick your board (ESP32S3 Dev Module, say).
@@ -332,6 +333,7 @@ void draw(double now) {
   drawnAt = now;
   float goal[3];
   double tau;
+  bool coming = false;                              // (music's colour: its goal is what a beat brightens)
   const double frameKeep = frameEvery * 3 + 0.5 > KEEP ? frameEvery * 3 + 0.5 : KEEP;
   if (now < showUntil) {                            // (its colour just set, or which one it is asked: shown)
     for (int k = 0; k < 3; k++) goal[k] = ownOn ? own[k] : SHOW_PLAIN[k];
@@ -342,6 +344,7 @@ void draw(double now) {
   } else if (now - musicAt < KEEP) {
     for (int k = 0; k < 3; k++) goal[k] = (ownOn ? own[k] : music[k]) * MUSIC_BASE;
     tau = MUSIC_TAU;
+    coming = true;
   } else if (now - joinedAt < JOINED_SECS) {        // (just on your WiFi: green, so you can tell)
     for (int k = 0; k < 3; k++) goal[k] = JOINED[k];
     tau = SHOW_TAU;
@@ -350,8 +353,12 @@ void draw(double now) {
     tau = IDLE_TAU;
   }
   const float follow = 1.0f - (float)exp(-dt / tau);
-  float out[3];
-  for (int k = 0; k < 3; k++) { shown[k] += (goal[k] - shown[k]) * follow; out[k] = shown[k]; }
+  float out[3], lift[3];                            // (lift: what a beat brightens. Music's colour as it will be
+  for (int k = 0; k < 3; k++) {                     // once it's come in, so a beat that comes with the first of it,
+    shown[k] += (goal[k] - shown[k]) * follow;      // a Soundboard's sound, is as bright as any)
+    out[k] = shown[k];
+    lift[k] = coming && goal[k] > shown[k] ? goal[k] : shown[k];
+  }
   int kept = 0;
   for (int i = 0; i < eventCount; i++) {
     const double age = now - events[i].at;
@@ -361,7 +368,7 @@ void draw(double now) {
     const float s = events[i].strength;
     if (events[i].kind == BEAT) {
       const float p = s * (float)exp(-age / BEAT_TAU);
-      for (int k = 0; k < 3; k++) out[k] = out[k] * (1 + BEAT_GAIN * p) + 60 * p;
+      for (int k = 0; k < 3; k++) out[k] = out[k] + lift[k] * BEAT_GAIN * p + 60 * p;
     } else if (events[i].kind == HIT && age < HIT_SECS) {
       const float r = s * (float)pow(1 - age / HIT_SECS, 2);
       const float red[3] = {255, 0, 0};

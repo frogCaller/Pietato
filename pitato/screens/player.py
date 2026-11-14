@@ -542,7 +542,11 @@ class PlayerScreen:
                 self.toast("No songs in ~/Music to play at start-up", 4)
             return
         random.shuffle(songs)
-        self.play(songs, 0, show=False)
+        self.glow_early = True                         # (at start-up your lights aren't heard yet: screens/glow.py)
+        try:
+            self.play(songs, 0, show=False)
+        finally:
+            self.glow_early = False
         self.queue_random = True
 
     def remember(self, finished=False):

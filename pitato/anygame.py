@@ -21,6 +21,15 @@ When the screen stops dead (text, a level's end, GAME OVER, the game paused) it 
 nowhere for a long while (back at a title screen, after a game over) it gets the game going again, from the top.
 A model that presses Start in the middle of the game isn't followed (that would only pause it).
 
+Running and jumping doesn't get through everything: a ledge that wants a crate, a gate with a lever. A platformer
+that's covered no new ground for half a minute, by instinct (the level's scrolled no further than it had, whichever
+way it's been run at), is handed to the decision model, to play a move at a time as it would any other game (told
+so, and the coach too). Its instinct keeps watching how far the level scrolls by: once the model's moves have got it
+past (beyond the ground it had covered, by a third of the screen), it's played by instinct again. If the model's got
+it no further in a couple of dozen moves, or the screen changes altogether (another room, a life lost, a menu), its
+instincts have another go, and so on, each a little sooner. So a game taken for a platformer that's really a puzzle
+is still played, whatever its notes call it.
+
 Any other game is played a move at a time: the decision model's shown the game's picture as it is now and picks the
 next thing to press (a button, a direction for a moment or held a while, a direction with a button, or nothing for a
 moment) and this presses it; the game runs on meanwhile, at its own speed, and nothing's pressed while the model
@@ -30,7 +39,16 @@ and what it did last and what came of each: something new on the screen, nothing
 looked before, as with a jump on the spot), or nothing at all. When its moves have brought nothing new for a while,
 it's stuck: it's told so, and which buttons it hasn't tried there; what it's mostly been doing comes off its list for a
 few picks (or till something new comes of another move); and the coach looks again. A model that can't look at
-pictures is told it can't see the screen, and plays on from the rest."""
+pictures is told it can't see the screen, and plays on from the rest.
+
+What it learns by playing: when it was stuck and has got on (a few moves running that brought something new; a
+platformer handed to the model: past what stopped it), the coach is told what it was doing and which moves got it
+on; when it's been stuck a long while, what it's tried. The coach makes a line of each to remember (pitato/coach.py:
+the notes' Learned: lines), and the decision model's told them with each pick, in this game and the next. A life
+lost, a level done or a new room it can't tell from the screen of any game by itself. So only where it has the
+moves to go with it (the model playing a platformer its instincts handed over) is the coach told that the screen's
+changed altogether, and left to say from its own look which it was. What went wrong (stuck a long while, the screen
+changed) is told twice at most till it's got on again, so that one bad place doesn't fill its notes."""
 import collections
 import threading
 import time
@@ -56,6 +74,14 @@ OFF_FOR = 8                  # picks that what it was mostly doing then is off i
 MOSTLY = 0.5                 # ...when that was at least this share of those moves
 LEFT_ON = 4                  # (moves left on its list, at least)
 TIPS_FOR_PICKS = 500         # characters of your tips the decision model's told (the coach reads them all)
+LEARNED_FOR_PICKS = 400      # ...and of what's been learned by playing (the newest of it)
+GOT_ON = 3                   # moves in a row that brought something new, after it was stuck: it's got on (the coach
+                             # is told how, for a line to remember)
+LONG_STUCK = 3               # stuck this many times over (STUCK_AFTER moves each): the coach is told what it's tried
+LONG_TELLS = 2               # ...this many times at most, till it's got on again (with the times the screen's
+                             # changed altogether as the model played a platformer: what went wrong, not what worked)
+STUCK_KEPT = 2               # ...and that it was stuck is let go of this many times STUCK_AFTER moves on, if it's
+                             # neither got on nor got stuck again by then (it's moving about)
 PUSH = 127                   # a stick pushed all the way (an N64 game's directions)
 CAME = {"new": "something new", "same": "nothing new", "nothing": "nothing changed", None: "not known",
         "passed": "not done (your last moves got nowhere)"}
@@ -134,6 +160,17 @@ WAITS = 2                    # its own presses in a row that brought nothing, ge
 WAIT_MOST = 10.0             # the model's pick (the model can see what's on the screen), this many seconds at most
 A_KIND = {"racing": "a racing", "platformer": "a platform", "fighting": "a fighting", "shooter": "a shooting",
           "sports": "a sports", "puzzle": "a puzzle", "rpg": "an RPG", "adventure": "an adventure", "other": "a"}
+HANDS_OVER = ("platformer",)  # the kinds of action game handed to the decision model when instinct gets nowhere
+HAND_OVER = 30               # ...after this many seconds of covering no new ground (pitato/instincts.py's Platformer
+                             # keeps count of where the level's scrolled to): half that the second time, a third
+HAND_SOONEST = 10            # the third, but never sooner than this
+SCROLLED = 20                # (...a level that has scrolled by as it ran, for this many looks: not a game of one
+                             # screen, where no further is all there is)
+HANDED_MOST = LONG_STUCK * STUCK_AFTER   # moves the decision model has to get it past: then its instincts' turn again
+HANDED = ("Running and jumping by itself got the player nowhere here, so for now it presses one thing at a time, as "
+          "you tell it: say what to do to get past this, a move at a time.")
+HANDED_NOTE = ("Running and jumping by itself got nowhere here: it's yours to play, a move at a time, till you're "
+               "past it.")
 
 
 def button_key(label):
@@ -307,6 +344,17 @@ class AnyGame:
         self.asked_at = 0.0                              # (when it was last asked)
         self.silent = False                              # it isn't answering
         self.moving = False                              # its last pick was a move (a button, a menu's cursor)
+        self.thinking = False                            # an action game its instincts got nowhere in: the model's,
+        self.hand_overs = 0                              # a move at a time, till it's past (and how often so far)
+        self.handed = None                               # ...{"secs": how long its instincts got nowhere, "moves":
+                                                         # the model's since}
+        self.remake = False                              # (its instinct's to be made again, once it has the game)
+        self.new_run = 0                                 # its moves in a row that brought something new
+        self.episode = None                              # stuck, and not got on yet: {"n": its moves with nothing
+                                                         # new, "mostly": what they mostly were, "since": moves
+                                                         # since it was last stuck, "told": the coach knows it's been
+                                                         # a long while}
+        self.long_tells = 0                              # times the coach's been told that, since it last got on
 
     def new_decider(self):
         """The decision model, asked on a thread of its own (io's own way of asking, if it has one: a try-out's)."""
@@ -321,10 +369,15 @@ class AnyGame:
                     if self.kind != "other" else "What kind of game it is isn't known yet: played a move at a time")
         while True:
             self.know()
-            if self.kind in LIVE:
+            if self.by_instinct:
                 self.live()
             else:
                 self.turn()
+
+    @property
+    def by_instinct(self):
+        """It's played by instinct now: an action game, and not one handed to the decision model for the moment."""
+        return self.kind in LIVE and not self.thinking
 
     def know(self):
         """What's known of the game now: the coach's word on it (or your notes'), over the guess from its name. A
@@ -343,10 +396,14 @@ class AnyGame:
                               + ("played by instinct" if self.kind in LIVE else "played a move at a time"))
             self.io.let_go()
             self.mode = "menu"
+            self.thinking, self.handed, self.episode, self.new_run = False, None, None, 0
             self.presser.live = self.kind in LIVE
             if self.decider is not None:
                 self.decider.forget()
-        self.instinct = None                             # (made again: what its buttons do may be known now)
+        if self.thinking:                                # (its instinct's watching how far the model gets it: made
+            self.remake = True                           # again once it has the game back)
+        else:
+            self.instinct, self.remake = None, False     # (made again: what its buttons do may be known now)
 
     @property
     def going(self):
@@ -365,7 +422,7 @@ class AnyGame:
         pr = self.presser
         if pr.pressed and pr.last_press >= self.asked_at:
             return True
-        if pr.going and self.kind not in LIVE:
+        if pr.going and not self.by_instinct:
             return False
         return now - self.asked_at > LATE and (pr.last_new or 0.0) > self.asked_at + 0.5
 
@@ -380,7 +437,7 @@ class AnyGame:
     def heeds(self, key):
         """Whether the model's move is made: yes, unless its last few have brought nothing new while the game's
         getting going (they're in the way of what does: then only one in a few, to see if it's finding its feet)."""
-        if key == "wait" or self.unheeded < UNHEEDED or self.presser.going and self.kind not in LIVE:
+        if key == "wait" or self.unheeded < UNHEEDED or self.presser.going and not self.by_instinct:
             return True
         self.passed += 1
         return self.passed % PASSED == 0
@@ -388,7 +445,9 @@ class AnyGame:
     def press_on(self, look, now):
         """Its own presses, getting the game going and on when it waits (pitato/instincts.py's PressOn): done, if
         there's one to make now (True)."""
-        if self.presser.going and self.kind not in LIVE:     # (a game played a move at a time, going: only when the
+        if self.thinking:                                    # (handed to the decision model, for so many moves:
+            helpless = False                                 # nothing's pressed for it meanwhile)
+        elif self.presser.going and not self.by_instinct:    # (a game played a move at a time, going: only when the
             helpless = self.silent or self.unheeded >= UNHEEDED   # model's not answering, or getting nowhere)
         else:
             helpless = not self.leads(now) and not self.waits(now)
@@ -410,6 +469,8 @@ class AnyGame:
             self.decider = self.new_decider()
         look = self.io.look()
         now = self.now()
+        if self.thinking and self.watched(look, now):
+            return                                       # (the screen's changed altogether: its instincts' again)
         if self.press_on(look, now):
             return
         got = self.decider.take()
@@ -420,6 +481,8 @@ class AnyGame:
                     self.io.log(event="The decision model isn't answering: it presses on through what it can by "
                                       "itself, and asks again")
                 self.silent, self.mode = True, "auto"
+                if self.thinking:                        # (handed it by its instincts: back to them, then)
+                    return self.hand_back("The decision model isn't answering")
                 self.io.status("Waiting for your bot's computer to answer")
                 self.ask_at = now + MISSED_WAIT
             elif key in self.moves:
@@ -433,6 +496,8 @@ class AnyGame:
                     self.recent.append({"move": self.moves[key][0].split(" (")[0], "key": key, "came": "passed"})
         if self.decider.idle() and now >= self.ask_at:
             self.came(look)
+            if self.by_instinct:                         # (it's got on, or the model's got nowhere either: its
+                return                                   # instincts have it again)
             if self.coach is not None:
                 self.coach.see(look, self.story())
             choices = self.choices
@@ -442,7 +507,8 @@ class AnyGame:
                              quiet=self.silent)
             self.ask_at = self.asked_at = now
         pr = self.presser                                # (looked at less often once it's going: it's the model's
-        self.io.wait(TICK if not pr.going or pr.watch is not None or pr.pending else SLOW_TICK)   # to play)
+        often = self.thinking or not pr.going or pr.watch is not None or pr.pending   # to play; but not a game its
+        self.io.wait(TICK if often else SLOW_TICK)       # instinct's watching scroll by)
 
     def not_made(self, key, why="came for a screen that's gone"):
         """The model's move, not made (it came too late for the screen it was picked for): said in the log."""
@@ -490,6 +556,8 @@ class AnyGame:
             return                                   # (a move made: what came of it's seen next time)
         if look is not None and now >= self.check_at:
             self.check(look, now)
+            if self.thinking:                            # (handed to the decision model: a move at a time, next)
+                return
         if now >= self.ask_at and self.decider.idle():
             plays = self.plays()
             fallback = next((k for k in plays if PLAY_WAY.get(k, self.instinct.way) == self.instinct.way), "wait") \
@@ -586,6 +654,12 @@ class AnyGame:
                 got = new and last.get("still", True)     # while the screen was waiting can be said to have)
                 self.unheeded = 0 if got else self.unheeded + 1
         self.stale_checks = 0 if new else self.stale_checks + 1
+        if self.hands_over(now):
+            self.hand_over(now)
+            if self.coach is not None:
+                self.coach.see(look, self.story())
+                self.coach.nudge()
+            return
         if self.stale_checks and self.stale_checks % LIVE_STUCK == 0:
             self.io.log(event=f"Stuck: {self.stale_checks} seconds with nothing new")
             self.instinct.stuck(now)
@@ -595,6 +669,129 @@ class AnyGame:
                 self.coach.nudge()
         if self.coach is not None:
             self.coach.see(look, self.story())
+
+    def hands_over(self, now):
+        """Whether its instincts hand the game to the decision model now: a platformer that's scrolled by as it ran
+        (not a game of one screen) and has covered no new ground for HAND_OVER seconds (sooner each time after the
+        first), the game going and the model answering."""
+        far_at = getattr(self.instinct, "far_at", None)
+        after = max(HAND_SOONEST, HAND_OVER // (1 + self.hand_overs))
+        return (self.kind in HANDS_OVER and far_at is not None and now - far_at >= after and self.presser.going
+                and not self.silent and getattr(self.instinct, "scrolled", 0) >= SCROLLED)
+
+    def hand_over(self, now):
+        """By instinct it's got nowhere here: the decision model plays it a move at a time, as it would a game of
+        another kind, till it's past what stopped it (handed_came), or isn't after HANDED_MOST moves, or the
+        screen's changed altogether (watched). Its instinct watches how far the level scrolls by meanwhile."""
+        secs = int(round(now - self.instinct.far_at))
+        self.thinking, self.hand_overs = True, self.hand_overs + 1
+        self.io.log(event=f"By instinct it's got nowhere for {secs} seconds: the decision model plays it a move at "
+                          "a time from here, till it's past")
+        self.io.let_go()
+        self.instinct.hand()
+        self.mode, self.presser.live = "menu", False
+        if self.decider is not None:
+            self.decider.forget()
+        self.recent.clear()
+        self.stale, self.off, self.off_left = [], (), 0
+        self.unheeded = self.passed = self.new_run = 0
+        self.before, self.ask_at = None, 0.0
+        self.episode, self.handed = None, {"secs": secs, "moves": []}
+
+    def hand_back(self, why):
+        """...and its instincts have it again."""
+        self.thinking, self.handed, self.episode = False, None, None
+        self.io.log(event=f"{why}: played by instinct again")
+        self.io.let_go()
+        self.mode, self.presser.live = "play", True
+        if self.decider is not None:
+            self.decider.forget()
+        self.recent.clear()
+        self.stale, self.off, self.off_left = [], (), 0
+        self.unheeded = self.passed = self.new_run = 0
+        self.stale_checks, self.last_check = 0, None
+        self.ask_at = self.check_at = 0.0
+        if self.remake:                                  # (what its buttons do was said meanwhile: made again)
+            self.instinct, self.remake = None, False
+        elif self.instinct is not None:
+            self.instinct.unhand()                       # (how far it's got: counted afresh)
+
+    def watched(self, look, now):
+        """A look at a game its instincts handed over: its instinct watches how far the level's scrolled by (and
+        in hold_for, as a move's made). The screen's changed altogether (another room, a life lost, a menu): its
+        instincts have it again (True). Which of those it was can't be told from here, so the coach is told just
+        that, with the moves before it, and makes of its own look what there is to learn."""
+        if look is not None:
+            self.instinct.watch(look, now)
+        if not self.instinct.cut:
+            return False
+        moves = self.moves_said()
+        if moves:
+            self.trouble(f"It was stuck: playing by itself (running and jumping), it got nowhere for "
+                         f"{self.handed['secs']} seconds. Then, as it pressed one thing at a time, the screen "
+                         f"changed altogether: another room, a life lost or a menu (the picture shows which). Its "
+                         f"last moves, oldest first: {moves}.")
+        self.hand_back("The screen's changed altogether")
+        return True
+
+    def moves_said(self):
+        """Its last few moves and what came of each, in words (oldest first)."""
+        return "; ".join(f"{m['move']}: {CAME[m['came']]}" for m in list(self.recent)[-(GOT_ON + 3):])
+
+    def trouble(self, words):
+        """Something for the coach to learn from that isn't getting on (stuck a long while; the screen changed
+        altogether under the model's moves): told LONG_TELLS times at most, till it's got on again, so that what
+        went wrong in one place doesn't fill its notes."""
+        self.long_tells += 1
+        if self.long_tells <= LONG_TELLS:
+            self.tell(words)
+
+    def handed_came(self, last):
+        """What's come of a move in a game its instincts handed over: past what stopped them (the level's scrolled
+        by further than it ever had: got_on), or not after HANDED_MOST moves (the coach is told what's been tried,
+        and its instincts have another go). True: handed back."""
+        h = self.handed
+        h["moves"].append(last["key"])
+        if self.instinct.past():
+            self.got_on()
+            return True
+        if len(h["moves"]) < HANDED_MOST:
+            return False
+        used = {self.kinds.get(k) for k in h["moves"]}
+        tried = [label for key, label in self.buttons.items() if key in used]
+        untried = [label for key, label in self.buttons.items() if key not in used and label not in PAUSES]
+        self.long_stuck(f"playing by itself (running and jumping) it got nowhere for {h['secs']} seconds, and then "
+                        f"{len(h['moves'])} moves, one at a time, got it no further", tried, untried)
+        self.hand_back(f"The decision model's got it no further either ({len(h['moves'])} moves)")
+        return True
+
+    def tell(self, words):
+        """Something the coach can learn from (pitato/coach.py's tell): in the log too."""
+        self.io.log(event=words)
+        tell = getattr(self.coach, "tell", None)
+        if tell is not None:
+            tell(words)
+
+    def long_stuck(self, how, tried, untried):
+        """It's been stuck a long while: the coach is told what's been tried there, for a line to remember (trouble:
+        a couple of times at most, till it's got on again)."""
+        self.trouble(f"It's been stuck a long while: {how}. "
+                     + (f"Buttons it's pressed there: {', '.join(tried)}. " if tried else "It's pressed no button. ")
+                     + (f"Not yet: {', '.join(untried)}." if untried else "That's all of them."))
+
+    def got_on(self):
+        """It was stuck, and has got on: GOT_ON moves running have brought something new (a game its instincts handed
+        over: it's past what stopped them, and theirs again). The coach is told what it was doing and which moves
+        did it, for a line to remember."""
+        ep, self.episode, self.long_tells = self.episode, None, 0
+        moves = self.moves_said()
+        if self.thinking:
+            self.tell(f"It was stuck: playing by itself (running and jumping), it got nowhere for "
+                      f"{self.handed['secs']} seconds. Then, a move at a time, it got past. Its last moves, oldest "
+                      f"first: {moves}.")
+            return self.hand_back("It's got past")
+        was = f"{ep['n']} of its moves brought nothing new" + (f", mostly {ep['mostly']}" if ep["mostly"] else "")
+        self.tell(f"It was stuck: {was}. Then it got on. Its last moves, oldest first: {moves}.")
 
     def live_says(self):
         _, playing, play = PLAYS[self.kind]
@@ -626,9 +823,20 @@ class AnyGame:
         else:
             last["came"] = "new" if share >= NEW_SHARE else "same"
         self.unheeded = 0 if last["came"] == "new" else self.unheeded + 1
+        if self.thinking and self.handed_came(last):    # (past what stopped its instincts, or no further in a long
+            return                                      # while: theirs again)
+        ep = self.episode
+        if ep is not None:                              # (stuck a while back, and neither got on nor stuck again
+            ep["since"] += 1                            # since: it's moving about. Not stuck any more)
+            if ep["since"] > STUCK_KEPT * STUCK_AFTER:
+                self.episode = None
         if last["came"] == "new":                       # (it's got somewhere: all its moves are back on its list)
             self.stale, self.off, self.off_left = [], (), 0
+            self.new_run += 1
+            if self.episode is not None and self.new_run >= GOT_ON:
+                self.got_on()
             return
+        self.new_run = 0
         self.stale.append(last["key"])
         if len(self.stale) % STUCK_AFTER == 0:
             self.stuck()
@@ -652,6 +860,20 @@ class AnyGame:
                               f"that's off its list for {OFF_FOR} picks")
         else:
             self.io.log(event=f"Stuck: {len(self.stale)} moves with nothing new")
+        ep = self.episode
+        if self.thinking:                                # (a game its instincts handed over: its moves are counted
+            ep = None                                    # there, in handed_came)
+        elif ep is None:
+            ep = self.episode = {"n": 0, "mostly": "", "since": 0, "told": False}
+        if ep is not None:
+            ep["n"], ep["since"] = ep["n"] + STUCK_AFTER, 0
+            ep["mostly"] = self.kind_words(kind) if kind else ep["mostly"]
+            if ep["n"] >= LONG_STUCK * STUCK_AFTER and not ep["told"]:   # (a long while: what it's tried, to
+                ep["told"] = True                                        # remember)
+                used = {self.kinds.get(k) for k in self.stale}
+                self.long_stuck(f"{ep['n']} moves with nothing new" + (f", mostly {ep['mostly']}" if ep["mostly"]
+                                                                       else ""),
+                                [label for key, label in self.buttons.items() if key in used], self.untried())
         if self.coach is not None:
             self.coach.nudge()
 
@@ -679,7 +901,7 @@ class AnyGame:
         """How it's going, for the coach: the last moves and what came of each; and whether it's stuck, doing what
         mostly, what's off its list, and the buttons it hasn't tried there (an action game: for how long, doing
         what)."""
-        if self.kind in LIVE:
+        if self.by_instinct:
             stuck = self.stale_checks >= LIVE_STUCK
             return {"moves": [f"{m['move']}: {CAME[m['came']]}" for m in self.recent], "stale": self.stale_checks,
                     "stuck": stuck, "mostly": "", "off": [], "untried": [],
@@ -688,7 +910,7 @@ class AnyGame:
         kind = self.mostly() if len(self.stale) >= STUCK_AFTER else None
         return {"moves": [f"{m['move']}: {CAME[m['came']]}" for m in self.recent], "stale": len(self.stale),
                 "stuck": len(self.stale) >= STUCK_AFTER, "mostly": self.kind_words(kind) if kind else "",
-                "off": self.off_words(), "untried": self.untried()}
+                "off": self.off_words(), "untried": self.untried(), "note": HANDED if self.thinking else ""}
 
     def doing(self, words):
         """What it's doing, for the game's menu: the coach's goal, or the move."""
@@ -722,6 +944,10 @@ class AnyGame:
         tips = self.coach.tips if self.coach is not None else ""
         if tips:
             state["tips"] = tips[:TIPS_FOR_PICKS]
+        lessons = getattr(self.coach, "lessons", None)   # (what's been learned by playing it: the coach's notes)
+        learned = lessons(LEARNED_FOR_PICKS) if lessons is not None else []
+        if learned:
+            state["learned by playing it before"] = learned
         done = [f"{m['move']}: {CAME[m['came']]}" for m in self.recent]
         if done:
             state["you did last, oldest first"] = done
@@ -735,9 +961,11 @@ class AnyGame:
         elif len(self.stale) >= STUCK_AFTER:
             notes.append(f"Your last {len(self.stale)} moves got you nowhere (nothing new on the screen): do "
                          "something different.")
-        if self.kind in LIVE and self.stale_checks >= LIVE_STUCK:
+        if self.by_instinct and self.stale_checks >= LIVE_STUCK:
             notes.append(f"Nothing new on the screen for {self.stale_checks} seconds: try something else (the other "
                          "way, or a button).")
+        if self.thinking:
+            notes.append(HANDED_NOTE)
         if self.off_left > 0:
             notes.append("Off your list for now, as they got you nowhere: " + ", ".join(self.off_words()) + ".")
         untried = self.untried()
@@ -758,8 +986,23 @@ class AnyGame:
                     self.io.hold(b)
                 for axis, value in sticks:
                     self.io.stick(axis, value)
-                self.io.wait(secs)
+                push = dict(sticks).get("lx", 0)
+                self.hold_for(secs, "right" if "right" in buttons or push > 0 else
+                              "left" if "left" in buttons or push < 0 else None)
             finally:
                 self.io.let_go()
         else:
-            self.io.wait(how[1])
+            self.hold_for(how[1])
+
+    def hold_for(self, secs, way=None):
+        """So many seconds pass, what's held kept held (way: the direction that is, if one). In a game its instincts
+        handed over, the instinct watches meanwhile how far the level scrolls by (a look every TICK, as when it
+        plays): that's how it's known the model's got it past."""
+        if not self.thinking:
+            return self.io.wait(secs)
+        end = self.now() + secs
+        while end - self.now() > 1e-6:
+            self.io.wait(min(TICK, end - self.now()))
+            look = self.io.look()
+            if look is not None:
+                self.instinct.watch(look, self.now(), way)

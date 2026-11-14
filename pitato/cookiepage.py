@@ -1,8 +1,9 @@
-"""Apps > The Cookie, on the screen: the cookie at the top (or the plate it's gone from), a line on where it is or
-what's just happened, and a row for each of your Pietatos: its name, its Bot's last few throws (so you can learn its
-habit), and the cookie beside the one that has it. Nothing on it moves: it's drawn again when something changes, and
-once a second while a countdown runs. (cookie.py: the rules. screens/cookie.py: its buttons, and what media mode does
-for it. cookie_mark here: the small cookie on the status bar and the home screen of the one that has it.)"""
+"""Apps > The Cookie, on the screen: a cookie at the top on the one that got the last (an empty plate on the others),
+a line on who got it or what's just happened, and a row for each of your Pietatos: its name, its Bot's last few
+throws (so you can learn its habit), and a cookie beside the one that got the last. Nothing on it moves: it's drawn
+again when something changes, and once a second while a countdown runs. (cookie.py: the rules. screens/cookie.py: its
+buttons, and what media mode does for it. cookie_mark here: the small cookie on the status bar and the home screen of
+the one that got the last.)"""
 from .cookie import COOKIE_KEPT
 from .fine import detail, made_fine
 from .sims import rps_span, rps_sprite, Sim
@@ -33,7 +34,7 @@ def cookie_mark(d, cx, cy, r):
 
 def cookie_picture(r, s=1, plate=None):
     """A cookie this big (its half, px), for a picture drawn s times as finely: drawn four times bigger and made
-    smaller, for round edges. plate: the plate it's gone from instead, a ring in that colour with a few crumbs."""
+    smaller, for round edges. plate: an empty plate instead, a ring in that colour with a few crumbs on it."""
     from PIL import Image, ImageDraw
     K = 4
     half = (r + 2) * s
@@ -46,7 +47,7 @@ def cookie_picture(r, s=1, plate=None):
         d.ellipse((c + px * R - rad * R, c + py * R - rad * R, c + px * R + rad * R, c + py * R + rad * R), fill=fill)
     if plate is not None:
         d.ellipse((c - R, c - R, c + R, c + R), outline=plate + (255,), width=max(1, round(R * 0.07)))
-        for px, py, rad in COOKIE_SPOTS[1::2]:         # (crumbs, where it was)
+        for px, py, rad in COOKIE_SPOTS[1::2]:         # (crumbs)
             disc(px * 0.55, py * 0.55, rad * 0.32, plate + (255,))
     else:
         disc(0, 0, 1.0, COOKIE_EDGE + (255,))
@@ -59,7 +60,7 @@ def cookie_picture(r, s=1, plate=None):
 
 class CookiePage(Sim):
     key = "cookie"
-    blurb = "One cookie between your Pietatos. Beat the one that has it at rock paper scissors and it's yours."
+    blurb = "Your Pietatos play each other at rock paper scissors. A win gets a cookie."
     poke_label = None
     options = ()
     bare = True                         # on the page itself: no box, and nothing beside it
@@ -68,10 +69,9 @@ class CookiePage(Sim):
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
         self.head = ("", "")            # its top: a line, and a smaller one under it
-        self.here = False               # the cookie's here (drawn at the top; else the plate it's gone from)
-        self.moves = 0                  # how many times it's changed hands
+        self.here = False               # this one got the last cookie (drawn at the top; else an empty plate)
         self.rows = []                  # your Pietatos: (name, a word on it, its colour or None, its Bot's last
-                                        #  throws, it has the cookie, it's on)
+                                        #  throws, it got the last cookie, it's on)
         self.until = None               # seconds till its top next changes by itself (a countdown): asked each frame
         self.own_hints = []             # its buttons
         self.fonts = {}
@@ -114,7 +114,7 @@ class CookiePage(Sim):
         return text.rstrip() + "…"
 
     def picture(self, what, r, s, colour=None):
-        """A picture kept: the cookie ("cookie"), its plate ("plate", in colour), or a throw ("r", "p", "s")."""
+        """A picture kept: a cookie ("cookie"), an empty plate ("plate", in colour), or a throw ("r", "p", "s")."""
         key = (what, r, s, colour)
         pic = self.pics.get(key)
         if pic is None:
@@ -138,21 +138,15 @@ class CookiePage(Sim):
         d = ImageDraw.Draw(img)
         s = detail(img)
         W, E = self.w, COOKIE_SIDE
-        # the top: the cookie, a line on it and a smaller one, how many times it's changed hands
+        # the top: a cookie (or an empty plate), a line and a smaller one
         r = 27
         cx, cy = x0 + E + r + 4, y0 + COOKIE_TOP // 2 + 2
         self.put(img, self.picture("cookie", r, s) if self.here else self.picture("plate", r, s, LINE), cx, cy)
         tx, right = cx + r + 16, x0 + W - E
         head, sub = self.head
-        f_head, f_sub, f_small = self.font(20, True), self.font(14), self.font(13)
-        moved = "" if self.moves < 1 else "Changed hands once" if self.moves == 1 else \
-            f"Changed hands {self.moves} times"
-        if moved and f_head.getlength(head) > right - tx - f_small.getlength(moved) - 18:
-            moved = ""                                 # (no room for it beside a long line)
+        f_head, f_sub = self.font(20, True), self.font(14)
         d.text((tx, cy - 12), self.fit(head, f_head, right - tx), font=f_head, fill=TEXT, anchor="lm")
         d.text((tx, cy + 13), self.fit(sub, f_sub, right - tx), font=f_sub, fill=BODY, anchor="lm")
-        if moved:
-            d.text((right, cy - 12), moved, font=f_small, fill=MUTED, anchor="rm")
         # your Pietatos, a row each
         rows = list(self.rows)
         more = len(rows) - COOKIE_ROWS + 1 if len(rows) > COOKIE_ROWS else 0

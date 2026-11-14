@@ -1,4 +1,5 @@
-"""The Bot at work: your coding agent acted out, prompts sent to it, and its requests to use a tool answered."""
+"""The Bot at work: your coding agent acted out, prompts sent to it, its requests to use a tool answered, and what
+it answers shown (an agent that says: OpenClaw or Hermes, through agent_link.py)."""
 import socket
 import time
 
@@ -10,7 +11,7 @@ from ..library import VOLUME_STEP
 from ..coder import (
     ASK_ABOUT_MAX, ASK_ID, ASK_PREVIEW_MAX, ask_text, ASK_TOOL_MAX, CO_DIRTY, co_span, CO_TOP, CODER_BUSY,
     CODER_CHANNEL, coder_desk, coder_draw, coder_extras, CODER_POSES, CODER_SAY_AS, CODER_TITLES, coder_under,
-    coder_wav, PROMPT_MAX)
+    coder_wav, PROMPT_MAX, REPLY_AGENT_MAX, reply_lines, REPLY_MAX, REPLY_STEP, reply_text)
 
 
 class CoderScreen:
@@ -61,12 +62,17 @@ class CoderScreen:
 
     def coder_hints(self, s):
         if self.coder_help:
-            return [("B", "Close")]
+            return [("◀▶", "Claude Code" if self.coder_help_page else "OpenClaw, Hermes"), ("B", "Close")]
         if self.coder_ask_shown() is not None:
             return [("A", "Allow"), ("B", "Deny"), ("X", "Later")]
+        reply = self.coder_reply_shown()
+        if reply is not None:
+            self.coder_reply_box(reply)                # (whether there's more of it than fits)
+            more = [("▲▼", "More")] if reply["most"] else []
+            return more + [("A", "Prompt"), ("X", "Stop" if self.coder_reply_aloud else "Read it"), ("B", "Close")]
         y = ("Y", "OK") if s["anim"] in ("attention", "error") else ("Y", "Ring")
-        return [("◀▶", "Chat"), ("A", "Prompt"), y, ("X", "Sound", self.setting("coder_sound") != "Off"),
-                ("START", "Connect")]
+        last = ("SELECT", "Answer") if self.coder_reply else ("START", "Connect")   # (its last answer, closed)
+        return [("◀▶", "Chat"), ("A", "Prompt"), y, ("X", "Sound", self.setting("coder_sound") != "Off"), last]
 
     def prompt_open(self):
         """A on the Bot at work: a prompt for your coding agent (the one you left, if you backed out), once
@@ -94,6 +100,7 @@ class CoderScreen:
         else:
             self.prompts.put(text)
             self.prompt_draft = ""
+            self.coder_reply_close()                   # (its answer to the one before: read)
             self.toast("Sending your prompt", 3)
 
     def prompt_taken(self, prompt):
@@ -127,6 +134,9 @@ class CoderScreen:
         if self.coder_help:
             if name in ("l", "r"):
                 return "pass"
+            if name in ("left", "right") and not repeat:   # (its other card: Claude Code's, or OpenClaw's and Hermes's)
+                self.coder_help_page = 1 - self.coder_help_page
+                self.dirty = True
             if name in ("a", "b", "start") and not repeat:
                 self.coder_help = False
                 self.dirty = True
@@ -136,6 +146,10 @@ class CoderScreen:
             if not repeat:
                 self.coder_answer(ask, name)
             return None
+        reply = self.coder_reply_shown() if ask is None else None    # (your agent's answer, on the screen: up and
+        if reply is not None and (name in ("x", "b", "select")       # down go through a long one, and are the
+                                  or name in ("up", "down") and reply["most"]):   # volume's as ever over a short)
+            return self.press_coder_reply(reply, name, repeat)
         if name in ("up", "down"):
             self.set_volume(VOLUME_STEP if name == "up" else -VOLUME_STEP)
             self.toast(f"Volume {self.volume}", 2)
@@ -152,10 +166,112 @@ class CoderScreen:
             self.toast("Its sounds are on" if on else "Its sounds are off", 2)
         elif name == "start":
             self.coder_help, self.coder_where = True, None
+        elif name == "select" and self.coder_reply:    # (its last answer, again)
+            self.coder_reply["open"] = True
         else:
             return "pass"
         self.dirty = True
         return None
+
+    # -- what your agent answers (agent_link.py sends it on from OpenClaw or Hermes) ---------------------------------
+    def coder_reply_shown(self):
+        """Your agent's answer, when its card is up (not under the card on connecting an agent); or None."""
+        reply = self.coder_reply
+        return reply if reply and reply["open"] and not self.coder_help else None
+
+    def coder_reply_close(self):
+        """Its answer's card, closed (SELECT shows it again), and its reading out loud stopped."""
+        if self.coder_reply_aloud and self.voice.speaking:
+            self.voice.stop()
+        self.coder_reply_aloud = False
+        if self.coder_reply and self.coder_reply["open"]:
+            self.coder_reply["open"] = False
+            self.dirty = True
+
+    def press_coder_reply(self, reply, name, repeat):
+        """Your agent's answer on the screen: up and down go through one that's longer than its card, X reads it out
+        loud in your Bot's voice (or stops), B closes it (SELECT shows it again). A types the next prompt, as ever."""
+        if name in ("up", "down"):
+            top = max(0, min(reply["most"], reply["top"] + (-REPLY_STEP if name == "up" else REPLY_STEP)))
+            if top != reply["top"]:
+                reply["top"] = top
+                self.dirty = True
+            return None
+        if repeat:
+            return None
+        if name == "x":
+            if self.coder_reply_aloud and self.voice.speaking:
+                self.voice.stop()
+                self.coder_reply_aloud = False
+            else:
+                ok, why = self.say_aloud(reply["text"])
+                self.coder_reply_aloud = bool(ok)
+                if not ok:
+                    self.toast(why, 3)
+        else:
+            self.coder_reply_close()
+        self.dirty = True
+        return None
+
+    def web_coder_reply(self, cmd):
+        """POST /coder/reply: what your agent answered to a prompt you sent (agent_link.py passes it on from OpenClaw
+        or Hermes). Its card goes up on the Bot at work; elsewhere, a word that it's there. (The control server's
+        thread.)"""
+        text = cmd.get("text")
+        if not isinstance(text, str) or not reply_text(text):
+            return {"ok": False, "error": "text is what it answered"}
+        agent = cmd.get("agent")
+        self.coder_reply_n += 1
+        self.coder_reply = {"n": self.coder_reply_n, "text": reply_text(text, REPLY_MAX),
+                            "agent": ask_text(agent, REPLY_AGENT_MAX) if isinstance(agent, str) else "",
+                            "failed": cmd.get("failed") is True, "open": True, "top": 0, "most": 0, "lines": None,
+                            "covers": False}
+        self.coder_reply_aloud = False
+        if self.active and not self.on_coder_page() and not self.proc_owns_screen():
+            self.toast("Your agent couldn't answer: see the Bot at work" if self.coder_reply["failed"] else
+                       "Your agent has answered: it's on the Bot at work", 4)
+        self.dirty = True
+        return {"ok": True}
+
+    def coder_reply_box(self, reply):
+        """Where your agent's answer goes: a card along the bottom, as tall as its words need, up to the whole page
+        (its words made lines no wider than it; how far down they can be gone through). (top, bottom, lines shown.)
+        A card that tall is over the Bot: reply["covers"], and nothing moves under it."""
+        F, W, H = self.fonts, self.fb.w, self.fb.h
+        inner = W - 48 - 48
+        if not reply["lines"] or reply["lines"][0] != inner:
+            from PIL import Image, ImageDraw
+            d = ImageDraw.Draw(Image.new("L", (1, 1)))
+            reply["lines"] = (inner, reply_lines(reply["text"], lambda s: d.textlength(s, font=F["small"]), inner))
+        lines = reply["lines"][1]
+        y1 = H - (0 if self.full_app() else self.FOOTER) - 10
+        most = max(1, int((y1 - (self.HEADER + 6) - 64) // 24))
+        rows = min(most, len(lines))
+        reply["most"] = max(0, len(lines) - rows)
+        reply["top"] = min(reply["top"], reply["most"])
+        y0 = self.HEADER + 6 if rows == most else y1 - (64 + 24 * rows)   # (all the page: from its top)
+        reply["covers"] = y0 < self.HEADER + 110       # (its face would be under it)
+        return y0, y1, rows
+
+    def coder_reply_card(self, img, reply):
+        """Your agent's answer, over its desk: whose it is, and as much of it as fits (up and down: the rest)."""
+        from ..fine import ImageDraw
+        F, W = self.fonts, self.fb.w
+        d = ImageDraw.Draw(img)
+        y0, y1, rows = self.coder_reply_box(reply)
+        x0, x1 = 24, W - 24
+        lines, top = reply["lines"][1], reply["top"]
+        d.rounded_rectangle((x0, y0, x1, y1), radius=16, fill=ROW, outline=LINE)
+        x, y = x0 + 24, y0 + 28
+        title = "It couldn't answer" if reply["failed"] else f"{reply['agent'] or 'Your agent'} says"
+        d.text((x, y), self.fit(d, title, F["head"], x1 - x0 - 48 - 110), font=F["head"], fill=TEXT, anchor="lm")
+        if reply["most"]:                               # (where you are in it)
+            d.text((x1 - 24, y + 1), f"{top + 1}-{min(len(lines), top + rows)} of {len(lines)}", font=F["small"],
+                   fill=MUTED, anchor="rm")
+        y += 32
+        for line in lines[top:top + rows]:
+            d.text((x, y), line, font=F["small"], fill=BODY, anchor="lm")
+            y += 24
 
     # -- your agent asks to use a tool (Claude Code's permission prompt, through the channel) ---------------------
     def coder_ask_shown(self):
@@ -237,8 +353,11 @@ class CoderScreen:
             self.coder_where = self.coder_addresses()
         by_name, by_number, locked = self.coder_where
         host = by_name.split("//")[1].rsplit(":", 1)[0]
-        setup = [f"curl -O {by_name}/coder_hooks.py", f"python3 coder_hooks.py {host}"]
-        start = [f"claude --dangerously-load-development-channels server:{CODER_CHANNEL}"]
+        other = bool(self.coder_help_page)             # (OpenClaw or Hermes: agent_link.py does it all)
+        setup = [f"curl -O {by_name}/agent_link.py", f"python3 agent_link.py {host}"] if other else \
+            [f"curl -O {by_name}/coder_hooks.py", f"python3 coder_hooks.py {host}"]
+        start = ["python3 agent_link.py listen"] if other else \
+            [f"claude --dangerously-load-development-channels server:{CODER_CHANNEL}"]
         notes = []
         if by_number:
             notes.append(f"(or use {by_number.split('//')[1].rsplit(':', 1)[0]} for {host})")
@@ -249,7 +368,8 @@ class CoderScreen:
         y0 = max(self.HEADER + 6, (self.HEADER + CO_TOP + max(0, self.fb.h - 480)) / 2 - h / 2)
         d.rounded_rectangle((x0, y0, x1, y0 + h), radius=16, fill=ROW)
         x, y = x0 + 24, y0 + 28
-        d.text((x, y), "Connect Claude Code", font=F["head"], fill=TEXT, anchor="lm")
+        d.text((x, y), "Connect OpenClaw or Hermes" if other else "Connect Claude Code", font=F["head"], fill=TEXT,
+               anchor="lm")
         y += 32
         cmds = setup + start
         font = F["mono_s"] if max(d.textlength(c, font=F["mono_s"]) for c in cmds) <= x1 - x0 - 56 else F["co_mono_xs"]
@@ -266,9 +386,11 @@ class CoderScreen:
             d.text((x + 4, y), note, font=F["small"], fill=MUTED, anchor="lm")
             y += 24
         y += 10
-        d.text((x, y), "For prompts from here (A), start Claude Code with:", font=F["small"], fill=BODY, anchor="lm")
+        d.text((x, y), "For prompts from here (A), keep this running there:" if other else
+               "For prompts from here (A), start Claude Code with:", font=F["small"], fill=BODY, anchor="lm")
         y = block(start, y + 30) + 2
-        d.text((x, y), "Other agents and scripts: POST to /coder?pose=typing", font=F["small"], fill=MUTED, anchor="lm")
+        d.text((x, y), "Your agent can work this Pietato too: ask it to play something" if other else
+               "Other agents and scripts: POST to /coder?pose=typing", font=F["small"], fill=MUTED, anchor="lm")
 
     def render_coder(self):
         F = self.fonts
@@ -279,8 +401,10 @@ class CoderScreen:
         hints = self.coder_hints(s)
         quiet = self.setting("coder_sound") == "Off"
         ask = None if self.coder_help else self.coder_ask_shown()
+        reply = self.coder_reply_shown() if ask is None else None
         key = (self.status_sig, self.msg, ACCENT, title, sub, tuple(hints), quiet, self.coder_help, self.tab_off,
-               fb.w, self.full_app(), ask and ask["id"])
+               fb.w, self.full_app(), ask and ask["id"], self.coder_help and self.coder_help_page,
+               reply and (reply["n"], reply["top"]))
         ox = max(0, (fb.w - 640) // 2)                # a wide screen: the coder in the middle, the desk all along
         oy = max(0, fb.h - 480)                       # ...a taller one: the room above it
         if key != self.coder_base[0]:                 # what doesn't move: drawn when it changes
@@ -305,15 +429,18 @@ class CoderScreen:
         if self.coder_help:                            # (the card, over an empty desk)
             self.coder_card(img)
         else:
-            p = self.coder.pose(now, s)
-            stage = img.crop((ox, oy, ox + 640, oy + 480)) if ox or oy else img
-            coder_draw(stage, p, ACCENT, now, under=self.coder_base[2])
-            coder_extras(stage, p, now, ACCENT, {"code": F["co_code"], "mark": F["big"],
-                                                 "z": (F["co_z1"], F["co_z2"], F["co_z3"])})
-            if ox or oy:
-                img.paste(stage, (ox, oy))
+            if reply is None or not reply["covers"]:   # (a long answer is over all of it: an empty desk under that)
+                p = self.coder.pose(now, s)
+                stage = img.crop((ox, oy, ox + 640, oy + 480)) if ox or oy else img
+                coder_draw(stage, p, ACCENT, now, under=self.coder_base[2])
+                coder_extras(stage, p, now, ACCENT, {"code": F["co_code"], "mark": F["big"],
+                                                     "z": (F["co_z1"], F["co_z2"], F["co_z3"])})
+                if ox or oy:
+                    img.paste(stage, (ox, oy))
             if ask is not None:                        # (its request, over it all)
                 self.coder_ask_card(img, ask)
+            elif reply is not None:                    # (...or what it answered)
+                self.coder_reply_card(img, reply)
         last_key, last_count, last_t, whole_t = self.coder_shown
         if (key != last_key or getattr(fb, "frames", None) != last_count or now - last_t > 0.5
                 or now - whole_t > 3 or not hasattr(fb, "show_part")):

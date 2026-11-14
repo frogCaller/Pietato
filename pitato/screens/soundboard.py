@@ -3,7 +3,8 @@ them). Its player's a process of its own, as you, started with the page and gone
 up, your Soundboard folder and the banks' file are looked at every second, so a new sound is on its button without
 anything being started again (and at once when the web page says it changed something); the sound goes where
 Settings > Sound says, as it changes; and whether there's a microphone is known, so Record a sound is on START's card
-only when there's one to record with.
+only when there's one to record with. Your LEDs (Apps > LED backlight, an ESP32 board: screens/glow.py) are lit by its
+sounds as they are by music: a pulse in the button's colour as each is heard, and that colour while it plays.
 
 Its buttons: the d-pad's four, A, B, X and Y play what's on them; L and R go through the banks; SELECT stops
 everything; START has its card (the bank, the volume, Record a sound), where A or START goes on and B goes back to
@@ -20,6 +21,7 @@ import time
 from .. import soundbank as B
 from ..asyou import as_you, nice_now
 from ..config import home_dir, read_own_text, settings_file, write_setting
+from ..glow import colour_of
 from ..library import LIBRARY, VOLUME_STEP
 from ..listen import mics
 from ..screen import aplay_device, sound_place
@@ -34,7 +36,15 @@ BOARD_ROUTE = 2.0                # ...at where the sound goes, and whether there
 BOARD_AGAIN = (1.0, 5)           # a player that stops is started again after this long, this many times running
 BOARD_QUIET = 2.0                # seconds the sound card's let go of for something else that starts playing
 BOARD_BEHIND = 256 << 10         # bytes waiting for a player that isn't taking them, before it's stopped (and started again)
+BOARD_HEARD = (0.004, 0.032)     # seconds from a button to its sound being heard: a little (its player's next
+                                 # chunk), and the sound card's buffer (this, till its player's said how long it is)
+BOARD_HUE = 0.5                  # seconds between its colour, said to your LEDs while a sound plays
+BOARD_HUE_ON = 0.3               # ...and this long after a button at least (its player says it's playing a moment on)
 PAD_SAY = {"up": "Up", "down": "Down", "left": "Left", "right": "Right", "x": "X", "y": "Y", "a": "A", "b": "B"}
+PAD_LIGHT = {"up": "Blue", "left": "Teal", "right": "Green", "down": "Purple", "x": "Pink", "y": "Yellow", "a": "Red",
+             "b": "White"}       # each button's colour on your LEDs (glow.py's COLOURS): its own on the page
+                                 # (soundboard.py's PAD_COLOUR), as an LED shows it
+PAD_LIGHT_NONE = "Warm white"    # ...and a sound that's on no button of the bank that's up
 
 
 class Board:
@@ -61,6 +71,8 @@ class Board:
         self.rest_till = 0.0
         self.start_at, self.stops = 0.0, 0
         self.gave_up = False
+        self.buffer = None             # the sound card's buffer, as its player has it (seconds)
+        self.hue = None                # your LEDs lit by its sounds: [their colour, when it was last said, since when]
 
     def bank(self):
         return self.banks[self.at] if 0 <= self.at < len(self.banks) else None
@@ -121,6 +133,7 @@ class SoundboardScreen:
         b.device = b.volume = b.loaded = None
         b.ready, b.bad, b.playing = {}, {}, frozenset()
         b.sound_ok, b.sound_why, b.rested = None, "", False
+        b.buffer = b.hue = None
         proc.started = now
         threading.Thread(target=self.board_reader, args=(proc,), daemon=True, name="soundboard").start()
         self.board_route(now)
@@ -262,6 +275,9 @@ class SoundboardScreen:
                 print("soundboard: " + (f"playing through a {said.get('buffer')} ms buffer" if ok else
                                         f"the sound won't open ({said.get('why')})"), flush=True)
             b.sound_ok, b.sound_why = ok, "" if ok else str(said.get("why") or "")
+            ms = said.get("buffer")
+            good = ok and isinstance(ms, (int, float)) and not isinstance(ms, bool) and 0 < ms < 1000
+            b.buffer = ms / 1000.0 if good else None
         elif what == "level" and b.rec is not None:
             now = time.monotonic()
             b.rec["secs"], b.rec["level"] = said.get("secs") or 0, said.get("peak") or 0
@@ -424,6 +440,12 @@ class SoundboardScreen:
         if quiet != b.rested:                          # (the Bot's talking: it has the sound card, as a player would)
             b.rested = quiet
             self.board_tell(do="rest" if quiet else "warm")
+        if b.hue is not None:                          # (your LEDs: its sound's colour, while it plays)
+            if not b.playing and now - b.hue[2] >= BOARD_HUE_ON:
+                b.hue = None
+            elif now - b.hue[1] >= BOARD_HUE:
+                b.hue[1] = now
+                self.glow_hue(b.hue[0])
 
     def board_quiet(self, secs=BOARD_QUIET):
         """Something else starts playing (the Bot's voice, a song): the sound card's let go of for it, at once."""
@@ -495,11 +517,28 @@ class SoundboardScreen:
             return
         if sid not in b.ready:
             return                                     # (not read yet, its name still dim: not played late)
-        self.board_tell(do="play", id=sid)
+        self.board_sound(sid, pad)
         now = time.monotonic()
         if b.sound_ok is False and now - b.busy_said > 5:
             b.busy_said = now
             self.toast("No sound: " + self.board_trouble(), 3)
+
+    def board_sound(self, sid, pad=None):
+        """A sound played (its player's told), and your LEDs lit by it (screens/glow.py's glow_flash): a pulse as it's
+        heard (a moment on: what's mixed waits its turn, then the sound card's buffer), in its button's colour, kept
+        while it plays (board_tick)."""
+        b = self.board
+        if not self.board_tell(do="play", id=sid):
+            return False
+        if pad is None:
+            bank = b.bank()
+            pad = next((p for p, s in (bank["pads"] if bank is not None else {}).items() if s == sid), None)
+        rgb = colour_of(PAD_LIGHT.get(pad, PAD_LIGHT_NONE))
+        now = time.monotonic()
+        late = BOARD_HEARD[0] + (b.buffer if b.buffer is not None else BOARD_HEARD[1])
+        if self.glow_flash(rgb, now + late):
+            b.hue = [rgb, now, now]
+        return True
 
     def press_board(self, s, name, repeat):
         """Its buttons (not START's card: press_board_card). Every one is its own: none goes back, or on to the next
@@ -520,7 +559,7 @@ class SoundboardScreen:
             self.board_step(-1 if name in ("l", "l2") else 1)
         elif name == "select":
             if b.placing is not None:
-                self.board_tell(do="play", id=b.placing)
+                self.board_sound(b.placing)
             else:
                 self.board_tell(do="stop")
         elif name == "start":
@@ -566,7 +605,7 @@ class SoundboardScreen:
             elif name in ("b", "start"):
                 self.board_card_shut()
             elif name == "select" and b.placing:
-                self.board_tell(do="play", id=b.placing)
+                self.board_sound(b.placing)
             else:
                 return None
         elif name in ("left", "right") and key == "bank":
