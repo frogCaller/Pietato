@@ -114,8 +114,20 @@ def rows():
 # ---- what it says ---------------------------------------------------------------------------------------------------
 out = m.web_settings()
 ids = [s["id"] for s in out["sections"]]
-check(ids == ["screen", "sound", "start", "share", "wifi", "weather", "ha", "pihole", "plex", "jellyfin", "bot",
-              "character", "games", "cheevos", "sim", "finance", "web"], f"the sections: {ids}")
+check(ids == ["appearance", "screen", "general", "start", "share", "wifi", "weather", "ha", "pihole", "plex",
+              "jellyfin", "bot", "character", "games", "cheevos", "sim", "finance", "web"], f"the sections: {ids}")
+secs = {s["id"]: (s["title"], [r["key"] for r in s["rows"]]) for s in out["sections"]}
+check(secs["appearance"] == ("Appearance", ["wallpaper", "home_style", "accent", "look", "app_full"]),
+      f"Appearance, as the Pi's Settings has it: the background, the home screen's style, the accent, the apps' pages, "
+      f"full screen apps ({secs['appearance']})")
+check(secs["screen"][0] == "Screen" and secs["screen"][1][0] == "screen"
+      and set(secs["screen"][1]) <= {"screen", "resolution", "turn", "oled"},
+      f"Screen, as there: Video size first, and what this one's screen has of the rest ({secs['screen']})")
+check(secs["general"] == ("General", ["clock", "battery", "attract", "sound"]),
+      f"General: the clock, battery saver, attract mode and sound ({secs['general']})")
+labels = {r["key"]: r["label"] for s in out["sections"] for r in s["rows"]}
+check(labels["screen"] == "Video size" and secs["ha"][0] == "Home Assistant",
+      f"Video size by its name, and Home Assistant by its own ({labels['screen']!r}, {secs['ha'][0]!r})")
 every = json.dumps(out)
 for secret in (TOKEN, TOKEN[30:70], "jf-Secret-77", "web-Secret-55", "ph-Secret-33"):
     check(secret not in every, f"...never in what the page is sent: {secret[:12]}…")

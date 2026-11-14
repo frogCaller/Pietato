@@ -6,8 +6,8 @@ Pietato starts on a home screen of apps:
   Pi-hole's stats (from the Pi-hole itself: add it by its address), Web, for browsing ([Web](#web), below), and
   Control another Pietato, to work another of yours with this one's buttons
   ([Another Pietato](controllers.md#another-pietato)). The first time you open the TV Remote or Lights, they ask
-  for Home Assistant's IP address and a long-lived token (Settings > Home changes them later), or you can put them
-  in on the web page's Settings
+  for Home Assistant's IP address and a long-lived token (Settings > Home Assistant changes them later), or you
+  can put them in on the web page's Settings
 - **TV**: Plex (Continue watching, Watchlist, Live TV with news and sports), Jellyfin, about 250 old
   cartoons and 150 old films from the Internet Archive, and your own streams. Live channels and Plex videos are
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
@@ -46,20 +46,22 @@ Pietato starts on a home screen of apps:
   consoles you have games for, a different one each time you come back to the home screen
 - **System**: a dashboard of the Pi's temperature, how busy it is, its memory, storage and network. SELECT
   shows it as a list instead, with Update software, Reboot and Shut down
-- **Settings**: WiFi, Bluetooth, the home screen's style, background, colours, video size, a TV or monitor's
-  resolution, battery saver, sound, an OLED screen's music bars, controller
-- Settings > Background changes the home screen's background: dark ones, colourful ones like Sunset, Candy
-  and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and A shows
-  them all to pick from
-- Settings > App pages makes the pages inside the apps Light: pale pages with dark words, in place of the
-  dark ones. The home screen keeps its background either way
-- If you'd rather see the apps on the whole screen, set Settings > Full screen apps to On. The status
-  bar, the tabs and the button hints go away, leaving just the app's name at the top. The buttons work
+- **Settings**: WiFi, Bluetooth, the clock, battery saver, sound and controller, plus two pages that A opens
+  and B closes. Appearance has the home screen's background and style, the accent colour, the apps' pages and
+  full screen apps. Screen has the video size, a TV or monitor's resolution, turning the picture and an OLED's
+  music bars
+- Settings > Appearance > Background changes the home screen's background: dark ones, colourful ones like
+  Sunset, Candy and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and
+  A shows them all to pick from
+- Settings > Appearance > App pages makes the pages inside the apps Light: pale pages with dark words, in
+  place of the dark ones. The home screen keeps its background either way
+- If you'd rather see the apps on the whole screen, set Settings > Appearance > Full screen apps to On. The
+  status bar, the tabs and the button hints go away, leaving just the app's name at the top. The buttons work
   the same, and L and R still switch apps
-- If your screen is mounted on its side or upside down, Settings > Rotate screen turns the picture to
-  match: the apps, games, videos and the console
-- With a Waveshare 2.23inch OLED HAT on the Pi's pins, Settings > [OLED screen](#oled-screen) shows bars
-  that move with your music
+- If your screen is mounted on its side or upside down, Settings > Screen > Rotate screen turns the picture
+  to match: the apps, games, videos and the console
+- With a Waveshare 2.23inch OLED HAT on the Pi's pins, Settings > Screen > Waveshare 2.23 OLED shows bars that
+  move with your music ([OLED screen](#oled-screen))
 - On a 1080p or 4K TV, a Pi 4 or 5 (or a PC) draws the menus in the TV's finer detail, so text, icons and
   pictures stay sharp
 - On a battery (in a GPi Case, or on a laptop), the screen goes dark after three minutes with nothing
@@ -184,9 +186,9 @@ For its Serial Monitor, set Tools > USB CDC On Boot to Enabled before you upload
 ## OLED screen
 
 A [Waveshare 2.23inch OLED HAT](https://www.waveshare.com/wiki/2.23inch_OLED_HAT) on the Pi can show bars that
-move with your music. Press the HAT onto the Pi's pins, wired as it comes (SPI), and set Settings > OLED screen
-to Music bars. Its bars come up once to show it's lit. The first time, it turns on the Pi's SPI if it isn't on,
-and asks you to restart.
+move with your music. Press the HAT onto the Pi's pins, wired as it comes (SPI), and set Settings > Screen >
+Waveshare 2.23 OLED to Music bars. Its bars come up once to show it's lit. The first time, it turns on the Pi's
+SPI if it isn't on, and asks you to restart.
 
 The setting is there on a Pi with a TV or monitor on HDMI. It isn't on a Pi in a GPi Case, whose screen uses
 those pins, or on a PC or a handheld.

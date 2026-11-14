@@ -72,7 +72,7 @@ def until(cond, secs=5):
 
 
 # ---- Settings: no Location, Temperature, or On the home screen ------------------------------------------------------
-rows = [r[0] for r in m.settings_rows()]
+rows = [r[0] for r in m.settings_all_rows()]           # (its first page's, and Appearance's and Screen's)
 check(f"Settings: no Location, Temperature or 'On the home screen' ({rows})",
       not {"location", "units", "widget"} & set(rows) and "home_style" in rows)
 

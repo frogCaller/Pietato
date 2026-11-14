@@ -1,6 +1,6 @@
 """Home Assistant's settings, on the Pi: its address and long-lived token, saved and checked, for the TV Remote and
-Lights. Opened from the TV Remote or Lights before it's set up, and from Settings > Home. (The web page's Settings
-has them too: easier for pasting a token.)"""
+Lights. Opened from the TV Remote or Lights before it's set up, and from Settings > Home Assistant. (The web page's
+Settings has them too: easier for pasting a token.)"""
 import re
 import threading
 import time
@@ -37,7 +37,7 @@ class HaSettingsScreen:
         self.dirty = True
 
     def ha_value(self):
-        """Settings > Home's row: where it is, or that it isn't set up."""
+        """Settings > Home Assistant's row: where it is, or that it isn't set up."""
         ha = self.hass
         if ha.url and ha.token:
             return ha.where
@@ -153,7 +153,7 @@ class HaSettingsScreen:
         self.header(img, d)
         rows = self.ha_rows()
         sel = self.ha_menu["sel"] % len(rows)
-        d.text((20, self.LIST_TOP + 10), "Home  ›  Settings", font=F["small"], fill=MUTED, anchor="lm")
+        d.text((20, self.LIST_TOP + 10), "Settings  ›  Home Assistant", font=F["small"], fill=MUTED, anchor="lm")
         top, rh = self.LIST_TOP + 26, 46
         for k, (key, label, value, colour) in enumerate(rows):
             y = top + k * rh

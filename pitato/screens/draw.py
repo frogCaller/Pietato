@@ -34,8 +34,9 @@ def tap_buttons(label):
 
 
 class Bar:
-    """How tall a bar is (or where a list starts, under them): its own size, or, while Settings > Full screen apps
-    has an app on the whole screen, what's left without the bars. Asked of the class itself: its own size."""
+    """How tall a bar is (or where a list starts, under them): its own size, or, while Settings > Appearance > Full
+    screen apps has an app on the whole screen, what's left without the bars. Asked of the class itself: its own
+    size."""
 
     def __init__(self, shown, full):
         self.shown, self.full = shown, full
@@ -53,8 +54,8 @@ class DrawScreen:
     GRID_COLS, CELL_H = 4, 116
 
     def full_app(self):
-        """Settings > Full screen apps: an app on the whole screen, no status bar, tabs or buttons along the
-        bottom (its Controls, X, has the buttons): its page, Now playing, a picture or a document. Not the home
+        """Settings > Appearance > Full screen apps: an app on the whole screen, no status bar, tabs or buttons along
+        the bottom (its Controls, X, has the buttons): its page, Now playing, a picture or a document. Not the home
         screen, Controls, a box to type in or a game's menu; nor a sim, which has its own (SELECT)."""
         if getattr(self, "view", None) not in FULL_VIEWS or not getattr(self, "state", None):
             return False

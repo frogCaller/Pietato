@@ -183,7 +183,7 @@ class KonamiScreen:
         ha = self.hass
         ha.load(LIBRARY[ri]["files"], pick=self.setting("ha_tv") or "")
         if not ha.configured:
-            self.toast("Set up Home Assistant first: Settings > Home", 4)
+            self.toast("Set up Home Assistant first, in Settings", 4)
             return
         ha.on_change = self.remote_changed
         ha.on_note = lambda text, secs=3: self.toast(text, secs)
@@ -198,7 +198,7 @@ class KonamiScreen:
         lt = self.lights
         lt.load(LIBRARY[li]["files"])
         if not lt.configured:
-            self.toast("Set up Home Assistant first: Settings > Home", 4)
+            self.toast("Set up Home Assistant first, in Settings", 4)
             return
         lt.on_change = self.lights_changed
         lt.on_note = lambda text: self.toast(text, 3)

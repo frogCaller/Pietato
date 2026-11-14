@@ -104,15 +104,65 @@ snap("home_plain")
 def open_app(name):
     m.home_sel = [a[0] for a in m.home_apps()].index(name); m.press("a")
 
-# Settings
+# Settings: its first page, with Appearance and Screen on it, each a page of settings of its own
+def keys():
+    return [k for k, _, _ in m.settings_rows()]
+
 open_app("Settings")
-m.set_sel = [k for k, _, _ in g.SETTINGS].index("wallpaper")
+root = keys()
+print("Settings:", [label for _, label, _ in m.settings_rows()])
+assert m.set_page == "root" and root[:5] == ["wifi", "bluetooth", "appearance", "display", "clock"], root
+moved = {"wallpaper", "home_style", "accent", "look", "app_full", "screen", "resolution", "turn", "oled"}
+assert not moved & set(root), root                       # (theirs are on the two pages, and only there)
+assert root == [k for k, _, _ in g.SETTINGS] and len(root) == len(set(root))
+assert dict((k, label) for k, label, _ in g.SETTINGS)["homeassistant"] == "Home Assistant"
+m.set_sel = root.index("appearance")
 snap("settings")
+m.press("right"); m.press("left")                        # (◀▶ on a page's row: nothing of its own to change)
+assert m.set_page == "root" and keys()[m.set_sel] == "appearance" and m.setting("wallpaper") == "Midnight"
+m.press("a")                                             # A: its page, on the first of its settings
+assert (m.set_page, m.set_sel) == ("appearance", 0), (m.set_page, m.set_sel)
+assert [label for _, label, _ in m.settings_rows()] == ["Background", "Home screen style", "Accent colour", "App pages",
+                                                        "Full screen apps"], m.settings_rows()
+snap("settings_appearance")
 m.press("right"); print("background:", m.setting("wallpaper"))      # Dusk
-m.press("down"); m.press("right"); m.press("right"); print("accent:", m.setting("accent"), g.ACCENT)
-m.press("down"); m.press("right"); print("clock:", m.setting("clock"))
+assert m.setting("wallpaper") == "Dusk"
+m.press("down"); m.press("down"); assert keys()[m.set_sel] == "accent"
+m.press("right"); print("accent:", m.setting("accent"), g.ACCENT)
+assert m.setting("accent") == [a for a, _ in g.ACCENTS][1]
+m.press("up"); m.press("up"); m.press("up")              # (round the top: the last of them)
+assert keys()[m.set_sel] == "app_full"
+m.press("b")                                             # B: Settings' first page again, on Appearance
+assert m.set_page == "root" and keys()[m.set_sel] == "appearance" and m.view == "list", (m.set_page, m.set_sel)
+m.press("down"); assert keys()[m.set_sel] == "display"
+m.press("a")
+shown = [label for _, label, _ in m.settings_rows()]
+print("Screen:", shown)
+assert (m.set_page, m.set_sel) == ("display", 0) and shown[0] == "Video size", (m.set_page, shown)
+assert set(keys()) <= {"screen", "resolution", "turn", "oled"} and "oled" not in keys(), keys()   # (no Pi here: no OLED)
+assert keys() == [k for k, _, _ in g.SETTINGS_PAGES["display"] if k in keys()]                      # (in their order)
+m.press("right"); print("video size:", m.setting("screen"))
+assert m.setting("screen") == g.SCREEN_MODES[1]
+snap("settings_screen")
+m.press("left"); assert m.setting("screen") == g.SCREEN_MODES[0]
+m.press("l"); other = g.LIBRARY[m.tab]["name"]; m.press("r")   # (L and R: the tabs, as everywhere; back on the page)
+assert other != "Settings" and g.LIBRARY[m.tab]["name"] == "Settings" and m.set_page == "display", (other, m.set_page)
+m.press("b")
+assert m.set_page == "root" and keys()[m.set_sel] == "display", (m.set_page, m.set_sel)
+m.press("down"); assert keys()[m.set_sel] == "clock"
+m.press("right"); print("clock:", m.setting("clock"))
+assert m.setting("clock") == "24-hour"
 snap("settings_changed")
 m.press("b"); print("B ->", m.view); snap("home_dusk_24h")
+assert m.view == "home", m.view
+# ...left for the home screen from one of the pages (another tab's B): Settings opens on its first page, on that row
+open_app("Settings")
+m.set_sel = keys().index("appearance"); m.press("a"); m.press("down"); m.press("down")
+m.press("l"); m.press("b")
+assert m.view == "home" and m.set_page == "root", (m.view, m.set_page)
+open_app("Settings")
+assert m.set_page == "root" and keys()[m.set_sel] == "appearance", (m.set_page, m.set_sel)
+m.press("b")
 
 # location: Weather's settings (START), a town typed with the d-pad keyboard
 assert "location" not in [k for k, _, _ in g.SETTINGS] and "units" not in [k for k, _, _ in g.SETTINGS]
@@ -151,7 +201,8 @@ m.weather_changed(); assert wait_for(lambda: m.weather.data and not m.weather.bu
 
 # background: A on its row opens a page of them all, a little picture each; A there uses one
 open_app("Settings")
-m.set_sel = [k for k, _, _ in g.SETTINGS].index("wallpaper")
+m.set_page, m.set_sel = m.settings_place("wallpaper")
+assert (m.set_page, m.set_sel) == ("appearance", 0), (m.set_page, m.set_sel)   # (Settings > Appearance: its first)
 m.press("a")
 assert m.set_page == "wallpaper" and g.WALLPAPERS[m.set_sel] == m.setting("wallpaper") == "Dusk", (m.set_page, m.set_sel)
 snap("settings_backgrounds")
@@ -176,9 +227,10 @@ assert (g.LIBRARY[m.tab]["name"], m.setting("wallpaper"), os.path.basename(m.set
 assert m.set_page == "wallpaper" and g.WALLPAPERS[m.set_sel] == "Picture"          # (back on the page, yours on it)
 snap("settings_picture")
 m.press("b")
-assert m.set_page == "root" and m.settings_rows()[m.set_sel][0] == "wallpaper"     # (B: back on its row)
+assert m.set_page == "appearance" and m.settings_rows()[m.set_sel][0] == "wallpaper"   # (B: back on its row there)
 m.press("right"); assert m.setting("wallpaper") == "Midnight"                      # (▶ on the row, as ever: the next)
 m.press("left"); assert m.setting("wallpaper") == "Picture"
+m.press("b"); assert m.set_page == "root" and keys()[m.set_sel] == "appearance"    # (B: Settings' first page)
 m.press("b"); assert m.view == "home", m.view
 snap("home_picture")
 
@@ -214,7 +266,8 @@ for k, name in enumerate(g.WALLPAPERS):
 sheet.save(SP + "/out/wallpapers.png")
 
 W, H = 640, 480
-order = ["home_plain", "settings", "settings_changed", "home_dusk_24h", "keyboard", "location_results",
+order = ["home_plain", "settings", "settings_appearance", "settings_screen", "settings_changed", "home_dusk_24h",
+         "keyboard", "location_results",
          "settings_backgrounds", "settings_backgrounds_picture", "settings_picture", "home_picture", "home_aurora",
          "weather_now", "weather_week", "weather_words", "weather_c", "weather_none"]
 cols = 2

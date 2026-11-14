@@ -1,8 +1,8 @@
 """Any screen, any sound output: the screen's size and the framebuffer media mode draws on, the
 sound cards (and Bluetooth headphones and speakers), the video size to ask for, and the size an HDMI screen starts
-at. And a screen on its side or upside down (Settings > Rotate screen: one that's taller than it's wide, turned to
-lie wide, or one mounted the other way round): everything here draws on it turned, a quarter or half turn, and looks
-at it turned back."""
+at. And a screen on its side or upside down (Settings > Screen > Rotate screen: one that's taller than it's wide,
+turned to lie wide, or one mounted the other way round): everything here draws on it turned, a quarter or half turn,
+and looks at it turned back."""
 import fcntl
 import glob
 import json
@@ -27,7 +27,7 @@ PLEX_BITRATE = 1500                            # kbps
 PLEX_LIVE_HEIGHT = 480                         # pick the channel's stream closest to this
 
 
-# ---- a screen on its side (Settings > Rotate screen) -------------------------------------------------------
+# ---- a screen on its side (Settings > Screen > Rotate screen) -------------------------------------------------------
 TURNS = (0, 90, 180, 270)      # degrees, clockwise: how the picture's turned for the screen
 TURN = 0                       # ...now (set_turn)
 FBCON_ROTATE = "/sys/class/graphics/fbcon/rotate_all"   # the terminal's turn: 0 to 3, a quarter turn each
@@ -386,7 +386,7 @@ def hdmi_ports():
     return ports
 
 
-# ---- HDMI: the picture's size (Settings > Resolution) -------------------------------
+# ---- HDMI: the picture's size (Settings > Screen > Resolution) -------------------------------
 DRM_DIR = "/sys/class/drm"                     # the kernel's screens (KMS): none on the GPi Case
 CMDLINE_TXT = ("/boot/firmware/cmdline.txt", "/boot/cmdline.txt")   # Bookworm's, then an older system's
 HDMI_SIZE = re.compile(r"video=HDMI-A-\d+:(\d+)x(\d+)")
@@ -427,12 +427,12 @@ def size_of(text):
 
 
 def res_name(size):
-    """Settings > Resolution's name for a size: "720x720 (square)" for a square screen's."""
+    """Settings > Screen > Resolution's name for a size: "720x720 (square)" for a square screen's."""
     return f"{size} (square)" if size in SQUARE_SIZES else size
 
 
 def resolution_choices():
-    """Settings > Resolution: (the HDMI screen's own size, [the sizes it takes, biggest first]), or None
+    """Settings > Screen > Resolution: (the HDMI screen's own size, [the sizes it takes, biggest first]), or None
     without one (the GPi Case's screen)."""
     screens = hdmi_screens()
     if not screens or (is_pc() and not grub_ready()):

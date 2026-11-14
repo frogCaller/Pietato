@@ -1,7 +1,7 @@
-"""Settings > Resolution: a TV or monitor's sizes (from the kernel's screens), cmdline.txt's video= changed
+"""Settings > Screen > Resolution: a TV or monitor's sizes (from the kernel's screens), cmdline.txt's video= changed
 and nothing else, the restart, the question after it (keep, go back, or nothing said: back by itself), the
 screen not taking a size, no screen on HDMI (the GPi Case: no row), and setup.sh asking nothing about it (the
-screen's own size, till Settings > Resolution changes it)."""
+screen's own size, till Settings > Screen > Resolution changes it)."""
 import os, sys, time, shutil, subprocess as sp
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -95,6 +95,11 @@ def labels(m):
     return [r[1] for r in m.settings_rows()]
 
 
+def on_res(m):
+    """Settings > Screen, on Resolution."""
+    m.set_page, m.set_sel = m.settings_place("resolution")
+
+
 # ---- the helpers --------------------------------------------------------------------------------
 check(f"the HDMI screens: the monitor's, its own size first ({g.hdmi_screens()[0][1][:3]})",
       [p for p, _ in g.hdmi_screens()] == ["HDMI-A-1"] and g.hdmi_screens()[0][1][0] == "1920x1080"
@@ -111,9 +116,11 @@ m = g.Media()
 m.enter()
 si = m.tab_index("settings")
 m.open_app(si)
-check(f"Settings has Resolution, after Video size ({keys(m)[7:11]})",
-      keys(m)[keys(m).index("screen") + 1] == "resolution")
-m.set_sel = m.settings_root_index("resolution")
+page = [k for k, _, _ in m.settings_page_rows("display")]
+check(f"Settings > Screen has Resolution, after Video size ({page})",
+      page[page.index("screen") + 1] == "resolution" and "resolution" not in keys(m)
+      and m.settings_place("resolution") == ("display", 1))
+on_res(m)
 snap(m, "root")
 check(f"its value: Auto, the screen's own ({m.res_value()})", m.res_value() == "Auto (1920x1080)")
 m.press("a")
@@ -156,9 +163,9 @@ check(f"...{left} seconds to answer", g.RES_KEEP - 1 <= left <= g.RES_KEEP)
 m.press("x"); m.press("left")
 check("other buttons don't answer it", m.view == "keepres" and m.setting("resolution_try"))
 m.press("a")
-check(f"A: kept, on to Settings > Resolution ({m.view}, {g.LIBRARY[m.tab]['name']}, {keys(m)[m.set_sel]})",
-      m.view == "list" and g.LIBRARY[m.tab]["name"] == "Settings" and keys(m)[m.set_sel] == "resolution"
-      and not m.setting("resolution_try") and not popened)
+check(f"A: kept, on to Settings > Screen > Resolution ({m.view}, {g.LIBRARY[m.tab]['name']}, {keys(m)[m.set_sel]})",
+      m.view == "list" and g.LIBRARY[m.tab]["name"] == "Settings" and m.set_page == "display"
+      and keys(m)[m.set_sel] == "resolution" and not m.setting("resolution_try") and not popened)
 check(f"...its value now ({m.res_value()}), and cmdline.txt still has it",
       m.res_value() == "1280x720" and "video=HDMI-A-1:1280x720@60" in open(CMD).read())
 snap(m, "kept")
@@ -190,7 +197,7 @@ check(f"nothing said in time: back to 1280x720, and the Pi restarts ({popened})"
 popened.clear()
 FB.real_w, FB.real_h = 1280, 720
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a")
+on_res(m); m.press("a")
 m.set_sel = labels(m).index("1024x768"); m.press("a"); m.press("a")
 check("1024x768 picked", "video=HDMI-A-1:1024x768@60" in open(CMD).read())
 popened.clear()
@@ -205,7 +212,7 @@ check(f"B on the question: back to 1280x720 now ({popened})",
 popened.clear()
 FB.real_w, FB.real_h = 1280, 720
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a")
+on_res(m); m.press("a")
 m.set_sel = labels(m).index("1680x1050"); m.press("a"); m.press("a")
 popened.clear()
 FB.real_w, FB.real_h = 1920, 1080            # (it came up at the screen's own size instead)
@@ -217,7 +224,7 @@ check(f"the screen came up at another size: not asked, cmdline.txt as it was, no
 # ---- never shown (no screen, say): back by itself all the same ------------------------------------
 FB.real_w, FB.real_h = 1280, 720
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a")
+on_res(m); m.press("a")
 m.set_sel = labels(m).index("800x600"); m.press("a"); m.press("a")
 popened.clear()
 m = g.Media()                                # (no enter: media mode never came up)
@@ -236,7 +243,7 @@ screen("HDMI-A-2", "connected", ["1920x1080", "1280x720"])         # (a TV on th
 
 def pick(size):
     m = g.Media(); m.enter(); m.open_app(si)
-    m.set_sel = m.settings_root_index("resolution"); m.press("a")
+    on_res(m); m.press("a")
     m.set_sel = labels(m).index(size); m.press("a"); m.press("a")
     return m
 
@@ -259,7 +266,7 @@ text = open(CMD).read()
 check(f"...and back ({text!r})", "video=HDMI-A-1:1280x720@60" in text and "video=HDMI-A-2:1280x720@60" in text
       and "1920x1080" not in text and "video=Composite-1:720x480@60ie" in text and text.count("\n") == 1)
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a"); m.set_sel = 0; m.press("a"); m.press("a")
+on_res(m); m.press("a"); m.set_sel = 0; m.press("a"); m.press("a")
 text = open(CMD).read()
 check(f"Auto: both ports' say goes, the rest stays ({text!r})",
       "HDMI-A" not in text and "video=Composite-1:720x480@60ie" in text and "root=PARTUUID=4e639091-02" in text)
@@ -274,7 +281,7 @@ BOARD = ["1920x1080", "1280x720", "1024x768", "800x600", "640x480"]     # (what 
 screen("HDMI-A-1", "connected", BOARD)
 FB.real_w, FB.real_h = 1920, 1080                                         # (and it's sent 1080p: squeezed square)
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a")
+on_res(m); m.press("a")
 check(f"a screen that doesn't list 720x720: there to pick anyway, once, named for square screens ({labels(m)})",
       labels(m) == ["Auto", "1920x1080", "1280x720", "1024x768", "800x600", "720x720 (square)", "640x480"])
 snap(m, "square_page")
@@ -312,7 +319,7 @@ FB.real_w, FB.real_h = 1920, 1080
 popened.clear()
 g.CMDLINE_TXT = (S + "/nothing/cmdline.txt",)
 m = g.Media(); m.enter(); m.open_app(si)
-m.set_sel = m.settings_root_index("resolution"); m.press("a")
+on_res(m); m.press("a")
 m.set_sel = labels(m).index("1280x720"); m.press("a"); m.press("a")
 check(f"no cmdline.txt: it says so, and doesn't restart ({m.msg})",
       "Couldn't change it" in (m.msg or "") and not popened and not m.setting("resolution_try"))
@@ -331,13 +338,16 @@ screen("HDMI-A-1", "connected", MODES)
 
 # ---- back to the right row from the other pages, with Resolution there ----------------------------
 m = g.Media(); m.enter(); m.open_app(si)
-for row in ("wifi", "resolution"):
-    m.set_page, m.set_sel = "root", m.settings_root_index(row)
+for row, where in (("wifi", "root"), ("resolution", "display")):
+    m.set_page, m.set_sel = m.settings_place(row)
     m.press("a")
     page = m.set_page
     m.press("b")
-    check(f"{row}: A opens {page}, B comes back to it ({keys(m)[m.set_sel]})",
-          m.set_page == "root" and keys(m)[m.set_sel] == row)
+    check(f"{row}: A opens {page}, B comes back to it ({m.set_page}, {keys(m)[m.set_sel]})",
+          page == row and m.set_page == where and keys(m)[m.set_sel] == row)
+m.press("b")
+check(f"...and B from Screen: Settings' first page, on Screen ({m.set_page}, {keys(m)[m.set_sel]})",
+      m.set_page == "root" and keys(m)[m.set_sel] == "display")
 m.set_page, m.set_sel = "root", m.settings_root_index("friend")
 m.press("a"); m.press("b")
 check(f"Bot: back to it ({keys(m)[m.set_sel]})", m.set_page == "root" and keys(m)[m.set_sel] == "friend")
@@ -348,11 +358,11 @@ m.press("right")
 check(f"At start-up still changes with Resolution above it ({was}, then {m.setting('start')})",
       m.setting("start") == starts[(starts.index(was) + 1) % len(starts)] != was)
 
-# ---- setup.sh: no question about 720p (the screen's own size stays; Settings > Resolution changes it) ----------
+# ---- setup.sh: no question about 720p (the screen's own size stays; Settings > Screen > Resolution changes it) --
 setup = open(ROOT + "/setup.sh").read()
 check("setup.sh: no question about 720p, cmdline.txt left alone, the screen's own size kept",
       "720p" not in setup and "cmdline.txt" not in setup
-      and "(the screen's own resolution, as it is: Settings > Resolution changes it)" in setup)
+      and "(the screen's own resolution, as it is: Settings > Screen > Resolution changes it)" in setup)
 
 # pictures
 W, H = 640, 480

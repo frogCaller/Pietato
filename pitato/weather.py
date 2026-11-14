@@ -74,7 +74,8 @@ WX_TINT = {   # PiE-ink's colours for each kind of weather (on a dark screen)
     "rain": (90, 160, 255), "snow": (215, 235, 255), "bolt": (245, 200, 80), "fog": (175, 180, 190),
     "wind": (195, 200, 210), "sunset": (255, 150, 80),
 }
-WX_TINT_PALE = {   # ...and on a light page (Settings > App pages): each a little deeper, to show against it
+WX_TINT_PALE = {   # ...and on a light page (Settings > Appearance > App pages): each a little deeper, to show
+                   # against it
     "sun": (244, 172, 20), "moon": (126, 142, 188), "cloud": (160, 168, 184), "dark": (112, 120, 138),
     "rain": (46, 124, 232), "snow": (126, 176, 226), "bolt": (232, 166, 16), "fog": (148, 156, 170),
     "wind": (148, 156, 172), "sunset": (240, 122, 52),

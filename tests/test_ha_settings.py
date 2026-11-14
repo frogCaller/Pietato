@@ -174,7 +174,7 @@ with open(path, "a") as f:
     f.write("lights = light.kitchen\n# a note of yours\n")
 os.chmod(path, 0o600)
 
-# ---- the Home tab: its apps, and no Settings of its own (the TV Remote and Lights ask; Settings > Home has them) -------
+# ---- the Home tab: its apps, and no Settings of its own (the TV Remote and Lights ask; Settings has them) -------
 m.go_home()
 m.tab, m.view = ha_tab, "list"
 m.load_tab(ha_tab)
@@ -189,8 +189,9 @@ si = m.tab_index("settings")
 m.tab, m.view, m.set_page = si, "list", "root"
 m.load_tab(si)
 keys = [k for k, _, _ in m.settings_root_rows()]
-check("homeassistant" in keys and keys.index("homeassistant") == keys.index("friend") + 1,
-      f"Settings: Home, after Bot ({keys})")
+check("homeassistant" in keys and keys.index("homeassistant") == keys.index("friend") + 1
+      and dict((k, label) for k, label, _ in m.settings_root_rows())["homeassistant"] == "Home Assistant",
+      f"Settings: Home Assistant, after Bot ({keys})")
 m.set_sel = keys.index("homeassistant")
 check(m.ha_value() == "127.0.0.1:18123", f"...its row says where it is ({m.ha_value()!r})")
 draw("settings_root")

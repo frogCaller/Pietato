@@ -205,15 +205,15 @@ async def web():
               up == parts[0] and down in parts[2:])
         await pg.mouse.wheel(0, -30000)
 
-        # Settings > Background: a little picture of each, in full rows; one clicked is the Pi's background
+        # Settings > Appearance > Background: a little picture of each, in full rows; one clicked is the Pi's background
         await pg.wait_for_function("""(() => { const p = document.querySelectorAll(".set-walls img.wall-pic");
           return p.length > 5 && Array.from(p).every((i) => i.complete && i.naturalWidth > 0); })()""", timeout=15000)
         walls = await pg.evaluate("""Array.from(document.querySelectorAll(".set-walls .wall-sw"), (b) => {
           const r = b.getBoundingClientRect(), i = b.querySelector("img");
           return [b.textContent.trim(), b.getAttribute("aria-pressed"), i ? i.naturalWidth : 0, Math.round(r.top)]; })""")
         tops = sorted(set(w[3] for w in walls))
-        check(f"Settings > Background: a little picture of each ({len(walls)}), the one in use marked, in rows of five "
-              f"({len(tops)} rows)", [w[0] for w in walls] == g.WALLPAPERS[:-1] + ["Your picture"]
+        check(f"Settings > Appearance > Background: a little picture of each ({len(walls)}), the one in use marked, in "
+              f"rows of five ({len(tops)} rows)", [w[0] for w in walls] == g.WALLPAPERS[:-1] + ["Your picture"]
               and [w[0] for w in walls if w[1] == "true"] == [m.setting("wallpaper")] == ["Midnight"]
               and all(w[2] == 192 for w in walls[:-1]) and [sum(w[3] == t for w in walls) for t in tops] == [5, 5, 5, 5])
         await pg.click('.set-walls .wall-sw:has-text("Candy")')
@@ -287,7 +287,7 @@ async def web():
         rows = await ph.evaluate("""(() => { const t = Array.from(document.querySelectorAll(".set-walls .wall-sw"),
           (b) => Math.round(b.getBoundingClientRect().top)); return Array.from(new Set(t), (y) => t.filter((v) => v === y).length); })()""")
         wide = await ph.evaluate("document.documentElement.scrollWidth")
-        check(f"...Settings > Background on a phone: four across, nothing wider than it ({rows}, {wide})",
+        check(f"...Settings > Appearance > Background on a phone: four across, nothing wider than it ({rows}, {wide})",
               rows == [4] * 5 and wide <= 390)
         await ph.screenshot(path=S + "/settings_phone.png")
         PLAY["on"] = False

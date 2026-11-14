@@ -683,7 +683,7 @@ def main():
     media.dock_start()                             # (a GPi Case 2: its dock watched, the picture following it)
     media.power_start()                            # (a GPi Case: its power switch's pin watched, as well as its key)
     media.glow_start()                             # (Apps > LED backlight: its LED grid lit)
-    media.oled_start()                             # (Settings > OLED screen: an OLED HAT's bars, with the music)
+    media.oled_start()                             # (Settings > Screen > Waveshare 2.23 OLED: its bars, with the music)
     media.lamps_start()                            # (lights of your own on the network, an ESP32's LED: found)
     media.chromium_leftover()                      # (Chromium, if the last Pietato left it running: closed)
     control = Control()

@@ -5,8 +5,8 @@ on GPIO 25. The SPI is written to as it is (/dev/spidev0.0), and the two pins ar
 start-up, then each of its four rows of 128 bytes with where it starts before it (only the rows that changed).
 The bars are the sound itself, a moment of it at a time: the sound heard now (party.py's player says when each bit
 of a song is heard), cut into BARS pieces, a bar as tall as its piece is loud. A bar jumps up and falls back
-slowly, FPS times a second. screens/oled.py has its setting (Settings > OLED screen: only on a Pi with its pins
-free); as it's turned on there, the bars come up a little once, so you can tell it's lit."""
+slowly, FPS times a second. screens/oled.py has its setting (Settings > Screen > Waveshare 2.23 OLED: only on a Pi
+with its pins free); as it's turned on there, the bars come up a little once, so you can tell it's lit."""
 import errno
 import fcntl
 import glob
@@ -302,7 +302,8 @@ class OledBars:
         self.wake.set()
 
     def hello(self):
-        """Its bars up a little, once, and down again: it's lit (Settings > OLED screen, as it's turned on)."""
+        """Its bars up a little, once, and down again: it's lit (Settings > Screen > Waveshare 2.23 OLED, as it's turned
+        on)."""
         self.up, self.fed = HELLO, self.clock()
         self.wake.set()
 

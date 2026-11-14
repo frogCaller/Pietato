@@ -1,8 +1,8 @@
-"""Settings > Full screen apps: Off at first, ◀▶ changes it, kept. On: an app's page, Now playing, a picture and a
-document have no status bar, no tabs and no buttons along the bottom, just the app's name (or Now playing's, the
-document's) along the top (a delete's are-you-sure keeps its buttons; a credit stays, small); a list shows more rows;
-L R: the next app's name there. Not the home screen, Controls, a box to type in, or a sim (SELECT has its own). The
-class's own sizes as they were. Off again: as before."""
+"""Settings > Appearance > Full screen apps: Off at first, ◀▶ changes it, kept. On: an app's page, Now playing, a
+picture and a document have no status bar, no tabs and no buttons along the bottom, just the app's name (or Now
+playing's, the document's) along the top (a delete's are-you-sure keeps its buttons; a credit stays, small); a list
+shows more rows; L R: the next app's name there. Not the home screen, Controls, a box to type in, or a sim (SELECT
+has its own). The class's own sizes as they were. Off again: as before."""
 import json, os, shutil, sys, time, types
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
@@ -75,14 +75,14 @@ def sizes():
 # Settings: the row, Off; ◀▶: On, kept
 si = m.tab_index("settings")
 m.open_app(si)
-rows = m.settings_rows()
-k = next((i for i, r in enumerate(rows) if r[0] == "app_full"), None)
-check(f"Settings has it: Full screen apps, Off ({k is not None and rows[k][1]!r}, {m.setting('app_full')!r})",
-      k is not None and rows[k][1] == "Full screen apps" and m.setting("app_full") == "Off")
+page, k = m.settings_place("app_full")
+rows = m.settings_page_rows("appearance")
+check(f"Settings > Appearance has it: Full screen apps, Off ({page}, {rows[k][1]!r}, {m.setting('app_full')!r})",
+      page == "appearance" and rows[k][:2] == ("app_full", "Full screen apps") and m.setting("app_full") == "Off")
 check(f"...its bars as they were ({sizes()})", sizes() == (26, 68, 76, 48))
 keys, bar = draw()
 check(f"...drawn with them: the status bar, and the buttons ({keys})", bar and "B" in keys)
-m.set_sel = k
+m.set_page, m.set_sel = page, k
 m.press("right")
 check(f"◀▶: On, kept ({m.setting('app_full')!r}, {json.load(open(g.STATE_FILE))['settings'].get('app_full')!r})",
       m.setting("app_full") == "On" and json.load(open(g.STATE_FILE))["settings"].get("app_full") == "On")
@@ -180,7 +180,7 @@ check("Finance: where its numbers come from, small in the corner", corner.getext
 
 # Off again: as before
 m.open_app(si)
-m.set_sel = next(i for i, r in enumerate(m.settings_rows()) if r[0] == "app_full")
+m.set_page, m.set_sel = m.settings_place("app_full")
 m.press("left")
 keys, bar = draw()
 check(f"Off again: the bars back ({m.setting('app_full')!r}, {sizes()}, {keys})",

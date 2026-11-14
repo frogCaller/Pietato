@@ -1,9 +1,9 @@
-"""Settings > Home screen style: Bright, Glass (to start with) and Cards (Minimal's gone: one picked before is
-Glass now), each drawn its own way, and each with every app's line along the bottom, what's playing popping up, and
-the weather there once Weather knows where you are (and not before). Cards on a bigger screen: a TV's as far
+"""Settings > Appearance > Home screen style: Bright, Glass (to start with) and Cards (Minimal's gone: one picked before
+is Glass now), each drawn its own way, and each with every app's line along the bottom, what's playing popping up,
+and the weather there once Weather knows where you are (and not before). Cards on a bigger screen: a TV's as far
 apart across as down; an ultrawide's in two rows of taller cards (▶, ▼ and ▲ going through them); the GPi
-Case's as ever. Settings > Background: the dark ones as ever, and brighter ones with them (strong colours, pale
-ones), the home screen's words in the ink each needs; A on its row opens a page of them all."""
+Case's as ever. Settings > Appearance > Background: the dark ones as ever, and brighter ones with them (strong
+colours, pale ones), the home screen's words in the ink each needs; A on its row opens a page of them all."""
 import io, json, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -72,10 +72,11 @@ apps = [a for a, _ in m.home_apps()]
 F = m.fonts
 
 # ---- the setting
-rows = [r[0] for r in m.settings_rows()]
-row = m.settings_rows()[rows.index("home_style")]
-check(f"Settings has it, after Background ({row[1]}: {row[2]})", rows.index("home_style") == rows.index("wallpaper") + 1
-      and row[1] == "Home screen style" and row[2] == ["Bright", "Glass", "Cards"])
+rows = [r[0] for r in m.settings_page_rows("appearance")]
+row = m.settings_page_rows("appearance")[rows.index("home_style")]
+check(f"Settings > Appearance has it, after Background ({row[1]}: {row[2]})",
+      rows.index("home_style") == rows.index("wallpaper") + 1 and row[1] == "Home screen style"
+      and row[2] == ["Bright", "Glass", "Cards"] and "home_style" not in [r[0] for r in m.settings_root_rows()])
 check("Glass to start with", m.setting("home_style") == "Glass" and m.home_style() == "Glass")
 for old, new in (("Original", "Bright"), ("Style 2", "Glass"), ("Style 3", "Glass"), ("Style 4", "Cards"),
                  ("Minimal", "Glass")):
@@ -83,7 +84,7 @@ for old, new in (("Original", "Bright"), ("Style 2", "Glass"), ("Style 3", "Glas
     assert m.setting("home_style") == new and m.home_style() == new, (old, m.setting("home_style"))
 check("one picked by its earlier name (Original, Style 2...): the same one, by its name now; Minimal: Glass", True)
 m.state["settings"]["home_style"] = "Glass"
-m.tab = m.tab_index("settings"); m.view = "list"; m.set_page = "root"; m.set_sel = rows.index("home_style")
+m.tab = m.tab_index("settings"); m.view = "list"; m.set_page, m.set_sel = m.settings_place("home_style")
 seen = []
 for _ in range(3):
     m.press("right"); seen.append(m.setting("home_style"))
@@ -303,12 +304,36 @@ img, texts, clock = home_on("Glass", "Teletext")
 check("...one it doesn't know: Midnight's too", inked[clock] == g.TEXT
       and img.getpixel((5, 5)) == g.wallpaper("Midnight", (640, 480)).getpixel((5, 5)))
 
-# ---- Settings > Background: ◀ ▶ on its row as ever; A opens a page of them all, a little picture each
+# ---- Settings' first page: Appearance and Screen, each a page of settings of its own (A opens it, B goes back)
 m.set_setting("wallpaper", "Midnight"); m.set_setting("home_style", "Glass")
-m.tab = m.tab_index("settings"); m.view = "list"; m.set_page = "root"
-m.set_sel = [r[0] for r in m.settings_rows()].index("wallpaper")
+m.tab = m.tab_index("settings"); m.view = "list"
+m.set_page, m.set_sel = "root", m.settings_root_index("appearance")
 texts = drawn(m)
-check("Settings > Background: ◀ ▶ change it, A shows them all", "Change" in texts and "See them all" in texts)
+check(f"Settings: Appearance on its first page (the background in use beside it), and Screen (its size); A opens the "
+      f"one picked ({[t for t in texts if t in ('Appearance', 'Screen', 'Midnight', m.res_here(), 'Open', 'Home')]})",
+      all(t in texts for t in ("Appearance", "Screen", "Midnight", m.res_here(), "Open", "Home"))
+      and not any(t in texts for t in ("Background", "Accent colour", "Video size", "Change", "Back")))
+m.press("a")
+texts = drawn(m)
+check("...A: its page, Settings › Appearance, with the five of them; ◀▶ change one, B goes back",
+      m.set_page == "appearance" and "Settings  ›  Appearance" in texts and "Change" in texts and "Back" in texts
+      and all(t in texts for t in ("Background", "Home screen style", "Accent colour", "App pages", "Full screen apps"))
+      and not any(t in texts for t in ("WiFi", "Clock", "Video size", "Open")))
+m.press("b"); m.press("down"); m.press("a")
+texts = drawn(m)
+check(f"...Screen's: Settings › Screen, Video size first ({m.set_page})",
+      m.set_page == "display" and "Settings  ›  Screen" in texts and "Video size" in texts and "Back" in texts
+      and not any(t in texts for t in ("Background", "WiFi", "Clock")))
+m.press("b")
+texts = drawn(m)
+check("...B: Settings' first page again, on Screen", m.set_page == "root" and "Settings" in texts
+      and m.settings_rows()[m.set_sel][0] == "display" and "Open" in texts)
+
+# ---- Settings > Appearance > Background: ◀ ▶ on its row as ever; A opens a page of them all, a little picture each
+m.tab = m.tab_index("settings"); m.view = "list"; m.set_page, m.set_sel = m.settings_place("wallpaper")
+texts = drawn(m)
+check("Settings > Appearance > Background: ◀ ▶ change it, A shows them all",
+      "Change" in texts and "See them all" in texts)
 m.press("right")
 check(f"...▶: the next ({m.setting('wallpaper')})", m.setting("wallpaper") == g.WALLPAPERS[1])
 m.press("left"); m.press("left")
@@ -332,7 +357,7 @@ m.set_sel = g.WALLPAPERS.index("Picture")
 texts = drawn(m)
 check("...on Picture: A picks one of yours", "Pick a picture" in texts and "One of your own" in texts)
 m.press("b")
-check("...B: back to Settings, on its row", m.set_page == "root"
+check("...B: back to Settings > Appearance, on its row", m.set_page == "appearance"
       and m.settings_rows()[m.set_sel][0] == "wallpaper")
 small = FB.w, FB.h
 FB.w, FB.h = 480, 320                               # (a small handheld's screen)
@@ -394,8 +419,8 @@ for name in ("Midnight", "Aurora", "Dusk", "Ocean", "Forest"):
 
 # ---- the backgrounds themselves: the dark ones as they were, and brighter ones: strong colours, pale ones
 names = [w for w in g.WALLPAPERS if w != "Picture"]
-check(f"Settings > Background: {len(g.WALLPAPERS)} to pick from, each with a look of its own, Midnight first (what it "
-      f"starts with), a picture of yours last",
+check(f"Settings > Appearance > Background: {len(g.WALLPAPERS)} to pick from, each with a look of its own, Midnight "
+      f"first (what it starts with), a picture of yours last",
       sorted(names) == sorted(g.WALLS) and len(set(g.WALLPAPERS)) == len(g.WALLPAPERS) >= 20
       and g.WALLPAPERS[0] == "Midnight" == g.SETTINGS_DEFAULT["wallpaper"] and g.WALLPAPERS[-1] == "Picture")
 AT = [(40, 30), (320, 240), (600, 60), (100, 440), (560, 400)]

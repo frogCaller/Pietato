@@ -37,7 +37,7 @@ watchers <how many>; and of watching (--watch): watchgone <why> (the host's game
 
 Run as: python3 -m pitato.emulator --core CORE --game GAME --saves FOLDER [--resume] [--turn 90] ...
 (--net ADDRESS:PORT:KEY: another's game, joined as player 2; --watch ADDRESS:PORT:KEY: another's game, watched.)
-(--turn: a screen on its side, Settings > Rotate screen: the pictures go onto it turned that far clockwise.)"""
+(--turn: a screen on its side, Settings > Screen > Rotate screen: the pictures go onto it turned that far clockwise.)"""
 import argparse
 import ctypes as C
 import fcntl
@@ -468,8 +468,9 @@ def notice_picture(lines, width, scale=1):
 
 class Screen:
     """The framebuffer, written a band of rows at a time: the picture in the middle, black either side. A screen on
-    its side (turn: degrees, clockwise; Settings > Rotate screen) is all that as it's seen (w x h): the picture's
-    turned as it goes onto the screen's own pixels (dev_w x dev_h). A notice can go over the picture for a while."""
+    its side (turn: degrees, clockwise; Settings > Screen > Rotate screen) is all that as it's seen (w x h): the
+    picture's turned as it goes onto the screen's own pixels (dev_w x dev_h). A notice can go over the picture for a
+    while."""
 
     def __init__(self, dev="/dev/fb0", turn=0):
         test = os.environ.get("PITATO_FB")         # (the tests: path:WxH:bits, a plain file)

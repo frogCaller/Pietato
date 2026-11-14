@@ -89,8 +89,8 @@ check(f"another's: heard (by the Camera tab's listener), not taken for a camera 
       and b.camera.found_list() == [])
 check("...one that doesn't say its colour (an older one): none", b.pie.peer_accent(A_URL) is None)
 said = a.share_beacon("kitchen")
-check(f"a beacon says its colour, Settings > Accent colour ({said})", said == {"pietato": 1, "id": a.share_id,
-      "port": 5432, "host": "kitchen", "accent": "Blue"})
+check(f"a beacon says its colour, Settings > Appearance > Accent colour ({said})",
+      said == {"pietato": 1, "id": a.share_id, "port": 5432, "host": "kitchen", "accent": "Blue"})
 a.set_setting("accent", "Purple")
 b.camera.heard("192.168.1.77", json.dumps(a.share_beacon("kitchen")).encode())
 check(f"...heard: its colour, for a dot beside its name ({b.pie.peer_accent(A_URL)})",

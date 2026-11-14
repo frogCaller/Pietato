@@ -5,12 +5,12 @@ none, or the pins taken); its SPI; a command or the picture, by its D/C pin; the
 starts it, then only the rows that changed, and dark and off as it's shut; the picture for the bars (as that driver
 packs one: 25 bars, 4 wide, up from the bottom); the sound as it's heard (the sound heard now, not what's just been
 written; whatever the volume; nothing for now, a jump); and the bars themselves (as tall as the sound's loud, up at
-once, falling slowly, drawn only as they change, 25 times a second). Then media mode: Settings > OLED screen only on
-a Pi with its pins free (not in a GPi Case, on a handheld or a PC); picked, it's lit, and music plays through party
-mode's player (a song already playing moved to it), its bars up as the loud part of a song is heard, whatever the
-volume; one that's in another's party, by its leader's clock; an LED backlight on the same pin turned off for it, and
-the other way round; the Pi's SPI not on (turned on in config.txt, a restart asked for; the LED backlight's own part
-left as it is), its pins taken; the web page's Settings; and dark as Pietato goes."""
+once, falling slowly, drawn only as they change, 25 times a second). Then media mode: Settings > Screen > Waveshare
+2.23 OLED only on a Pi with its pins free (not in a GPi Case, on a handheld or a PC); picked, it's lit, and music
+plays through party mode's player (a song already playing moved to it), its bars up as the loud part of a song is
+heard, whatever the volume; one that's in another's party, by its leader's clock; an LED backlight on the same pin
+turned off for it, and the other way round; the Pi's SPI not on (turned on in config.txt, a restart asked for; the
+LED backlight's own part left as it is), its pins taken; the web page's Settings; and dark as Pietato goes."""
 import ctypes, errno, os, shutil, sys, threading, time, wave
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -533,7 +533,7 @@ class FB:
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 m.set_setting("name", "gpi")
 SETTINGS = next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
-m.view, m.tab, m.set_page = "list", SETTINGS, None
+m.view, m.tab, m.set_page = "list", SETTINGS, "display"   # (Settings > Screen: its row's there)
 
 
 def rows():
@@ -547,15 +547,16 @@ def web_rows():
 # where it can be
 MODEL = S + "/model"
 open(MODEL, "w").write("Raspberry Pi 4 Model B Rev 1.5\x00")
-check(f"this machine (no Pi): no OLED screen in Settings, here or on the web page ({m.oled_can()})",
-      not m.oled_can() and "oled" not in rows() and "oled" not in web_rows())
+check(f"this machine (no Pi): no OLED in Settings > Screen, here or on the web page ({m.oled_can()})",
+      not m.oled_can() and "oled" not in rows() and "oled" not in web_rows() and rows()[0] == "screen")
 SO.PI_MODEL, SO.is_pc, SO.is_handheld = MODEL, (lambda: False), (lambda: False)
 m.case = None
 r = rows()
-check(f"a Pi on a TV or monitor: Settings > OLED screen, after Sound: Off, or Music bars "
-      f"({m.settings_rows()[r.index('oled')] if 'oled' in r else None})", m.oled_can() and "oled" in r
-      and r[r.index("oled") - 1] == "sound" and m.settings_rows()[r.index("oled")] == ("oled", "OLED screen",
-                                                                                      ["Off", "Music bars"]))
+check(f"a Pi on a TV or monitor: Settings > Screen > Waveshare 2.23 OLED, the last of its rows: Off, or Music bars "
+      f"({m.settings_rows()[r.index('oled')] if 'oled' in r else None})", m.oled_can() and r[-1] == "oled"
+      and r[0] == "screen" and m.settings_rows()[-1] == ("oled", "Waveshare 2.23 OLED", ["Off", "Music bars"])
+      and m.settings_place("oled") == ("display", len(r) - 1)
+      and "oled" not in [k for k, _, _ in m.settings_root_rows()])
 m.case = "2w"
 in_case = m.oled_can(), "oled" in rows(), "oled" in web_rows()
 m.case = None
@@ -737,16 +738,16 @@ m.glow_spi, m.glow_port = S + "/spi-leds", 0
 open(m.glow_spi, "wb").close()
 m.msg = ""
 took = m.glow_pick("glow_on", "On")
-check(f"the LED backlight turned on (its LEDs are on the same pin): the OLED screen goes off, and that's said "
+check(f"the LED backlight turned on (its LEDs are on the same pin): the OLED goes off, and that's said "
       f"({m.msg!r})", took is True and m.glow_grid is not None and m.oled is None and m.setting("oled") == "Off"
-      and fw.closed and m.msg == "The OLED screen is off: the LEDs use its pin")
+      and fw.closed and m.msg == "The OLED is off: the LEDs use its pin")
 m.msg = ""
 m.set_sel = rows().index("oled")
 m.press("right")
 fw = made[-1][1]
-check(f"...and the OLED screen turned on again: the LEDs go off ({m.msg!r})", m.oled is not None
+check(f"...and the OLED turned on again: the LEDs go off ({m.msg!r})", m.oled is not None
       and m.glow_grid is None and m.setting("glow_on") == "Off" and m.setting("oled") == "Music bars"
-      and m.msg == "The LED backlight is off: the OLED screen uses its pin")
+      and m.msg == "The LED backlight is off: the OLED uses its pin")
 m.oled_stop()
 m.set_setting("glow_on", "On")
 m.oled_start()
@@ -768,7 +769,7 @@ conf = open(S + "/config.txt").read()
 check(f"the Pi's SPI not on: turned on in config.txt, and a restart asked for ({m.msg!r}; its row: "
       f"{m.oled_value()!r})", m.oled is None and m.oled_restart and "dtparam=spi=on" in conf
       and "core_freq_min" not in conf and conf.startswith("dtparam=audio=on\n") and G.BLOCK[0] in conf
-      and m.msg == "Restart the Pi to turn its SPI on for the OLED screen" and m.oled_value() == "Restart the Pi"
+      and m.msg == "Restart the Pi to turn its SPI on for the OLED" and m.oled_value() == "Restart the Pi"
       and m.setting("oled") == "Music bars")
 wr = web_rows().get("oled") or {}
 check(f"...the web page's Settings say so too ({wr.get('status')!r})", wr.get("value") == "Music bars"
@@ -791,7 +792,7 @@ for err, says in ((errno.EBUSY, "Its pins are in use"), (errno.ENODEV, "No GPIO 
     m.msg = ""
     m.oled_pick("Music bars")
     check(f"its pins not to be had ({os.strerror(err)}): not lit, and said ({m.msg!r})", m.oled is None
-          and m.oled_value() == says and m.msg == f"The OLED screen can't be lit: {says[0].lower()}{says[1:]}"
+          and m.oled_value() == says and m.msg == f"The OLED can't be lit: {says[0].lower()}{says[1:]}"
           and web_rows()["oled"].get("tone") == "bad")
     m.oled_pick("Off")
 bad = []
@@ -811,9 +812,12 @@ m.oled_wires = make_wires
 
 # the web page's Settings
 wr = web_rows().get("oled") or {}
-check(f"the web page's Settings: OLED screen, with Sound ({wr.get('value')!r}, {wr.get('note')!r})",
-      wr.get("kind") == "choice" and wr.get("value") == "Off" and "Waveshare 2.23inch OLED HAT" in wr.get("note", "")
-      and "oled" in [r["key"] for s in m.web_settings()["sections"] if s["id"] == "sound" for r in s["rows"]]
+check(f"the web page's Settings: Waveshare 2.23 OLED, the last of Screen's ({wr.get('label')!r}, "
+      f"{wr.get('value')!r}, {wr.get('note')!r})",
+      wr.get("kind") == "choice" and wr.get("value") == "Off" and wr.get("label") == "Waveshare 2.23 OLED"
+      and wr.get("note") == "The OLED HAT on the Pi's pins: bars that move with your music."
+      and [(s["title"], s["rows"][0]["key"], s["rows"][-1]["key"]) for s in m.web_settings()["sections"]
+           if s["id"] == "screen"] == [("Screen", "screen", "oled")]
       and "status" not in wr)
 said = m.web_settings_do({"key": "oled", "value": "Music bars"})
 fw = made[-1][1]

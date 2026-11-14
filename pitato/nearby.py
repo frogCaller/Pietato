@@ -263,7 +263,7 @@ class PieInk:
         self.own = ""                 # this Pietato's own name for itself (its own beacon isn't another's)
         self.peers_on = lambda: True  # Settings > Share with other Pietatos: On
         self.heard = {}               # its address -> {"host", "seen", "peer", "accent"}: its beacon (peer: another
-                                      # Pietato's; accent: its colour, Settings > Accent colour there)
+                                      # Pietato's; accent: its colour, Settings > Appearance > Accent colour there)
         self.bad = {}                 # an address -> when it may be asked again
         self.answer = (0.0, None)     # (when, what it had): see fetch()
         self.remembered = None        # {"url", "host"}: the one that answered last (kept on disk)
@@ -491,8 +491,8 @@ class PieInk:
                      "full": "hw" in h, "cookie": h.get("cookie")} for u, h in self.heard.items() if h.get("peer")]
 
     def peer_accent(self, url):
-        """Another Pietato's colour (its Settings > Accent colour, as its beacon says): (r, g, b), or None (one that
-        doesn't say)."""
+        """Another Pietato's colour (its Settings > Appearance > Accent colour, as its beacon says): (r, g, b), or
+        None (one that doesn't say)."""
         with self.lock:
             name = (self.heard.get(url) or {}).get("accent")
         return dict(ACCENTS).get(name) if name else None

@@ -10,7 +10,8 @@ ACCENTS = [("Blue", (96, 170, 228)), ("Teal", (64, 196, 180)), ("Green", (110, 2
 ACCENTS_LIGHT = {"Blue": (32, 108, 190), "Teal": (12, 132, 120), "Green": (38, 138, 60),   # ...as they are on a light
                  "Purple": (112, 80, 204), "Pink": (198, 56, 122), "Red": (202, 56, 56),   # page: darker, to read
                  "Gold": (160, 112, 8), "White": (58, 64, 78)}                             # against it (White: grey)
-LOOKS = ("Dark", "Light")        # Settings > App pages: the pages inside the apps (the home screen keeps its own)
+LOOKS = ("Dark", "Light")        # Settings > Appearance > App pages: the pages inside the apps (the home screen
+                                 # keeps its own)
 OWN_LOOK = ("home", "screens.home")   # the modules that draw the home screen: its background's colours, whatever
                                       # the pages' are
 LOOK = ["Dark"]                  # the look now
@@ -138,8 +139,8 @@ BADGE = {  # file type label colours in the Files tab
     "dir": ACCENT, "image": DONE, "video": (110, 196, 196), "audio": (170, 146, 222),
     "pdf": (224, 122, 128), "doc": (124, 152, 232), "text": BODY, "other": MUTED,
 }
-# ...and a light one (Settings > App pages): a pale page, white rows and cards on it, dark words. Each colour by the
-# name the modules draw with (set_look changes them there)
+# ...and a light one (Settings > Appearance > App pages): a pale page, white rows and cards on it, dark words. Each
+# colour by the name the modules draw with (set_look changes them there)
 PALETTES = {
     "Dark": {"BG": BG, "ROW": ROW, "TEXT": TEXT, "BODY": BODY, "MUTED": MUTED, "LINE": LINE, "DONE": DONE,
              "WARN": WARN, "KEY_FILL": KEY_FILL, "KEY_TEXT": KEY_TEXT, "PILL": PILL, "PILL_TEXT": PILL_TEXT,

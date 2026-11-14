@@ -221,7 +221,7 @@ def focused():
     return t["kind"] + ":" + (t["b"].get("label") or "")
 
 
-# ---- the Home tab: Web, after the rest (Home Assistant's settings: in Settings > Home) ------------------------------
+# ---- the Home tab: Web, after the rest (Home Assistant's settings: in Settings > Home Assistant) -------------------
 
 home = next(i for i, t in enumerate(g.LIBRARY) if t["name"] == "Home")
 m.tab, m.view = home, "list"

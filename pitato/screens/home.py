@@ -2,6 +2,7 @@
 import random
 import time
 
+from ..config import SETTINGS_PAGES
 from ..theme import ACCENT, BG, BODY, co_mix, LINE, MUTED, ROW, TEXT
 from ..library import LIBRARY, LISTEN_KINDS, NOW_POP_SECS
 from ..home import (CARD, CARD_LINE, draw_bright_icon, draw_glyph, draw_icon, home_cols, HOME_ICONS, HOME_LABELS,
@@ -105,6 +106,8 @@ class HomeScreen:
         self.coder_help = False
         self.bot_settings = False
         self.sim_close()
+        if self.set_page in SETTINGS_PAGES:            # (one of Settings' pages of settings: its row, next time)
+            self.set_sel = self.settings_root_index(self.set_page)
         self.set_page = "root"
         self.wx_menu = None
         self.ha_menu = None
@@ -121,14 +124,14 @@ class HomeScreen:
         self.view = "home"
         self.dirty = True
 
-    # -- its three looks (Settings > Home screen style) -------------------------
+    # -- its three looks (Settings > Appearance > Home screen style) -------------------------
     #   Bright: bold, the time and the weather big, bright tiles with white glyphs, an accent ring round the app
     #           picked
     #   Glass: thin type, tiles of tinted glass with grey glyphs, the app picked lit and glowing
     #   Cards: dark cards, each with a coloured glyph and its name, an accent line by the time, the weather
     #          between thin lines
-    # Over a pale background (Settings > Background: Sky, Peach...), the words go dark, Glass's tiles are light
-    # glass with dark glyphs, and Cards' cards are white.
+    # Over a pale background (Settings > Appearance > Background: Sky, Peach...), the words go dark, Glass's tiles are
+    # light glass with dark glyphs, and Cards' cards are white.
     HOME_X = 36                                      # Glass's margins, left and right
     TILE = 74                                        # Glass's tile
     HOME_TOP = 14                                    # the time's top (no status bar here)

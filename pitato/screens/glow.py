@@ -356,8 +356,8 @@ class GlowScreen:
         return True
 
     def glow_pick(self, key, value):
-        """One of its settings picked. The LEDs on: an OLED screen on this Pi goes off (Settings > OLED screen,
-        screens/oled.py: it's on the same pin), and that's said (True)."""
+        """One of its settings picked. The LEDs on: an OLED screen on this Pi goes off (Settings > Screen > Waveshare
+        2.23 OLED, screens/oled.py: it's on the same pin), and that's said (True)."""
         took = key == "glow_on" and value == "On" and self.setting("oled") not in (None, "Off")
         if took:
             self.oled_pick("Off")
@@ -372,7 +372,7 @@ class GlowScreen:
         self.share_news()                              # (your others: what it wants of them, now)
         self.glow_seen = 0.0
         if took:
-            self.toast("The OLED screen is off: the LEDs use its pin", 4)
+            self.toast("The OLED is off: the LEDs use its pin", 4)
         return took
 
     # -- the grid ----------------------------------------------------------------------------------------------------

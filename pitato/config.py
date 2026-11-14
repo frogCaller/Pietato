@@ -50,44 +50,52 @@ def web_private(name):
 
 
 # ---- settings: saved with the rest of the state ---------------------------------------
-WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings > Background: the dark ones, as ever;
-              "Sunset", "Candy", "Lagoon", "Jungle", "Arcade",      # strong colours; pale ones (the home screen's
-              "Sky", "Peach", "Mint", "Lemon", "Bubblegum",         # words go dark over them); and the rest. How each
-              "Rainbow", "Snow", "Space", "Black", "Picture"]       # looks: home.py's WALLS
-SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Video size; Y while a video plays
-OLED_CHOICES = ["Off", "Music bars"]               # Settings > OLED screen (screens/oled.py)
-SETTINGS = [   # key, label, choices (None: opens a page of its own). (Where you are and the temperature's units are
-               # Weather's: START there)
+WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings > Appearance > Background: the dark
+              "Sunset", "Candy", "Lagoon", "Jungle", "Arcade",      # ones, as ever; strong colours; pale ones (the
+              "Sky", "Peach", "Mint", "Lemon", "Bubblegum",         # home screen's words go dark over them); and
+              "Rainbow", "Snow", "Space", "Black", "Picture"]       # the rest. How each looks: home.py's WALLS
+SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Screen > Video size; Y while a video plays
+OLED_CHOICES = ["Off", "Music bars"]               # Settings > Screen > Waveshare 2.23 OLED (screens/oled.py)
+SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page of its own). (Where you are and the
+               # temperature's units are Weather's: START there)
     ("wifi", "WiFi", None),
     ("bluetooth", "Bluetooth", None),     # your controllers, keyboards and the rest: find, pair, connect
-    ("wallpaper", "Background", WALLPAPERS),
-    ("home_style", "Home screen style", ["Bright", "Glass", "Cards"]),
-    ("accent", "Accent colour", [a for a, _ in ACCENTS]),
-    ("look", "App pages", list(LOOKS)),   # the pages inside the apps, dark (as ever) or light; the home screen keeps
-                                          # its background (theme.py's set_look)
+    ("appearance", "Appearance", None),   # how the home screen and the apps look: a page of settings (SETTINGS_PAGES)
+    ("display", "Screen", None),          # the screen's picture, and an OLED beside it: a page of settings too
     ("clock", "Clock", ["12-hour", "24-hour"]),
-    ("app_full", "Full screen apps", ["Off", "On"]),   # the apps without the bars along the top and bottom
-    ("screen", "Video size", SCREEN_MODES),
-    ("resolution", "Resolution", None),   # a TV or monitor's: the sizes it takes (not there on the GPi Case)
-    ("turn", "Rotate screen", ["Off", "90°", "180°", "270°"]),   # a screen on its side: the picture turned
-                                                                # clockwise (not there on the GPi Case's own)
     ("battery", "Battery saver", ["Auto", "On", "Off"]),   # the screen dark after a few minutes with nothing happening
                                                          # (Auto: while it runs on its battery; screens/rest.py)
     ("attract", "Attract mode", ["On", "Games only", "Off"]),   # left idle, plugged in: the Bot gets bored and
                                                             # finds something to do (screens/attract.py)
     ("sound", "Sound", None),
-    ("oled", "OLED screen", OLED_CHOICES),   # a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with
-                                             # your music (only on a Pi with its pins free: screens/oled.py)
     ("pad", "Controller", None),
     ("pad_swap", "Swap A and B", ["Off", "On"]),   # on the controller in hand (kept with its buttons, not here)
     ("friend", "Bot", None),
-    ("homeassistant", "Home", None),             # Home Assistant's address and token, for the TV Remote and Lights
+    ("homeassistant", "Home Assistant", None),   # its address and token, for the TV Remote and Lights
     ("start", "At start-up", ["Home screen", "Terminal", "Game"]),   # (Game: the one you played last, where you
                                                                      # were: screens/games.py game_boot)
     ("start_song", "Random song at start-up", ["Off", "On"]),   # one of yours from ~/Music, as it starts
     ("share", "Share with other Pietatos", ["On", "Off"]),   # prices and the weather fetched once for them all, and
                                                             # a game carried on on another of them (savesync.py)
 ]
+SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on the first page: their rows, as above
+    "appearance": [
+        ("wallpaper", "Background", WALLPAPERS),
+        ("home_style", "Home screen style", ["Bright", "Glass", "Cards"]),
+        ("accent", "Accent colour", [a for a, _ in ACCENTS]),
+        ("look", "App pages", list(LOOKS)),   # the pages inside the apps, dark (as ever) or light; the home screen
+                                              # keeps its background (theme.py's set_look)
+        ("app_full", "Full screen apps", ["Off", "On"]),   # the apps without the bars along the top and bottom
+    ],
+    "display": [                              # ("screen" is Video size's own key, as ever)
+        ("screen", "Video size", SCREEN_MODES),
+        ("resolution", "Resolution", None),   # a TV or monitor's: the sizes it takes (not there on the GPi Case)
+        ("turn", "Rotate screen", ["Off", "90°", "180°", "270°"]),   # a screen on its side: the picture turned
+                                                                    # clockwise (not there on the GPi Case's own)
+        ("oled", "Waveshare 2.23 OLED", OLED_CHOICES),   # that OLED HAT on the Pi's pins: bars that move with your
+                                                         # music (only on a Pi with its pins free: screens/oled.py)
+    ],
+}
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
                     "screen": "Fit", "sound": "Auto", "coder_sound": "On", "sim_full": "Off", "bot_mode": "chat",
@@ -101,7 +109,7 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "glow_wiring": "Rows", "glow_count": "60", "glow_start": "Bottom left", "glow_way": "Clockwise",
                     "glow_bottom": "Yes",             # (Apps > LED backlight: screens/glow.py)
                     "oled": "Off"}
-TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Rotate screen's choices
+TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Screen > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,
                   "Minimal": "Glass"}                                                               # and one gone)
 SETTINGS_GONE = ("shrink", "widget")   # settings there were once (Big videos: they're made smaller whenever they

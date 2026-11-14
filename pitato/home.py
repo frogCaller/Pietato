@@ -20,7 +20,7 @@ def bayer(n=8):
 # A background: its sky (colours from the top down, or across it at a tilt), soft glows over that, and a few plain
 # shapes (hills, waves, bubbles, clouds, stars), all in shares of the screen; and the ink the home screen's words
 # take over it: light on a dark one, white on a strong colour, dark on a pale one. Its shapes keep clear of the
-# words: between the time and the weather, or behind the rows of tiles. (Settings > Background's list is
+# words: between the time and the weather, or behind the rows of tiles. (Settings > Appearance > Background's list is
 # config.py's WALLPAPERS: each of its names is here.)
 GLOW = 110 / 255          # how much of a glow's colour shows at its middle, unless it says
 WALLS = {

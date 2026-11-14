@@ -52,9 +52,11 @@ m.press("y"); print("Y -> ", m.setting("screen"))
 m.press("b")
 # settings row
 m.view = "list"; m.tab = m.tab_index("settings"); m.load_tab(m.tab)
+m.set_page, m.set_sel = m.settings_place("screen")       # (Settings > Screen: Video size)
 rows = [r[1] for r in m.settings_rows()]
-print("settings:", rows)
-m.set_sel = rows.index("Video size"); m.press("right"); print("◀▶ ->", m.setting("screen")); m.press("right"); print("◀▶ ->", m.setting("screen"))
+print("settings:", m.set_page, rows)
+assert m.set_page == "display" and rows[m.set_sel] == "Video size", (m.set_page, rows)
+m.press("right"); print("◀▶ ->", m.setting("screen")); m.press("right"); print("◀▶ ->", m.setting("screen"))
 m.press("right")
 m.dirty = True; m.flush(); shots["settings"] = FB.last
 # the real framebuffer: blank_outside on a file standing in for /dev/fb0

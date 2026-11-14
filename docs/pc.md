@@ -10,5 +10,5 @@ scripts ([Setting it up](setup.md) has them).
 It builds every game emulator (about an hour, or fewer in Custom), so leave the computer on until it says All set.
 After that, the computer starts in Pietato, like a console. If you have a desktop, open System,
 press SELECT for its list and pick Desktop to use it, then restart the computer to come back to Pietato.
-Settings > Resolution sets the screen's size at start-up. With a desktop installed, Bluetooth
+Settings > Screen > Resolution sets the screen's size at start-up. With a desktop installed, Bluetooth
 headphones only play sound on the desktop, so in Pietato use the computer's speakers, HDMI or a USB speaker.

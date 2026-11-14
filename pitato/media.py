@@ -346,7 +346,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.home_sel = 0            # the icon picked on the home screen
         self.wall = (None, None)     # (what it's for, the home screen's background)
         self.wall_tones = None       # ...its colour, about, from its top to its foot (screens/home.py)
-        self.wall_swatches = {}      # Settings > Background's page: each of them, small (screens/settings.py)
+        self.wall_swatches = {}      # Settings > Appearance > Background's page: each of them, small
+                                     # (screens/settings.py)
         self.web_walls = {}          # ...and for the web page's (screens/web.py)
         self.home_base = (None, None)  # (what it's for, that background with the app cards on it)
         self.home_tiles = []           # (...and where each card on it is: its top left)
@@ -494,10 +495,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.res_boot()                                # (just restarted at a new resolution: it asks if you'll keep it)
         self.boot_song = (time.monotonic() + BOOT_SONG_WAIT if self.setting("start_song") == "On" and not self.boot_game
                           else 0.0)                    # (a game to start: it has the speaker)
-        set_look(self.setting("look"))                 # (Settings > App pages: the pages dark, or light)
+        set_look(self.setting("look"))                 # (Settings > Appearance > App pages: the pages dark, or light)
         set_accent(self.setting("accent"))
         turn = TURN_DEGREES.get(self.setting("turn"), 0)
-        screen_out.set_turn(turn)                      # (Settings > Rotate screen: everything drawn turned)
+        screen_out.set_turn(turn)                      # (Settings > Screen > Rotate screen: everything drawn turned)
         if turn:
             screen_out.set_terminal_turn(turn)         # (...the terminal too: left as it is otherwise)
         self.weather = Weather(lambda: self.setting("location"),
@@ -961,8 +962,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             kept.clear()
 
     def look_changed(self):
-        """Settings > App pages, put into effect: the pages' colours (theme.py's set_look; the accent's a darker one
-        of its kind on a light page), and whatever was drawn in the others thrown away, Apps' worlds' own too."""
+        """Settings > Appearance > App pages, put into effect: the pages' colours (theme.py's set_look; the accent's a
+        darker one of its kind on a light page), and whatever was drawn in the others thrown away, Apps' worlds' own
+        too."""
         set_look(self.setting("look"))
         self.forget_kept()
         self.face_shot = None
@@ -1586,10 +1588,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
     def share_beacon(self, host, full=False):
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
-        colour (Settings > Accent colour: a dot in it beside its name on your other Pietatos, to tell apart two of
-        the same name). full: the one told straight to each of yours (not to everyone on the network), for the group
-        chat too: what it's doing, what it's made of, and how long ago you were last noticed here; the game it's
-        playing, for their home screens' lobby (screens/lobby.py); and the cookie (screens/cookie.py)."""
+        colour (Settings > Appearance > Accent colour: a dot in it beside its name on your other Pietatos, to tell
+        apart two of the same name). full: the one told straight to each of yours (not to everyone on the network),
+        for the group chat too: what it's doing, what it's made of, and how long ago you were last noticed here; the
+        game it's playing, for their home screens' lobby (screens/lobby.py); and the cookie (screens/cookie.py)."""
         beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
         if full:
             beacon.update(doing=self.group_doing(), hw=self.group_hardware())

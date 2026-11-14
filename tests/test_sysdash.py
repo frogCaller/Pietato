@@ -1,8 +1,8 @@
 """System's dashboard (drawn as the Pi-hole page is) and its list, SELECT going from one to the other and the one
 picked kept; what each button does on it; its numbers from System's own (the list's rows as they were); the last 5
 minutes' looks (a look every 10 seconds, from the main loop, its own count of the CPU's time); the power and a newer
-version said at the top. Then the Home tab (Home Assistant's, renamed): its name, Settings > Home, the web page's
-Home screen and Home tab apart, Check connection; and Apps' rows without "B stops it"."""
+version said at the top. Then the Home tab (Home Assistant's, renamed): its name, Settings > Home Assistant, the web
+page's Home screen and Home tab apart, Check connection; and Apps' rows without "B stops it"."""
 import io, json, os, shutil, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -224,14 +224,14 @@ hi = names.index("Home")
 check("the tab's called Home (not Home Assistant, nor House)", "Home Assistant" not in names and "House" not in names
       and g.LIBRARY[hi]["children"] == ["TV Remote", "Lights", "Pi-hole", "Web", "Control another Pietato"]
       and all(g.LIBRARY[names.index(c)]["parent"] == "Home" for c in g.LIBRARY[hi]["children"]))
-check("Settings > Home", ("homeassistant", "Home", None) in g.SETTINGS)
+check("Settings > Home Assistant", ("homeassistant", "Home Assistant", None) in g.SETTINGS)
 m.tab, m.view = hi, "list"; m.load_tab(hi)
 check("where the web page says: Home", m.where_text() == "Home")
 r = m.web_command({"cmd": "open", "home": True})
 check("the web page's Home screen: the home screen", r == {"ok": True} and m.view == "home" and m.where_text() == "Home screen")
 r = m.web_command({"cmd": "open", "app": "Home"})
 check("...its Home app: the Home tab", r == {"ok": True} and m.view == "list" and m.tab == hi)
-check(f"...its apps, and no Settings of its own (Settings > Home has them) ({[it['title'] for it in m.tab_items()]})",
+check(f"...its apps, and no Settings of its own (Settings > Home Assistant has them) ({[it['title'] for it in m.tab_items()]})",
       [it["title"] for it in m.tab_items()] == ["TV Remote", "Lights", "Pi-hole", "Web", "Control another Pietato"])
 si = m.tab_index("settings")
 m.tab, m.view, m.set_page = si, "list", "root"
@@ -239,8 +239,9 @@ m.load_tab(si)
 m.set_sel = [k for k, _, _ in m.settings_root_rows()].index("homeassistant")
 m.press("a")
 texts = draw()
-check("Settings > Home: Home  ›  Settings, and Check connection",
-      "Home  ›  Settings" in texts and "Check connection" in texts and "Check the connection" not in texts)
+check("Settings > Home Assistant: its page says so, and has Check connection",
+      "Settings  ›  Home Assistant" in texts and "Home  ›  Settings" not in texts and "Check connection" in texts
+      and "Check the connection" not in texts)
 page = open(ROOT + "/templates/index.html").read()
 check("the web page: its Home button asks for the Home screen as that (its Apps tab gone: the apps are on the screen)",
       'pi("open", { home: true })' in page and 'a.home ? { home: true } : { app: a.name }' not in page)

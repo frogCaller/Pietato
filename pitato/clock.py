@@ -40,8 +40,8 @@ HANDS = ((-0.07, 0.52, 0.023), (-0.07, 0.8, 0.0165))   # the hour and minute han
 SECOND_HAND = (-0.2, 0.86, 0.0055)    # the second hand: from (its tail), to, half how thick
 HUB = (0.042, 0.014)                  # the middle: the second hand's disc, and the pin in it
 DATE = (0.4, 0.105)                   # the date: below the middle, its letters' size
-# its colours on what's behind it: something dark (as ever), or pale (a light page, Settings > App pages): its dial
-# white, its marks, hands and figures dark
+# its colours on what's behind it: something dark (as ever), or pale (a light page, Settings > Appearance > App
+# pages): its dial white, its marks, hands and figures dark
 ON_DARK = {"text": (236, 239, 243), "body": (176, 184, 196), "muted": (104, 112, 125), "face": FACE,
            "edge": FACE_EDGE, "dot": MINUTE_DOT[2], "mark": HOUR_MARK[3], "figure": FIGURES[2]}
 ON_PALE = {"text": (20, 24, 31), "body": (64, 72, 86), "muted": (116, 124, 138), "face": (252, 253, 254),
@@ -152,7 +152,7 @@ class Clock(Sim):
         return BG
 
     def pale(self):
-        """What's behind it is pale (a light page: Settings > App pages)."""
+        """What's behind it is pale (a light page: Settings > Appearance > App pages)."""
         return sum(self.backdrop) > 384
 
     def inks(self):

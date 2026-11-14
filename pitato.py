@@ -29,7 +29,7 @@ Pi's sound there, and Mic here lets the bot hear you through it. Its Draw tab pu
 whole screen until B (kept in ~/Pictures/Drawings). It talks to this script on 127.0.0.1:5480.
 
 While a video plays, Y turns full screen on or off (the choice is kept for the next videos);
-Settings > Video size picks Fit (all of the picture), Full screen (zoomed) or Stretch.
+Settings > Screen > Video size picks Fit (all of the picture), Full screen (zoomed) or Stretch.
 
 It starts in media mode (Settings > At start-up can start it in the terminal instead, or in the game you played
 last, where you were).
@@ -260,22 +260,24 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 main), and if that's newer, setup.sh --update, then a restart; nothing newer: it says it's up
                 to date
   Settings    - WiFi (scan, connect, forget), Bluetooth (look, pair, connect, forget: a keyboard shows
-                its code to type), the home screen's style (Bright, Glass or Cards: the weather on it
-                once Weather knows where you are), background (dark, colourful or pale ones, or a picture
-                of yours: ◀▶ go through them, A shows them all) and colours, the pages inside the apps (dark,
-                or light: pale pages with dark words), clock, full screen apps (just the app's name along
-                the top, no bars or buttons), video size, rotate screen (a screen on its
-                side: the menus, games, videos and the terminal turned 90°, 180° or 270°), battery saver
-                (Auto: on its battery, in a GPi Case or a laptop, the screen goes dark after three minutes with
-                nothing happening; music plays on, and any button wakes it), sound (Auto: Bluetooth
-                headphones or a speaker while they're connected, else a USB speaker while it's plugged
-                in, else a TV on HDMI (a monitor that says it has no sound: the headphone jack), else
-                the Pi's own; or HDMI, headphones, a USB speaker...; a microphone isn't listed),
-                OLED screen (a Pi with its pins free, on a TV or monitor: a Waveshare 2.23inch OLED HAT
-                on them shows bars that move with your songs and stations, which play through party
-                mode's player for it: pitato/oled.py; not with an LED backlight's LEDs on the same pin),
-                controller, swap A and B, start-up, and a random song at start-up. Bluetooth headphones
-                gone while something plays: it pauses (A plays on through the Pi), a game's menu comes up.
+                its code to type), Appearance (a page of its own, A opens it: the home screen's background
+                (dark, colourful or pale ones, or a picture of yours: ◀▶ go through them, A shows them
+                all) and style (Bright, Glass or Cards: the weather on it once Weather knows where you
+                are), the accent colour, the pages inside the apps (dark, or light: pale pages with dark
+                words) and full screen apps (just the app's name along the top, no bars or buttons)),
+                Screen (a page too: video size, a TV or monitor's resolution, rotate screen (a screen on
+                its side: the menus, games, videos and the terminal turned 90°, 180° or 270°) and
+                Waveshare 2.23 OLED (a Pi with its pins free, on a TV or monitor: that OLED HAT on them
+                shows bars that move with your songs and stations, which play through party mode's
+                player for it: pitato/oled.py; not with an LED backlight's LEDs on the same pin)), clock,
+                battery saver (Auto: on its battery, in a GPi Case or a laptop, the screen goes dark
+                after three minutes with nothing happening; music plays on, and any button wakes it),
+                sound (Auto: Bluetooth headphones or a speaker while they're connected, else a USB
+                speaker while it's plugged in, else a TV on HDMI (a monitor that says it has no sound:
+                the headphone jack), else the Pi's own; or HDMI, headphones, a USB speaker...; a
+                microphone isn't listed), controller, swap A and B, Home Assistant, start-up, and a
+                random song at start-up. Bluetooth headphones gone while something plays: it pauses (A
+                plays on through the Pi), a game's menu comes up.
 
 Your settings files (radio.txt, bot.txt...) are in the static folder of the Pietato folder.
 setup.sh tells the service where that is; run by hand, it's the static folder next to this script.

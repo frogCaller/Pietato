@@ -3,7 +3,7 @@ screens, GRUB): it knows it's a PC, and a Pi isn't one; its name (its maker and 
 outputs (a desktop's speakers, HDMI on the same card and on the graphics card's, a USB speaker; never the Loopback card
 or a controller's) and Auto's pick among them (HDMI with a TV plugged in that plays sound, else the speakers; a USB
 speaker first), played straight to the card (sysdefault, or the HDMI port's own device: never ALSA's default,
-PipeWire's on a desktop); Settings > Resolution through GRUB (put in by update-grub; as it was if that fails),
+PipeWire's on a desktop); Settings > Screen > Resolution through GRUB (put in by update-grub; as it was if that fails),
 DisplayPort and laptop screens too, and through media mode (a moment's wait, then it restarts); System's numbers (its
 maker and model, no Pi power light, a Desktop row with a desktop to start) and its dashboard (This PC, its disk);
 System > Desktop (A twice: Pietato stops, the desktop starts, by a job of its own); media mode starting on its own
@@ -159,7 +159,7 @@ check("Settings > Sound picks one by its name", SC.sound_route("Speakers") == "P
 check("...a USB speaker moves the sound, as on a Pi", SC.sound_moves("Speaker") and not SC.sound_moves("PCH"))
 check(f"no sound at all: says so as a PC ({SC.sound_name('')})", SC.sound_name("") == "the PC")
 
-# ---- Settings > Resolution: GRUB's ----
+# ---- Settings > Screen > Resolution: GRUB's ----
 DRM = S + "/drm"
 for port, status, modes in (("card1-HDMI-A-1", "connected", "1920x1080\n1280x720\n1920x1080i\n"),
                             ("card1-eDP-1", "disconnected", ""), ("card1-DP-2", "connected", "2560x1440\n1920x1080\n"),
@@ -176,7 +176,7 @@ os.chmod(BIN + "/update-grub", 0o755)
 check(f"its screens: HDMI and DisplayPort too ({SC.hdmi_screens()})",
       SC.hdmi_screens() == [("DP-2", ["2560x1440", "1920x1080"]), ("HDMI-A-1", ["1920x1080", "1280x720"])])
 ch = SC.resolution_choices()
-check(f"Settings > Resolution's sizes ({ch})", ch == ("2560x1440", ["1920x1080"]))
+check(f"Settings > Screen > Resolution's sizes ({ch})", ch == ("2560x1440", ["1920x1080"]))
 check("at start-up: the screen's own (Auto)", SC.boot_resolution() is None)
 was = SC.set_boot_video(["DP-2"], ["video=DP-2:1920x1080@60"])
 grub = open(SC.GRUB).read()
@@ -259,7 +259,7 @@ check(f"...A again: Pietato stops and the desktop starts, by a job of its own ({
                    "systemctl stop pitato; systemctl start display-manager"]])
 MM.subprocess.Popen = real_popen
 
-# ---- Settings > Resolution on a PC: a moment's wait while GRUB takes it, then the PC restarts at that size ----
+# ---- Settings > Screen > Resolution on a PC: a moment's wait while GRUB takes it, then the PC restarts at that size
 open(S + "/grub.log", "w").close()
 waits, boots = [], []
 real_wait = m.render_wait
@@ -272,7 +272,7 @@ m.press_resolution("a", False, "res", "1920x1080")
 asked = (list(waits), list(boots), open(S + "/grub.log").read())
 m.press_resolution("a", False, "res", "1920x1080")
 grub = open(SC.GRUB).read()
-check(f"Settings > Resolution, 1920x1080, A: it asks first ({asked})", asked == ([], [], ""))
+check(f"Settings > Screen > Resolution, 1920x1080, A: it asks first ({asked})", asked == ([], [], ""))
 check(f"...A again: a moment's wait while GRUB takes it, then it restarts ({waits}, {boots})",
       waits[:1] == [("Changing the resolution", "One moment")] and waits[-1][0] == "Restarting"
       and boots == [["systemctl", "reboot"]] and open(S + "/grub.log").read() == "update-grub \n")

@@ -577,7 +577,7 @@ m.load_tab(APPS)
 check("Apps: LED backlight, on a Pi that can have a grid", "LED backlight" in [it["title"] for it in m.items[APPS]])
 m.view, m.tab = "list", next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.set_page = None
-check("...not in Settings any more", "glow" not in [k for k, _, _ in m.settings_rows()])
+check("...not in Settings any more", "glow" not in [k for k, _, _ in m.settings_all_rows()])
 m.web_tab("LED backlight")
 s = m.sim_game()
 check(f"its page: the LEDs off, and said so; its buttons ({s.says}; {m.sim_hints(s)})", s.key == "glow"
@@ -1032,5 +1032,5 @@ m.load_tab(APPS)
 check("a Pi that can't have one (a PC, a GPi Case): no LED backlight in Apps, nor on the web page",
       "LED backlight" not in [it["title"] for it in m.items[APPS]] and m.web_catalog()["glow"] is False
       and m.web_glow()["rows"] == [] and "error" in m.web_settings_do({"key": "glow_colour", "value": "Blue"})
-      and "glow" not in [k for k, _, _ in m.settings_rows()])
+      and "glow" not in [k for k, _, _ in m.settings_all_rows()])
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}")

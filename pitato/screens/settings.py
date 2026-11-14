@@ -1,11 +1,13 @@
-"""The Settings tab: WiFi, Bluetooth and the rest (where you are is Weather's: its START)."""
+"""The Settings tab: WiFi, Bluetooth and the rest (where you are is Weather's: its START). Its first page has a row
+for each, and two of them open a page of settings of their own: Appearance (how the home screen and the apps look)
+and Screen (the video's size, a TV or monitor's resolution, a screen on its side, an OLED HAT)."""
 import re
 import subprocess
 import threading
 import time
 
 from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
-from ..config import SETTINGS, TURN_DEGREES, WALLPAPERS
+from ..config import SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
 from ..system import is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
                       resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
@@ -18,7 +20,8 @@ from ..bot import FRIEND_PAGES
 from ..face import face_colours
 from ..inputs import HALT_WAIT
 
-RES_KEEP = 20          # Settings > Resolution: seconds to keep a new size, or the Pi goes back (it may show nothing)
+RES_KEEP = 20          # Settings > Screen > Resolution: seconds to keep a new size, or the Pi goes back (it may show
+                       # nothing)
 RES_START = 40         # ...and before that, how long the Pi may take to start and ask
 
 
@@ -68,14 +71,16 @@ class SettingsScreen:
                 [("res_none", "No TV or monitor on HDMI", None)]
         if self.set_page == "wallpaper":
             return [("wall", name, name) for name in WALLPAPERS]
+        if self.set_page in SETTINGS_PAGES:
+            return self.settings_page_rows(self.set_page)
         return self.settings_root_rows()
 
-    def settings_root_rows(self):
-        """Settings' first page: Sound's outputs are this Pi's (and Bluetooth headphones connected to it), Resolution is
-        there for a TV or monitor, Rotate screen for any screen but the GPi Case's own (unless it's turned already:
-        to turn it back), and OLED screen on a Pi with its pins free (screens/oled.py)."""
-        rows = []
-        for key, label, choices in SETTINGS:
+    def settings_here(self, rows):
+        """These rows, as they are on this Pietato: Sound's outputs are this Pi's (and Bluetooth headphones connected
+        to it), Resolution is there for a TV or monitor, Rotate screen for any screen but the GPi Case's own (unless
+        it's turned already: to turn it back), and the OLED on a Pi with its pins free (screens/oled.py)."""
+        here = []
+        for key, label, choices in rows:
             if key == "sound":
                 choices = self.sound_choices()
             elif key == "resolution" and not self.res_info():
@@ -85,8 +90,25 @@ class SettingsScreen:
                 continue
             elif key == "oled" and not self.oled_can():
                 continue
-            rows.append((key, label, choices))
-        return rows
+            here.append((key, label, choices))
+        return here
+
+    def settings_root_rows(self):
+        """Settings' first page."""
+        return self.settings_here(SETTINGS)
+
+    def settings_page_rows(self, page):
+        """One of its pages of settings: Appearance ("appearance"), or Screen ("display")."""
+        return self.settings_here(SETTINGS_PAGES[page])
+
+    def settings_all_rows(self):
+        """Every setting there is here, the pages' with the first page's (the web page's Settings: its own parts)."""
+        return self.settings_root_rows() + [r for page in SETTINGS_PAGES for r in self.settings_page_rows(page)]
+
+    def settings_page_value(self, page):
+        """A page of settings' row on the first page: a word of what's in it (Appearance: the background; Screen: its
+        size now)."""
+        return (self.setting("wallpaper") or "") if page == "appearance" else self.res_here()
 
     def sound_value(self):
         """Settings > Sound's row: Auto says where the sound goes now (Bluetooth headphones, a USB speaker, HDMI...);
@@ -155,6 +177,14 @@ class SettingsScreen:
         keys = [k for k, _, _ in self.settings_root_rows()]
         return keys.index(key) if key in keys else 0
 
+    def settings_place(self, key):
+        """Where a row is: (its page, its place there). Its page: "root" (the first), or a page of settings."""
+        for page in SETTINGS_PAGES:
+            keys = [k for k, _, _ in self.settings_page_rows(page)]
+            if key in keys:
+                return page, keys.index(key)
+        return "root", self.settings_root_index(key)
+
     def press_settings(self, name, repeat):
         if self.set_page == "f_char":                  # (the Bot's Character: L R go through its parts)
             return self.press_character(name, repeat)
@@ -175,6 +205,9 @@ class SettingsScreen:
             return self.press_friend_settings(name, repeat, key, extra)
         elif self.set_page == "resolution":
             self.press_resolution(name, repeat, key, extra)
+        elif name == "b" and self.set_page in SETTINGS_PAGES:   # (a page of settings: back to the first, on its row)
+            if not repeat:
+                self.set_page, self.set_sel = "root", self.settings_root_index(self.set_page)
         elif name == "b":
             return "pass"
         elif key == "pad_swap" and name in ("left", "right", "a"):
@@ -186,7 +219,9 @@ class SettingsScreen:
             value = extra[(i + (1 if name == "right" else -1)) % len(extra)]
             self.settings_pick(key, value)
         elif name == "a" and not repeat:
-            if key == "wifi":
+            if key in SETTINGS_PAGES:                  # (Appearance, Screen: its page of settings)
+                self.set_page, self.set_sel = key, 0
+            elif key == "wifi":
                 self.set_page, self.set_sel = "wifi", 1
                 self.wifi_rescan()
             elif key == "bluetooth":
@@ -265,7 +300,7 @@ class SettingsScreen:
             else:
                 self.set_setting("wallpaper", WALLPAPERS[sel])
         elif name == "b" and not repeat:
-            self.set_page, sel = "root", self.settings_root_index("wallpaper")
+            self.set_page, sel = self.settings_place("wallpaper")
         self.set_sel = sel
         self.dirty = True
         return None
@@ -294,13 +329,14 @@ class SettingsScreen:
         return kept[key]
 
     def render_wall(self):
-        """Settings > Background: every one of them, a little picture each with its name under it; the one in use
-        ticked, the one picked ringed."""
+        """Settings > Appearance > Background: every one of them, a little picture each with its name under it; the one
+        in use ticked, the one picked ringed."""
         F = self.fonts
         img, d = self.canvas()
         W, H = self.fb.w, self.fb.h
         self.header(img, d)
-        d.text((20, self.LIST_TOP + 10), "Settings  ›  Background", font=F["small"], fill=MUTED, anchor="lm")
+        d.text((20, self.LIST_TOP + 10), "Settings  ›  Appearance  ›  Background", font=F["small"], fill=MUTED,
+               anchor="lm")
         n = len(WALLPAPERS)
         sel, now = self.set_sel % n, self.setting("wallpaper")
         cols, cw, ch, pw, ph, top = self.wall_layout()
@@ -339,8 +375,8 @@ class SettingsScreen:
 
     # -- Rotate screen: a screen mounted on its side or upside down ----------------------------------------------
     def turn_screen(self):
-        """Settings > Rotate screen, put into effect: the menus (and the terminal) turned now; a game or a video
-        as it next starts."""
+        """Settings > Screen > Rotate screen, put into effect: the menus (and the terminal) turned now; a game or a
+        video as it next starts."""
         turn = TURN_DEGREES.get(self.setting("turn"), 0)
         set_turn(turn)
         set_terminal_turn(turn)
@@ -394,7 +430,7 @@ class SettingsScreen:
         return f"{getattr(fb, 'dev_w', w)}x{getattr(fb, 'dev_h', h)}"
 
     def res_value(self):
-        """Settings > Resolution's row: the size the Pi starts at, or Auto, the screen's own."""
+        """Settings > Screen > Resolution's row: the size the Pi starts at, or Auto, the screen's own."""
         boot = boot_resolution()
         if boot:
             return boot
@@ -406,7 +442,7 @@ class SettingsScreen:
             return
         if name == "b":
             self.confirm = (None, 0.0)
-            self.set_page, self.set_sel = "root", self.settings_root_index("resolution")
+            self.set_page, self.set_sel = self.settings_place("resolution")
         elif name == "a" and key == "res":
             want = "res:" + (extra or "Auto")
             if extra == boot_resolution():
@@ -482,7 +518,7 @@ class SettingsScreen:
         self.set_setting("resolution_try", None)
         self.res_until = 0.0
         self.open_app(self.tab_index("settings"))
-        self.set_page, self.set_sel = "root", self.settings_root_index("resolution")
+        self.set_page, self.set_sel = self.settings_place("resolution")
         self.toast(f"Resolution: {t.get('size') or t.get('to')}", 3)
 
     def res_undo(self, restart=True):
@@ -671,7 +707,8 @@ class SettingsScreen:
         crumb = {"wifi": "Settings  ›  WiFi",
                  "friend": "Bot  ›  Settings" if self.bot_settings else "Settings  ›  Bot",
                  "f_models": "Bot  ›  Model", "f_voices": "Bot  ›  Voice",
-                 "resolution": "Settings  ›  Resolution"}.get(self.set_page, "Settings")
+                 "appearance": "Settings  ›  Appearance", "display": "Settings  ›  Screen",
+                 "resolution": "Settings  ›  Screen  ›  Resolution"}.get(self.set_page, "Settings")
         d.text((20, self.LIST_TOP + 10), crumb, font=F["small"], fill=MUTED, anchor="lm")
         boot = boot_resolution() if self.set_page == "resolution" else None
         if self.set_page == "resolution":
@@ -766,6 +803,7 @@ class SettingsScreen:
             d.text((30, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
             value = ((self.current_ssid() or "Not connected") if key == "wifi" else
                      self.bt_value() if key == "bluetooth" else
+                     self.settings_page_value(key) if key in SETTINGS_PAGES else
                      self.pad_summary() if key == "pad" else
                      self.pad_swap_value() if key == "pad_swap" else
                      self.friend_summary() if key == "friend" else
@@ -786,7 +824,7 @@ class SettingsScreen:
                 d.text((x0 - 10, mid), "◀", font=F["small"], fill=ACCENT, anchor="rm")
                 self.tap_arrows(y, y + rh, x0 - 10, W - 28)
                 x0 -= 28
-            if key == "wallpaper":                     # a little preview
+            if key in ("wallpaper", "appearance"):     # a little preview
                 thumb = self.wall_thumb()
                 d.rounded_rectangle((x0 - 70, mid - 15, x0 - 14, mid + 17), radius=5, fill=LINE)
                 img.paste(thumb, (int(x0 - 68), int(mid - 13)))
@@ -822,11 +860,12 @@ class SettingsScreen:
             hints = ([("A", "Use this")] if rows[sel][0] == "res" else []) + [("B", "Back")]
         else:
             key = rows[sel][0]
-            hints = [("◀▶", "Change"), ("L R", "Tabs"), ("B", "Home")]
-            if key in ("wifi", "bluetooth", "friend", "resolution", "homeassistant"):
+            back = ("B", "Back" if self.set_page in SETTINGS_PAGES else "Home")
+            hints = [("◀▶", "Change"), ("L R", "Tabs"), back]
+            if key in ("wifi", "bluetooth", "friend", "resolution", "homeassistant") or key in SETTINGS_PAGES:
                 hints = [("A", {"friend": "Set up", "homeassistant": "Set up", "wifi": "Networks",
-                                "bluetooth": "Devices"}.get(key, "Change")),
-                         ("L R", "Tabs"), ("B", "Home")]
+                                "bluetooth": "Devices", "appearance": "Open", "display": "Open"}.get(key, "Change")),
+                         ("L R", "Tabs"), back]
             elif key == "pad":
                 hints = [("A", "Set up buttons"), ("X", "Reset"), ("L R", "Tabs"), ("B", "Home")]
             elif key == "pad_swap" and self.pad_in_hand() is not None:   # (which controller: on the right)

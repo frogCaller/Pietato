@@ -9,7 +9,7 @@ Settings writes most of them for you.
 | `finance.txt` | `stocks =` the stocks to show (tickers, as on Yahoo Finance) and `coins =` the coins (CoinGecko ids). Y on the Finance tab adds and removes them |
 | `camera.txt` | `camera =` an address per line, a name after it if you like |
 | `bot.txt` | `server =`, `model =`, `style =`, `voice =`, `listen =`, `wake =`, `face_only =`, `colour =`, `background =`, `lashes =`, and its shape from 0 to 10: `eye_size =`, `eye_height =`, `eye_corners =`, `eye_gap =`, `mouth_size =` (Settings > Bot and its Character write these) |
-| `homeassistant.txt` | `url =` and `token =` (a long-lived access token): Settings > Home writes them, on the Pi or the web page. Your TVs and lights are found by themselves, and `tv =` and `lights =` pick which ones show |
+| `homeassistant.txt` | `url =` and `token =` (a long-lived access token): Settings > Home Assistant writes them, on the Pi or the web page. Your TVs and lights are found by themselves, and `tv =` and `lights =` pick which ones show |
 | `pihole.txt` | `address =` and `password =`: the Pi-hole page writes them when you sign in there |
 | `jellyfin.txt` | `server =` if your Jellyfin server isn't found by itself, and `user =` and `password =` if you'd rather not use Quick Connect |
 | `webui.txt` | `password =` if you want the web page to ask for one, `hosts =` other names you open it by |

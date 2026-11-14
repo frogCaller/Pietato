@@ -1,5 +1,5 @@
-"""A screen on its side (Settings > Rotate screen): the menus, turned 90, 180 or 270 degrees onto the screen's own
-pixels, exactly as they'd be on a screen that lies wide (portrait screens: 400x1280 like a 7.9" one, 720x1280,
+"""A screen on its side (Settings > Screen > Rotate screen): the menus, turned 90, 180 or 270 degrees onto the screen's
+own pixels, exactly as they'd be on a screen that lies wide (portrait screens: 400x1280 like a 7.9" one, 720x1280,
 1080x1920, and 480x640 at 16 bits), quick paths and all (whole pixels doubled, a box at a time, straight into the
 screen's memory or written row by row), the bars round a video, turned another way while it's up; the screen read
 back for the web page, turned back; a game's pictures turned too (the real emulator playing a test game: its
@@ -384,9 +384,10 @@ g.Framebuffer = FB
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 m.status_sig = m.status_signature()
 m.case = None
-keys = [k for k, _, _ in m.settings_root_rows()]
-check(f"Settings: Rotate screen, after Resolution's place ({keys[keys.index('turn') - 1:keys.index('turn') + 1]})",
-      "turn" in keys and m.setting("turn") == "Off")
+keys = [k for k, _, _ in m.settings_page_rows("display")]
+check(f"Settings > Screen: Rotate screen, after Resolution's place ({keys[keys.index('turn') - 1:keys.index('turn') + 1]})",
+      "turn" in keys and m.setting("turn") == "Off" and "turn" not in [k for k, _, _ in m.settings_root_rows()]
+      and [k for k, _, _ in g.SETTINGS_PAGES["display"]].index("turn") == 2)
 m.set_setting("turn", "90°")
 check(f"...90°: everything drawn turned from now on ({SC.TURN}), the menus at once ({m.fb.turns}), the terminal too "
       f"({open(ROT).read()!r})", SC.TURN == 90 and m.fb.turns == [90] and open(ROT).read() == "1")
@@ -397,12 +398,12 @@ check(f"...Off: back ({SC.TURN}, {m.fb.turns}, {open(ROT).read()!r})", SC.TURN =
       and open(ROT).read() == "0" and "rotate" not in " ".join(m.video_args()))
 m.case = "2w"
 m.res_info = lambda: None
-check("...not there on the GPi Case's own screen", "turn" not in [k for k, _, _ in m.settings_root_rows()])
+check("...not there on the GPi Case's own screen", "turn" not in [k for k, _, _ in m.settings_page_rows("display")])
 m.state["settings"]["turn"] = "270°"
-check("...unless it's turned already (to turn it back)", "turn" in [k for k, _, _ in m.settings_root_rows()])
+check("...unless it's turned already (to turn it back)", "turn" in [k for k, _, _ in m.settings_page_rows("display")])
 m.res_info = lambda: ("1920x1080", ["1920x1080"])
 m.state["settings"]["turn"] = "Off"
-check("...or the GPi Case 2 is in its dock, on a TV", "turn" in [k for k, _, _ in m.settings_root_rows()])
+check("...or the GPi Case 2 is in its dock, on a TV", "turn" in [k for k, _, _ in m.settings_page_rows("display")])
 m.save_state()
 open(ROT, "w").write("0")
 SC.set_turn(0)

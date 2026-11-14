@@ -290,7 +290,7 @@ m.press("a")
 m.go_home(); m.tab = m.tab_index("settings"); m.load_tab(m.tab); m.set_page = "root"; m.view = "list"
 rows = m.settings_rows()
 keys = [r[0] for r in rows]
-check(f"Settings: Battery saver, after Rotate screen's place ({keys})", "battery" in keys
+check(f"Settings: Battery saver, after Clock ({keys})", keys.index("battery") == keys.index("clock") + 1
       and dict((r[0], r[2]) for r in rows)["battery"] == ["Auto", "On", "Off"])
 m.set_sel = keys.index("battery")
 m.press("right")
@@ -301,9 +301,9 @@ m.dirty = True; m.flush()
 FB.last.save(S + "/settings_battery.png")
 web = {r["key"]: r for s in m.web_settings()["sections"] for r in s["rows"]}
 b = web.get("battery")
-check(f"the web page: Battery saver in Screen, Auto, and why ({b and (b['value'], b['choices'], b.get('note'))})",
+check(f"the web page: Battery saver in General, Auto, and why ({b and (b['value'], b['choices'], b.get('note'))})",
       b and b["value"] == "Auto" and b["choices"] == ["Auto", "On", "Off"] and b.get("note") == "On: it's running on its battery"
-      and any(r["key"] == "battery" for s in m.web_settings()["sections"] if s["id"] == "screen" for r in s["rows"]))
+      and any(r["key"] == "battery" for s in m.web_settings()["sections"] if s["id"] == "general" for r in s["rows"]))
 out = m.web_settings_do({"cmd": "settings", "key": "battery", "value": "Off"})
 check(f"...set there: Off ({out})", out == {"ok": True} and m.setting("battery") == "Off")
 out = m.web_settings_do({"cmd": "settings", "key": "battery", "value": "Sometimes"})

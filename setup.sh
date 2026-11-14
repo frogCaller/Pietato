@@ -1550,7 +1550,7 @@ else
     # HDMI screens need KMS, which the case's settings had turned off
     sed -i -E 's/^#dtoverlay=vc4-kms-v3d/dtoverlay=vc4-kms-v3d/' "$CONFIG"
   fi
-  # (the screen's own resolution, as it is: Settings > Resolution changes it)
+  # (the screen's own resolution, as it is: Settings > Screen > Resolution changes it)
 fi
 
 # --------------------------------------------------------------------------

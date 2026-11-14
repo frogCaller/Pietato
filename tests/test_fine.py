@@ -78,7 +78,7 @@ def fake_json(url, *a, **k):
 g.fetch_json = fake_json
 g.urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(OSError("offline"))
 
-# a 1080p monitor's screens, for Settings > Resolution
+# a 1080p monitor's screens, for Settings > Screen > Resolution
 DRM = S + "/drm/card1-HDMI-A-1"
 os.makedirs(DRM)
 open(DRM + "/status", "w").write("connected\n")
@@ -209,15 +209,16 @@ def tour(which):
     tab("Settings")
     m.set_page, m.set_sel = "root", 0
     shot("settings")
-    m.set_sel = m.settings_root_index("resolution")
+    m.set_page, m.set_sel = m.settings_place("resolution")         # (Settings > Screen, where there's a TV's sizes)
     shot("settings_res_row")
     m.press("a")
     shot("settings_res_page")
-    m.set_page = "root"
-    m.set_sel = m.settings_root_index("wallpaper"); m.press("a")   # (every background, a little picture each)
+    m.set_page, m.set_sel = m.settings_place("wallpaper")          # (Settings > Appearance)
+    shot("settings_appearance")
+    m.press("a")                                                   # (every background, a little picture each)
     shot("settings_backgrounds")
     m.press("b")
-    m.set_sel = m.settings_root_index("friend"); m.press("a")
+    m.set_page, m.set_sel = "root", m.settings_root_index("friend"); m.press("a")
     shot("settings_bot")
     m.press("b")
     tab("Weather")                               # (where you are: Weather's settings, START)

@@ -280,7 +280,7 @@ check("the home screen", m.view == "home")
 m.hass.configured = False
 toasts.clear()
 m.konami_do("tv:on")
-check(f"Home Assistant not set up: said ({toasts[-1:]})", toasts[-1:] == ["Set up Home Assistant first: Settings > Home"])
+check(f"Home Assistant not set up: said ({toasts[-1:]})", toasts[-1:] == ["Set up Home Assistant first, in Settings"])
 m.hass.configured = True
 
 # ---- what can't be a code, and what can -----------------------------------------------------------------------------

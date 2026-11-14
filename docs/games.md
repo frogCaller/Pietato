@@ -76,8 +76,8 @@ To play on a Pietato that has no controller (one on the TV, say) with another on
 [Another Pietato](controllers.md#another-pietato).
 
 Each Pietato's name has a dot beside it in its accent colour, so if you give each one its own colour in
-Settings > Accent colour, you can tell them apart at a glance. Two with the same name also show the end of
-their address after it, like `raspberrypi (.62)`.
+Settings > Appearance > Accent colour, you can tell them apart at a glance. Two with the same name also show
+the end of their address after it, like `raspberrypi (.62)`.
 
 Left on the home screen for five minutes while it's plugged in, your Bot gets bored, and one of the
 things it does is play one of your games by itself ([The Bot](bot.md) has the rest). With the AI player

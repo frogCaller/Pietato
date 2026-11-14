@@ -169,4 +169,4 @@ class LightsScreen:
             return "Looking for your lights", "One moment"
         if self.lights_scenes:
             return "No scenes", "Make them in Home Assistant"
-        return "No lights found", "Name them on the web page: Settings, Home"
+        return "No lights found", "Name them on the web page: Settings, Home Assistant"

@@ -685,8 +685,8 @@ class WebScreen:
         return {"ok": True} if self.game is not None else {"error": "The game didn't start on the Pi"}
 
     def web_wall(self, name):
-        """One of the home screen's backgrounds as a little picture, for the web page's Settings > Background (None:
-        no such one, or Picture: that's yours)."""
+        """One of the home screen's backgrounds as a little picture, for the web page's Settings > Appearance >
+        Background (None: no such one, or Picture: that's yours)."""
         if not isinstance(name, str) or name not in WALLS:
             return None
         kept = self.web_walls

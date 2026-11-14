@@ -21,8 +21,8 @@ All set.
 ## Screens
 
 A small square screen (like Waveshare's 4-inch 720x720) may tell the Pi it's a TV, which squeezes the picture:
-pick 720x720 (square) in Settings > Resolution. On a touch screen, tap what you want and swipe to move along
-a list.
+pick 720x720 (square) in Settings > Screen > Resolution. On a touch screen, tap what you want and swipe to move
+along a list.
 
 In the GPi Case 2's dock, with the TV on, the picture is on the TV: put the case in the dock or take it out
 and the Pi restarts with the picture where it should be. The case's buttons don't work in the dock, so use a

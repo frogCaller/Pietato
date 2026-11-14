@@ -8,8 +8,7 @@ import threading
 import time
 import urllib.parse
 
-from ..config import (ACCENTS, SCREEN_MODES, WALLPAPERS, clean_name, edit_config, home_dir, read_config,
-                      settings_glob)
+from ..config import ACCENTS, WALLPAPERS, clean_name, edit_config, home_dir, read_config, settings_glob
 from ..homeassistant import ha_typed_url, ha_url, save_ha
 from ..pihole import dns_guess
 from ..screen import boot_resolution, res_name
@@ -69,7 +68,7 @@ class WebSettingsScreen:
 
     def web_settings_now(self):
         sections = []
-        root = {k: (label, choices) for k, label, choices in self.settings_root_rows()}
+        root = {k: (label, choices) for k, label, choices in self.settings_all_rows()}
 
         def sec(sid, title, rows, about=""):
             rows = [r for r in rows if r]
@@ -89,35 +88,36 @@ class WebSettingsScreen:
             ok, words = pair
             return {"status": words, "tone": "busy" if ok == "busy" else "ok" if ok else "bad"}
 
-        # the screen
-        rows = [choice("wallpaper", choices=WALLPAPERS, picture=os.path.basename(self.setting("picture") or ""),
-                       walls=True),               # (the page shows a little picture of each: web.py's web_wall)
-                choice("home_style"),
-                choice("accent", colours={a: hex_of(rgb) for a, rgb in ACCENTS}),
-                choice("look"),                   # (the pages inside the apps: dark, or light)
-                choice("clock"), choice("app_full")]
-        if "turn" in root:
-            rows.append(choice("turn"))
-        battery = choice("battery")
-        if battery["value"] not in ("On", "Off"):
-            battery["value"], battery["note"] = "Auto", self.saver_why()   # (Auto: on or off now, and why)
-        rows.append(battery)
-        attract = choice("attract")
-        attract["note"] = ("Left idle, plugged in: the Bot gets bored and plays a game, looks through the camera or "
-                           "shows another app, till a button's pressed. Games only: just games.")
-        rows.append(attract)
+        # Appearance and Screen, as the Pi's Settings has them (its two pages of settings), and the rest of its own
+        sec("appearance", "Appearance", [
+            choice("wallpaper", choices=WALLPAPERS, picture=os.path.basename(self.setting("picture") or ""),
+                   walls=True),                   # (the page shows a little picture of each: web.py's web_wall)
+            choice("home_style"),
+            choice("accent", colours={a: hex_of(rgb) for a, rgb in ACCENTS}),
+            choice("look"),                       # (the pages inside the apps: dark, or light)
+            choice("app_full")])
+        rows = [choice("screen")]                  # (Video size)
         info = self.res_info() if "resolution" in root else None
         if info:
             rows.append(choice("resolution", "Resolution", ["Auto"] + list(info[1]), value=boot_resolution() or "Auto",
                                names=dict({s: res_name(s) for s in info[1]}, Auto=f"Auto ({info[0]})"),
                                confirm="The Pi restarts at this size, then asks on its screen whether to keep it. "
                                        "If nobody says so, it goes back."))
+        if "turn" in root:
+            rows.append(choice("turn"))
+        if "oled" in root:
+            rows.append(self.web_oled_row())
         sec("screen", "Screen", rows)
+        battery = choice("battery")
+        if battery["value"] not in ("On", "Off"):
+            battery["value"], battery["note"] = "Auto", self.saver_why()   # (Auto: on or off now, and why)
+        attract = choice("attract")
+        attract["note"] = ("Left idle, plugged in: the Bot gets bored and plays a game, looks through the camera or "
+                           "shows another app, till a button's pressed. Games only: just games.")
         sound = choice("sound", "Sound", root["sound"][1], value=self.sound_shown())   # (Bluetooth headphones, by
         if sound["value"] == "Auto" and self.sound_value() != "Auto":                   # name, while they have it)
             sound["note"] = self.sound_value()     # (Auto: HDMI, say)
-        sec("sound", "Sound and video", [sound, choice("screen", "Video size", SCREEN_MODES),
-                                         self.web_oled_row() if "oled" in root else None])
+        sec("general", "General", [choice("clock"), battery, attract, sound])
         sec("start", "Starting up", [choice("start"), choice("start_song")])
         sec("share", "Other Pietatos", [
             {"key": "name", "label": "This Pietato's name", "kind": "text", "value": self.setting("name") or "",
@@ -151,7 +151,7 @@ class WebSettingsScreen:
             choice("units", "Temperature", WX_UNITS, value=self.setting("units") if self.setting("units") in WX_UNITS
                    else WX_UNITS[0])])
 
-        # Home: your Home Assistant
+        # your Home Assistant
         cfg = read_config(self.ha_files())
         url, token = ha_url(cfg.get("url", "")), bool(cfg.get("token", "").strip())
         rows = [{"key": "ha_url", "label": "Address", "kind": "text", "value": url.split("://", 1)[-1]
@@ -168,7 +168,7 @@ class WebSettingsScreen:
         if url or token:
             rows.append({"key": "ha_forget", "label": "", "kind": "action", "button": "Forget Home Assistant",
                          "tone": "bad", "confirm": "Its address and token are taken off the Pi."})
-        sec("ha", "Home", rows, "Your Home Assistant: the TV Remote and Lights work your TVs and lights through it.")
+        sec("ha", "Home Assistant", rows, "The TV Remote and Lights work your TVs and lights through it.")
 
         # Pi-hole
         ph = self.pihole

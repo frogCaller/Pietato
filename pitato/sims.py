@@ -46,8 +46,8 @@ class Sim:
     poke_label = None               # X: what it does, or None
     options = ()
     restart_for = ()                # options it starts again for
-    pale_defaults = {}              # options it starts with on a light page (Settings > App pages) instead, till
-                                    # you pick any of them: {key: choice}
+    pale_defaults = {}              # options it starts with on a light page (Settings > Appearance > App pages)
+                                    # instead, till you pick any of them: {key: choice}
     smooth = False                  # it moves smoothly: drawn more often where the machine has the time (SIM_SMOOTH)
     bare = False                    # drawn on the page itself, in the middle: no box, no numbers beside it
     paced = False                   # its picture changes now and then (frame_in says when), not frame by frame
@@ -89,7 +89,8 @@ class Sim:
         self.restart()
 
     def relook(self):
-        """The pages' look has changed (Settings > App pages): pictures it kept in the page's colours, thrown away."""
+        """The pages' look has changed (Settings > Appearance > App pages): pictures it kept in the page's colours,
+        thrown away."""
 
     def update(self, dt):
         return None

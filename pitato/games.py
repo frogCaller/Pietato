@@ -1010,7 +1010,8 @@ class GameRun:
     def start(self, core, sound="", volume=80, picture="Fit", fb="/dev/fb0", resume=True, options=(), turn=0,
               cheevos=True, saves=None, net="", watch=""):
         """options: the emulator's settings ("key=value"), over what it'd have otherwise (a DS game's screens).
-        turn: degrees the screen's picture is turned clockwise (a screen on its side: Settings > Rotate screen).
+        turn: degrees the screen's picture is turned clockwise (a screen on its side: Settings > Screen > Rotate
+        screen).
         cheevos: its achievements, if you've signed in to RetroAchievements. saves: a folder of its own for its saves
         (attract mode's, apart from yours), instead of Games/Saves. net: ADDRESS:PORT:KEY, another Pietato's game,
         joined as player 2 (pitato/netplay.py); watch: ADDRESS:PORT:KEY, another Pietato's game, watched."""

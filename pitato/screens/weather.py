@@ -155,8 +155,8 @@ class WeatherScreen:
         self.fb.show(img)
 
     def wx_icon(self, name, size, pale=None):
-        """A weather picture, kept. On a light page (Settings > App pages) its colours are a little deeper; the home
-        screen's is as ever, whatever the pages are (pale=False)."""
+        """A weather picture, kept. On a light page (Settings > Appearance > App pages) its colours are a little deeper;
+        the home screen's is as ever, whatever the pages are (pale=False)."""
         pale = look() == "Light" if pale is None else pale
         key = (name, size, scale()) + (("pale",) if pale else ())
         if key not in self.wx_icons:                   # (as finely as the screen's drawn)

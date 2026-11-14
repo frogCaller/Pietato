@@ -1,8 +1,9 @@
-"""Settings > App pages: the pages inside the apps, Dark (as ever, to start with) or Light. Light: a pale page with
-white rows and cards and dark words, on every tab and its pages, the accent a deeper one of its kind (to read against
-white), a notice a dark pill (to stand out). The home screen keeps its background and its words, whatever the pages
-are. Picked on the Pi or the web page, kept for next time, and nothing drawn before in the other look is left on the
-screen: every page comes out as it does on one that started in that look, and back in Dark, to the pixel as it was.
+"""Settings > Appearance > App pages: the pages inside the apps, Dark (as ever, to start with) or Light. Light: a pale
+page with white rows and cards and dark words, on every tab and its pages, the accent a deeper one of its kind (to
+read against white), a notice a dark pill (to stand out). The home screen keeps its background and its words, whatever
+the pages are. Picked on the Pi or the web page, kept for next time, and nothing drawn before in the other look is
+left on the screen: every page comes out as it does on one that started in that look, and back in Dark, to the pixel
+as it was.
 What's dark anyway keeps its light words (the black before a video, Now playing's art). Notes starts on paper with
 dark ink on a light page, till you pick; the Clock's dial is white, its hands dark."""
 import json, os, shutil, subprocess, sys, time, types
@@ -103,16 +104,18 @@ def walk(m):
     m.go_home(); m.open_app(tab("Finance")); m.tick()
     out["Finance*"] = drawn(m)                       # (*: what it says depends on when: looked at, not compared)
     m.go_home(); m.open_app(tab("Settings"))
-    m.set_page, m.set_sel = "root", m.settings_root_index("look")
+    m.set_page, m.set_sel = "root", m.settings_root_index("appearance")
     for _ in range(100):                             # (Bluetooth's row: once it knows whether there is any)
         if m.bt_value() != "…":
             break
         m.tick(); time.sleep(0.05)
     out["Settings"] = drawn(m)
-    m.set_sel = m.settings_root_index("wallpaper"); m.press("a")
-    out["Settings > Background"] = drawn(m)
+    m.set_page, m.set_sel = m.settings_place("look")
+    out["Settings > Appearance"] = drawn(m)
+    m.set_page, m.set_sel = m.settings_place("wallpaper"); m.press("a")
+    out["Settings > Appearance > Background"] = drawn(m)
     m.press("b")
-    m.set_page, m.set_sel = "root", m.settings_root_index("look")
+    m.set_page, m.set_sel = m.settings_place("look")
     m.help_from, m.view = "list", "help"
     out["Controls"] = drawn(m)
     m.view = "list"
@@ -133,11 +136,12 @@ def walk(m):
 m = g.Media(); m.enter()
 
 # ---- the setting, and Dark as ever
-rows = m.settings_root_rows()
+rows = m.settings_page_rows("appearance")
 keys = [k for k, _, _ in rows]
 row = next((r for r in rows if r[0] == "look"), None)
-check(f"Settings has App pages, after the accent colour: Dark or Light ({row})",
-      row == ("look", "App pages", ["Dark", "Light"]) and keys.index("look") == keys.index("accent") + 1)
+check(f"Settings > Appearance has App pages, after the accent colour: Dark or Light ({row})",
+      row == ("look", "App pages", ["Dark", "Light"]) and keys.index("look") == keys.index("accent") + 1
+      and "look" not in [k for k, _, _ in m.settings_root_rows()])
 check("it starts Dark, as ever: the colours every module draws with are the ones they were",
       m.setting("look") == "Dark" and T.look() == "Dark" and g.BG == (16, 19, 23) and g.TEXT == (236, 239, 243)
       and g.ROW == (31, 37, 46) and g.ACCENT == dict(T.ACCENTS)["Blue"]
@@ -148,7 +152,7 @@ check(f"...and its pages are dark ({ {k: round(pale(v), 2) for k, v in dark.item
 
 # ---- Light, picked on the Pi
 m.open_app(tab("Settings"))
-m.set_page, m.set_sel = "root", m.settings_root_index("look")
+m.set_page, m.set_sel = m.settings_place("look")
 m.press("right")
 theirs = {mod.__name__.split(".", 1)[1]: vars(mod) for mod in g._mods}
 home_mods = [n for n in theirs if n in T.OWN_LOOK]
@@ -164,9 +168,10 @@ check(f"...but for the home screen's ({home_mods}): its background's colours and
       and theirs["screens.draw"]["ACCENT"] == T.ACCENTS_LIGHT["Blue"])
 light = walk(m)
 shares = {k: round(pale(v), 2) for k, v in light.items()}
-check(f"every page is light now: a pale page, white rows, dark words ({shares}; Settings > Background has its "
-      f"pictures of them all, dark ones too)",
-      all(pale(light[k]) > (0.5 if k == "Settings > Background" else 0.9) for k in light if k != "the home screen")
+check(f"every page is light now: a pale page, white rows, dark words ({shares}; Settings > Appearance > Background "
+      f"has its pictures of them all, dark ones too)",
+      all(pale(light[k]) > (0.5 if k == "Settings > Appearance > Background" else 0.9) for k in light
+          if k != "the home screen")
       and all(has(light[k], LIGHT["BG"]) > 100000 for k in LISTS)
       and all(has(light[k], DARK["BG"]) == 0 for k in LISTS))
 same_home = light["the home screen"].tobytes() == dark["the home screen"].tobytes()

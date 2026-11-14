@@ -161,14 +161,21 @@ names, _ = tap(320, 240)
 check(f"...a tap on it does nothing ({names})", names == [])
 draw()
 
-# ---- Settings: rows, and a picked row's ◀ value ▶ -----------------------------------------------------------------
+# ---- Settings: rows, a page of settings opened by a tap on its row, and a picked row's ◀ value ▶ --------------------
 m.tab = m.tab_index("settings"); m.load_tab(m.tab); m.set_page = "root"; m.set_sel = 0
 draw()
 srows = m.settings_rows()
-acc = next(i for i, r in enumerate(srows) if r[0] == "accent")
+check("Settings: each row tappable", sum(w[:3] == ("sel", "attr", "set_sel") for _, w in m.taps) >= 5)
+app = next(i for i, r in enumerate(srows) if r[0] == "appearance")
+x, y = spot(lambda w: w == ("sel", "attr", "set_sel", app))
+names, _ = tap(x, y)
+check(f"Appearance tapped: its page of settings, in one tap ({names}, {m.set_page})",
+      names == ["a"] and m.set_page == "appearance")
+prows = m.settings_rows()
+acc = next(i for i, r in enumerate(prows) if r[0] == "accent")
 m.set_sel = acc
 draw()
-check("Settings: each row tappable", sum(w[:3] == ("sel", "attr", "set_sel") for _, w in m.taps) >= 5)
+check("...each of its rows tappable", sum(w[:3] == ("sel", "attr", "set_sel") for _, w in m.taps) == len(prows))
 before = m.setting("accent")
 x, y = spot(lambda w: w == ("keys", "right"))
 names, _ = tap(x, y)
@@ -177,23 +184,28 @@ check(f"...the accent's ▶, tapped: the next colour ({before} -> {m.setting('ac
 x, y = spot(lambda w: w == ("keys", "left"))
 tap(x, y)
 check(f"...its ◀: back ({m.setting('accent')})", m.setting("accent") == before)
-other = next(i for i, r in enumerate(srows) if i > acc and r[2])
+other = next(i for i, r in enumerate(prows) if i > acc and r[2])
 if any(w == ("sel", "attr", "set_sel", other) for _, w in m.taps):
     x, y = spot(lambda w: w == ("sel", "attr", "set_sel", other))
     names, _ = m.web_touch({"cmd": "tap", "x": x / m.fb.w, "y": y / m.fb.h})
     check(f"another row tapped: picked, and A ({m.set_sel} = {other}, {names})", m.set_sel == other and names == ["a"])
     m.flush()
+x, y = spot(lambda w: w == ("keys", "b"))
+tap(x, y)
+check(f"Back, along the bottom: Settings' first page, on Appearance ({m.set_page}, {m.set_sel})",
+      m.set_page == "root" and m.set_sel == app and m.view == "list")
+draw()
 touch("scroll", y=50)
 touch("scroll", y=50)                                  # (twice: more rows than one turn of the wheel goes)
 check(f"the wheel down a long way: the last row, never round to the top ({m.set_sel} of {len(srows)})",
       m.set_sel == len(srows) - 1)
 
-# ---- Settings > Background: its page of little pictures, each one tappable ----------------------------------------
-m.set_page = "root"; m.set_sel = next(i for i, r in enumerate(srows) if r[0] == "wallpaper")
+# ---- Settings > Appearance > Background: its page of little pictures, each one tappable ---------------------------
+m.set_page, m.set_sel = m.settings_place("wallpaper")
 m.press("a")
 draw()
 walls = [w for _, w in m.taps if w[:3] == ("sel", "attr", "set_sel")]
-check(f"Settings > Background: each one on its page tappable ({len(walls)} of {len(g.WALLPAPERS)})",
+check(f"Settings > Appearance > Background: each one on its page tappable ({len(walls)} of {len(g.WALLPAPERS)})",
       m.set_page == "wallpaper" and len(walls) == len(g.WALLPAPERS))
 mint = g.WALLPAPERS.index("Mint")
 x, y = spot(lambda w: w == ("sel", "attr", "set_sel", mint))
@@ -202,9 +214,10 @@ check(f"...a tap on Mint: picked and used, in one tap ({names}, {m.setting('wall
       and m.setting("wallpaper") == "Mint" and m.set_page == "wallpaper" and m.set_sel == mint)
 x, y = spot(lambda w: w == ("keys", "b"))
 tap(x, y)
-check("...Back, along the bottom: Settings' rows again", m.set_page == "root" and m.view == "list")
+check("...Back, along the bottom: Appearance's rows again, on Background",
+      m.set_page == "appearance" and m.settings_rows()[m.set_sel][0] == "wallpaper" and m.view == "list")
 m.set_setting("wallpaper", "Midnight")
-m.set_sel = len(srows) - 1
+m.set_page = "root"; m.set_sel = len(srows) - 1
 draw()
 
 # ---- the keyboard on the screen, and typing from the web page -----------------------------------------------------

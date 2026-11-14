@@ -2,9 +2,9 @@
 page's copy of the screen does: a tap picks and opens what's there (an app, a row, a button along the bottom), a swipe
 moves along (a list scrolls), a resting screen just wakes. Found among the other devices (not a laptop's touchpad, a
 drawing tablet, a mouse or a controller), with its own axes' ranges, the single-touch way or by slot (the first finger
-alone); a finger resting, or moved not far either way, nothing. Turned with the picture (Settings > Rotate screen) and
-off the picture's black edges, nothing. Not the terminal's, Settings > Controller's or Chromium's (which reads it
-itself). With fake input devices that use the real evdev codes, and the real main loop."""
+alone); a finger resting, or moved not far either way, nothing. Turned with the picture (Settings > Screen > Rotate
+screen) and off the picture's black edges, nothing. Not the terminal's, Settings > Controller's or Chromium's (which
+reads it itself). With fake input devices that use the real evdev codes, and the real main loop."""
 import io, json, os, shutil, sys, threading, time, urllib.request
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -215,7 +215,7 @@ sq = Where(Pic(720, 720, 720, 720, w=720, h=720))
 check("the square screen, as it is: the same share", sq.touch_cmd(("tap", 0.5, 0.25)) == {"cmd": "tap", "x": 0.5, "y": 0.25})
 side = Where(Pic(480, 800, 800, 480, turn=90, w=800, h=480))        # (a tall screen on its side, turned to lie wide)
 got = side.touch_cmd(("tap", 0.25, 0.5))
-check(f"turned a quarter (Settings > Rotate screen): where that is on the picture ({got})",
+check(f"turned a quarter (Settings > Screen > Rotate screen): where that is on the picture ({got})",
       got == {"cmd": "tap", "x": 0.5, "y": 0.75})
 got = side.touch_cmd(("swipe", 0.0, -0.5))
 check(f"...a swipe up the screen's own way: left on the picture ({got})",
@@ -398,7 +398,7 @@ check(f"the screen resting: a tap wakes it, nothing opens ({rested} -> {m.restin
       rested and not m.resting and m.view == "home")
 g.Media.saver_on = real_saver
 
-# turned upside down (Settings > Rotate screen): the screen's own corner opposite is where Music is
+# turned upside down (Settings > Screen > Rotate screen): the screen's own corner opposite is where Music is
 FB.turn, FB.dev_w, FB.dev_h, FB.tw, FB.th, FB.ox, FB.oy = 180, 640, 480, 640, 480, 0, 0
 m.dirty = True; wait()
 touch_at(waveshare, 1 - where[0], 1 - where[1])
