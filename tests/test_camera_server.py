@@ -93,6 +93,18 @@ check("and stopped when the presses stopped", v4l2().get("pan_absolute") == pan)
 check("pan and tilt went together", all("tilt_absolute=" in ln for ln in open(STATE + ".log").read().split() if "pan_absolute=" in ln))
 code, r = post("/api/ptz/drive", {"vx": 1, "vy": 0, "sid": "t", "seq": 3})
 check("an old message can't start it again", code == 200 and not ptz.driver)
+was_tick, camera.TICK = camera.TICK, 0.6               # (a long tick, to tell its first step from a whole one)
+writes = lambda: len(open(STATE + ".log").read().split())   # noqa: E731
+n, t0 = writes(), time.monotonic()
+post("/api/ptz/drive", {"vx": -1, "vy": 0, "sid": "first", "seq": 1})
+while writes() == n and time.monotonic() - t0 < 3:
+    time.sleep(0.01)
+first = time.monotonic() - t0
+post("/api/ptz/stop", {"sid": "first", "seq": 2})
+camera.TICK = was_tick
+time.sleep(0.8)
+check(f"its first step comes soon after the d-pad's pressed ({first:.2f} s), not a whole tick on ({0.6} s here)",
+      first < 0.5 and not ptz.driver)
 
 # never too far down
 for seq in range(10, 40):

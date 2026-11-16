@@ -484,9 +484,10 @@ class Ptz:
             return self.position() if self.ctrls else {}
 
     def drive_loop(self):
-        last = time.monotonic()
+        last, first = time.monotonic(), True
         while True:
-            time.sleep(TICK)
+            time.sleep(TICK / 3 if first else TICK)  # (its first step soon after the d-pad's pressed)
+            first = False
             with self.lock:
                 now = time.monotonic()
                 vx, vy = self.vel

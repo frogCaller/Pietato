@@ -21,6 +21,7 @@ from .camera import OwnCameras
 # Camera tab: cameras on other Pis (PiE-ink, or camera.py from this repo), or any camera on your network
 CAM_SPEED = {"slow": 25, "normal": None, "fast": 120}   # None: the camera's own setting
 CAM_TICK = 0.15          # stick messages while the d-pad is held (it stops after 0.7 s quiet)
+CAM_TAP = 0.15           # ...and a tap of it turns the camera for this long at least (told to stop no sooner)
 CAM_FPS = 4              # how often a camera that's only a picture is fetched, for the Camera tab
 CAM_STREAM_FPS = (15, 8)  # ...and the pictures of one that streams, shown at most this many a second (on a Pi 4
                           # or 5; on a slower Pi)
@@ -429,6 +430,8 @@ class Camera:
         self.finding = None          # the gen a look at the address is running for
         self.held = set()            # d-pad directions held right now
         self.tapped = set()          # ...and pressed since its thread last looked (a tap, let go of before it did)
+        self.poked = threading.Event()   # ...one pressed or let go of: its thread looks now, not at its next tick
+        self.unfollow = False        # follow-me to be turned off before it's steered (its thread does that first)
         self.zoom_dir = 0
         self.zoom = None             # 0..1, once the camera has said
         self.speed = "normal"
@@ -618,7 +621,7 @@ class Camera:
             self.frame, self.raw, self.jpeg, self.reached, self.info, self.zoom = None, None, None, None, {}, None
             self.fitted, self.connecting = None, False
         self.held.clear()
-        self.tapped = set()
+        self.tapped, self.unfollow = set(), False
         self.zoom_dir, self.sel_down, self.start_down, self.action = 0, None, None, ""
         if self.running:
             self.begin()
@@ -739,7 +742,7 @@ class Camera:
 
     def stop(self):
         self.held.clear()
-        self.tapped = set()
+        self.tapped, self.unfollow = set(), False
         self.zoom_dir = 0
         self.sel_down = self.start_down = None
         with self.lock:
@@ -753,13 +756,16 @@ class Camera:
         self.own.close()
 
     def control_loop(self, gen, base):
-        moving, next_info, next_zoom = False, 0.0, 0.0
+        moving, since, next_info, next_zoom = False, 0.0, 0.0, 0.0
         while self.running and gen == self.gen:
             now = time.monotonic()
             way = TURNED_DPAD.get(self.turn_of(self.addr), {})   # (up on a turned picture: where it is)
             tapped, self.tapped = self.tapped, set()  # (a quick tap, a click on the web page's remote: let go of
             held = {way.get(d, d) for d in self.held | tapped}   # already, and it turns a little all the same)
             if held:
+                if self.unfollow:                     # (follow-me off, before the first of its steering)
+                    self.unfollow = False
+                    self.post("/api/ptz/follow", {"on": False}, base)
                 vx = ("right" in held) - ("left" in held)
                 vy = ("up" in held) - ("down" in held)
                 if self.flipped(self.addr):           # (one that turns left when told right)
@@ -771,8 +777,9 @@ class Camera:
                 if CAM_SPEED[self.speed]:
                     body["speed"] = CAM_SPEED[self.speed]
                 self.post("/api/ptz/drive", body, base)
-                moving = True
-            elif moving:
+                if not moving:
+                    moving, since = True, now
+            elif moving and now - since >= CAM_TAP:   # (a tap: it's turned a moment before it's told to stop)
                 self.seq += 1
                 self.post("/api/ptz/stop", {"sid": self.sid, "seq": self.seq}, base)
                 moving = False
@@ -785,7 +792,11 @@ class Camera:
             if now >= next_info and not held and not self.zoom_dir:
                 self.refresh(gen, base)
                 next_info = now + 2
-            time.sleep(CAM_TICK)
+            if moving and not held:                   # (a tap's moment, the rest of it; then the stop)
+                time.sleep(max(0.0, min(CAM_TAP, since + CAM_TAP - time.monotonic())))
+            else:                                     # (a button pressed or let go of meanwhile: at once)
+                self.poked.wait(CAM_TICK)
+            self.poked.clear()
         if moving:                                    # never leave it turning
             self.seq += 1
             self.post("/api/ptz/stop", {"sid": self.sid, "seq": self.seq}, base)
@@ -1079,15 +1090,16 @@ class Camera:
                 return True
             return False
         if name in ("up", "down", "left", "right"):
-            if self.following:                        # steering takes over from follow-me
-                self.info.setdefault("follow", {})["on"] = False
-                threading.Thread(target=self.post, args=("/api/ptz/follow", {"on": False}),
-                                 daemon=True).start()
+            if self.following:                        # steering takes over from follow-me: told so first, by
+                self.info.setdefault("follow", {})["on"] = False   # the thread that steers it (never after)
+                self.unfollow = True
             self.held.add(name)
             self.tapped.add(name)
+            self.poked.set()
             self.action = self.moving_text()
         elif name in ("x", "y"):
             self.zoom_dir = 1 if name == "x" else -1
+            self.poked.set()
         elif name == "start":                         # decided when let go, or once held long enough
             self.start_down, self.start_used = time.monotonic(), False
         elif name == "select":                        # decided when let go, or once held long enough
@@ -1232,6 +1244,7 @@ class Camera:
     def release(self, name):
         if name in self.held:
             self.held.discard(name)
+            self.poked.set()
             self.action = self.moving_text()
         elif name in ("x", "y") and self.zoom_dir:
             self.zoom_dir = 0

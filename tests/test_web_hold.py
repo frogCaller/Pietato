@@ -246,6 +246,25 @@ n = len(told)
 time.sleep(0.4)
 check(f"X held: it zooms in for as long, and no longer ({zooms})", out.get("held") is True and len(zooms) >= 2
       and zooms == sorted(zooms) and zooms[-1] > 0.2 and len(told) == n)
+import pitato.cameras as CAMS  # noqa: E402
+was_tick, CAMS.CAM_TICK = CAMS.CAM_TICK, 3.0           # (its thread looking at what's held only every three seconds)
+time.sleep(0.5)
+told.clear()
+t0 = time.monotonic()
+ask(button="left", hold="down")
+while not drives() and time.monotonic() - t0 < 2.9:
+    time.sleep(0.01)
+went = time.monotonic() - t0
+time.sleep(0.3)
+t1 = time.monotonic()
+ask(button="left", hold="up")
+while told[-1][0] != "/api/ptz/stop" and time.monotonic() - t1 < 2.9:
+    time.sleep(0.01)
+stopped = time.monotonic() - t1
+CAMS.CAM_TICK = was_tick
+time.sleep(0.3)
+check(f"a press is passed on to the camera at once ({went:.2f} s), not at its thread's next look; letting go too "
+      f"({stopped:.2f} s)", went < 1.0 and stopped < 1.0)
 out = ask(button="b", hold="down")
 time.sleep(0.2)
 ask(button="b", hold="up")
@@ -330,7 +349,7 @@ async def web():
         m.game, m.view = None, "home"
         await asyncio.sleep(0.3)
         presses.clear()
-        await held_down(pg, '.dp[data-b="down"]', 1.2)
+        await held_down(pg, '.dp[data-b="down"]', 2.5)   # (long enough for a slow machine to press it again thrice)
         await pg.mouse.up()
         await asyncio.sleep(0.4)
         again = [p for p in presses if p == ("down", True)]
