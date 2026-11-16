@@ -359,13 +359,19 @@ class BotScreen:
         v = words[0].lower() if words else "auto"
         return v if v in ("auto", "on") else "on" if v in ("yes", "1", "true") else "off"
 
+    def own_sound_records(self):
+        """This machine's own sound records, microphone or no, and can't be told from a sound card you plugged in
+        that plays too: a GPi Case 2's (a USB sound card of its own), an RK3326 handheld's. (A GPi Case 2W's sound is
+        the Pi's own, which can't record: any sound card that records there is one you plugged in.)"""
+        return getattr(self, "case", None) == "2" or is_handheld()
+
     def auto_mics(self, found=None):
         """The microphones it listens with by itself (Listens: Auto): one you plugged in, not a webcam's (that's there
-        for its pictures), nor in a GPi Case (or an RK3326 handheld) its own sound, nor on a PC its own sound card (that
-        records whether there's a microphone or not)."""
-        case, pc = getattr(self, "case", None) or is_handheld(), is_pc()
+        for its pictures), nor a GPi Case 2's or an RK3326 handheld's own sound (own_sound_records: there, only one
+        that doesn't play), nor on a PC its own sound card (that records whether there's a microphone or not)."""
+        own, pc = self.own_sound_records(), is_pc()
         return [c for c in (mics() if found is None else found)
-                if not c["camera"] and not (case and c["plays"]) and (c["usb"] or not pc)]
+                if not c["camera"] and not (own and c["plays"]) and (c["usb"] or not pc)]
 
     def bot_ear(self):
         """What it listens with, as Settings > Bot has it: a microphone's card ("": the first there is), WEB_MIC (a web
@@ -390,9 +396,9 @@ class BotScreen:
     def listen_rows(self, found):
         """Settings > Bot's rows on listening, of f_listen, f_wake and f_mic. Listens is there wherever Vosk runs (so it
         can be turned off before a microphone's ever plugged in); the wake phrase with a microphone plugged in (in a GPi
-        Case, not the case's own sound), while it's On, or while it hears a web page's; the microphone, too, when
+        Case 2, not the case's own sound), while it's On, or while it hears a web page's; the microphone, too, when
         there's more than one to pick from (or one's picked)."""
-        usable = [c for c in found if not c["plays"]] if getattr(self, "case", None) else found
+        usable = [c for c in found if not c["plays"]] if getattr(self, "case", None) == "2" else found
         hearing = bool(usable) or self.bot_listen_mode() == "on" or self.bot_mic() == WEB_MIC
         rows = ["f_listen"] if hearing or listen_supported() or have_vosk() else []
         if hearing:

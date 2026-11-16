@@ -20,8 +20,8 @@ from .pilot import changes, PILOT_MOST, Pilots
 NEVER = float("inf")
 EXIT_WAIT = 10.0  # seconds it has to tidy up when it's told to stop (the Pi shutting down): then it goes as it is
 HOT_HELD = 10.0  # HOME down in the menus this long without letting go: as if it had (◀ or ▶ go as themselves)
-WEB_HOLD_LOST = 1.0  # a button held down on the web page's remote, in a game: let go of here when the page hasn't said
-                     # it's still held for this long (the page closed, or its WiFi gone)
+WEB_HOLD_LOST = 1.0  # a button held down on the web page's remote (in a game, or steering a camera): let go of here
+                     # when the page hasn't said it's still held for this long (the page closed, or its WiFi gone)
 
 
 # ---- the main loop ----------------------------------------------------------------------

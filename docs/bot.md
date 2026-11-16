@@ -99,7 +99,8 @@ It doesn't talk over your music, unless you turn on Pauses music in its Characte
 pauses your music or the radio while you talk to it and while it answers, and plays it on after.
 
 If you plug a USB microphone into the Pi (one with a free USB port: in a GPi Case, only the GPi Case 2's
-dock has one) or a PC, you can talk to it: say "hey potato" and what you want. It makes out what you say on
+dock has one) or a PC, you can talk to it: say "hey potato" and what you want. A USB sound card with a
+microphone plugged into it counts too. It makes out what you say on
 the Pi itself with [Vosk](https://alphacephei.com/vosk/), which it downloads the first time you plug one in
 (about 45 MB). It listens while music plays or is paused: over music it only listens for its name, so
 say "hey potato" and, once the music pauses or goes quieter, what you want. It doesn't listen while it's

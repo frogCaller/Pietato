@@ -428,6 +428,7 @@ class Camera:
         self.gen = 0                 # goes up when the camera changes or stops: its threads end
         self.finding = None          # the gen a look at the address is running for
         self.held = set()            # d-pad directions held right now
+        self.tapped = set()          # ...and pressed since its thread last looked (a tap, let go of before it did)
         self.zoom_dir = 0
         self.zoom = None             # 0..1, once the camera has said
         self.speed = "normal"
@@ -617,6 +618,7 @@ class Camera:
             self.frame, self.raw, self.jpeg, self.reached, self.info, self.zoom = None, None, None, None, {}, None
             self.fitted, self.connecting = None, False
         self.held.clear()
+        self.tapped = set()
         self.zoom_dir, self.sel_down, self.start_down, self.action = 0, None, None, ""
         if self.running:
             self.begin()
@@ -737,6 +739,7 @@ class Camera:
 
     def stop(self):
         self.held.clear()
+        self.tapped = set()
         self.zoom_dir = 0
         self.sel_down = self.start_down = None
         with self.lock:
@@ -754,7 +757,8 @@ class Camera:
         while self.running and gen == self.gen:
             now = time.monotonic()
             way = TURNED_DPAD.get(self.turn_of(self.addr), {})   # (up on a turned picture: where it is)
-            held = {way.get(d, d) for d in self.held}
+            tapped, self.tapped = self.tapped, set()  # (a quick tap, a click on the web page's remote: let go of
+            held = {way.get(d, d) for d in self.held | tapped}   # already, and it turns a little all the same)
             if held:
                 vx = ("right" in held) - ("left" in held)
                 vy = ("up" in held) - ("down" in held)
@@ -1080,6 +1084,7 @@ class Camera:
                 threading.Thread(target=self.post, args=("/api/ptz/follow", {"on": False}),
                                  daemon=True).start()
             self.held.add(name)
+            self.tapped.add(name)
             self.action = self.moving_text()
         elif name in ("x", "y"):
             self.zoom_dir = 1 if name == "x" else -1

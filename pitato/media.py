@@ -633,9 +633,11 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         return self.tab if p is None else p
 
     def web_holds(self):
-        """A game on the screen: a button held down on the web page's remote is held down here too, till it's let go
-        of there (anywhere else it's pressed once, and again and again while it's held, as the menus want)."""
-        return self.active and self.view == "game" and self.game is not None
+        """Where a button held down on the web page's remote is held down here too, till it's let go of there: a game
+        on the screen, and a camera's picture (one that turns is steered for as long as the d-pad's held, and zooms
+        while X or Y is, as with a controller). Anywhere else it's pressed once, and again and again while it's held,
+        as the menus want."""
+        return self.active and ((self.view == "game" and self.game is not None) or self.on_camera_page())
 
     def holds_buttons(self):
         """Pages that follow buttons held down themselves (no key repeat)."""

@@ -7,13 +7,14 @@ and it opens like an app.
 
 ![The web page: the Pi's screen, with the remote beside it](webui.png)
 
-**Screen** is the Pi's screen in media mode, and it works like the Pi: tap something on it to open
-it, and swipe or scroll to move along a list. Back and Home are under it, and the whole remote is
-behind Remote. Its Hotkey is the controller's HOME (a game's menu, say), while Home under the screen
-goes to the home screen. In a game, a button you hold on the remote (or your keyboard's arrows) stays held
-till you let go, as on a controller. When the Pi has a box to type in, one comes up under the screen too, so you
-can type on your phone or computer. Further down, you can set up controllers and pair Bluetooth devices.
-A Pi with no screen works the same from here: Screen shows the menus it would have.
+**Screen** is the Pi's screen in media mode, and it works like the Pi: tap something on it to open it, and swipe
+or scroll to move along a list. Back and Home are under it, and the whole remote is behind Remote. Its Hotkey is
+the controller's HOME (a game's menu, say), while Home under the screen goes to the home screen. In a game, a
+button you hold on the remote (or your keyboard's arrows) stays held till you let go, as on a controller. It's
+the same on a camera's picture: hold the d-pad to turn a camera that turns, click it to turn a little, and hold
+X or Y to zoom. When the Pi has a box to type in, one comes up under the screen too, so you can type on your
+phone or computer. Further down, you can set up controllers and pair Bluetooth devices. A Pi with no screen
+works the same from here: Screen shows the menus it would have.
 
 When the Pi is at its terminal instead of media mode, Screen on the secure page (below) shows the
 terminal. Type the password you sign in to the Pi with, and you can use it from there: click it and

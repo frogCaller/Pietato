@@ -226,13 +226,20 @@ m.press("right")
 check(f"Auto again ({toasts[-1:]})", m.bot_listen_mode() == "auto" and "listen = auto" in bot_txt()
       and toasts[-1] == "It listens when a microphone's plugged in")
 was_case = getattr(m, "case", None)
-m.case = "gpi2"
+m.case = "2"
 plug_mic("Audio", "USB Audio Device", 7, plays=True, line=" 7 [Audio          ]: USB-Audio - USB Audio Device\n")
-check(f"in a GPi Case, its own sound isn't a microphone: {listen_keys()}", listen_keys() == ["f_listen"])
+check(f"in a GPi Case 2, its own sound (a USB sound card that records too) isn't a microphone: {listen_keys()}",
+      listen_keys() == ["f_listen"])
 ticks(1)
 check("...nor listened with by itself", m.ears.state == "off" and not got and m.auto_mics() == [])
 m.case = None
 check("...on another Pi, a headset is", "f_wake" in keys() and [c["id"] for c in m.auto_mics()] == ["Audio"])
+unplug(7)
+m.case = "2w"                                          # (a Pi set up for the GPi Case 2W: its own sound can't record)
+plug_mic("CODEC", "USB Audio CODEC", 7, plays=True, line=" 7 [CODEC          ]: USB-Audio - USB Audio CODEC\n")
+check(f"a Pi set up for a GPi Case 2W: a USB sound card that records and plays is a microphone you plugged in "
+      f"({listen_keys()})", "f_wake" in listen_keys() and [c["id"] for c in m.auto_mics()] == ["CODEC"]
+      and m.bot_ear() == "CODEC")
 unplug(7)
 m.case = was_case
 ticks(1)

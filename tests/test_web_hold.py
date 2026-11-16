@@ -1,8 +1,10 @@
 """The web page's remote in a game: a button held down there is held down in the game till it's let go of (the d-pad
 held walks, as a controller's does), not pressed once; the page says it's still held every so often, and the Pi lets go
 of it by itself when the page goes quiet. In the menus it's pressed once, and again and again while it's held, as
-before. Media mode's main loop and its control server, then the web page in a real browser: the d-pad held with the
-mouse, and the keyboard's arrows."""
+before. On a camera's picture it's held too: a camera that turns is steered for as long as the d-pad's held (and stops
+when it's let go of, or the page goes quiet), a click turns it a little, X zooms while it's held; in your list of
+cameras it's the menus' again. Media mode's main loop and its control server, then the web page in a real browser:
+the d-pad held with the mouse, and the keyboard's arrows."""
 import asyncio, os, shutil, socket, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, SP); sys.path.insert(0, TESTS); sys.path.insert(0, ROOT)
@@ -151,6 +153,111 @@ check(f"in the menus, held down on the page: pressed once, not held ({out}, {pre
       "held" not in out and presses == [("down", False)])
 out = ask(button="down", hold="up")
 check(f"...its letting go: nothing more ({out}, {presses})", out == {"ok": True} and presses == [("down", False)])
+
+# ---- a camera's picture: steered while the d-pad's held on the page ---------------------------------------------
+import io, json  # noqa: E401, E402
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: E402
+from PIL import Image  # noqa: E402
+told = []                                              # (what the camera's told: its path and what's said)
+
+
+class Shed(BaseHTTPRequestHandler):
+    """A pretend camera that turns, as camera.py answers for one."""
+    def log_message(self, *a):
+        pass
+
+    def reply(self, obj, ctype="application/json", code=200):
+        body = obj if isinstance(obj, bytes) else json.dumps(obj).encode()
+        self.send_response(code); self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/api/ptz":
+            return self.reply({"ok": True, "available": True, "position": {"pan": 0, "tilt": 0, "zoom": 0.2},
+                               "follow": {"can": False, "on": False}, "name": "Shed", "server": "Pitato camera"})
+        if self.path == "/api/camera.jpg":
+            out = io.BytesIO()
+            Image.new("RGB", (320, 240), (40, 70, 90)).save(out, "JPEG")
+            return self.reply(out.getvalue(), "image/jpeg")
+        self.reply({"ok": False}, code=404)
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        told.append((self.path, body))
+        self.reply({"ok": True, "position": {"pan": 0, "tilt": 0, "zoom": body.get("zoom", 0.2)}})
+
+
+shed = ThreadingHTTPServer(("127.0.0.1", 0), Shed)
+threading.Thread(target=shed.serve_forever, daemon=True).start()
+SHED = f"127.0.0.1:{shed.server_address[1]}"
+open(H + "/camera.txt", "w").write(f"camera = {SHED}   Shed\n")
+m.soon(lambda: (m.web_tab("Camera"), m.camera_open(SHED)))
+end = time.time() + 15
+while time.time() < end and not (m.on_camera_page() and m.camera.kind == "pie" and m.camera.reached):
+    time.sleep(0.1)
+check(f"a camera that turns, on the screen ({m.camera.title}, {m.camera.kind})", m.on_camera_page()
+      and m.camera.steers and m.camera.title == "Shed")
+
+
+def drives():
+    return [b for p, b in told if p == "/api/ptz/drive"]
+
+
+told.clear()
+out = ask(button="left", hold="down")
+time.sleep(0.8)
+n = len(drives())
+check(f"on a camera's picture, ◀ held down on the web page: held here too, and the camera turns for as long ({out}, "
+      f"told {n} times, to the left)", out.get("held") is True and n >= 3
+      and all(b["vx"] == -1 and b["vy"] == 0 for b in drives()) and "/api/ptz/stop" not in [p for p, _ in told])
+for _ in range(3):
+    out = ask(button="left", hold="still")
+    time.sleep(0.3)
+check(f"...the page saying it's still held: still turning ({len(drives())} times now)", out.get("held") is True
+      and len(drives()) >= n + 3 and "/api/ptz/stop" not in [p for p, _ in told])
+out = ask(button="left", hold="up")
+time.sleep(0.5)
+n = len(told)
+check(f"...let go of on the page: it's told to stop ({told[-1][0]})", "held" not in out
+      and told[-1][0] == "/api/ptz/stop")
+time.sleep(0.5)
+check("...and told nothing more", len(told) == n)
+told.clear()
+ask(button="up", hold="down")
+time.sleep(0.5)
+check(f"▲ held, then the page goes quiet: turning upwards a moment ({len(drives())} times)", len(drives()) >= 2
+      and all(b["vy"] == 1 and b["vx"] == 0 for b in drives()) and "/api/ptz/stop" not in [p for p, _ in told])
+time.sleep(1.3)
+check(f"...a second with nothing from the page: it stops by itself ({told[-1][0]})", told[-1][0] == "/api/ptz/stop")
+told.clear()
+for _ in range(4):                                     # (a click: down and up at once, quicker than the camera's
+    ask(button="right", hold="down")                   #  thread looks at what's held)
+    ask(button="right", hold="up")
+    time.sleep(0.5)
+check(f"a click on the d-pad, let go of at once: it turns a little all the same, every time ({len(drives())} of 4), "
+      f"and stops", len(drives()) == 4 and all(b["vx"] == 1 for b in drives()) and told[-1][0] == "/api/ptz/stop")
+told.clear()
+out = ask(button="x", hold="down")
+time.sleep(0.5)
+zooms = [b["zoom"] for p, b in told if p == "/api/ptz/set"]
+ask(button="x", hold="up")
+time.sleep(0.4)
+n = len(told)
+time.sleep(0.4)
+check(f"X held: it zooms in for as long, and no longer ({zooms})", out.get("held") is True and len(zooms) >= 2
+      and zooms == sorted(zooms) and zooms[-1] > 0.2 and len(told) == n)
+out = ask(button="b", hold="down")
+time.sleep(0.2)
+ask(button="b", hold="up")
+time.sleep(0.2)
+presses.clear()
+out2 = ask(button="down", hold="down")
+time.sleep(0.2)
+check(f"B: your cameras; there the d-pad's pressed once, not held, as in the menus ({out2}, {presses})",
+      m.cam_list and "held" not in out2 and presses == [("down", False)])
+ask(button="down", hold="up")
+m.soon(m.go_home)
+time.sleep(0.4)
 
 # ---- the web page in a browser ------------------------------------------------------------------------------------
 import logging; logging.getLogger("werkzeug").setLevel(logging.ERROR)
