@@ -7,10 +7,11 @@ and is heard on both (the one that's over has let go of each sound card). A song
 page deaf a while): the Den doesn't drop it, finds it behind at its next look, and tells it again, from where the song
 is by then. The TV, turned on in the middle of the party: asked in, without anyone doing anything, and playing from
 where the song is. The party paused, the TV turned off and on again: back in it, paused, and playing on with the
-others. The Kitchen leaves (HOME's menu), its word to the Den lost: it isn't brought back. Then the Kitchen starts a
-party of its own while the Den's is still going: the Den and the TV switch to it (the Den's own is over). And when
-that one's over, the Den (Settings > Random song at start-up on) has its own song back, the one the party stopped:
-not the party's. The party's songs come with their covers from the one that leads it."""
+others. The Kitchen leaves (HOME's menu), its word to the Den lost: it isn't brought back, till Join is picked in HOME's
+menu on its Now playing (there while a party's going). Then the Kitchen starts a party of its own while the Den's is
+still going: the Den and the TV switch to it (the Den's own is over). And when that one's over, the Den (Settings >
+Random song at start-up on) has its own song back, the one the party stopped: not the party's. The party's songs come
+with their covers from the one that leads it."""
 import json, os, shutil, socket, subprocess, sys, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -228,6 +229,23 @@ try:
     check(f"...and though the Den never heard that it left, it isn't brought back (the Kitchen: {theirs['party']}; "
           f"the Den's party: {st['party']['members']})", theirs["party"] is None and theirs["playing"] is None
           and st["party"]["members"] == ["TV"])
+
+    # ---- ...till Join's picked on it (HOME's menu on Now playing) ---------------------------------------------------
+    said = json.loads(den.do("beacon"))                # (what the Den tells your others: that it leads a party)
+    kitchen.do("hearfrom 127.0.0.2 " + json.dumps(said))
+    kitchen.do("play " + K1)                           # (a song of its own: its Now playing, for HOME's menu)
+    rows = kitchen.menu("join")
+    theirs = wait(15, lambda: on(kitchen, "Three", "Den"))
+    since = time.monotonic()
+    st = den.state()
+    check(f"HOME's menu on the Kitchen's Now playing, the Den's party going (its beacon says so: {said.get('party')}): "
+          f"Join, with Party mode ({rows}); picked: it's in again, on the party's song ({theirs and brief(theirs)}; "
+          f"the Den: {st['party']['members']})", said.get("party") == 1
+          and rows == ["back", "send", "keep", "join", "party"] and bool(theirs)
+          and st["party"]["members"] == ["Kitchen", "TV"] and "Kitchen joined the party" in den.said("toast"))
+    time.sleep(5.0)
+    got = step(den, kitchen, since, 2.5)
+    check(f"...from where the song is, in step ({got} ms from the Den)", got[0] is not None and abs(got[0]) < 10)
 
     # ---- a new party, started on another of them: the rest switch to it ----------------------------------------------
     kitchen.do("play " + K1)

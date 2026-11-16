@@ -395,6 +395,7 @@ class PartyPlayer:
         self.tail = None                               # ...or before a jump into silence: the rest of its fade out,
                                                        #  for the next piece written (a piece can end partway)
         self.until = None                              # ...ahead after a jump: silence till then (the leader's clock)
+        self.snap = False                              # its clock's just been set better: put right at once (snapped)
         self.closed = False
         self.aplay = None
         args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error"]
@@ -479,6 +480,13 @@ class PartyPlayer:
 
     def paused(self):
         return self.stop_at is not None and self.clock() >= self.stop_at[0]
+
+    def snapped(self):
+        """Its clock's just been set better (the leader's, roughly known till now, looked at properly): it's put
+        where that says at once, faded across, however little it's out: not little by little, as a sound card's
+        slow drift is."""
+        with self.lock:
+            self.snap = True
 
     def pause_at(self, t):
         """Paused at t (the leader's clock), on the sample heard then."""
@@ -584,8 +592,10 @@ class PartyPlayer:
                 if self.stop_at is not None and self.stop_at[0] > t:   # (a pause coming: up to it, this time)
                     left = min(left, max(1, int(np.ceil((self.stop_at[0] - t) * rate))))
                 err = want - (self.next + self.x)      # (+: behind the clock; -: ahead of it)
-                if self.played == 0 or (abs(err) > PARTY_JUMP * rate and abs(self.drift or 0.0) > PARTY_JUMP * rate / 2):
-                    if self.jump(err, out, left, t):   # (far out, or its very start: put right at once)
+                if self.played == 0 or self.snap or (abs(err) > PARTY_JUMP * rate
+                                                     and abs(self.drift or 0.0) > PARTY_JUMP * rate / 2):
+                    self.snap = False                  # (far out, its very start, or its clock just set better: put
+                    if self.jump(err, out, left, t):   #  right at once)
                         break
                     i = sum(len(p) for p in out)
                     continue

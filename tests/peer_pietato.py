@@ -20,7 +20,8 @@ peer URL NAME [too] (the other one; too: another, as well), deaf SECONDS (its we
 long: a message that never gets there), set KEY VALUE (a setting), pilots (the controllers another Pietato's working
 it with, as JSON), group say TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON,
 for log), hear BEACON (another's
-beacon, as JSON, heard as if it came from this machine's own address), cookie (the cookie as it's known here, as JSON)
+beacon, as JSON, heard as if it came from this machine's own address; hearfrom ADDRESS BEACON: from that address),
+cookie (the cookie as it's known here, as JSON)
 / cookie look (its look at what your others say of it, as if it had been up a while) / cookie try r|p|s (your throw
 for it), quit. Its emulator,
 asked to open its game (nethost, watchhost), says it has (at 5442 and 5444), and the ask goes in the log.
@@ -347,6 +348,10 @@ try:
             print(got[0] if got else "ok", file=SAY, flush=True)
         elif words[0] == "hear":                        # another's beacon, as if heard (from this machine's address)
             m.pie.hear("127.0.0.1", json.loads(words[1]))
+            print("ok", file=SAY, flush=True)
+        elif words[0] == "hearfrom":                    # ...or from the address given (hearfrom ADDRESS BEACON)
+            addr, said = words[1].split(None, 1)
+            m.pie.hear(addr, json.loads(said))
             print("ok", file=SAY, flush=True)
         elif words[0] == "cookie":                      # the cookie: as it's known here; look; try r|p|s
             rest = (words[1] if len(words) > 1 else "").split()

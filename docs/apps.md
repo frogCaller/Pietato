@@ -141,8 +141,9 @@ Pietatos needs to be on.
 
 One that's turned on later, or comes out of a game or a video, joins by itself within a few seconds and plays
 from where the song is (a station starts again for all of them). One that missed a song is put right the same
-way. One you took out with Leave the party stays out. Starting Party mode on another Pietato moves them all
-to that one's party.
+way. One you took out with Leave the party stays out; to bring it back, play something on it and pick Join in
+HOME's menu on Now playing, which has it while a party is going. Starting Party mode on another Pietato moves
+them all to that one's party.
 
 ## LED backlight
 

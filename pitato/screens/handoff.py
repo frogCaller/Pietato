@@ -288,7 +288,9 @@ class HandoffScreen:
             return [("back", back), ("party", self.party_label())]
         keep = [("keep", "Send to another Pietato")] if self.media_keepable() else []   # (a song of yours, a copy)
         party = [] if m.get("video") or not self.party_label() else [("party", self.party_label())]
-        return [("back", back), ("send", "Play on another Pietato")] + keep + party
+        on = [] if m.get("video") else self.party_others()[:1]   # (another of yours' party, this one's not in: to join)
+        join = [("join", f"Join {on[0][1]}'s party")] if on else []
+        return [("back", back), ("send", "Play on another Pietato")] + keep + join + party
 
     def media_keepable(self):
         """What's playing is a song of yours, a file here: a copy can go to another of yours to keep (Plex's and
@@ -366,6 +368,11 @@ class HandoffScreen:
         elif name == "a" and job == "party":           # (party mode: started, ended or left: screens/party.py)
             self.media_menu_close()
             self.party_job()
+        elif name == "a" and job == "join":            # (...or another's, joined)
+            self.media_menu_close()
+            on = self.party_others()[:1]
+            if on:
+                self.party_join(on[0][0], on[0][1])
         elif name == "a":
             self.media_menu_close(play_on=False)       # (sent, it stops here; if it can't go, it plays on)
             self.media_send()

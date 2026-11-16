@@ -6,8 +6,9 @@ volume and sound (Settings > Sound). One that's in another party when this one's
 it was leading itself is over). While it goes on the leader looks at it every few seconds: one that's fallen behind (a
 song or a pause that never got to it) is told again, from where the song is by then; one that's on and free (just
 turned on, done with its game) is asked in, and plays from there too; one that's stopped answering is asked in again
-when it's back; one that left stays out. POST /api/party (webui.py) carries what the leader says, and what the others
-ask."""
+when it's back; one that left stays out, till Join is picked on it (HOME's menu on Now playing has it, with Party
+mode, while another of yours leads a party): the leader's asked to let it in. POST /api/party (webui.py) carries what
+the leader says, and what the others ask."""
 import os
 import re
 import secrets
@@ -240,19 +241,24 @@ class PartyScreen:
             else:
                 p["asked"][url] = now + PARTY_AGAIN
                 msg = {"kind": "start", "port": PARTY_PORT}
-            p["looking"] += 1
-            threading.Thread(target=self.party_look_at, args=(p, url, name, dict(msg, token=p["token"]), n, paused),
-                             daemon=True, name="party-look").start()
+            self.party_reach(p, url, name, msg, n, paused, now)
 
-    def party_look_at(self, p, url, name, msg, n, paused):
+    def party_reach(self, p, url, name, msg, n, paused, since):
+        """(The leader.) One of yours asked what it's on, or asked in, on a thread of its own: party_looked has what
+        it says. n, paused: what the party's on as it's asked; since: when."""
+        p["looking"] += 1
+        threading.Thread(target=self.party_look_at, args=(p, url, name, dict(msg, token=p["token"]), n, paused, since),
+                         daemon=True, name="party-look").start()
+
+    def party_look_at(self, p, url, name, msg, n, paused, since):
         """(A thread of its own.) One of yours asked what it's on, or asked in."""
         got = None
         try:
             got = party_post(url, dict(msg, clock=time.monotonic()), PARTY_WAIT if msg["kind"] == "start" else 3.0)
         finally:
-            self.soon(lambda: self.party_looked(p, url, name, msg["kind"], got, n, paused))
+            self.soon(lambda: self.party_looked(p, url, name, msg["kind"], got, n, paused, since))
 
-    def party_looked(self, p, url, name, kind, got, n, paused):
+    def party_looked(self, p, url, name, kind, got, n, paused, since):
         """(The leader's main loop.) What one of yours said to a look. In the party and not on its song, or not paused
         as it is: told again. Asked in, and it's in: said, and told what's on. One that says it left stays out; one
         that doesn't answer is asked again at the next look, one that can't join now a while later."""
@@ -288,7 +294,7 @@ class PartyScreen:
                 return
         if whole(got.get("n")) == n and bool(got.get("paused")) == paused:
             return                                     # (on the party's song, as the party is)
-        if p["n"] == n and p["said"] <= p["looked"]:   # (nothing's been said to all of them since it was asked)
+        if p["n"] == n and p["said"] <= since:         # (nothing's been said to all of them since it was asked)
             if kind != "start":
                 print(f"party: {name} is behind: told again", flush=True)
             self.party_catch(url)
@@ -390,16 +396,40 @@ class PartyScreen:
         if getattr(self, "sharing", False):
             threading.Thread(target=self.share_now, daemon=True, name="party-said").start()
 
-    def party_elsewhere(self):
-        """Another of your Pietatos is leading a party, and this one isn't in it (in a game when it began, say, or left
-        to play something of its own): the lights of your own on the network are the party's to light, not this
-        one's music's."""
+    def party_others(self):
+        """Your other Pietatos leading a party now that this one isn't in (in a game when it began, say, or left to
+        play something of its own): [(its address, its name)]. None while this one's in a party."""
         pie = getattr(self, "pie", None)
         if self.party is not None or pie is None:
-            return False
+            return []
         yours = dict(self.saves_peers())
         with pie.lock:
-            return any(u in yours and h.get("party") for u, h in pie.heard.items())
+            on = [u for u, h in pie.heard.items() if u in yours and h.get("party")]
+        return sorted((u, yours[u]) for u in on)
+
+    def party_elsewhere(self):
+        """There's a party on among your others that this one isn't in: the lights of your own on the network are
+        the party's to light, not this one's music's."""
+        return bool(self.party_others())
+
+    def party_join(self, url, host):
+        """Join, picked in HOME's menu on Now playing (there while another of yours leads a party): its leader's asked
+        to let this one in. It asks this one in as it does any of yours, a moment later, and tells it what's on."""
+        if self.party is not None:
+            return
+        why = self.party_busy()
+        if why:
+            self.toast(why, 3)
+            return
+        self.party_quit = None                         # (asked for: a party it left is one it's in again)
+        self.toast(f"Joining {host}'s party…", 4)
+
+        def ask():
+            got = party_post(url, {"kind": "join"}, PARTY_WAIT)
+            if got is None or got.get("ok") is not True:
+                why = (got or {}).get("error") or f"{host} not responding"
+                self.soon(lambda: self.toast(f"Couldn't join: {why}", 4))
+        threading.Thread(target=ask, daemon=True, name="party-join").start()
 
     # -- in another's -----------------------------------------------------------------------------------------------
     def party_busy(self):
@@ -430,8 +460,12 @@ class PartyScreen:
             try:
                 got = clock_offset(urllib.parse.urlsplit(p["leader"]).hostname, p["port"], p["token"])
                 if got is not None:
+                    rough = p.get("rough")
                     p["offset"], p["rtt"] = got
                     p["rough"], p["heard"] = False, time.monotonic()
+                    proc = self.proc
+                    if rough and self.party is p and isinstance(proc, PartyProc):
+                        proc.player.snapped()          # (its song, begun by the rough clock: where this one says, now)
             finally:
                 p["pinging"] = False
         threading.Thread(target=ping, daemon=True, name="party-ping").start()
@@ -537,6 +571,16 @@ class PartyScreen:
             return {"ok": False, "error": "Not one of your Pietatos"}
         url, host = peers[0]
         kind, token, p = cmd.get("kind"), cmd.get("token"), self.party
+        if kind == "join":                             # (one of yours asks to be let into the party this one leads:
+            if p is None or not p.get("lead"):         #  asked in as any is, now, whether or not it left before)
+                return {"ok": False, "error": "There's no party here now"}
+            p["left"].discard(url)
+            if url not in p["members"]:
+                now, proc = time.monotonic(), self.proc
+                p["asked"][url] = now + PARTY_AGAIN
+                paused = isinstance(proc, PartyProc) and proc.player.stop_at is not None
+                self.party_reach(p, url, host, {"kind": "start", "port": PARTY_PORT}, p["n"], paused, now)
+            return {"ok": True}
         if not isinstance(token, str) or not 16 <= len(token) <= 64:
             return {"ok": False, "error": "What party?"}
         if kind == "start":

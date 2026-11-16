@@ -179,6 +179,21 @@ check(f"...on again together, from where they were ({on[0][1] if on else None:.3
       and abs(apart(f"{S}/a.log", f"{S}/c.log", r_at, after=0.3)[0]) < NEAR)
 for pl in (a, b, c):
     pl.close()
+out = [0.030]                                          # (one whose clock is only roughly known: 30 ms behind)
+at = time.monotonic() + 1.0
+a, b = player("g", at), player("h", at, clock=lambda: time.monotonic() - out[0])
+time.sleep(1.0 + 2.5)
+rough = apart(f"{S}/g.log", f"{S}/h.log", at, after=1.5)
+out[0] = 0.0                                           # (...then set right, the leader's clock looked at properly)
+b.snapped()
+set_at = time.monotonic()
+time.sleep(2.2)
+right = apart(f"{S}/g.log", f"{S}/h.log", set_at, after=0.6)
+check(f"one whose clock was only roughly known, 30 ms out, hears it that much late ({rough}); its clock set right: "
+      f"it's put in step at once, not little by little ({right})", None not in rough + right
+      and 22 < rough[0] < 38 and abs(right[0]) < NEAR)
+for pl in (a, b):
+    pl.close()
 short = S + "/short.wav"
 ramp(short, 2)
 at = time.monotonic() + 0.5
@@ -439,7 +454,16 @@ m.play(queue, 0)
 check("a song plays here (on its own player)", spawned and spawned[-1][0] == SONGS[0] and m.view == "now")
 m.media_home()
 items = m.media_menu_items()
-check(f"HOME on Now playing: Party mode, in its menu ({items})", ("party", "Party mode") in items)
+check(f"HOME on Now playing: Party mode, in its menu ({items})", ("party", "Party mode") in items
+      and "join" not in dict(items))
+m.pie.heard[THEIRS]["party"] = True                    # (the TV says it's leading a party)
+there = m.media_menu_items()
+check(f"...and, while another of yours leads a party, Join before it ({there})", ("join", "Join tv's party") in there
+      and there.index(("join", "Join tv's party")) + 1 == there.index(("party", "Party mode")))
+del m.pie.heard[THEIRS]["party"]
+said = m.web_party({"from": "127.0.0.1", "kind": "join"})
+check(f"...one of yours asking to be let into a party here, with none on: no ({said})",
+      said == {"ok": False, "error": "There's no party here now"})
 m.media_menu["sel"] = [k for k, _ in items].index("party")
 done = threading.Event()
 threading.Thread(target=lambda: (m.press("a"), done.set()), daemon=True).start()
@@ -585,7 +609,7 @@ check("party mode again", m.party_leading() and type(m.proc).__name__ == "PartyP
 p = m.party
 said = g.party_post(THEIRS, {"kind": "what", "token": p["token"]})
 p["looking"] += 1
-m.party_looked(p, THEIRS, "tv", "look", said, p["n"], False)
+m.party_looked(p, THEIRS, "tv", "look", said, p["n"], False, time.monotonic())
 check(f"one from before the leader's looks, asked what it's on ({said}): left as it is, in the party, and not asked "
       f"again", said == {"ok": False, "error": "What's that?"} and THEIRS in p["plain"] and THEIRS in p["members"])
 p["plain"].clear()
