@@ -971,7 +971,7 @@ class DrawScreen:
             target = self.handoff_target() if self.media_sendable() else None
             cols = [
                 ("Music & radio", [("A", "Pause / play"), ("◀▶", "Seek / station"),
-                                   ("L R", "Prev / next"), ("▲▼", "Volume"), ("Y", "Shuffle")]),
+                                   ("L R", "Prev / next"), ("▲▼", "Volume"), ("Y", "Shuffle / repeat")]),
                 ("", ([("X", f"Play it on {target[1]}")] if target else [])
                  + [("SELECT", "Lofi art"), ("B", "Back to the list"), ("HOME", "and ◀: Terminal"),
                     ("", "Music keeps playing in"), ("", "the terminal")]),

@@ -146,6 +146,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.meta = {}
         self.paused = False
         self.shuffle = False
+        self.repeat = False          # the one song again each time it ends (Y on Now playing: in order, shuffled, it)
         self.volume = 80
         self.started = 0.0
         self.retry = None           # (args, target) to try if a stream fails at once
@@ -2041,7 +2042,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 return                                 # (it had been playing: tuned in again)
             online = bool(self.cur) and self.cur["src"].startswith("ia:")
             self.remember(finished=not quick)
-            i = None if was in ("live", "radio") or (quick and online) else self.next_index(1)
+            i = None if was in ("live", "radio") or (quick and online) else self.next_index(1, ended=not quick)
             if was in ("live", "radio") and quick:
                 self.toast("Couldn't play that stream")
             elif quick and online:                      # not on to the next: it'd likely fail too
@@ -2213,8 +2214,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.skip(1)
             elif name in ("up", "down"):
                 self.set_volume(VOLUME_STEP if name == "up" else -VOLUME_STEP)
-            elif name == "y" and not radio:
-                self.shuffle = not self.shuffle
+            elif name == "y" and not radio:            # (round: in order, shuffled, the one song again and again)
+                self.shuffle, self.repeat = (False, not self.repeat) if self.shuffle or self.repeat else (True, False)
+                self.toast("Repeat this song" if self.repeat else "Shuffle" if self.shuffle else "In order", 2)
             elif name == "x":
                 self.view, self.help_from = "help", "now"
                 self.media_x()                         # (X again there: on another of your Pietatos)

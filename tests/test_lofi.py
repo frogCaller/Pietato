@@ -156,7 +156,8 @@ k = m.fonts
 from PIL import Image, ImageDraw
 d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
 x = 20
-for key, label in (("A", "Pause"), ("◀▶", "Seek"), ("L R", "Prev/next"), ("Y", "Shuffle"), ("SELECT", "Art"), ("B", "List")):
+for key, label in (("A", "Pause"), ("◀▶", "Seek"), ("L R", "Prev/next"), ("Y", "In order"), ("SELECT", "Art"),
+                   ("B", "List")):                     # (Y's words at their longest: what it does next)
     x += m.key_w(d, key) + 7 + d.textlength(label, font=k["small"]) + 18
 check(f"...its buttons fit along the bottom ({x - 18:.0f} of 640)", x - 18 <= 632)
 m.press("select")

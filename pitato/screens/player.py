@@ -599,12 +599,17 @@ class PlayerScreen:
         self.kind = None
         self.retry = None
 
-    def next_index(self, d):
+    def next_index(self, d, ended=False):
+        """Which of the queue is next (d: 1, or -1 for the one before), or None: there's none. ended: the song's
+        played through, not been skipped: with Repeat on (Y on Now playing) it's the one again. (One that stopped
+        as soon as it started isn't played again and again: the next, as ever.)"""
         n = len(self.queue)
         if not n:
             return None
         if self.kind in ("radio", "live"):          # channel up/down wraps around
             return (self.qi + d) % n
+        if ended and self.kind == "audio" and self.repeat and 0 <= self.qi < n:
+            return self.qi
         if self.kind == "audio" and self.shuffle and d > 0 and n > 1:
             return random.choice([i for i in range(n) if i != self.qi])
         i = self.qi + d

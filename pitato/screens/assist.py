@@ -811,7 +811,7 @@ class AssistScreen:
             self.cmd("pausing_keep mute " + ("1" if k == "mute" else "0"))
             return "Muted." if k == "mute" else "Sound back on."
         if k == "shuffle":
-            self.shuffle = not self.shuffle
+            self.shuffle, self.repeat = not self.shuffle, False   # (not the one song again and again, either way)
             return f"Shuffle {'on' if self.shuffle else 'off'}."
         if k == "playing":
             if not self.proc or not self.cur:

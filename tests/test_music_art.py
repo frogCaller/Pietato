@@ -374,6 +374,28 @@ check("shuffle on: its drawing lit in the cover's colour (off: not)",
       ink(sh, (ax, keys - 12, ax + 34, keys + 12), colour, 30)
       and not ink(a, (ax, keys - 12, ax + 34, keys + 12), colour, 30))
 m.shuffle = False
+toasted = []
+was_toast, m.toast = m.toast, lambda text, secs=4: toasted.append(text)
+as_ever = m.next_index(1)
+m.press("y")
+first = (m.shuffle, m.repeat, toasted[-1])
+m.press("y")
+second = (m.shuffle, m.repeat, toasted[-1])
+rp = shot(m)
+spot = (slice(keys - 14, keys + 14), slice(ax - 2, ax + 36))
+check(f"Y goes round: shuffle ({first}), then the one song again and again ({second}): its drawing a loop with a 1 "
+      f"in it, lit in the cover's colour", first == (True, False, "Shuffle")
+      and second == (False, True, "Repeat this song") and ink(rp, (ax, keys - 12, ax + 34, keys + 12), colour, 30)
+      and not np.array_equal(rp[spot], sh[spot]) and not np.array_equal(rp[spot], a[spot]))
+check(f"...the song played through: it's the next ({m.next_index(1, ended=True)}, of {m.qi}); skipped with R, the "
+      f"one after it as ever ({m.next_index(1)}); and one that stopped as soon as it started isn't played again and "
+      f"again", m.next_index(1, ended=True) == m.qi and m.next_index(1) == as_ever and as_ever != m.qi
+      and m.next_index(1, ended=False) == as_ever)
+m.press("y")
+check(f"...and round to in order again ({m.shuffle}, {m.repeat}, {toasted[-1]!r}): the next, when it's played "
+      f"through", (m.shuffle, m.repeat, toasted[-1]) == (False, False, "In order")
+      and m.next_index(1, ended=True) == as_ever and np.array_equal(shot(m)[spot], a[spot]))
+m.toast = was_toast
 for key, did in (("a", "pause"), ("right", "seek 10 0"), ("l", None)):
     m.said.clear()
     skipped = []

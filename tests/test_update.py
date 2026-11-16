@@ -10,10 +10,11 @@ it's up to date, back on System, no restart; a newer version it hadn't looked fo
 doesn't work (changes here in the way, setup.sh failing, the job gone), System says why, and offers it again. GitHub's
 history written afresh (every id new, the same versions): taken as it is, up to date if it's the same
 version, put in if there's a newer one, but not over a version of its own here. A shallow clone (an SD card image's)
-goes on to main's newest as any does. Pietato renamed on GitHub: a folder cloned from its old name gets it from the new
-one once that answers (as the folder's owner). release.py (kept, though Update software doesn't ask it now): the newest
-version among tags; GitHub's answer, not a pre-release, a draft or a tag it can't take. In a mount namespace of its
-own: everything it makes is on a tmpfs at /srv there."""
+goes on to main's newest as any does. A Pi that lost its power just after a version was fetched (git's files for it
+there, and empty): the next look mends it, and so does Update software. Pietato renamed on GitHub: a folder cloned
+from its old name gets it from the new one once that answers (as the folder's owner). release.py (kept, though Update
+software doesn't ask it now): the newest version among tags; GitHub's answer, not a pre-release, a draft or a tag it
+can't take. In a mount namespace of its own: everything it makes is on a tmpfs at /srv there."""
 import http.server, json, os, shutil, subprocess, sys, threading, time
 
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
@@ -570,6 +571,61 @@ check(f"...pressed: on to it as the folder's owner, put in, and the Pi restarts 
       and read(T + "/installed-commit").strip() == sixth and "A sixth." in read(SHALLOW + "/README.md"))
 us.done()
 
+# ---- git's own files cut short by a power cut, as they were written: mended, and it updates all the same -------------
+POWER = HOME + "/power"
+sh(["git", "clone", "-q", "file://" + T + "/origin.git", POWER])
+open(T + "/installed-commit", "w").write(sixth + "\n")
+up = g.Updater(folder=POWER)
+up.check()
+objects = POWER + "/.git/objects"
+
+
+def files(folder):
+    return {os.path.join(d, f) for d, _, names in os.walk(folder) for f in names}
+
+
+def cut_short(since):
+    """What git wrote since then, as a Pi that lost its power just after leaves it: there, and empty. Which."""
+    cut = sorted(files(objects) - since)
+    for path in cut:
+        open(path, "w").close()
+    return cut
+
+
+before = files(objects)
+commit("README.md", "# Pitato\n\nFetched, and the power went.\n", "Fetched as the power went")
+up.check()
+cut = cut_short(before)
+said = sh(["git", "-C", POWER, "status"], ok=False)
+check(f"a version fetched just as the Pi lost its power: git's files for it there and empty ({len(cut)}), and git "
+      f"says so ({said.stderr.splitlines()[:1]})", len(cut) >= 3 and "is empty" in said.stderr)
+newest = commit("README.md", "# Pitato\n\nA newer one still.\n", "Newer still")
+up.check()
+empty = [x for x in files(objects) if os.path.getsize(x) == 0]
+others = subprocess.run(["find", POWER, "!", "-user", USER], capture_output=True, text=True).stdout.split()
+check(f"...the next look mends it (the empty ones taken away, and fetched afresh): New version, both of them "
+      f"({up.new}, {up.words()!r}; {len(empty)} empty, {others[:3]})", up.new == 2 and up.words() == "New version"
+      and not empty and not others
+      and sh(["git", "-C", POWER, "rev-parse", "refs/remotes/origin/main"]).stdout.strip() == newest)
+before = files(objects)
+cut_short(before - set(cut))                           # (cut short again, and not looked at since)
+newest = commit("README.md", "# Pitato\n\nAnd one more.\n", "One more")
+for f in ("setup.called", "reboot.log"):
+    if os.path.exists(f"{T}/{f}"):
+        os.remove(f"{T}/{f}")
+until(lambda: not os.path.exists(T + "/unit.running"), 15)     # (the last update's job over)
+err = up.begin()
+ok = err is None and until(lambda: "reboot" in read(T + "/reboot.log"), 25)
+others = subprocess.run(["find", POWER, "!", "-user", USER], capture_output=True, text=True).stdout.split()
+check(f"...Update software pressed on a folder left that way: mended there too, on to main's newest, put in, and "
+      f"the Pi restarts ({err}, {others[:3]})", ok and not others
+      and sh(["git", "-C", POWER, "rev-parse", "HEAD"]).stdout.strip() == newest
+      and read(T + "/installed-commit").strip() == newest and "And one more." in read(POWER + "/README.md")
+      and "git's files here are damaged" in read(T + "/update.log")
+      and "==> The newest version on main" in read(T + "/update.log")
+      and not sh(["git", "-C", POWER, "fsck", "--no-dangling"], ok=False).stderr.strip())
+up.done()
+
 # ---- a fork that goes by another branch (master, say): that one's followed -------------------------------------------
 sh(["git", "init", "-q", "--bare", "-b", "master", T + "/fork.git"])
 sh(["git", "-C", T + "/work", "push", "-q", T + "/fork.git", "main:master"])
@@ -593,6 +649,8 @@ check("why, in words", "GitHub didn't answer" in W("failed pull fatal: unable to
                               "by merge: README.md Please commit your changes or stash them before you merge. Aborting")
       and "changes of its own" in W("failed pull fatal: Not possible to fast-forward to main: this folder's history "
                                     "diverges from it")
+      and "is damaged" in W("failed pull error: object file .git/objects/49/a00fe761 is empty fatal: "
+                            "unpack-objects failed")
       and W("failed install").startswith("The update didn't finish"))
 
 # ---- a Pi only just started (its clock still near nothing): System looks all the same ---------------------------------

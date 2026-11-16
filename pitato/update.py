@@ -9,7 +9,10 @@ version, setup.sh --update (no questions: it keeps how it was set up), then a re
 (systemd-run), so setup.sh putting in a new media mode can't stop it partway. Nothing newer (main's newest, or a
 version newer than it, here already): it says it's up to date, and nothing's restarted. setup.sh notes what it put in:
 an update that got no further than git is put in the next time. A folder cloned from one of Pietato's names on GitHub
-before (pie-tato) gets it from its name now, once GitHub answers there (GitHub sends the old name on meanwhile)."""
+before (pie-tato) gets it from its name now, once GitHub answers there (GitHub sends the old name on meanwhile).
+A Pi that loses its power just after a version's fetched can be left with git's files for it there and empty, and git
+won't fetch again over them: those are taken away and it's fetched afresh (here, and in the update); and what a
+fetch brings is written to the card at once, so it isn't left that way."""
 import os
 import pwd
 import re
@@ -34,6 +37,8 @@ UPDATE_UNIT = "pitato-update"
 INSTALLED = os.path.join(os.path.dirname(STATE_FILE), "installed-commit")   # what setup.sh last put in (git's id)
 GIT_QUIET = {"GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o ConnectTimeout=20",
              "LC_ALL": "C"}    # (a question from git or ssh would wait for ever, unseen: an error instead)
+DAMAGED = ("is empty", "unpack-objects failed", "index-pack failed", "bad object", "is corrupt",
+           "did not send all necessary objects")   # git's words when files of its own are cut short (in small letters)
 REPO_MOVED = {"frogcaller/pie-tato": "frogCaller/Pietato"}   # Pietato's names on GitHub before (in lower case): now
 GITHUB_REMOTE = re.compile(r"(https?://(?:[^@/\s]+@)?github\.com/|git@github\.com:|ssh://git@github\.com(?::22)?/)"
                            r"([^/\s]+/[^/\s]+?)(\.git)?/?", re.I)
@@ -63,8 +68,25 @@ case "$SYM" in
 esac
 if [ -z "$BRANCH" ] || ! git check-ref-format "refs/heads/$BRANCH" 2> /dev/null; then BRANCH=main; fi
 echo "==> The newest version on $BRANCH"
-git_ fetch --quiet --force --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" > "$STATUS.pull" 2>&1 \\
-  || failed
+fetch_() {{ git_ fetch --quiet --force --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" \\
+  > "$STATUS.pull" 2>&1; }}
+empty_() {{ find "$DIR/.git/objects" -type f -empty "$@" 2> /dev/null; }}
+mend_() {{
+  # git's own files here were cut short as they were written (the Pi lost its power just after a version was fetched:
+  # files that are there, and empty, which git won't fetch again over). The empty ones go, and where main was last
+  # seen is forgotten: the fetch brings them afresh
+  echo "==> git's files here are damaged (a power cut, as they were written?): mending them"
+  empty_ -delete
+  git_ update-ref -d "refs/remotes/origin/$BRANCH"
+}}
+if [ -n "$(empty_ -print -quit)" ]; then mend_; fi
+if ! fetch_; then
+  grep -qiE "{damaged}" "$STATUS.pull" || failed
+  cat "$STATUS.pull"
+  mend_
+  fetch_ || failed
+fi
+sync                                 # (on the card now: a power cut can't leave what it brought half written)
 REL="$(git_ rev-parse -q --verify "refs/remotes/origin/$BRANCH^{{commit}}" 2> /dev/null)"
 WAS="$(git_ rev-parse HEAD 2> /dev/null)"
 if [ -z "$REL" ] || [ -z "$WAS" ]; then
@@ -154,6 +176,8 @@ def update_why(status):
         if any(w in said for w in ("resolve host", "unable to access", "could not read from remote", "timed out",
                                    "unreachable", "connection")):
             return "The update didn't start: GitHub didn't answer. Is the WiFi on?"
+        if any(w in said for w in DAMAGED):            # (and mending it didn't do: its log has git's own words)
+            return f"The update didn't start: this Pi's copy of Pietato is damaged ({UPDATE_LOG} says more)"
         return "The update didn't start: git didn't work"
     if words.startswith("stopped"):
         return "The update stopped before it was done. Update software tries again"
@@ -242,12 +266,48 @@ class Updater:
         branch, err = self.main_branch()
         if branch is None:
             return None, None, err
-        ok, _, err = self.git("fetch", "--quiet", "--force", "--no-tags", "origin",
-                              f"+refs/heads/{branch}:refs/remotes/origin/{branch}", timeout=120)
+        seen = f"refs/remotes/origin/{branch}"
+        fetch = ("fetch", "--quiet", "--force", "--no-tags", "origin", f"+refs/heads/{branch}:{seen}")
+        if self.empty():                               # (git's files cut short by a power cut: mended first)
+            self.mend(seen)
+        was = self.git("rev-parse", "-q", "--verify", seen, timeout=30)[1]
+        ok, _, err = self.git(*fetch, timeout=120)
+        if not ok and any(w in err.lower() for w in DAMAGED):
+            self.mend(seen)                            # (...or git says they are: mended, and again)
+            ok, _, err = self.git(*fetch, timeout=120)
         if not ok:
             return None, None, err
-        ok, commit, err = self.git("rev-parse", "-q", "--verify", f"refs/remotes/origin/{branch}^{{commit}}", timeout=30)
-        return (branch, commit, "") if ok and commit else (None, None, err or "git")
+        ok, commit, err = self.git("rev-parse", "-q", "--verify", seen + "^{commit}", timeout=30)
+        if ok and commit and commit != was:
+            os.sync()                                  # (a newer version fetched: on the card now, so a power cut
+        return (branch, commit, "") if ok and commit else (None, None, err or "git")   # can't leave it half written)
+
+    def empty(self):
+        """git's own files here that are there and empty: a Pi that lost its power just after a version was fetched
+        has them, and git won't fetch again over them."""
+        out = []
+        for folder, _, names in os.walk(os.path.join(self.folder, ".git", "objects")):
+            for name in names:
+                try:
+                    if os.path.getsize(os.path.join(folder, name)) == 0:
+                        out.append(os.path.join(folder, name))
+                except OSError:
+                    pass
+        return out
+
+    def mend(self, seen):
+        """git's own files here are damaged: the empty ones are taken away and where main was last seen (seen) is
+        forgotten, so the next fetch brings them afresh."""
+        gone = 0
+        for path in self.empty():
+            try:
+                os.remove(path)
+                gone += 1
+            except OSError:
+                pass
+        self.git("update-ref", "-d", seen, timeout=30)
+        print(f"update: git's files here were damaged (a power cut, as they were written?): {gone} empty ones "
+              f"taken away, and fetched again", flush=True)
 
     def newer(self, head, rel):
         """How many versions (commits) newer than this one (head) main's newest (rel) is: 0 when it's this one, or this
@@ -343,7 +403,7 @@ class Updater:
             os.makedirs(UPDATE_RUN, exist_ok=True)
             with open(UPDATE_SCRIPT, "w") as f:
                 f.write(UPDATE_SH.format(status=shlex.quote(UPDATE_STATUS), log=shlex.quote(UPDATE_LOG),
-                                         installed=shlex.quote(INSTALLED)))
+                                         installed=shlex.quote(INSTALLED), damaged="|".join(DAMAGED)))
             os.chmod(UPDATE_SCRIPT, 0o700)
             with open(UPDATE_STATUS, "w") as f:
                 f.write("start\n")

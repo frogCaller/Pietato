@@ -309,8 +309,9 @@ class MusicScreen:
         return lit, mixed(MUTED, BODY, 0.6), mixed(BG, TEXT, 0.2)
 
     def now_buttons(self, d, lay, colour, radio):
-        """The buttons' drawings under the line: back, play or pause, on; shuffle on the left (lit while it's on),
-        the volume on the right. Each can be tapped, on the web page's copy of the screen."""
+        """The buttons' drawings under the line: back, play or pause, on; Y's on the left (shuffle: lit while it's on;
+        a loop with a 1 in it while the one song's played again and again), the volume on the right. Each can be
+        tapped, on the web page's copy of the screen."""
         lit, soft, _ = self.now_inks(colour)
         F, W = self.fonts, lay["W"]
         cx, y, ax = W // 2, lay["keys"], lay["ax"]
@@ -326,12 +327,17 @@ class MusicScreen:
         self.tappable((cx - 34, y - 30, cx + 34, y + 30), "keys", "a")
         self.tappable((cx - 116, y - 30, cx - 48, y + 30), "keys", "left" if radio else "l")
         self.tappable((cx + 48, y - 30, cx + 116, y + 30), "keys", "right" if radio else "r")
-        if not radio:                                  # shuffle: two lines that cross, an arrowhead on each
-            ink = lit if self.shuffle else soft
+        if not radio:
             x0, x1, up, dn = ax + 2, ax + 30, y - 7, y + 7
-            for a, b in ((dn, up), (up, dn)):
-                d.line([(x0, a), (x0 + 8, a), (x1 - 12, b), (x1 - 5, b)], fill=ink, width=2, joint="curve")
-                d.polygon([(x1 - 6, b - 5), (x1 - 6, b + 5), (x1, b)], fill=ink)
+            if self.repeat:                            # the one song, again and again: a loop, a 1 in it
+                d.rounded_rectangle((x0, up - 2, x1 + 2, dn + 2), radius=9, outline=lit, width=2)
+                d.polygon([(x1 - 9, up - 7), (x1 - 9, up + 3), (x1 - 2, up - 2)], fill=lit)
+                d.text((x0 + 12, y), "1", font=F["badge"], fill=lit, anchor="mm")
+            else:                                      # shuffle: two lines that cross, an arrowhead on each
+                ink = lit if self.shuffle else soft
+                for a, b in ((dn, up), (up, dn)):
+                    d.line([(x0, a), (x0 + 8, a), (x1 - 12, b), (x1 - 5, b)], fill=ink, width=2, joint="curve")
+                    d.polygon([(x1 - 6, b - 5), (x1 - 6, b + 5), (x1, b)], fill=ink)
             self.tappable((ax - 12, y - 26, ax + 46, y + 26), "keys", "y")
         d.text((W - ax, y), f"Volume {self.volume}", font=F["small"], fill=soft, anchor="rm")
 
@@ -370,7 +376,8 @@ class MusicScreen:
         if record:
             d.text((tx, y + 1), self.fit(d, record, F["small"], tw), font=F["small"], fill=BODY, anchor="lm")
         foot = ay + side - 10
-        nxt = None if radio or self.shuffle or self.qi + 1 >= len(self.queue) else self.queue[self.qi + 1]["title"]
+        nxt = None if radio or self.shuffle or self.repeat or self.qi + 1 >= len(self.queue) \
+            else self.queue[self.qi + 1]["title"]
         if nxt:
             d.text((tx, foot), self.fit(d, "Next: " + nxt, F["small"], tw), font=F["small"], fill=soft, anchor="lm")
             foot -= 22
@@ -386,8 +393,9 @@ class MusicScreen:
             d.text((ax, bar + 21), clock(self.pos), font=F["small"], fill=BODY, anchor="lm")
             if length:
                 d.text((W - ax, bar + 21), clock(length), font=F["small"], fill=soft, anchor="rm")
-            hints = [("A", "Pause" if not self.paused else "Play"), ("◀▶", "Seek"),
-                     ("L R", "Prev/next"), ("Y", "Shuffle"), ("SELECT", "Art"), ("B", "List")]
+            hints = [("A", "Pause" if not self.paused else "Play"), ("◀▶", "Seek"), ("L R", "Prev/next"),
+                     ("Y", "In order" if self.repeat else "Repeat" if self.shuffle else "Shuffle"),   # (what it
+                     ("SELECT", "Art"), ("B", "List")]                                                #  does next)
         else:
             hints = [("A", "Pause" if not self.paused else "Play"), ("◀▶", "Station"),
                      ("▲▼", "Volume"), ("SELECT", "Art"), ("B", "List")]
