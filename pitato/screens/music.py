@@ -11,8 +11,8 @@ import time
 from ..theme import ACCENT, BG, BODY, look, MUTED, ROW, TEXT
 from ..config import CACHE_DIR
 from ..cover import (cover_at_hand, cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir,
-                     GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded)
-from ..coverfind import cover_bytes, CoverFinder, covers_had
+                     found_file, GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded, tidy)
+from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
 from ..ear import Ear
 from ..library import LIBRARY, LISTEN_KINDS
 from ..util import cache_name, clock, find_files
@@ -62,9 +62,12 @@ class MusicScreen:
     # -- covers --------------------------------------------------------------------------------------------------
     def cover_for(self, it):
         """A song's cover and its glow's colour, for Now playing: (picture, colour), (None, None) for a song that
-        has none, or None while it's still being found (the page is drawn again when it is)."""
+        has none, or None while it's still being found (the page is drawn again when it is). A song that plays here
+        from another of your Pietatos: its cover there, once it's been brought here (cover_bring)."""
         src = it.get("src") or ""
-        if it.get("kind") != "audio" or not src or "://" in src:
+        if "://" in src:
+            src = "cover:" + it["cover"] if it.get("cover") else ""
+        if it.get("kind") != "audio" or not src:
             return None, None
         if self.covers is None:
             self.covers = collections.OrderedDict()
@@ -90,7 +93,7 @@ class MusicScreen:
                     return
             im = colour = None
             try:
-                found = cover_file(src)
+                found = src[6:] if src.startswith("cover:") else cover_file(src)   # (one brought here: the picture)
                 if found:
                     im = Image.open(found)
                     im.draft("RGB", (COVER_SIDE, COVER_SIDE))
@@ -104,6 +107,45 @@ class MusicScreen:
             while len(self.covers) > COVERS_KEPT:
                 self.covers.popitem(last=False)
             self.dirty = True
+
+    def cover_bring(self, it, url, name, size):
+        """A song that plays here from another of your Pietatos (sent here to play, or its party's): its cover there
+        brought here for Now playing (it["cover"], once it's come), the song known by its file's name and size there,
+        as the grid's are. The same song here with a cover: that one. Here with none: the one brought is kept as
+        its own, so it needn't be looked for."""
+        if not isinstance(name, str) or not name or "/" in name or type(size) is not int or size < 0:
+            return
+
+        def bring():
+            try:
+                mine = self.music_songs().get((name.lower(), size))
+                pic = cover_at_hand(mine) if mine else None
+                if not pic:
+                    pic = found_file(mine) if mine else os.path.join(covers_dir(), "from",
+                                                                     cache_name(f"{name.lower()}:{size}", ".jpg"))
+                    if os.path.exists(pic):
+                        os.utime(pic)                  # (used just now: among the last to be thrown away)
+                    elif not cover_from(url, name, size, pic):
+                        return
+                    elif mine:
+                        self.music_cover_found(mine)   # (on the grid too)
+                    else:
+                        tidy(os.path.dirname(pic))
+            except Exception as ex:
+                print(f"cover: {ex!r}", flush=True)
+                return
+            it["cover"] = pic
+            self.dirty = True
+        threading.Thread(target=bring, daemon=True, name="cover-bring").start()
+
+    def cover_kept(self, url, path, name, size):
+        """(Its thread.) A song another of your Pietatos sent to keep has come: its cover there kept with it, if the
+        song has none of its own here (in its folder, or inside it)."""
+        try:
+            if not cover_file(path) and cover_from(url, name, size, found_file(path)):
+                self.music_cover_found(path)
+        except Exception as ex:
+            print(f"cover: {ex!r}", flush=True)
 
     # -- where the song is, between the player's words on it -----------------------------------------------------
     def pos_said(self, pos):
@@ -402,12 +444,14 @@ class MusicScreen:
 
     def web_cover_file(self, name, size, asker):
         """GET /api/covers/file: the cover this one has for that song (a JPEG's bytes), for another of yours; None:
-        it has none, or it isn't one of yours asking."""
+        it has none, or it isn't one of yours asking. The song: one of this one's Music, or one it's sent that one (or
+        is playing on it), wherever it is here; its cover got out of its file now, if it hasn't been."""
         if self.setting("share") == "Off" or not self.saves_peers(str(asker or "")):
             return None
         try:
-            path = self.music_songs().get((str(name or "").lower(), int(size)))
-            found = cover_at_hand(path) if path else None
+            key = (str(name or "").lower(), int(size))
+            path = self.music_songs().get(key) or self.handoff_keys().named(*key)
+            found = cover_file(path) if path else None
             return cover_bytes(found) if found else None
         except (OSError, ValueError, TypeError):
             return None

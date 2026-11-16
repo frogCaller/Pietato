@@ -2,16 +2,23 @@
 in a game, a video or the terminal, plays what this one plays, in step with it, through its own speaker. This one leads:
 its songs, one after another, and its stations. A, ◀▶, L, R and START on any of them pause it, move about in a song or
 skip, for all of them; HOME's menu on the leader ends it, and on another leaves it (it stops there). Each keeps its own
-volume and sound (Settings > Sound). POST /api/party (webui.py) carries what the leader says, and what the others ask."""
+volume and sound (Settings > Sound). One that's in another party when this one's started switches to this one (a party
+it was leading itself is over). While it goes on the leader looks at it every few seconds: one that's fallen behind (a
+song or a pause that never got to it) is told again, from where the song is by then; one that's on and free (just
+turned on, done with its game) is asked in, and plays from there too; one that's stopped answering is asked in again
+when it's back; one that left stays out. POST /api/party (webui.py) carries what the leader says, and what the others
+ask."""
 import os
 import re
 import secrets
 import threading
 import time
+import urllib.error
 import urllib.parse
 
 from ..asyou import as_you
 from ..config import home_dir
+from ..coverfind import song_key
 from ..library import LISTEN_KINDS
 from ..party import (ClockServer, clock_offset, PARTY_LEAD, PARTY_PORT, PartyPlayer, PartyProc, probe, Relay,
                      RelayServer)
@@ -21,25 +28,46 @@ from .. import savesync
 
 PARTY_WAIT = 4.0             # seconds each of your others has to say it's in
 PARTY_PING_EVERY = 30.0      # seconds between a follower's looks at the leader's clock (clocks drift apart)
+PARTY_PING_SOON = 2.0        # ...while it only has it roughly (none of its looks has found it yet)
 PARTY_GONE = 3.0             # seconds the leader's had no party music: the party's over
 PARTY_SOON = 0.6             # seconds from a pause (or playing on) to its happening on all of them
+PARTY_LOOK = 5.0             # seconds between the leader's looks at its party: who's behind, who else is on
+PARTY_SAID = 4.0             # ...and none this soon after it's said something to all of them (still on its way)
+PARTY_MISSES = 3             # times running one doesn't answer before it's out of the party (asked in again later)
+PARTY_AGAIN = 30.0           # seconds before one that couldn't join (a game on it, say) is asked again; and between
+                             # a station's starting again for one that's behind
+PARTY_LOST = 60.0            # seconds without a word from its leader before one in a party takes it to be over
 PARTY_ASKS = ("pause", "next", "back", "ahead", "behind")   # what another can ask the leader to do, for all of them
 PATH = re.compile(r"/[A-Za-z0-9/_.?=&%-]{1,300}")
+NOT_IN = "It isn't in that party"
+LEFT = "It left that party"
+OLD = "What's that?"         # (a Pietato from before the leader's looks, asked what it's on: left as it is)
 
 
 def party_post(url, body, timeout=3.0):
     """Another Pietato's answer (a dict) to what's said of the party, or None when it doesn't answer."""
     try:
         got = savesync.post_json(url + "/api/party", body, timeout=timeout)
+    except urllib.error.HTTPError as ex:               # (it answered: it doesn't know what's asked)
+        return {"ok": False, "error": OLD} if ex.code == 400 else None
     except (OSError, ValueError):
         return None
     return got if isinstance(got, dict) else None
 
 
+def whole(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
 class PartyScreen:
     """Party mode: leading one (this one's music, on all of yours, in step), or in another's."""
-    party = None      # leading: {"lead": True, "token", "members": {url: name}, "clock", "server", "relay", "song"};
-                      # in another's: {"lead": False, "leader": url, "name", "token", "port", "offset", "pinged"}
+    party = None      # leading: {"lead": True, "token", "members": {url: name}, "clock", "server", "relay", "song",
+                      # "n": its songs counted, "on": the one playing as it was said, "said": when all were last told
+                      # something, "missed": {url: times running it hasn't answered}, "away": out of it for that,
+                      # "left": out of their own accord, "plain": older ones, "asked": {url: not asked in before}};
+                      # in another's: {"lead": False, "leader": url, "name", "token", "port", "offset", "rough",
+                      # "pinged", "heard": when its leader last said anything, "n", "at": the song it was last told}
+    party_quit = None  # the party it last left of its own accord (its key): not one it's asked back into
 
     def party_on(self):
         return self.party is not None
@@ -86,8 +114,9 @@ class PartyScreen:
         self.flush()
         said = {}
 
-        def ask(url):
-            said[url] = party_post(url, {"kind": "start", "token": token, "port": PARTY_PORT}, PARTY_WAIT)
+        def ask(url):                                  # (new: one in another party switches to this one)
+            said[url] = party_post(url, {"kind": "start", "token": token, "port": PARTY_PORT, "new": True,
+                                         "clock": time.monotonic()}, PARTY_WAIT)
         jobs = [threading.Thread(target=ask, args=(url,), daemon=True) for url, _ in peers]
         for j in jobs:
             j.start()
@@ -100,11 +129,15 @@ class PartyScreen:
             why = next((s.get("error") for s in said.values() if s and s.get("error")), "")
             self.toast(f"None of them could join{': ' + why if why and len(peers) == 1 else ''}", 4)
             return
+        now = time.monotonic()
         self.party = {"lead": True, "token": token, "members": members, "clock": clock, "server": server,
-                      "relay": None, "song": "", "since": time.monotonic(), "quiet": None}
+                      "relay": None, "song": "", "since": now, "quiet": None, "n": 0, "on": None, "said": now,
+                      "looked": now, "looking": 0, "missed": {}, "away": set(), "left": set(), "plain": set(),
+                      "asked": {url: now + PARTY_AGAIN for url, _ in peers if url not in members and said.get(url)}}
         names = list(members.values())
         self.toast("Party mode with " + (names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]), 5)
         print(f"party: leading, with {', '.join(names)}", flush=True)
+        self.party_said()
         pos = (self.pos or 0) if self.kind == "audio" else 0
         self.play(self.queue, self.qi, start=max(0, pos), show=False)   # (on all of them: play() comes back here)
 
@@ -144,24 +177,141 @@ class PartyScreen:
             mine, theirs = target, {"url": target}
         item = {"kind": kind, "title": it["title"], "sub": it.get("sub") or "", "meta_title": title,
                 "artist": artist, "length": length}
-        self.party_tell({"kind": "play", "item": item, "src": theirs, "at": at, "pos": pos})
+        if "web" in theirs:                            # (a song of this one's: its cover's asked for by these)
+            item["name"], item["size"] = song_key(target)
+        if p is not None:                              # (its number, and what was said of it: for one that's behind,
+            p["n"] += 1                                #  or joins later)
+            p["on"] = {"item": item, "src": theirs}
+        self.party_tell({"kind": "play", "item": item, "src": theirs, "at": at, "pos": pos, "n": (p or {}).get("n")})
         self.party_proc(mine, at, pos, kind, it, True, title, artist, length)
 
-    def party_tell(self, msg):
-        """What the leader says (a song to play, a pause...), to each of yours in the party, on threads of their own:
-        one that doesn't answer has left it."""
+    def party_tell(self, msg, only=None):
+        """What the leader says (a song to play, a pause...), to each of yours in the party (only: just that one), on
+        threads of their own, with its clock as it's said. One that doesn't answer is told once more."""
         p = self.party
         if not p or not p.get("lead"):
             return
         msg = dict(msg, token=p["token"])
+        if only is None and msg["kind"] != "song":
+            p["said"] = time.monotonic()
 
         def tell(url):
-            if party_post(url, msg) is None:
-                gone = p["members"].pop(url, None)
-                if gone:
-                    print(f"party: {gone} didn't answer: it's left", flush=True)
-        for url in list(p["members"]):
+            got = None
+            try:
+                got = party_post(url, dict(msg, clock=time.monotonic())) or \
+                    party_post(url, dict(msg, clock=time.monotonic()))
+            finally:
+                self.soon(lambda: self.party_heard(p, url, got))
+        for url in ([only] if only else list(p["members"])):
             threading.Thread(target=tell, args=(url,), daemon=True, name="party-tell").start()
+
+    def party_heard(self, p, url, got):
+        """(The leader's main loop.) One in the party answered what it was told or asked (got), or didn't (None). A few
+        times running, and it's out of the party for now; so is one that says it isn't in it (restarted, say). The
+        leader's looks ask it in again."""
+        if self.party is not p or url not in p["members"]:
+            return
+        if got is None:
+            p["missed"][url] = p["missed"].get(url, 0) + 1
+            if p["missed"][url] < PARTY_MISSES:
+                return
+        elif not (got.get("ok") is False and got.get("error") == NOT_IN):
+            p["missed"].pop(url, None)
+            return
+        name = p["members"].pop(url)
+        p["missed"].pop(url, None)
+        p["asked"].pop(url, None)
+        p["away"].add(url)
+        print(f"party: {name} " + ("isn't answering" if got is None else "isn't in it any more"), flush=True)
+
+    def party_look(self, now):
+        """(The leader, every few seconds.) Each of yours in the party asked what it's on; each one that's on and isn't
+        in it (and didn't leave it) asked in. On threads of their own: party_looked has what they say."""
+        p = self.party
+        p["looked"] = now
+        n, paused = p["n"], self.proc.player.stop_at is not None
+        for url, name in self.saves_peers():
+            if url in p["members"]:
+                if url in p["plain"]:
+                    continue
+                msg = {"kind": "look"}
+            elif url in p["left"] or now < p["asked"].get(url, 0.0):
+                continue
+            else:
+                p["asked"][url] = now + PARTY_AGAIN
+                msg = {"kind": "start", "port": PARTY_PORT}
+            p["looking"] += 1
+            threading.Thread(target=self.party_look_at, args=(p, url, name, dict(msg, token=p["token"]), n, paused),
+                             daemon=True, name="party-look").start()
+
+    def party_look_at(self, p, url, name, msg, n, paused):
+        """(A thread of its own.) One of yours asked what it's on, or asked in."""
+        got = None
+        try:
+            got = party_post(url, dict(msg, clock=time.monotonic()), PARTY_WAIT if msg["kind"] == "start" else 3.0)
+        finally:
+            self.soon(lambda: self.party_looked(p, url, name, msg["kind"], got, n, paused))
+
+    def party_looked(self, p, url, name, kind, got, n, paused):
+        """(The leader's main loop.) What one of yours said to a look. In the party and not on its song, or not paused
+        as it is: told again. Asked in, and it's in: said, and told what's on. One that says it left stays out; one
+        that doesn't answer is asked again at the next look, one that can't join now a while later."""
+        p["looking"] -= 1
+        if self.party is not p:
+            if kind == "start" and got is not None and got.get("ok") is True:   # (in, as the party ended: told so)
+                threading.Thread(target=party_post, args=(url, {"kind": "stop", "token": p["token"]}), daemon=True,
+                                 name="party-end").start()
+            return
+        if kind == "start":
+            if got is None:                            # (not answering: asked again at the next look)
+                p["asked"].pop(url, None)
+                return
+            if url in p["members"]:
+                return
+            if got.get("ok") is not True:
+                if got.get("error") == LEFT:
+                    p["left"].add(url)
+                    p["away"].discard(url)
+                return
+            p["members"][url] = name
+            p["away"].discard(url)
+            p["asked"].pop(url, None)
+            self.toast(f"{name} joined the party", 3)
+            print(f"party: {name} joined", flush=True)
+        else:
+            self.party_heard(p, url, got)
+            if got is None or url not in p["members"]:
+                return
+            if got.get("ok") is not True:
+                if got.get("error") == OLD:
+                    p["plain"].add(url)
+                return
+        if whole(got.get("n")) == n and bool(got.get("paused")) == paused:
+            return                                     # (on the party's song, as the party is)
+        if p["n"] == n and p["said"] <= p["looked"]:   # (nothing's been said to all of them since it was asked)
+            if kind != "start":
+                print(f"party: {name} is behind: told again", flush=True)
+            self.party_catch(url)
+
+    def party_catch(self, url):
+        """(The leader.) One of them told what the party's on, from where it is: a song from there, a moment from now
+        (paused, if the party is). A station can't be joined in the middle (each plays the same bytes from the same
+        one on): it starts again for all of them, once it plays (and not again for a while)."""
+        p, proc = self.party, self.proc
+        if not p or not p.get("lead") or not p.get("on") or not isinstance(proc, PartyProc) or proc.poll() is not None:
+            return
+        now = time.monotonic()
+        paused = proc.player.stop_at is not None
+        if self.kind == "radio":
+            if not paused and now - p.get("again", 0.0) >= PARTY_AGAIN and 0 <= self.qi < len(self.queue or ()):
+                p["again"] = now
+                self.play(self.queue, self.qi, show=False)
+            return
+        at = now + PARTY_LEAD
+        pos = proc.player.position(at)
+        if proc.length and pos > proc.length - 1.0:    # (about over: the next song comes to all of them)
+            return
+        self.party_tell(dict(p["on"], kind="play", at=at, pos=pos, n=p["n"], paused=paused), only=url)
 
     def party_pause(self):
         """A, leading: all of them pause (or play on) together, a moment from now."""
@@ -210,8 +360,9 @@ class PartyScreen:
             return
         self.play(self.queue, self.qi, start=max(0.0, proc.player.position() + d), show=False)
 
-    def party_end(self, say=False):
-        """Not leading a party any more: the others stop; this one's music plays on, on its own."""
+    def party_end(self, say=False, play_on=True):
+        """Not leading a party any more: the others stop; this one's music plays on, on its own (play_on False: as it
+        is for now, on the party's player: it's off to another party, whose song comes in a moment)."""
         p, self.party = self.party, None
         if not p or not p.get("lead"):
             return
@@ -222,15 +373,33 @@ class PartyScreen:
             if x is not None:
                 x.close()
         print("party: over", flush=True)
+        self.party_said()
         if say:
             self.toast("Party mode's over", 3)
-        if isinstance(self.proc, PartyProc) and self.queue and 0 <= self.qi < len(self.queue):
+        if play_on and isinstance(self.proc, PartyProc) and self.queue and 0 <= self.qi < len(self.queue):
             pos = self.proc.player.position() if self.kind == "audio" else 0
             self.start_paused = bool(self.paused)       # (paused: still paused, on its own player)
             try:
                 self.play(self.queue, self.qi, start=pos, show=False)   # (as ever: on its own player)
             finally:
                 self.start_paused = False
+
+    def party_said(self):
+        """This one's beacon again, now: a party's begun here, or it's over (your others that aren't in it leave your
+        lights to it while it's on: party_elsewhere)."""
+        if getattr(self, "sharing", False):
+            threading.Thread(target=self.share_now, daemon=True, name="party-said").start()
+
+    def party_elsewhere(self):
+        """Another of your Pietatos is leading a party, and this one isn't in it (in a game when it began, say, or left
+        to play something of its own): the lights of your own on the network are the party's to light, not this
+        one's music's."""
+        pie = getattr(self, "pie", None)
+        if self.party is not None or pie is None:
+            return False
+        yours = dict(self.saves_peers())
+        with pie.lock:
+            return any(u in yours and h.get("party") for u, h in pie.heard.items())
 
     # -- in another's -----------------------------------------------------------------------------------------------
     def party_busy(self):
@@ -262,18 +431,37 @@ class PartyScreen:
                 got = clock_offset(urllib.parse.urlsplit(p["leader"]).hostname, p["port"], p["token"])
                 if got is not None:
                     p["offset"], p["rtt"] = got
+                    p["rough"], p["heard"] = False, time.monotonic()
             finally:
                 p["pinging"] = False
         threading.Thread(target=ping, daemon=True, name="party-ping").start()
 
-    def party_leave(self, say=False, tell=True):
-        """Out of the party: the music stops here, and the leader's told."""
+    def party_led(self, p, cmd):
+        """Something from its leader: it's there. With the leader's clock as it said it: this one's set by it, roughly
+        (as late as that took to get here), till one of its own looks at the leader's clock has found it."""
+        p["heard"] = time.monotonic()
+        clock = cmd.get("clock")
+        if p.get("offset") is None and isinstance(clock, (int, float)) and not isinstance(clock, bool):
+            p["offset"], p["rough"] = clock - time.monotonic(), True
+
+    def party_has(self, p):
+        """What this one's on, for its leader: the number of the party's song it's playing (None: none of them), and
+        whether it's paused."""
+        proc = self.proc
+        on = isinstance(proc, PartyProc) and not proc.lead
+        return {"n": p.get("n") if on else None, "paused": bool(on and proc.player.stop_at is not None)}
+
+    def party_leave(self, say=False, tell=True, mine=True):
+        """Out of the party: the music stops here, and the leader's told. mine: of its own accord (it isn't asked back
+        into that one); not mine (a game or a video on here now): it's asked in again, later."""
         p, self.party = self.party, None
         if not p or p.get("lead"):
             return
+        if mine:
+            self.party_quit = p["token"]
         if tell:
-            threading.Thread(target=party_post, args=(p["leader"], {"kind": "leave", "token": p["token"]}),
-                             daemon=True, name="party-leave").start()
+            said = {"kind": "leave", "token": p["token"], "back": not mine}
+            threading.Thread(target=party_post, args=(p["leader"], said), daemon=True, name="party-leave").start()
         if isinstance(self.proc, PartyProc):
             self.stop()
             if self.view == "now":
@@ -355,40 +543,65 @@ class PartyScreen:
             why = self.party_busy()
             if why:
                 return {"ok": False, "error": why}
-            if p is not None and (p.get("lead") or p.get("leader") != url):
-                return {"ok": False, "error": "It's in another party"}
             port = cmd.get("port")
             if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
                 return {"ok": False, "error": "What's that?"}
-            self.party = {"lead": False, "leader": url, "name": host, "token": token, "port": port, "offset": None,
-                          "pinged": 0.0, "got": False}
+            new = cmd.get("new") is True               # (just started, from HOME's menu there: not its leader's
+                                                       #  look for more of yours to join)
+            if p is not None and not p.get("lead") and p["leader"] == url and p["token"] == token:
+                self.party_led(p, cmd)                 # (in it already: what it's on, for its leader)
+                return dict(self.party_has(p), ok=True)
+            if p is not None and (p.get("lead") or p["leader"] != url):
+                if not new:
+                    return {"ok": False, "error": "It's in another party"}
+                if p.get("lead"):                      # (the newest party's the one: this one's own is over, and its
+                    self.party_end(play_on=False)      #  others are asked into that one too)
+                else:
+                    self.party_leave()
+            elif not new and token == self.party_quit:
+                return {"ok": False, "error": LEFT}
+            p = self.party = {"lead": False, "leader": url, "name": host, "token": token, "port": port, "offset": None,
+                              "rough": None, "pinged": 0.0, "got": False, "heard": time.monotonic()}
+            self.party_led(p, cmd)
             self.party_ping()
+            self.stir()                                # (said on a screen that's resting, too)
             self.toast(f"Party mode with {host}", 4)
             print(f"party: in {host}'s", flush=True)
             return {"ok": True}
         if p is None or p.get("token") != token:
-            return {"ok": False, "error": "It isn't in that party"}
+            return {"ok": False, "error": NOT_IN}
         if p.get("lead"):                              # (the leader: another of the party)
-            if url not in p["members"]:
-                return {"ok": False, "error": "It isn't in that party"}
-            if kind == "leave":
-                p["members"].pop(url, None)
+            if kind == "leave":                        # (of its own accord: it isn't asked back. For a game or a
+                p["members"].pop(url, None)            #  video: it is, after)
+                p["missed"].pop(url, None)
+                if cmd.get("back") is True:
+                    p["away"].add(url)
+                    p["asked"][url] = time.monotonic() + PARTY_AGAIN
+                else:
+                    p["away"].discard(url)
+                    p["left"].add(url)
                 return {"ok": True}
+            if url not in p["members"]:
+                return {"ok": False, "error": NOT_IN}
             if kind == "ask" and cmd.get("what") in PARTY_ASKS:
                 self.party_do(cmd["what"])
                 return {"ok": True}
             return {"ok": False, "error": "What's that?"}
         if url != p["leader"]:
-            return {"ok": False, "error": "It isn't in that party"}
+            return {"ok": False, "error": NOT_IN}
+        self.party_led(p, cmd)
         at = cmd.get("at")
         if kind == "stop":
-            self.party_leave(tell=False)
+            self.party_leave(tell=False, mine=False)
             self.toast(f"{host}'s party is over", 3)
             return {"ok": True}
         if kind in ("play", "pause", "resume") and (isinstance(at, bool) or not isinstance(at, (int, float))
                                                     or abs(at - self.party_clock()) > 60):
             return {"ok": False, "error": "When?"}
         if kind == "play":
+            if whole(cmd.get("n")) is not None and cmd["n"] == p.get("n") and at == p.get("at") \
+                    and isinstance(self.proc, PartyProc):
+                return {"ok": True}                    # (told twice: its answer the first time never got there)
             return self.party_take(cmd, url, at)
         proc = self.proc if isinstance(self.proc, PartyProc) else None
         if kind == "pause" and proc is not None:
@@ -407,7 +620,7 @@ class PartyScreen:
         address), from where in it, at when. A game or a video on here now: out of the party instead."""
         why = self.party_busy()
         if why:
-            self.party_leave()
+            self.party_leave(mine=False)
             return {"ok": False, "error": why}
         item, src, pos = cmd.get("item"), cmd.get("src"), cmd.get("pos")
         if not isinstance(item, dict) or item.get("kind") not in ("audio", "radio") or not isinstance(src, dict) \
@@ -432,20 +645,38 @@ class PartyScreen:
             else None
         it = {"key": f"party:{url}:{text('title')}", "kind": item["kind"], "title": text("title") or "Party",
               "sub": text("sub"), "src": "party:" + url}
+        self.cover_bring(it, url, item.get("name"), item.get("size"))   # (the song's cover there, for Now playing)
         self.party_proc(where, at, float(pos), item["kind"], it, False, text("meta_title"), text("artist"), length)
-        self.party["got"] = True                       # (its music's on: something else on instead, and it's left)
+        if cmd.get("paused") is True:                  # (a party that's paused: there, till it plays on)
+            self.proc.player.pause_at(at)
+            self.paused = True
+        p = self.party
+        p["got"] = True                                # (its music's on: something else on instead, and it's left)
+        p["n"], p["at"] = whole(cmd.get("n")), at
         return {"ok": True}
 
+    def web_party_look(self, cmd):
+        """(The control server's thread: answered at once, whatever the main loop's at.) Its leader's look at the
+        party: what this one's on, for the leader to tell it again if that's not what the party's on."""
+        peers = self.saves_peers(str(cmd.get("from") or ""))
+        p = self.party
+        if not peers or p is None or p.get("lead") or p.get("token") != cmd.get("token") or peers[0][0] != p["leader"]:
+            return {"ok": False, "error": NOT_IN}
+        self.party_led(p, cmd)
+        p["looks"] = True
+        return dict(self.party_has(p), ok=True)
+
     def party_tick(self, now):
-        """(Media mode's main loop.) Leading: the station's song, said to the others; nobody left in the party, or no
-        party music here a while: it's over. In another's: something else on here, out of it; the leader's clock
-        looked at again now and then."""
+        """(Media mode's main loop.) Leading: the station's song, said to the others; a look at the party every few
+        seconds (party_look); everyone's left it, or no party music here a while: it's over (ones that have only
+        stopped answering are waited for). In another's: something else on here, or not a word from its leader for a
+        long while: out of it; the leader's clock looked at again now and then."""
         p = self.party
         if p is None:
             return
         party_music = isinstance(self.proc, PartyProc)
         if p.get("lead"):
-            if not p["members"]:
+            if not p["members"] and not p["away"]:
                 self.party_end()
                 self.toast("Your other Pietatos left the party", 3)
                 return
@@ -461,9 +692,15 @@ class PartyScreen:
                 self.meta["song"] = relay.song
                 self.party_tell({"kind": "song", "song": relay.song})
                 self.dirty = True
+            if not p["looking"] and now - p["looked"] >= PARTY_LOOK and now - p["said"] >= PARTY_SAID:
+                self.party_look(now)
             return
-        if p.get("got") and not party_music:          # (something else on here, or nothing: out of it)
-            self.party_leave()
+        if p.get("got") and not party_music:          # (something else on here, or nothing: out of it. A game or a
+            self.party_leave(mine=self.party_busy() is None)   # video: back in it after. Its own music: not)
             return
-        if now - p.get("pinged", 0.0) > PARTY_PING_EVERY:
+        if (p.get("looks") or not p.get("got")) and now - p["heard"] > PARTY_LOST:
+            self.party_leave(tell=False, mine=False)   # (not a word from its leader for a long while, and it's one
+            self.toast(f"Lost touch with {p['name']}'s party", 3)   # that would have said something: off, or out of
+            return                                     #  reach. It's over here)
+        if now - p.get("pinged", 0.0) > (PARTY_PING_EVERY if p.get("rough") is False else PARTY_PING_SOON):
             self.party_ping()

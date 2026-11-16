@@ -139,6 +139,11 @@ R and START on any of them pause it, move about in a song or skip, for all of th
 HOME's menu ends it on the one you started it on, and leaves it on the others. Settings > Share with other
 Pietatos needs to be on.
 
+One that's turned on later, or comes out of a game or a video, joins by itself within a few seconds and plays
+from where the song is (a station starts again for all of them). One that missed a song is put right the same
+way. One you took out with Leave the party stays out. Starting Party mode on another Pietato moves them all
+to that one's party.
+
 ## LED backlight
 
 An 8x8 grid of WS2812B LEDs behind your TV, or a strip of them round its edges, can light up with the colours
@@ -168,7 +173,9 @@ too.
 An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato_led/pietato_led.ino` in the
 Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
 any ESP32 with an RGB LED). It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
-takes a game's colours, a hit's red and an achievement's gold. With Settings > Random song at start-up on, the
+takes a game's colours, a hit's red and an achievement's gold. While one of them leads a
+[party](#party-mode), the boards pulse to the party's music: a Pietato that isn't in the party leaves them to
+it. With Settings > Random song at start-up on, the
 song is playing before the board is heard, so the first time the song skips for a moment as the board joins in;
 after that the Pietato remembers it has boards, and they have the beat from the start. Its LED is amber while it
 looks for your WiFi,

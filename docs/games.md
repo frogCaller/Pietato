@@ -54,6 +54,7 @@ If you have two Pietatos, with Settings > Share with other Pietatos on, a game's
   song picked in your Music list, a video in Videos or a picture in Photos has the same menu for it, without
   opening it first: Play on another Pietato starts the song there (a video, from where you left off), and
   View on another Pietato shows the picture. Send to another Pietato keeps a copy there, a video in its Videos.
+  A song's cover goes with it either way, so the other one doesn't have to look for it.
 - **Play together** asks the other one to play too. In an NES, SNES, Genesis, Master System or Neo Geo
   game, it joins as player 2 (if it hasn't got the game, it's copied over). A Game Boy or Game Boy Color
   game has **Link cable** instead: you each play your own game, linked, to trade or battle Pokémon. It

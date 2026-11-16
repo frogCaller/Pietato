@@ -219,6 +219,16 @@ def cover_bytes(path):
     return out.getvalue()
 
 
+def cover_from(url, name, size, out, fetch=fetch):
+    """A song's cover on another of your Pietatos (the song by its file's name and size there), kept at out: whether
+    it came (it has none for it, or it isn't answering: it didn't)."""
+    try:
+        keep(fetch(f"{url}/api/covers/file?" + urllib.parse.urlencode({"name": name, "size": size})), out)
+    except Exception:
+        return False
+    return True
+
+
 def covers_had(songs, mine):
     """(One of yours asks.) Which of the songs it lists ([[file name, size]]) this one has a cover to hand for:
     their numbers in its list. mine: this one's songs, {(name in small letters, size): path}."""

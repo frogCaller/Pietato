@@ -834,6 +834,9 @@ try:
     # ---- a song of yours: Send to another Pietato on Now playing too, a copy for its Music; it plays on here --------
     SONG = HOME + "/Music/Lazy Afternoon.mp3"
     open(SONG, "wb").write(b"ID3\x04\x00" + bytes(range(256)) * 40)
+    from PIL import Image
+    os.makedirs(os.path.dirname(g.found_file(SONG)), exist_ok=True)
+    Image.new("RGB", (700, 700), (200, 60, 40)).save(g.found_file(SONG), "JPEG")   # (a cover found for it, here)
     m.play([{"kind": "audio", "src": SONG, "title": "Lazy Afternoon", "key": SONG}], 0)
     m.view, m.paused = "now", False
     m.media_home()
@@ -854,6 +857,14 @@ try:
           f"{toasts[-1:]})", got and open(TV + "/Music/Lazy Afternoon.mp3", "rb").read() == open(SONG, "rb").read()
           and m.view == "now" and m.proc is not None and m.cur.get("src") == SONG
           and toasts[-1:] == ["Sending it to tv, for its Music"])
+    theirs = TV + "/.pietato/cache/covers/found/" + g.cache_name(TV + "/Music/Lazy Afternoon.mp3", ".jpg")
+    end = time.time() + 10
+    while not os.path.isfile(theirs) and time.time() < end:
+        time.sleep(0.1)
+    pic = Image.open(theirs).convert("RGB") if os.path.isfile(theirs) else None
+    check(f"...and the cover it has here goes with it: the TV's copy has it too, without looking for one "
+          f"({pic and pic.size}, {pic and pic.getpixel((300, 300))})", pic is not None and pic.size == (600, 600)
+          and all(abs(a - b) < 12 for a, b in zip(pic.getpixel((300, 300)), (200, 60, 40))))
     m.play([{"kind": "radio", "src": "https://stream.example.com/jazz", "title": "Jazz FM"}], 0)
     m.view = "now"
     m.media_home()
@@ -892,6 +903,7 @@ try:
           and m.items[mi][m.sels[mi]]["src"] == ZEBRA)
     n = tv_lines()
     toasts.clear()
+    Image.new("RGB", (300, 300), (30, 90, 200)).save(g.found_file(ZEBRA), "JPEG")   # (its cover, here)
     m.media_home()
     m.press("down")
     m.press("a")
@@ -901,6 +913,14 @@ try:
           played is not None and played["kind"] == "audio" and "/api/handoff/file?token=" in played["play"]
           and "-ss" not in played["args"] and m.view == "list" and m.proc is None
           and toasts[-1:] == ["Playing on tv now"])
+    end = time.time() + 10
+    while not tv_state().get("cover") and time.time() < end:
+        time.sleep(0.2)
+    theirs = tv_state().get("cover")
+    pic = Image.open(theirs).convert("RGB") if theirs and os.path.isfile(theirs) else None
+    check(f"...with its cover from here, for the TV's Now playing ({pic and pic.size}, "
+          f"{pic and pic.getpixel((150, 150))})", pic is not None and pic.size == (300, 300)
+          and all(abs(a - b) < 12 for a, b in zip(pic.getpixel((150, 150)), (30, 90, 200))))
     n = tv_lines()
     m.media_home()
     m.press("down")

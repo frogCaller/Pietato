@@ -4,6 +4,7 @@ one inside its file (FFmpeg gets it out once: kept small in the cache), else one
 soft wash of it for behind the page, the picture itself with its corners rounded, and the glow."""
 import os
 import subprocess
+import threading
 
 from .config import CACHE_DIR
 from .util import cache_name
@@ -16,6 +17,8 @@ COVERS_MOST = 400                # ...and how many of them the cache keeps (the 
 WASH_KEEP = 0.34                 # how much of the cover's own colours its wash keeps (the rest: the page's)
 GLOW_REACH = 22                  # how far the glow reaches past the cover (the menus' pixels)
 GLOW_REST, GLOW_STEPS = 0.45, 8  # how lit it is between beats (1: on one), and how many steps there are between
+INSIDE = threading.Lock()        # one song's file looked inside at a time (two may want the same one's at once: Now
+                                 # playing here, and another of yours it's playing on too)
 
 
 def covers_dir():
@@ -98,9 +101,10 @@ def cover_file(path):
     if not os.path.exists(none):                       # (looked inside once: what it found is kept, or that it
         try:                                           #  found nothing)
             os.makedirs(covers_dir(), exist_ok=True)
-            got = inside(path, out)
-            if not got:
-                open(none, "w").close()
+            with INSIDE:
+                got = os.path.exists(out) or (not os.path.exists(none) and inside(path, out))
+                if not got:
+                    open(none, "w").close()
             tidy(covers_dir())
             if got:
                 return out

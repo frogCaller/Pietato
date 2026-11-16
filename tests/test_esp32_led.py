@@ -873,6 +873,9 @@ class Out:
     def event(self, name, strength=1.0, at=None, lamps=True):
         self.said.append((name, lamps))
 
+    def music(self, rgb, lamps=True):
+        self.said.append(("music", lamps))
+
     def aim(self, to, lamps=()):
         self.to = tuple(to)
 
@@ -891,6 +894,48 @@ check(f"...and a beat found for another's grid then: not to the light ({m.glow_o
       m.glow_out.said[-1] == ("beat", False))
 m.glow_pick("glow_beat", "On")
 check("...and on again: its beat again", m.glow_beats_wanted())
+
+
+def den_says(**more):
+    """Another of yours, the Den, says it's there (its beacon, told straight to this one), and what else."""
+    m.pie.hear("10.0.0.9", dict({"pietato": 1, "id": "c" * 12, "port": 5432, "host": "Den", "accent": "", "hw": {}},
+                                **more))
+    m.glow_lamps.take(G.lamp_packet("ESP32 A1B2C3", 1, 1.0), "127.0.0.1", m.glow_lamps.clock())   # (still there)
+    m.glow_seen = 0.0
+    m.glow_look(time.monotonic() + 100)
+
+
+den_says()
+m.glow_beat(time.monotonic(), 1.0)
+check(f"another of yours about, no party on: this one's music lights the board as ever ({m.glow_out.said[-1]}, "
+      f"{m.party_elsewhere()})", m.glow_out.said[-1] == ("beat", True) and not m.party_elsewhere())
+den_says(party=1)
+m.glow_beat(time.monotonic(), 1.0)
+check(f"it leads a party, and this one's not in it: the board is the party's to light, so this one's music's beat "
+      f"isn't sent to it ({m.glow_out.said[-1]}; its grids still get it)", m.party_elsewhere() and m.glow_party
+      and m.glow_out.said[-1] == ("beat", False))
+out = G.GlowOut()
+sent = []
+out.send = lambda data, to=None: sent.append(tuple(out.to if to is None else to))
+out.aim([("10.0.0.5", G.GLOW_PORT), ("10.0.0.77", G.GLOW_PORT)], lamps=[("10.0.0.77", G.GLOW_PORT)])
+out.music((255, 0, 0))
+out.music((255, 0, 0), lamps=False)
+check(f"...nor its colour between beats: to the grids alone ({sent})",
+      sent == [(("10.0.0.5", G.GLOW_PORT), ("10.0.0.77", G.GLOW_PORT)), (("10.0.0.5", G.GLOW_PORT),)])
+out.close()
+m.party = {"lead": False, "leader": "http://10.0.0.9:5432", "name": "Den", "token": "t" * 22, "offset": 0.0}
+m.glow_seen = 0.0
+m.glow_look(time.monotonic() + 200)
+m.glow_beat(time.monotonic(), 1.0)
+check(f"...in the party itself: its beats (the party's) light the board ({m.glow_out.said[-1]})",
+      not m.party_elsewhere() and m.glow_out.said[-1] == ("beat", True))
+m.party = None
+den_says()
+m.glow_beat(time.monotonic(), 1.0)
+check(f"the party over (the Den says so): this one's music lights it again ({m.glow_out.said[-1]})",
+      not m.glow_party and m.glow_out.said[-1] == ("beat", True))
+m.pie.heard.clear(); m.pie.peers_kept.clear()
+m.glow_seen = 0.0
 m.glow_out = None
 APPS = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Apps")
 
@@ -998,8 +1043,8 @@ class Lights:
     def aim(self, to, lamps=()):
         self.to = tuple(to)
 
-    def music(self, rgb):
-        self.said.append("colour")
+    def music(self, rgb, lamps=True):
+        self.said.append("colour" if lamps else "colour, not for the boards")
 
     def event(self, name, strength=1.0, at=None, lamps=True):
         self.said.append(name if lamps else name + ", not for the boards")

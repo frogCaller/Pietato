@@ -29,6 +29,7 @@ from .glow import Beats
 from .util import UA
 
 PARTY_PORT = 5446            # the leader's clock (UDP) and the station it passes on (TCP)
+PARTY_HOST = ""              # ...at every address of this Pi's (the tests' Pietatos share a machine: each at its own)
 PARTY_LEAD = 2.5             # seconds from a song being started to its playing (each one's ready by then)
 PARTY_PINGS = 12             # pings to the leader's clock: the quickest answer's used
 PARTY_RATE = 48000           # samples a second, as it's played (two channels, 16 bits each)
@@ -63,7 +64,7 @@ class ClockServer:
         self.token, self.clock = token, clock
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("", port))
+        self.sock.bind((PARTY_HOST, port))
         self.port = self.sock.getsockname()[1]
         self.closed = False
         threading.Thread(target=self.serve, daemon=True, name="party-clock").start()
@@ -255,7 +256,7 @@ class RelayServer(ThreadingHTTPServer):
 
     def __init__(self, token, port=PARTY_PORT):
         self.token, self.relay = token, None
-        super().__init__(("", port), RelayHandler)
+        super().__init__((PARTY_HOST, port), RelayHandler)
         self.port = self.server_address[1]
         threading.Thread(target=self.serve_forever, daemon=True, name="party-relay-server").start()
 
@@ -466,9 +467,10 @@ class PartyPlayer:
             return None
         return s + int(round((t - at) * PARTY_RATE))
 
-    def position(self):
-        """Where in it what's heard now is (seconds)."""
-        t = self.clock()
+    def position(self, t=None):
+        """Where in it what's heard now is (seconds); or what's heard at t (the leader's clock: a moment from now, for
+        one that starts it then)."""
+        t = self.clock() if t is None else t
         with self.lock:
             s = self.sample_at(t)
             if s is None:
@@ -837,8 +839,9 @@ class PartyProc:
 
     def poll(self):
         if self.returncode is None and (self.player.closed or (self.lead and self.player.done())):
-            self.returncode = 0
-            self.lines.put(None)
+            self.player.close()                        # (its song's over: its aplay gone, the sound card let go of.
+            self.returncode = 0                        #  HDMI's takes one player at a time: the next song's had no
+            self.lines.put(None)                       #  sound while this one's was still there)
         return self.returncode
 
     def wait(self, timeout=None):

@@ -58,6 +58,20 @@ class Tokens:
             self.keys[key] = (os.path.abspath(path), now + secs)
         return key
 
+    def named(self, name, size):
+        """A file a key's out for now, by its name (small letters) and its size: its path, or None. (A song sent to
+        another of yours, or playing on it: its cover's asked for by them.)"""
+        now = time.monotonic()
+        with self.lock:
+            paths = [p for p, until in self.keys.values() if until > now and os.path.basename(p).lower() == name]
+        for p in paths:
+            try:
+                if os.path.getsize(p) == size:
+                    return p
+            except OSError:
+                pass
+        return None
+
     def path(self, key):
         """The file a key opens (while it's good, and the file's there), or None."""
         if not isinstance(key, str) or not TOKEN.fullmatch(key):

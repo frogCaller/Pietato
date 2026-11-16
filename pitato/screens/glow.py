@@ -71,6 +71,7 @@ class GlowScreen:
     glow_seen = glow_music_at = 0.0
     glow_to = ()             # your grids (and this one's), and the lights of your own: [(address, port)]
     glow_to_lamps = ()       # ...the lights among them
+    glow_party = False       # a party's on among your others, and this one's not in it: the lights are the party's
     glow_names = None        # address -> (name, when looked up)
     glow_early = False       # the song at start-up's being started: lights it had last time are on their way
     glow_mind_at = 0.0       # when it next looks for lights on your network that want its beats
@@ -654,6 +655,7 @@ class GlowScreen:
             self.glow_seen = now
             self.glow_to = self.glow_targets()
             self.glow_to_lamps = frozenset((ip, GLOW_PORT) for ip, _, _ in self.lamps_on())
+            self.glow_party = self.party_elsewhere()
             if self.glow_out is not None:
                 self.glow_out.aim(self.glow_to, self.glow_to_lamps)
 
@@ -673,7 +675,9 @@ class GlowScreen:
             return
         if self.party is not None and not self.party.get("lead"):
             t -= self.party_clock() - time.monotonic()  # (the leader's clock, as this one's)
-        out.event("beat", strength, at=t, lamps=self.glow_setting("glow_beat") != "Off")   # (a grid: its own say)
+        # (a grid has its own say in it. The lights of your own: not with Pulse to music off here, nor while another
+        # of yours leads a party this one isn't in: the party's music lights them, not this one's)
+        out.event("beat", strength, at=t, lamps=self.glow_setting("glow_beat") != "Off" and not self.glow_party)
 
     def glow_music_on(self):
         """Music's on party mode's player for your LEDs: in a party, or with its beats found. (One that's there for
@@ -697,7 +701,7 @@ class GlowScreen:
                 self.glow_out = GlowOut()
                 self.glow_out.aim(self.glow_to, self.glow_to_lamps)
             self.glow_music_at = now
-            self.glow_out.music(dict(ACCENTS).get(self.setting("accent"), ACCENTS[0][1]))
+            self.glow_out.music(dict(ACCENTS).get(self.setting("accent"), ACCENTS[0][1]), lamps=not self.glow_party)
         st = self.glow_station
         if st is not None:
             relay = st.get("relay")

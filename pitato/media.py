@@ -1690,6 +1690,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             oled = self.oled_beacon()                  # (its OLED: for your others' music, as bars)
             if oled is not None:
                 beacon["oled"] = oled
+            if self.party_leading():                   # (a party: your lights follow it, not one that's not in it)
+                beacon["party"] = 1
             try:
                 beacon["cookie"] = self.cookie_beacon()   # (the cookie, as it's known here: screens/cookie.py)
             except Exception:

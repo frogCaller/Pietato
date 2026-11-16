@@ -54,6 +54,15 @@ def all_can_read(path):
         return False
 
 
+def song_named(path, kind):
+    """A song of this one's (a file) that goes to another of your Pietatos, as it's known there for its cover: its
+    file's name and its size ({"name", "size"}); nothing for anything else."""
+    try:
+        return {"name": os.path.basename(path), "size": os.path.getsize(path)} if path and kind == "audio" else {}
+    except OSError:
+        return {}
+
+
 def handoff_post(url, body, timeout):
     """Another Pietato's answer to a handoff (a dict), or None when it doesn't answer. (It answered no, with why: that,
     and its status.)"""
@@ -216,8 +225,8 @@ class HandoffScreen:
         else:
             self.toast(f"Sending it to {host}…", 3)
             self.flush()
-        said = handoff_post(url, {"kind": "media", "media": kind, "title": it.get("title") or "", "src": src,
-                                  "file": key, "pos": round(pos, 1)}, HANDOFF_GO)
+        said = handoff_post(url, dict({"kind": "media", "media": kind, "title": it.get("title") or "", "src": src,
+                                       "file": key, "pos": round(pos, 1)}, **song_named(path, kind)), HANDOFF_GO)
         if said is None or not said.get("ok"):
             if kind not in LISTEN_KINDS:
                 self.osd(not_sent(host, said), 3000)
@@ -446,8 +455,9 @@ class HandoffScreen:
         self.flush()                                   # (said before it waits for the answer)
         key = self.handoff_keys().issue(path)
         pos = float(self.resume_at(row)) if kind == "video" else 0.0
-        said = handoff_post(url, {"kind": "media", "media": kind, "title": row.get("title") or os.path.basename(path),
-                                  "src": "", "file": key, "pos": round(pos, 1)}, HANDOFF_GO)
+        said = handoff_post(url, dict({"kind": "media", "media": kind, "src": "", "file": key, "pos": round(pos, 1),
+                                       "title": row.get("title") or os.path.basename(path)},
+                                      **song_named(path, kind)), HANDOFF_GO)
         if said is None or not said.get("ok"):
             self.toast(not_sent(host, said), 4)
             return
@@ -935,6 +945,8 @@ class HandoffScreen:
         if not self.web_ready() or (self.no_screen() and kind not in LISTEN_KINDS):   # (none, or none for a video)
             return {"ok": False, "error": "There's no screen to show it on"}
         it = {"kind": kind, "src": src, "title": title, "key": "handoff:" + title, "label": f"{title} (from {host})"}
+        if kind == "audio":                            # (a song: its cover there comes too, for Now playing)
+            self.cover_bring(it, url, cmd.get("name"), cmd.get("size"))
         self.soon_jobs.append(lambda: self.handoff_play(it, pos, url))
         return {"ok": True}
 
@@ -1019,6 +1031,7 @@ class HandoffScreen:
         self.toast(f"Getting {title} from {host}…", 4)
 
         def copy():
+            kept = None
             try:
                 copy_file(f"{url}/api/handoff/file?token={key}", tmp, size)
                 kept = move_new(tmp, home_folder(folder), name)   # (moved, not copied again: a film needs no room twice)
@@ -1031,6 +1044,8 @@ class HandoffScreen:
             finally:
                 shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
             self.wake()
+            if kept and view == "music":               # (a song: its cover there comes with it)
+                self.cover_kept(url, kept, title, size)
         threading.Thread(target=copy, daemon=True, name="handoff-keep").start()
         return {"ok": True, "keep": True, "folder": folder}
 

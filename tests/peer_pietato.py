@@ -8,27 +8,42 @@ terminal's keys, go in the log too (another Pietato controlling this one: pilot.
     python3 peer_pietato.py HOME LOG NAME PEER_URL PEER_NAME [slow] [presses]
 
 It prints READY <its web page's address> once it's answering; then takes a line at a time: state (what's on its
-screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu), mediahome (...on a video or Now playing),
+screen, as JSON), press BUTTON (pressed, on its main loop), home (HOME on a picture, a PDF or some text: its menu),
+mediahome (...on a video or Now playing), play PATH|PATH (songs of its own, the first playing), pilot (Home > Control
+another Pietato: the other one picked), pilotpress BUTTON (a button of its own, while it controls the other one),
+busy SECONDS (its main loop held up that long, as a slow Pi's is: answered at once),
 news WHAT WHY (its emulator says WHAT, then ends: netgone, say), gamenews WHAT WHY (...and plays on: watchjoined, say),
 game PATH|TITLE|SYSTEM (a game of its own, opened), send (its game, to the other one: its menu's Play on another
 Pietato), endgame (its game, ended), beacon (what it tells your others it is, and doing, as JSON),
 expire (another's asking to play together, not answered in time),
-peer URL NAME, set KEY VALUE (a setting), pilots (the controllers another Pietato's working it with, as JSON), group say
-TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON, for log), hear BEACON (another's
+peer URL NAME [too] (the other one; too: another, as well), deaf SECONDS (its web page says nothing of a party that
+long: a message that never gets there), set KEY VALUE (a setting), pilots (the controllers another Pietato's working
+it with, as JSON), group say TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON,
+for log), hear BEACON (another's
 beacon, as JSON, heard as if it came from this machine's own address), cookie (the cookie as it's known here, as JSON)
 / cookie look (its look at what your others say of it, as if it had been up a while) / cookie try r|p|s (your throw
 for it), quit. Its emulator,
 asked to open its game (nethost, watchhost), says it has (at 5442 and 5444), and the ask goes in the log.
 PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone. PITATO_COOKIE_BOT: what its
 Bot throws for the cookie (r, p or s), every time; PITATO_COOKIE_GAP: seconds between one Pietato's tries for it.
-PITATO_OWN_MUSIC: its songs are the ones in its own home's Music (not this machine's)."""
+PITATO_OWN_MUSIC: its songs are the ones in its own home's Music (not this machine's). PITATO_CLOCK_AHEAD: seconds its
+clock (time.monotonic) is ahead of this machine's, as another Pi's is that's been up longer. PITATO_PING_SLOW: seconds
+longer its look at a party leader's clock takes (its WiFi dozing). PITATO_PARTY_QUICK: leading a party, its looks at
+who's in it and who else is on come this many times sooner. PITATO_ADDR: its own address on this machine (127.0.0.3,
+say): its web page answers there, and what it asks of the others comes from there, so several of them here are told
+apart as they are on a network. PITATO_WEB_PORT: its web page's port (the same again, started again)."""
 import json
 import os
 import sys
 import threading
 import time
 
+if os.environ.get("PITATO_CLOCK_AHEAD"):         # (before Pietato's loaded: its clock, from the start)
+    real_clock, AHEAD = time.monotonic, float(os.environ["PITATO_CLOCK_AHEAD"])
+    time.monotonic = lambda: real_clock() + AHEAD
+
 HOME, LOG, NAME, PEER_URL, PEER_NAME = sys.argv[1:6]
+ADDR = os.environ.get("PITATO_ADDR") or "127.0.0.1"
 SLOW = "slow" in sys.argv[6:]
 PRESSES = "presses" in sys.argv[6:]
 TESTS = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +53,17 @@ sys.path.insert(0, ROOT)
 os.environ["HOME"] = HOME
 import pietato_all as g  # noqa: E402
 import socket  # noqa: E402
+
+if ADDR != "127.0.0.1":                          # (what it asks of the others on this machine: from its own address)
+    real_connect = socket.create_connection
+
+    def connect(address, timeout=socket.getdefaulttimeout(), source_address=None, **kw):
+        if source_address is None and str(address[0]).startswith("127."):
+            source_address = (ADDR, 0)
+        return real_connect(address, timeout, source_address, **kw)
+    socket.create_connection = connect
+    import pitato.party as party_core  # noqa: E402
+    party_core.PARTY_HOST = ADDR                 # (a party it leads: its clock and its station, there too)
 
 lock = threading.Lock()
 SAY = sys.stdout                                 # (the test's word with it; what Pietato prints goes with its errors)
@@ -79,6 +105,15 @@ if os.environ.get("PITATO_COOKIE_GAP"):
     g.COOKIE_GAP = float(os.environ["PITATO_COOKIE_GAP"])
 if os.environ.get("PITATO_OWN_MUSIC"):
     next(t for t in g.LIBRARY if t["name"] == "Music")["dirs"] = [HOME + "/Music"]
+import pitato.screens.party as party_screen  # noqa: E402
+if os.environ.get("PITATO_PING_SLOW"):
+    real_offset = party_screen.clock_offset
+    party_screen.clock_offset = lambda *a, **k: (time.sleep(float(os.environ["PITATO_PING_SLOW"])),
+                                                 real_offset(*a, **k))[1]
+if os.environ.get("PITATO_PARTY_QUICK"):
+    for k in ("PARTY_LOOK", "PARTY_SAID", "PARTY_AGAIN", "PARTY_LOST"):
+        if hasattr(party_screen, k):
+            setattr(party_screen, k, getattr(party_screen, k) / float(os.environ["PITATO_PARTY_QUICK"]))
 
 
 # ---- its emulator: started, and its saves written as it ends -------------------------------------------------------
@@ -197,7 +232,17 @@ webui.CONTROL_KEY = S + "/control-key"
 import logging  # noqa: E402
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 from werkzeug.serving import make_server  # noqa: E402
-web = make_server("127.0.0.1", 0, webui.app, threaded=True)
+DEAF = [0.0]
+
+
+@webui.app.before_request
+def deaf():
+    """Nothing about a party gets to it, for a while (deaf SECONDS)."""
+    if webui.request.path == "/api/party" and time.time() < DEAF[0]:
+        return "Not now", 503
+
+
+web = make_server(ADDR, int(os.environ.get("PITATO_WEB_PORT") or 0), webui.app, threaded=True)
 threading.Thread(target=web.serve_forever, daemon=True).start()
 done = threading.Event()
 TERM = type("UI", (), {"write": (lambda self, t, c, v: log(key=c, value=v)) if PRESSES else (lambda *a: None),
@@ -228,10 +273,14 @@ def state_now():
                        if run else None, "lobby": [(e["host"], e["title"]) for e in m.lobby_entries()],
                        "playing": type(m.proc).__name__ if m.proc else None,
                        "party_src": getattr(getattr(m.proc, "player", None), "src", None),
+                       "pilot": m.pilot_out.status(time.monotonic()) if m.pilot_on() else None,
                        "cur": (m.cur or {}).get("title"), "paused": bool(m.paused),
+                       "cover": (m.cur or {}).get("cover"),   # (a song from another of yours: its cover, brought here)
                        "party": {"lead": party.get("lead"), "with": party.get("name"),
                                  "members": sorted((party.get("members") or {}).values()),
-                                 "offset": party.get("offset")} if party else None,
+                                 "offset": party.get("offset"), "n": party.get("n"),
+                                 "rough": party.get("rough")} if party else None,
+                       "back": [x["title"] for x in m.resume_later[0]] if m.resume_later else None,
                        "viewer": shown, "to": target[0] if target else None,
                        "file_menu": [k for k, _ in m.file_menu_items()] if m.view == "filemenu" else [],
                        "media_menu": [k for k, _ in m.media_menu_items()] if m.view == "mediamenu" else [],
@@ -245,7 +294,7 @@ def state_now():
                                   "games": [x["title"] for x in inv.get("games") or []]} if inv else None})
 
 
-print(f"READY http://127.0.0.1:{web.server_port}", file=SAY, flush=True)
+print(f"READY http://{ADDR}:{web.server_port}", file=SAY, flush=True)
 try:
     for line in sys.stdin:                            # (the test says what to do here, a line at a time)
         words = line.split(None, 1)
@@ -253,10 +302,18 @@ try:
             continue
         if words[0] == "quit":
             break
-        if words[0] == "peer":                         # the other one's web page, now it's up
-            url, name = words[1].split()
-            m.pie.heard.clear()
+        if words[0] == "peer":                         # the other one's web page, now it's up (too: another)
+            url, name = words[1].split()[:2]
+            if words[1].split()[2:] != ["too"]:
+                m.pie.heard.clear()
             m.pie.heard[url] = {"host": name, "seen": time.time() + 3600, "peer": True}
+            print("ok", file=SAY, flush=True)
+        elif words[0] == "deaf":                        # nothing about a party gets to it, that long
+            DEAF[0] = time.time() + float(words[1])
+            print("ok", file=SAY, flush=True)
+        elif words[0] == "busy":                        # its main loop held up a while (answered at once)
+            m.soon_jobs.append(lambda secs=float(words[1]): time.sleep(secs))
+            m.wake()
             print("ok", file=SAY, flush=True)
         elif words[0] == "set":                         # a setting, as Settings sets it
             key, value = words[1].split(None, 1)
@@ -345,7 +402,7 @@ try:
                 got.append(state_now())
             print(got[0], file=SAY, flush=True)
         elif words[0] in ("press", "news", "gamenews", "game", "expire", "home", "mediahome", "send",
-                          "endgame"):                   # (on its main loop, as a button would be)
+                          "endgame", "play", "pilot", "pilotpress"):   # (on its main loop, as a button would be)
             done_it = threading.Event()
             rest = words[1].split() if len(words) > 1 else []
 
@@ -373,6 +430,18 @@ try:
                         m.game_end()
                     elif what == "expire" and m.invite is not None:
                         m.invite["until"] = 0.0
+                    elif what == "play":                # (songs of its own, the first of them playing)
+                        songs = [g.item(p, os.path.basename(p).rsplit(".", 1)[0], "audio", p)
+                                 for p in " ".join(rest).split("|")]
+                        m.play(songs, 0)
+                    elif what == "pilot":               # (Home > Control another Pietato: the other one, picked)
+                        m.tab = m.tab_index("pilot")
+                        m.view = "list"
+                        m.load_tab(m.tab)
+                        m.pilot_start(m.pilot_rows()[0])
+                    elif what == "pilotpress":          # (a button of its own controller's, while it controls it)
+                        m.pilot_press(rest[0], True)
+                        m.pilot_press(rest[0], False)
                 finally:
                     done_it.set()
             m.soon_jobs.append(job)

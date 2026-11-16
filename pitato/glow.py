@@ -489,9 +489,11 @@ class GlowOut:
             now = self.clock()
             self.send(event_packet(name, strength, now if at is None else at, now), to)
 
-    def music(self, rgb):
-        if self.to:
-            self.send(music_packet(rgb, self.clock()))
+    def music(self, rgb, lamps=True):
+        """Music's colour, between its beats (lamps False: to the grids, not the lights of your own)."""
+        to = self.to if lamps else self.grids
+        if to:
+            self.send(music_packet(rgb, self.clock()), to)
 
     def close(self):
         self.to = self.grids = self.lamps = ()

@@ -14,7 +14,7 @@ from the web (as the Internet Archive's are): each takes it from there, in step.
 one: both play the same bytes, in step; the TV leaves, and the party's over here. Ended from HOME's menu: the TV
 stops, this one plays on, on its own. Last, this one in another's party, with a game on here: the party's next song
 isn't played over the game; it leaves the party instead."""
-import json, math, os, shutil, statistics, subprocess, sys, threading, time, wave
+import json, math, os, shutil, subprocess, sys, threading, time, wave
 from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler, ThreadingHTTPServer
 real_run = subprocess.run                              # (FFmpeg, to make a station's sound: the test stands in for the rest)
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -22,6 +22,7 @@ sys.path.insert(0, TESTS)
 import numpy as np
 import pietato_all as g
 import pitato.party as P
+from party_kit import apart, heard, lag, ramp, sound_card
 
 S = SP + "/t_party"
 shutil.rmtree(S, ignore_errors=True)
@@ -29,7 +30,6 @@ HOME, TV = S + "/gpi", S + "/tv"
 for h in (HOME, TV):
     for d in ("Music", "Videos", "Pictures", "Documents", "Games/Saves"):
         os.makedirs(f"{h}/{d}")
-os.makedirs(S + "/bin")
 ok_all = []
 RATE = P.PARTY_RATE
 
@@ -39,90 +39,7 @@ def check(what, cond):
     print(("ok   " if cond else "FAIL ") + what, flush=True)
 
 
-# a pretend aplay: takes the sound as a sound card would (FAKE_APLAY_SPEED_X: how fast its clock runs), with a buffer as
-# long as --buffer-time says, and logs each 10 ms as it's heard: when, its first sample, and how loud it is
-open(S + "/bin/aplay", "w").write('''#!/usr/bin/env python3
-import os, struct, sys, time
-import numpy as np
-args = sys.argv[1:]
-rate = int(args[args.index("-r") + 1]) if "-r" in args else 48000
-buf = next((int(a.split("=")[1]) for a in args if a.startswith("--buffer-time=")), 100000) / 1e6
-speed = float(os.environ.get("FAKE_APLAY_SPEED_X", "1.0"))
-log = open(os.environ["FAKE_APLAY_LOG"], "a", buffering=1) if os.environ.get("FAKE_APLAY_LOG") else None
-chunk = rate // 100
-inp = sys.stdin.buffer
-held, start, played = bytearray(), None, 0
-while True:
-    while len(held) < buf * rate * 4:
-        data = inp.read(chunk * 4)
-        if not data:
-            sys.exit(0)
-        held += data
-        if start is None:
-            start = time.monotonic()
-    first = struct.unpack("<hh", held[:4])
-    loud = float(np.sqrt(np.mean(np.frombuffer(bytes(held[:chunk * 4]), dtype="<i2").astype(np.float64) ** 2)))
-    del held[:chunk * 4]
-    if log:
-        log.write(f"{time.monotonic():.6f} {first[0]} {first[1]} {loud:.1f}\\n")
-    played += chunk
-    wait = start + played / (rate * speed) - time.monotonic()
-    if wait > 0:
-        time.sleep(wait)
-''')
-os.chmod(S + "/bin/aplay", 0o755)
-os.environ["PATH"] = S + "/bin:" + os.environ["PATH"]
-
-
-def ramp(path, secs):
-    """A song whose every sample says where in it it is: left, the place's low 15 bits; right, the rest."""
-    import wave
-    n = np.arange(RATE * secs, dtype=np.int64)
-    pcm = np.empty(2 * len(n), dtype="<i2")
-    pcm[0::2], pcm[1::2] = (n & 0x7FFF).astype("<i2"), (n >> 15).astype("<i2")
-    with wave.open(path, "wb") as w:
-        w.setnchannels(2); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(pcm.tobytes())
-
-
-def heard(log):
-    """What a pretend sound card heard: [(when, where in the song (seconds) or None for silence, how loud)]."""
-    out = []
-    try:
-        lines = open(log).read().splitlines()
-    except OSError:
-        return out
-    for line in lines:
-        t, left, right, loud = line.split()
-        left, right = int(left), int(right)
-        out.append((float(t), None if left == 0 and right == 0 else (right * 32768 + (left & 0x7FFF)) / RATE,
-                    float(loud)))
-    return out
-
-
-def lag(log, at, pos=0.0, after=0.0, before=None):
-    """How far behind (+) or ahead (-) of where the leader's clock says a song should be heard it was, in ms: (the
-    mean, the most either way)."""
-    errs = [((t - at) + pos - where) * 1000 for t, where, _ in heard(log) if where is not None and t > at + after
-            and (before is None or t < before)]
-    return (statistics.mean(errs), max(abs(e) for e in errs)) if errs else (None, None)
-
-
-def apart(log_a, log_b, at, after=1.0):
-    """How far apart two of them heard the same song (ms): the mean, and the most."""
-    a, b = heard(log_a), heard(log_b)
-    if not a or not b:
-        return None, None
-    bt = np.array([t for t, w, _ in b if w is not None])
-    bw = np.array([w for t, w, _ in b if w is not None])
-    errs = []
-    for t, w, _ in a:
-        if w is None or t < at + after:
-            continue
-        k = np.searchsorted(bw, w)                     # (when b heard the same place in it)
-        if 0 < k < len(bw):
-            tb = bt[k - 1] + (w - bw[k - 1]) * (bt[k] - bt[k - 1]) / max(bw[k] - bw[k - 1], 1e-9)
-            errs.append((tb - t) * 1000)
-    return (statistics.mean(errs), max(abs(e) for e in errs)) if errs else (None, None)
+sound_card(S + "/bin")                                 # (a pretend aplay: party_kit.py)
 
 
 # ---- the leader's clock, and another's pings of it --------------------------------------------------------------------
@@ -278,6 +195,22 @@ while proc.poll() is None and time.time() < end:
     time.sleep(0.1)
 check(f"...the leader's: its end, once it's been heard ({time.monotonic() - at:.1f} s in)", proc.poll() == 0
       and 2.0 <= time.monotonic() - at < 3.5)
+time.sleep(0.5)
+left = [t.name for t in threading.enumerate() if t.name in ("party-play", "party-decode")]
+check(f"...and its sound card's let go of with that: its aplay gone, nothing of it left running ({left})",
+      d.closed and d.aplay.poll() is not None and not left)
+os.environ["FAKE_APLAY_ONE"] = S + "/hdmi"             # (a sound card that takes one player at a time, as HDMI's does)
+first = P.PartyProc(player("f1", time.monotonic() + 0.3, src=short), title="Ramp", lead=True)
+end = time.time() + 6
+while first.poll() is None and time.time() < end:
+    time.sleep(0.05)
+f2 = player("f2", time.monotonic() + 0.5, src=short)   # (the next song, the moment that one's over)
+time.sleep(2.0)
+got = [w for _, w, _ in heard(f"{S}/f2.log") if w is not None]
+check(f"a song over and the next at once, on a sound card that takes one player at a time: the next is heard "
+      f"({len(got)} bits of it)", first.poll() == 0 and len(got) > 50)
+f2.close()
+del os.environ["FAKE_APLAY_ONE"]
 e = player("e", time.monotonic() + 0.3, src=short)
 other = P.PartyProc(e, title="Ramp")
 time.sleep(3.0)
@@ -517,6 +450,8 @@ check(f"...picked: the TV's asked, and it's in ({toasts[-1:]}; the TV: {st.get('
       and (st.get("party") or {}).get("with") == "gpi")
 pump(1.0)
 st = tv_state()
+check("...and this one's beacon says it leads a party (your lights follow it, not one that isn't in it)",
+      m.share_beacon("gpi", full=True).get("party") == 1 and "party" not in m.share_beacon("gpi"))
 check(f"...the TV's set its clock against this one's ({st['party']['offset']})",
       st["party"]["offset"] is not None and abs(st["party"]["offset"]) < 0.005)
 check(f"...the song again, on a party player here ({type(m.proc).__name__}) and there ({st['playing']}, "
@@ -587,6 +522,7 @@ radio.audio = open(LOUD, "rb").read()
 threading.Thread(target=radio.serve_forever, daemon=True).start()
 it = {"title": "Pretend FM", "sub": "", "src": f"http://127.0.0.1:{radio.server_port}/live", "kind": "radio"}
 m.play([it], 0)
+pump(1.0)                                              # (the TV's told on a thread: a moment for it to get there)
 st = tv_state()
 check(f"a station, in the party: passed on by this one ({m.party['relay'] and m.party['relay'].url}), both playing it "
       f"({type(m.proc).__name__}, {st['playing']} {st['cur']!r})", m.party["relay"] is not None
@@ -612,6 +548,16 @@ if mine is not None and theirs is not None:
     best = max(scores, key=scores.get) * 10
 check(f"...the same sound heard on both at the same moment ({best} ms apart, to the nearest 10)",
       best is not None and abs(best) <= 10)
+n = m.party["n"]
+m.party_catch(THEIRS)                                  # (the TV found behind, or just joined: party_looked's)
+pump(1.5)
+st = tv_state()
+check(f"...one that's behind on a station can't join it in the middle: it starts again, for both ({m.party['n']}, "
+      f"the TV {st['party']['n']} {st['playing']})", m.party["n"] == n + 1 and st["party"]["n"] == n + 1
+      and st["playing"] == "PartyProc" and type(m.proc).__name__ == "PartyProc")
+m.party_catch(THEIRS)
+pump(0.5)
+check(f"...and not again a moment later ({m.party['n']})", m.party["n"] == n + 1)
 
 # ---- the TV leaves (HOME's menu there) -------------------------------------------------------------------------------
 tv_do("mediahome")                                     # (on the TV's Now playing)
@@ -636,6 +582,20 @@ done = threading.Event()
 threading.Thread(target=lambda: (m.press("a"), done.set()), daemon=True).start()
 pump(15, done.is_set)
 check("party mode again", m.party_leading() and type(m.proc).__name__ == "PartyProc")
+p = m.party
+said = g.party_post(THEIRS, {"kind": "what", "token": p["token"]})
+p["looking"] += 1
+m.party_looked(p, THEIRS, "tv", "look", said, p["n"], False)
+check(f"one from before the leader's looks, asked what it's on ({said}): left as it is, in the party, and not asked "
+      f"again", said == {"ok": False, "error": "What's that?"} and THEIRS in p["plain"] and THEIRS in p["members"])
+p["plain"].clear()
+said = m.web_party({"from": "127.0.0.1", "kind": "leave", "token": p["token"], "back": True})
+m.party_tick(time.monotonic())
+check(f"one that leaves for a game or a video ({said}): out of it for now, and the party goes on (it's asked in "
+      f"again after)", said == {"ok": True} and THEIRS not in p["members"] and THEIRS in p["away"]
+      and p["asked"].get(THEIRS, 0) > time.monotonic() and m.party is p)
+p["away"].clear(); p["asked"].clear()
+p["members"][THEIRS] = "tv"
 since = len(open(LOG).read().splitlines())
 m.media_home()
 items = m.media_menu_items()
@@ -648,10 +608,46 @@ st = tv_state()
 check(f"...picked: the TV stops, and says so ({tv_said('toast', since)})", st["playing"] is None and st["party"] is None
       and tv_said("toast", since) == {"toast": "gpi's party is over"})
 check(f"...this one plays on, on its own player, from where it was ({spawned[-1]})", m.party is None
-      and spawned[-1][0] == SONGS[0] and type(m.proc).__name__ == "Proc" and toasts[-1] == "Party mode's over")
+      and spawned[-1][0] == SONGS[0] and type(m.proc).__name__ == "Proc" and toasts[-1] == "Party mode's over"
+      and "party" not in m.share_beacon("gpi", full=True))
 
 # ---- this one in another's party, with a game on here ---------------------------------------------------------------
 m.stop()
+token = "q" * 22
+m.web_party({"from": "127.0.0.1", "kind": "start", "token": token, "port": P.PARTY_PORT, "clock": 123456.0})
+check(f"this one in the TV's party, its clock set roughly by what the TV said till it's looked "
+      f"({m.party['offset']:.1f}, {m.party['rough']})", m.party["rough"] is True
+      and abs(m.party["offset"] - (123456.0 - time.monotonic())) < 1.0)
+
+
+class Quiet:
+    """(A party's song playing here: a player that does nothing.)"""
+    closed, stop_at = False, None
+
+    def done(self):
+        return False
+
+    def close(self):
+        self.closed = True
+
+
+m.proc, m.kind, m.cur = P.PartyProc(Quiet()), "audio", {"title": "One", "src": "party:" + THEIRS, "kind": "audio"}
+m.party.update(got=True, n=4)
+m.party["heard"] = time.monotonic() - g.PARTY_LOST - 1
+m.party_tick(time.monotonic())
+check("...its song playing, and not a word from an older leader for a long while: still in it (that one only "
+      "speaks at each song)", m.party_on())
+said = m.web_party_look({"from": "127.0.0.1", "kind": "look", "token": token})
+check(f"...its leader's look, answered: the song it's on ({said})", said == {"ok": True, "n": 4, "paused": False})
+m.party["heard"] = time.monotonic() - g.PARTY_LOST - 1
+m.party_tick(time.monotonic())
+check(f"...not a word for a long while from one that looks every few seconds: it's gone, and this one's out of "
+      f"its party ({toasts[-1:]})", m.party is None and m.proc is None
+      and toasts[-1] == "Lost touch with tv's party")
+m.web_party({"from": "127.0.0.1", "kind": "start", "token": token, "port": P.PARTY_PORT})
+m.party["heard"] = time.monotonic() - g.PARTY_LOST - 1
+m.party_tick(time.monotonic())
+check("...asked in, and never a song or a word since: out of it too", m.party is None)
 token = "p" * 22
 said = m.web_party({"from": "127.0.0.1", "kind": "start", "token": token, "port": P.PARTY_PORT})
 check(f"this one asked to join the TV's party: it's in ({said})", said == {"ok": True} and m.party_on()

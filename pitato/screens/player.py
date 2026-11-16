@@ -575,7 +575,9 @@ class PlayerScreen:
             m, self.media_menu = getattr(self, "media_menu", None) or {}, None
             self.view = m.get("view") or "list"
         if (self.proc and self.proc.poll() is None and self.kind in LISTEN_KINDS and self.cur and not self.paused
-                and self.music_loops()):                # (to come back once whatever stopped it is over)
+                and self.music_loops() and not str(self.cur.get("src") or "").startswith("party:")):
+            # (to come back once whatever stopped it is over. Not a song of another's party: what the party stopped
+            # here stays the one to come back)
             self.resume_later = (self.queue, self.qi, self.pos if self.kind == "audio" else 0)
         self.game_end()
         self.ahead_stop()

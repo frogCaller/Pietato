@@ -261,6 +261,12 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 except Exception as ex:
                     print(f"covers: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
+            if cmd["cmd"] == "party" and cmd.get("kind") == "look":   # a party's leader asks what this one's on,
+                try:                                   # every few seconds: answered here, off the main loop
+                    return self.reply(200, media.web_party_look(cmd))
+                except Exception as ex:
+                    print(f"party: {ex!r}", flush=True)
+                    return self.reply(500, {"error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "cookie":                 # another of yours tries for the cookie: answered here (it
                 try:                                   # may wait a few seconds for your throw), off the main loop
                     return self.reply(200, media.web_cookie(cmd))

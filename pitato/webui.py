@@ -1212,16 +1212,18 @@ def together():
     return pi_reply(ask_pi("POST", "/together", cmd, timeout=12))
 
 
-PARTY_KEYS = ("kind", "token", "port", "at", "pos", "item", "src", "what", "song")
+PARTY_KEYS = ("kind", "token", "port", "at", "pos", "item", "src", "what", "song", "n", "paused", "new", "clock",
+              "back")
 
 
 @app.post("/api/party")
 def party():
     """Party mode (pitato/party.py): another of your Pietatos leading one asks this one to join it, says what to play
-    and when, or that it's over; or, to the one leading, another in it asks it to pause or skip, or says it's left."""
+    and when, asks what it's on (look), or says it's over; or, to the one leading, another in it asks it to pause or
+    skip, or says it's left."""
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or body.get("kind") not in ("start", "play", "pause", "resume", "song", "stop", "ask",
-                                                              "leave"):
+                                                              "leave", "look"):
         return jsonify(ok=False, error="What's that?"), 400
     cmd = {k: body[k] for k in PARTY_KEYS if k in body}
     cmd["from"] = request.remote_addr
