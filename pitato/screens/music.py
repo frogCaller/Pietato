@@ -1,31 +1,39 @@
-"""Music's pages. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows the beat
-while the battery saver's off), what's playing beside it, how far through it is and the buttons under it, all on a soft
-wash of the cover. A song with no cover, or a station: a sign in its place, and the accent colour's glow. And Music's
-list: the picked song's cover beside it, a wash of it behind. (SELECT on Now playing: lofi art on the whole screen
-instead, screens/player.py.)"""
+"""Music's pages. Its songs: a grid of their covers, each with its name under it, the picked one raised a little with
+a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows
+the beat while the battery saver's off), what's playing beside it, how far through it is and the buttons under it, all
+on a soft wash of the cover. A song with no cover, or a station: a sign in its place, and the accent colour's glow.
+(SELECT on Now playing: lofi art on the whole screen instead, screens/player.py.)"""
 import collections
 import os
 import threading
 import time
 
 from ..theme import ACCENT, BG, BODY, look, MUTED, ROW, TEXT
-from ..cover import (cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, GLOW_REACH, glow_mask, glow_step,
-                     glow_strength, mixed, rounded)
+from ..config import CACHE_DIR
+from ..cover import (cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir, GLOW_REACH, glow_mask,
+                     glow_step, glow_strength, mixed, rounded)
+from ..coverfind import CoverFinder
 from ..ear import Ear
-from ..library import LIBRARY
-from ..util import clock
+from ..library import LIBRARY, LISTEN_KINDS
+from ..util import cache_name, clock
 
 NOW_RADIUS = 12                  # the cover's corners
 PULSE_FPS = 15                   # the glow's frames a second, while it follows the beat
 POS_NEAR = 0.3                   # the player's word on where the song is, this near what was expected: the same
                                  # run of it (its tenths of a second evened out); further: a jump, taken as said
 POS_KEPT = 3.0                   # ...and how long its word's good for (seconds)
-GLOW_MOST = 0.9                  # how much of the glow's colour shows at its strongest
-COVERS_KEPT = 12                 # songs' covers kept ready (each COVER_SIDE a side at most)
-LIST_COVER = 212                 # the picked song's cover, beside Music's list (the menus' pixels)
-LIST_WAIT = 0.2                  # seconds a song stays picked before its cover's looked for (one scrolled past: not)
-LIST_KEEP = 0.26                 # how much of the cover's colours the list's wash keeps (less than Now playing's)
-LIST_NARROW = 560                # a screen narrower than this: just the list
+GLOW_MOST = 0.68                 # how much of the glow's colour shows at its strongest (on a beat)
+GRID_LIT = 0.75                  # ...and round the picked cover in Music's grid
+COVERS_KEPT = 12                 # songs' covers kept ready for Now playing (each COVER_SIDE a side at most)
+GRID_GAP = 18                    # Music's grid: the least between two covers (the menus' pixels)...
+GRID_WORDS = 52                  # ...the room under each for its name and its folder's, and the gap to the next row
+GRID_SIDE = (96, 176)            # ...a cover's side: no smaller, no bigger
+GRID_RADIUS = 10                 # ...its corners
+GRID_RAISED = 5                  # ...how much bigger the picked one is, each way
+GRID_GLOW = 13                   # ...and how far its glow reaches
+GRID_AHEAD = 2                   # rows below the ones on the screen whose covers are got ready too
+TILES_KEPT = 80                  # covers kept ready at the grid's size
+GRID_IDLE = 10.0                 # seconds off the grid before the thread that gets them ready stops
 
 
 class MusicScreen:
@@ -34,24 +42,24 @@ class MusicScreen:
 
     covers = None                # songs' covers lately looked for: {song: (its picture, its glow's colour)}, each
                                  # None for a song with none
-    cover_want = None            # (the song whose cover's wanted next, how long to wait first)
+    cover_want = None            # the song whose cover's wanted next
     cover_busy = False           # ...and that there's a thread looking
     cover_lock = threading.Lock()
     now_made = None              # what Now playing's made of for this song and screen: (what for, the pictures)
     now_shot = None              # Now playing as last drawn: (the picture, the pictures it's made of, the glow's step,
                                  # the screen's frame count then)
-    list_made = None             # ...and the list's (what for, the pictures): kept on the page while the next
-                                 # song's cover is found
-    list_pics = None             # ...the ones on the page now
+    song_tiles = None            # the grid's covers: {song: which of the tiles is its, or None: it has no cover}
+    tiles = None                 # ...{which: (the picture at the grid's size, its glow's colour)}, the ones lately used
+    tiles_busy = False           # ...and that there's a thread getting them ready
+    cover_finder = None          # finding covers on the internet for the songs with none (Y on the grid), once asked
     ear = None                   # listening to the song for its beats (ear.py), while the glow follows them
     pulse_next = 0.0             # when the glow's next frame is due
     pos_off, pos_off_at = None, 0.0   # where the song is, less the clock (as the player last said, and when)
 
     # -- covers --------------------------------------------------------------------------------------------------
-    def cover_for(self, it, wait=0.0):
-        """A song's cover and its glow's colour: (picture, colour), (None, None) for a song that has none, or None
-        while it's still being found (the page is drawn again when it is). wait: seconds it must stay the one
-        wanted before it's looked for."""
+    def cover_for(self, it):
+        """A song's cover and its glow's colour, for Now playing: (picture, colour), (None, None) for a song that
+        has none, or None while it's still being found (the page is drawn again when it is)."""
         src = it.get("src") or ""
         if it.get("kind") != "audio" or not src or "://" in src:
             return None, None
@@ -61,7 +69,7 @@ class MusicScreen:
         if hit is not None:
             return hit
         with self.cover_lock:
-            self.cover_want = (src, wait)
+            self.cover_want = src
             start, self.cover_busy = not self.cover_busy, True
         if start:
             threading.Thread(target=self.cover_loop, daemon=True, name="cover").start()
@@ -73,15 +81,10 @@ class MusicScreen:
         from PIL import Image
         while True:
             with self.cover_lock:
-                want = self.cover_want
-                if want is None or want[0] in self.covers:
+                src = self.cover_want
+                if src is None or src in self.covers:
                     self.cover_busy = False
                     return
-            src, wait = want
-            if wait:
-                time.sleep(wait)
-                if self.cover_want != want:
-                    continue
             im = colour = None
             try:
                 found = cover_file(src)
@@ -123,8 +126,16 @@ class MusicScreen:
                     and self.setting("now_art") != "On" and not self.resting and not self.saver_on()
                     and "://" not in (it.get("src") or "") and not self.proc_owns_screen())
 
+    def music_tick(self, now):
+        """(Main loop.) Now playing's glow, and what the search for covers says when it's done."""
+        f = self.cover_finder
+        if f is not None and not f.busy and f.note:
+            note, f.note = f.note, ""
+            self.toast(note, 5)
+        self.pulse_tick(now)
+
     def pulse_tick(self, now):
-        """(Main loop.) The ear for the song on Now playing, kept or let go; the glow's next frame, when it's due."""
+        """The ear for the song on Now playing, kept or let go; the glow's next frame, when it's due."""
         if not self.pulse_wanted():
             if self.ear is not None:
                 self.ear_stop()
@@ -340,48 +351,197 @@ class MusicScreen:
         self.fb.show(img)
         self.now_shot = (img, pics, step, getattr(self.fb, "frames", None))
 
-    # -- Music's list: the picked song's cover beside it -----------------------------------------------------------
-    def music_side(self, img, items, sel):
-        """(Music's list, as it's drawn.) How much of the list's right is the picked song's cover's: none on another
-        tab, with no songs, or on a narrow screen. A soft wash of the cover goes behind the list (the one before
-        stays while the picked song's is found)."""
+    # -- Music's grid: every song a tile -----------------------------------------------------------------------------
+    def music_grid(self):
+        """Music's page is its grid of covers: its tab, with songs in it."""
         tab = LIBRARY[self.tab]
-        if tab.get("type") != "files" or tab.get("kind") != "audio" or not items or self.fb.w < LIST_NARROW:
-            return 0
-        from ..fine import made_fine, scale
-        W, s = self.fb.w, scale()
-        it = items[min(sel, len(items) - 1)]
-        area = (W, self.fb.h - self.HEADER - self.FOOTER - 1)
-        got = self.cover_for(it, LIST_WAIT)
-        key = (it.get("src"), area, s, BG)
-        if got is not None and (self.list_made is None or self.list_made[0] != key):
-            im = got[0]
-            self.list_made = (key, {
-                "wash": None if im is None else made_fine(
-                    cover_wash(im, (area[0] * s, area[1] * s), BG, ACCENT, LIST_KEEP), s),
-                "tile": None if im is None else made_fine(cover_tile(im, LIST_COVER * s, NOW_RADIUS * s), s)})
-        pics = self.list_made[1] if self.list_made is not None and self.list_made[0][1:] == key[1:] else None
-        self.list_pics = pics
-        if pics is not None and pics["wash"] is not None:
-            img.paste(pics["wash"], (0, self.HEADER + 1))
-        return LIST_COVER + 8
+        return tab.get("type") == "files" and tab.get("kind") == "audio" and bool(self.items.get(self.tab))
 
-    def music_panel(self, img, d, it):
-        """The picked song's cover beside the list (no cover: a note in its place), and the folder it's in under
-        it. A tap on it plays the song."""
-        F, W = self.fonts, self.fb.w
-        px, py = W - LIST_COVER - 16, self.list_top() + 4
-        pics = self.list_pics
-        if pics is not None and pics["tile"] is not None:
-            img.paste(pics["tile"], (px, py), pics["tile"])
-        else:
-            d.rounded_rectangle((px, py, px + LIST_COVER, py + LIST_COVER), radius=NOW_RADIUS, fill=ROW)
-            self.cover_sign(d, px + LIST_COVER / 2, py + LIST_COVER / 2, "note")
-        self.tappable((px - 6, py - 4, W, self.fb.h - self.FOOTER), "keys", "a")
-        y = py + LIST_COVER + 14
-        if y + 18 > self.fb.h - self.FOOTER:           # (a short screen: the cover's all there's room for)
-            return
-        folder = os.path.basename(os.path.dirname(it.get("src", "")))
-        for line in self.wrap(d, folder, F["small_b"], LIST_COVER, 2) if folder else ():
-            d.text((px, y), line, font=F["small_b"], fill=BODY, anchor="lt")
-            y += 19
+    def music_find_covers(self):
+        """Y on the grid: covers for the songs that have none, found on the internet (coverfind.py)."""
+        if self.cover_finder is None:
+            self.cover_finder = CoverFinder()
+            self.cover_finder.on_change = self.music_changed
+            self.cover_finder.on_found = self.music_cover_found
+        f = self.cover_finder
+        if f.busy:
+            self.toast("Finding covers already", 2)
+        elif f.start(it["src"] for it in self.tab_items() if it["kind"] == "audio"):
+            self.toast("Finding covers for the songs with none", 3)
+
+    def music_changed(self):
+        """(The finder's thread.) It's got somewhere: the page drawn again."""
+        self.dirty = True
+
+    def music_cover_found(self, path):
+        """(The finder's thread.) A song has a cover now: looked for afresh, on the grid and on Now playing."""
+        if self.song_tiles is not None:
+            self.song_tiles.pop(path, None)
+        if self.covers is not None:
+            self.covers.pop(path, None)
+        self.dirty = True
+
+    def music_hints(self, hints):
+        """The grid's buttons along the bottom: the list's, and Y to find covers (what gives way, if they don't all
+        fit: Controls and Tabs, which the Controls page has)."""
+        f = self.cover_finder
+        if f is None or not f.busy:
+            hints = hints[:1] + [("Y", "Find covers")] + hints[1:]
+        return self.hints_room(hints, keep=("A", "Y", "B", "START"))
+
+    def music_layout(self):
+        """The grid on this screen (the menus' pixels): cols by rows of covers, each side big, the first at x, y, the
+        next dx across and dy down. As many columns as the screen's wide; two rows, where covers a little smaller
+        make room for them."""
+        W, H = self.fb.w, self.fb.h
+        y = self.HEADER + GRID_GLOW + GRID_RAISED + 4  # (room over the top row for the picked one's glow)
+        room = H - self.FOOTER - 2 - y
+        cols = 3 if W < 560 else 4 if W < 800 else 5 if W < 1120 else 6
+        side = min(GRID_SIDE[1], (W - 48 - (cols - 1) * GRID_GAP) // cols)
+        if room // (side + GRID_WORDS) < 2 and room // 2 - GRID_WORDS >= GRID_SIDE[0]:
+            side = room // 2 - GRID_WORDS
+        side = max(GRID_SIDE[0], side)
+        gap = max(GRID_GAP, min(28, (W - 48 - cols * side) // (cols - 1)))
+        return {"cols": cols, "rows": max(1, room // (side + GRID_WORDS)), "side": side,
+                "x": (W - cols * side - (cols - 1) * gap) // 2, "y": y, "dx": side + gap, "dy": side + GRID_WORDS}
+
+    def music_tile(self, it, px):
+        """A song's cover at the grid's size (px of the screen's own pixels a side) and its glow's colour, or (None,
+        None): it has none, or it's not ready yet (the thread that gets them ready draws the page again)."""
+        if self.tiles is None or getattr(self, "tiles_px", None) != px:   # (another size of screen: all afresh)
+            self.tiles, self.song_tiles, self.tiles_px = collections.OrderedDict(), {}, px
+        key = self.song_tiles.get(it["src"])
+        hit = self.tiles.get(key) if key else None
+        if hit is None:
+            return None, None
+        self.tiles.move_to_end(key)
+        return hit
+
+    def music_tile_next(self):
+        """The next song whose cover the grid wants ready ((the song, the size)): one on the screen first, then the
+        rows just under them. None: they all are, or the grid's not on the screen."""
+        if not (self.active and self.view == "list" and self.music_grid()) or self.tiles is None:
+            return None
+        items, lay = self.tab_items(), self.music_layout()
+        first = self.tops.get(self.tab, 0) * lay["cols"]
+        for it in items[first:first + (lay["rows"] + GRID_AHEAD) * lay["cols"]]:
+            key = self.song_tiles.get(it["src"], False)
+            if key is False or (key is not None and key not in self.tiles):
+                return it, self.tiles_px
+        return None
+
+    def music_tile_make(self, it, px):
+        """A song's cover at the grid's size, got ready: one kept on disk from before, or made now and kept there
+        (a folder's cover: one for all the songs in it)."""
+        from PIL import Image, ImageOps
+        from ..fine import scale
+        src = it["src"]
+        thumbs = os.path.join(CACHE_DIR, "thumbs")
+        key = os.path.join(thumbs, cache_name(src, f"-m{px}.jpg"))   # (its own: a cover from inside its file)
+        im = None
+        try:
+            if not os.path.exists(key):
+                found = cover_file(src)
+                if found is None:
+                    self.song_tiles[src] = None
+                    return
+                if not found.startswith(covers_dir() + os.sep):      # (a picture in its folder: the folder's)
+                    key = os.path.join(thumbs, cache_name(found, f"-m{px}.jpg"))
+                if key not in self.tiles and not os.path.exists(key):
+                    im = Image.open(found)
+                    im.draft("RGB", (px * 2, px * 2))
+                    im = ImageOps.fit(im.convert("RGB"), (px, px), Image.LANCZOS)
+                    try:
+                        os.makedirs(thumbs, exist_ok=True)
+                        im.save(key, quality=88)
+                    except OSError:                    # (nowhere to keep it: it's made again next time)
+                        pass
+            if key not in self.tiles:
+                if im is None:
+                    im = Image.open(key).convert("RGB")
+                self.tiles[key] = (rounded(im, GRID_RADIUS * scale()), cover_colour(im))
+                while len(self.tiles) > TILES_KEPT:
+                    self.tiles.popitem(last=False)
+            self.song_tiles[src] = key
+        except Exception as ex:                        # (a picture that won't open: no cover)
+            print(f"cover: {ex!r}", flush=True)
+            self.song_tiles[src] = None
+
+    def music_tile_loop(self):
+        """Gets the grid's covers ready, the ones on the screen first, while the grid's up (and for a little after:
+        the grid starts it again)."""
+        idle = 0.0
+        try:
+            while self.active and idle < GRID_IDLE:
+                want = None if self.proc_owns_screen() else self.music_tile_next()
+                if want is None:
+                    idle += 0.2
+                    time.sleep(0.2)
+                    continue
+                idle = 0.0
+                self.music_tile_make(*want)
+                self.dirty = True
+        finally:
+            self.tiles_busy = False
+
+    def render_music(self):
+        """Music: a grid of its songs' covers, each with its name (and the folder it's in) under it; the picked one
+        a little bigger, with a glow in its cover's colour; the one that's playing marked."""
+        from PIL import Image as Plain
+        from ..fine import made_fine, scale
+        F = self.fonts
+        img, d = self.canvas()
+        items = self.tab_items()
+        n = len(items)
+        sel = max(0, min(self.sels.get(self.tab, 0), n - 1))
+        self.header(img, d)
+        lay = self.music_layout()
+        cols, rows, side, s = lay["cols"], lay["rows"], lay["side"], scale()
+        top, srow, total = self.tops.get(self.tab, 0), sel // cols, (n + cols - 1) // cols
+        top = srow if srow < top else srow - rows + 1 if srow >= top + rows else top
+        top = self.tops[self.tab] = max(min(top, total - rows), 0)
+        playing = self.cur["key"] if self.proc and self.kind in LISTEN_KINDS and self.cur else None
+        shown = [((top + r) * cols + c, lay["x"] + c * lay["dx"], lay["y"] + r * lay["dy"])
+                 for r in range(rows) for c in range(cols) if (top + r) * cols + c < n]
+        tiles = {i: self.music_tile(items[i], side * s) for i, _, _ in shown}
+        big = side + 2 * GRID_RAISED
+        for i, x, y in shown:                          # (the picked one's glow: under everything)
+            if i == sel:
+                made = getattr(self, "grid_glow", None)
+                if made is None or made[0] != (big, s):
+                    made = self.grid_glow = ((big, s), glow_mask(big * s, GRID_GLOW * s, GRID_RADIUS * s))
+                at = (x - GRID_RAISED - GRID_GLOW, y - GRID_RAISED - 2 - GRID_GLOW)
+                img.paste(made_fine(Plain.new("RGB", made[1].size, tiles[i][1] or ACCENT), s), at,
+                          made_fine(made[1].point(lambda v: int(v * GRID_LIT)), s))
+        half = (lay["dx"] - side) // 2
+        for i, x, y in shown:
+            it = items[i]
+            self.tappable((x - half, y - 6, x + side + half, y + lay["dy"] - 6), "sel", "sels", self.tab, i)
+            pic = tiles[i][0]
+            if i == sel:                               # (a little bigger, and a touch higher)
+                x0, y0, w = x - GRID_RAISED, y - GRID_RAISED - 2, big
+                pic = None if pic is None else pic.resize((big * s, big * s), Plain.LANCZOS)
+            else:
+                x0, y0, w = x, y, side
+            if pic is not None:
+                pic = made_fine(pic, s)
+                img.paste(pic, (x0, y0), pic)
+            else:
+                d.rounded_rectangle((x0, y0, x0 + w - 1, y0 + w - 1), radius=GRID_RADIUS, fill=ROW)
+                self.cover_sign(d, x0 + w / 2, y0 + w / 2, "note")
+            on = playing is not None and it["key"] == playing
+            name = self.fit(d, ("♪ " if on else "") + it["title"], F["small_b"], side)
+            d.text((x, y + side + 17), name, font=F["small_b"],
+                   fill=ACCENT if on else TEXT if i == sel else BODY, anchor="lm")
+            folder = os.path.basename(os.path.dirname(it["src"]))
+            if folder and folder != "Music":
+                d.text((x, y + side + 35), self.fit(d, folder, F["label"], side), font=F["label"], fill=MUTED,
+                       anchor="lm")
+        self.scrollbar(d, top, rows, total, lay["y"], lay["y"] + rows * lay["dy"] - GRID_WORDS)
+        f = self.cover_finder
+        self.footer(d, self.music_hints(self.list_hints()), right=f"Finding covers: {f.done} of {f.total}"
+                    if f is not None and f.busy else f"{sel + 1} of {n}")
+        self.fb.show(img)
+        if not self.tiles_busy and self.music_tile_next() is not None:
+            self.tiles_busy = True
+            threading.Thread(target=self.music_tile_loop, daemon=True, name="covers").start()

@@ -462,7 +462,7 @@ class WebScreen:
             self.www_scroll(n * self.ROW_H)
             return []
         taps = self.taps_now()
-        if (self.view == "list" and self.tab_type() != "photos"
+        if (self.view == "list" and self.tab_type() != "photos" and not self.music_grid()   # (a grid: ▲▼, a row each)
                 and any(w[:3] == ("sel", "sels", self.tab) for _, w in taps)):
             self.list_scroll(n)
             return []

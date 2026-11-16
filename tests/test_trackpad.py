@@ -353,21 +353,22 @@ m.home_sel = next(i for i, a in enumerate(m.home_apps()) if a[0] == "Music")
 click(bbm)
 check(f"pressed: Music opens (A) ({m.view}, {g.LIBRARY[m.tab]['name']})", m.view == "list" and g.LIBRARY[m.tab]["name"] == "Music")
 
-# a list
+# a grid (Music's covers: a row down each time)
 before = m.sels.get(m.tab, 0)
+row = m.music_layout()["cols"]
 glide(bbm, 0, 25, 3)
-check(f"a short swipe down: the next one ({before} -> {m.sels.get(m.tab, 0)})", m.sels.get(m.tab, 0) == before + 1)
+check(f"a short swipe down: the next row ({before} -> {m.sels.get(m.tab, 0)})", m.sels.get(m.tab, 0) == before + row)
 glide(bbm, 0, 25, 14)
-check(f"a long one: on a few more ({m.sels.get(m.tab, 0)})", m.sels.get(m.tab, 0) == before + 5)
+check(f"a long one: on a few more ({m.sels.get(m.tab, 0)})", m.sels.get(m.tab, 0) == before + 5 * row)
 glide(bbm, 0, -25, 3)
-check("up: back one", m.sels.get(m.tab, 0) == before + 4)
+check("up: back one", m.sels.get(m.tab, 0) == before + 4 * row)
 del pressed[:]
 glide(bbm, 0, 2, 40, gap=0.03)
 check(f"a finger resting on it, slipping slowly: nothing ({pressed})", pressed == [])
 bbm.send((e.EV_REL, e.REL_WHEEL, -1), (e.EV_SYN, e.SYN_REPORT, 0)); wait()
 bbm.send((e.EV_REL, e.REL_WHEEL, -1), (e.EV_REL, e.REL_WHEEL_HI_RES, -120), (e.EV_SYN, e.SYN_REPORT, 0)); wait()
 check(f"its wheel (Caps Lock on): a step a click ({m.sels.get(m.tab, 0)}, {pressed})",
-      m.sels.get(m.tab, 0) == before + 6 and pressed == ["down", "down"])
+      m.sels.get(m.tab, 0) == before + 6 * row and pressed == ["down", "down"])
 click(bbm, e.BTN_RIGHT)
 check(f"the right button: B, home ({m.view})", m.view == "home")
 

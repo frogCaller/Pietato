@@ -1903,7 +1903,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.now_art() and not self.resting and now >= self.lofi_next:   # (Now playing's lofi art: its rain...)
             self.lofi_next = now + 1.0 / self.lofi_fps()
             self.dirty = True
-        self.pulse_tick(now)                           # (...and its cover's glow, following the beat)
+        self.music_tick(now)                           # (...and its cover's glow, following the beat)
         if self.coder.heard and not self.setting("coder_seen"):
             self.set_setting("coder_seen", "yes")     # (an agent has found it: no more "how to connect")
         if (self.fin_auto and self.active and not self.resting and self.view == "list"
@@ -2196,6 +2196,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         grid = ttype == "photos" or (ttype == "games" and self.games_grid())   # (the Games tab's folders: icons)
         cols = (self.games_cols() if ttype == "games" else self.grid_cols()) if grid else 1
         page = self.grid_rows() * cols if grid else self.visible_rows()
+        tiles = grid or self.music_grid()              # (Music: its songs' covers, a grid of its own)
+        if tiles and not grid:
+            cols = self.music_layout()["cols"]
 
         if self.ha_menu is not None:                   # Home Assistant's settings, over the page
             r = self.press_ha_menu(name, repeat)
@@ -2256,6 +2259,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if ttype == "games" and name == "y":
             if not repeat:
                 self.games_find_art()
+            return None
+        if name == "y" and self.music_grid():          # (Music: covers found for the songs with none)
+            if not repeat:
+                self.music_find_covers()
             return None
         if ttype == "games" and name == "start":       # (not Now playing, here: a box to find a game in)
             if not repeat:
@@ -2413,9 +2420,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.v["slideshow"], self.v["next_t"] = True, time.monotonic() + SLIDESHOW_SECS
         elif n:
             step = {"up": -cols, "down": cols,
-                    "left": -1 if grid else -page, "right": 1 if grid else page}.get(name)
+                    "left": -1 if tiles else -page, "right": 1 if tiles else page}.get(name)
             if step is not None:
-                if grid or repeat or name in ("left", "right"):
+                if tiles or repeat or name in ("left", "right"):
                     sel = max(0, min(sel + step, n - 1))
                 else:
                     sel = (sel + step) % n

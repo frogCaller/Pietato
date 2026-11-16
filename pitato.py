@@ -91,10 +91,11 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 after it, from where it was
   Radio       - real stations by genre, popular near you, or search by name (from the free
                 Radio Browser directory), and your own list in static/radio.txt
-                Now playing (music or radio): the song's cover (cover.jpg or folder.jpg in its folder, or
-                the picture inside its file: pitato/cover.py), with a glow in its colour that follows the
-                beat while the battery saver's off (pitato/ear.py); the picked song's cover beside Music's
-                list too. SELECT puts on lofi art, a quiet pixel-art scene on the whole
+                Music's songs are a grid of their covers (cover.jpg or folder.jpg in a song's folder, or
+                the picture inside its file: pitato/cover.py; Y there finds covers for the songs with
+                none, on MusicBrainz and the Cover Art Archive: pitato/coverfind.py). Now playing (music or
+                radio) has the cover big, with a glow in its colour that follows the beat while the
+                battery saver's off (pitato/ear.py). SELECT there puts on lofi art, a pixel-art scene on the whole
                 screen (a rainy window, a rooftop at dusk or a night train: each song or station has its
                 own), what's playing in its corner; SELECT again for the usual page. It's kept for next time.
                 HOME there has Party mode: your other Pietatos that are on play it too, at the same moment

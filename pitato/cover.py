@@ -1,7 +1,7 @@
 """A song's cover art, for Music: the picture named for it in its folder (cover.jpg, folder.jpg and the like), else the
-one inside its file (FFmpeg gets it out once: kept small in the cache), else the only picture in its folder. And what
-Now playing makes of it: the colour its glow takes, a soft wash of it for behind the page, the picture itself with its
-corners rounded, and the glow."""
+one inside its file (FFmpeg gets it out once: kept small in the cache), else one found for it on the internet
+(coverfind.py), else the only picture in its folder. And what Now playing makes of it: the colour its glow takes, a
+soft wash of it for behind the page, the picture itself with its corners rounded, and the glow."""
 import os
 import subprocess
 
@@ -14,12 +14,18 @@ COVER_SIDE = 600                 # the most pixels a side of the one got out of 
 COVER_WAIT = 20                  # seconds FFmpeg may take over it
 COVERS_MOST = 400                # ...and how many of them the cache keeps (the ones not used longest go first)
 WASH_KEEP = 0.34                 # how much of the cover's own colours its wash keeps (the rest: the page's)
-GLOW_REACH = 26                  # how far the glow reaches past the cover (the menus' pixels)
-GLOW_REST, GLOW_STEPS = 0.5, 8   # how lit it is between beats (1: on one), and how many steps there are between
+GLOW_REACH = 22                  # how far the glow reaches past the cover (the menus' pixels)
+GLOW_REST, GLOW_STEPS = 0.45, 8  # how lit it is between beats (1: on one), and how many steps there are between
 
 
 def covers_dir():
     return os.path.join(CACHE_DIR, "covers")
+
+
+def found_file(path):
+    """Where a cover found on the internet for a song is kept (in a folder of its own: they aren't tidied away, as
+    the ones got out of songs' files are), whether or not there is one."""
+    return os.path.join(covers_dir(), "found", cache_name(path, ".jpg"))
 
 
 def beside(path, only=False):
@@ -100,7 +106,8 @@ def cover_file(path):
                 return out
         except OSError:
             pass
-    return beside(path, only=True)
+    found = found_file(path)
+    return found if os.path.exists(found) else beside(path, only=True)
 
 
 def cover_colour(im):

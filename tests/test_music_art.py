@@ -5,9 +5,13 @@ found a moment ahead of what's heard, kept by their place in the song, a jump st
 after each. Now playing: the cover on the left with its glow, a wash of it behind, the words, the line in the cover's
 colour, the buttons (each tappable); a note for a song with no cover, a sign for a station; the glow following the
 beat with the battery saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off
-the page. Music's list: the picked song's cover beside it (the one before kept while the next is found), nothing of
-the sort on another tab or a narrow screen. A light page, and a screen drawn finely. Last, for real: FFmpeg listening
-to a song with a kick drum every half second."""
+the page. Music's grid: every song a square with its cover (made small once and kept on disk, a folder's shared
+by its songs), its name and its folder's under it, the picked one bigger with a glow, the D-pad moving about it, A
+playing as before, only the covers near the screen looked at, another tab still a list. Covers from the internet
+(Y on the grid): who a song's by from its tags or its file's name, MusicBrainz asked which record it's on (the sure
+match only, no compilation's, never more than a question a second), the Cover Art Archive for its picture, a
+record's songs sharing one, what isn't found not asked about again for a month, the WiFi down said. A light page,
+and a screen drawn finely. Last, for real: FFmpeg listening to a song with a kick drum every half second."""
 import io, os, shutil, subprocess, sys, threading, time, types
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
@@ -273,7 +277,7 @@ def playing(m, i, title="", artist="", album="", pos=84.0, length=238.0):
 
 gate = threading.Event()                               # (shut: a cover that's looked for isn't found yet)
 real_cover_file = M.cover_file
-M.cover_file = lambda path: (gate.wait(8), real_cover_file(path))[1]
+M.cover_file = lambda path: (gate.wait(10), real_cover_file(path))[1]
 
 
 def found(m, secs=8.0):
@@ -454,7 +458,8 @@ out_lit = lit[ay + side // 2, ax - 5]
 check(f"a beat: just the cover and its glow go to the screen {m.fb.parts}, the glow brighter beside it "
       f"({tuple(out)} to {tuple(out_lit)})", m.fb.parts == [box] and m.fb.shows == 0 and out_lit[0] > out[0] + 20
       and near(lit[ay + int(side * 0.43), ax + side // 2], (255, 226, 170), 16)
-      and (lit[bar - 2:, :] == a[bar - 2:, :]).all() and box == (ax - 26, ay - 26, ax + side + 26, ay + side + 26))
+      and (lit[bar - 2:, :] == a[bar - 2:, :]).all()
+      and box == (ax - C.GLOW_REACH, ay - C.GLOW_REACH, ax + side + C.GLOW_REACH, ay + side + C.GLOW_REACH))
 check(f"...the loop looks again when its next frame's due ({m.tick_limit():.3f} s)",
       0 < m.tick_limit() <= 1 / 15 + 1e-6)
 fake[0] += 0.02
@@ -508,67 +513,325 @@ m.kind, m.cur = "radio", station
 m.tick()
 check("a station on it: no ear", m.ear is None and made[2].closed and len(made) == 3)
 
-# ---- Music's list --------------------------------------------------------------------------------------------
+# ---- Music's grid --------------------------------------------------------------------------------------------
+def ready(m, secs=10.0):
+    """The grid's covers, all got ready (the ones it wants now)."""
+    gate.set()
+    end = time.time() + secs
+    while (m.cover_busy or m.music_tile_next() is not None) and time.time() < end:
+        real_sleep(0.02)
+    gate.clear()
+    return m.music_tile_next() is None
+
+
+def at(lay, i, top=0):
+    """Where the grid's i-th song's cover is (its left and top)."""
+    return lay["x"] + (i % lay["cols"]) * lay["dx"], lay["y"] + (i // lay["cols"] - top) * lay["dy"]
+
+
 playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
 m.state["settings"]["battery"] = "On"
 m.view = "list"
-m.sels[MUSIC] = 2
-shot(m)
-found(m)
-L = shot(m, "list")
-px, py = 640 - M.LIST_COVER - 16, m.list_top() + 4
-check(f"Music's list: the picked song's cover beside it ({M.LIST_COVER} px, at {px}, {py}), the folder it's in under "
-      f"it", near(L[py + int(M.LIST_COVER * 0.43), px + M.LIST_COVER // 2], (255, 226, 170), 16)
-      and ink(L, (px, py + M.LIST_COVER + 10, px + 120, py + M.LIST_COVER + 34), g.BODY))
-check("...a soft wash of it behind the rows, the rows stopping short of it", not near(L[100, 300], g.BG, 4)
-      and L[100, 300].max() < 110 and near(L[m.list_top() + 2 * m.ROW_H + 24, 300], g.ROW, 6)
-      and not near(L[m.list_top() + 2 * m.ROW_H + 24, 404], g.ROW, 6))
+m.sels[MUSIC] = 0
+gl = m.music_layout()
+cols, rows, gs = gl["cols"], gl["rows"], gl["side"]
+check(f"Music: a grid of its songs, {cols} across and {rows} down on this screen, each cover {gs} px, all of it "
+      f"between the tabs and the buttons", m.music_grid() and (cols, rows) == (4, 2) and 110 <= gs <= 140
+      and gl["y"] - M.GRID_GLOW - M.GRID_RAISED >= m.HEADER and gl["y"] + rows * gl["dy"] <= 480 - m.FOOTER
+      and gl["x"] >= 20 and gl["x"] + (cols - 1) * gl["dx"] + gs <= 620)
+runs.clear()
+C.subprocess.run = counted
+G0 = shot(m)
+x1, y1 = at(gl, 1)
+check("its covers not ready yet: a note in each square, and a thread getting them ready", m.tiles_busy
+      and near(G0[y1 + 6, x1 + 20], g.ROW, 6) and ink(G0, (x1 + 30, y1 + 30, x1 + gs - 30, y1 + gs - 30), g.ACCENT))
+check("...ready", ready(m) and m.dirty)
+G = shot(m, "grid")
+x3, y3 = at(gl, 3)
+x4, y4 = at(gl, 4)
+check("each song's cover in its square: the folder's, the one inside the file, a note for one with none",
+      near(G[y1 + int(gs * 0.43), x1 + gs // 2], (255, 226, 170), 20)
+      and near(G[y3 + gs // 2, x3 + gs // 2], (55, 195, 110), 24) and near(G[y4 + 6, x4 + 20], g.ROW, 6)
+      and not near(G[y1 + 1, x1 + 1], G[y1 + 12, x1 + 12], 12))
+thumbs = sorted(n for n in os.listdir(S + "/cache/thumbs") if f"-m{gs}." in n)
+check(f"...kept on disk at the grid's size: one for the folder's cover (its three songs share it), one for the "
+      f"song with its own ({len(thumbs)}); nothing looked into twice ({len(runs)} FFmpeg)", len(thumbs) == 2
+      and m.song_tiles[SONGS[0]] == m.song_tiles[SONGS[1]] == m.song_tiles[SONG] != m.song_tiles[INSIDE]
+      and m.song_tiles[BARE] is None and len(runs) == 0)
+x0, y0 = at(gl, 0)
+beside, plain = G[y0 + gs // 2, x0 - M.GRID_RAISED - 5], G[y1 + gs // 2, x1 + gs + 8]
+check(f"the picked one: a little bigger, a glow in its cover's colour round it {tuple(beside)} (the others: none "
+      f"{tuple(plain)})", near(G[y0 - 4, x0 + gs // 2], (250, 150, 62), 30) and beside[0] > beside[2] + 40
+      and near(plain, g.BG, 4) and near(G[y1 - 4, x1 + gs // 2], g.BG, 4))
+x2, y2 = at(gl, 2)
+check("each one's name under it, and the folder it's in; the one that's playing marked in the accent's colour",
+      ink(G, (x0, y0 + gs + 8, x0 + gs, y0 + gs + 26), g.TEXT)
+      and ink(G, (x1, y1 + gs + 8, x1 + gs, y1 + gs + 26), g.BODY)
+      and ink(G, (x2, y2 + gs + 8, x2 + gs, y2 + gs + 26), g.ACCENT, 30)
+      and not ink(G, (x1, y1 + gs + 8, x1 + gs, y1 + gs + 26), g.ACCENT, 30)
+      and ink(G, (x1, y1 + gs + 27, x1 + gs, y1 + gs + 44), g.MUTED))
 taps = [(box, what) for box, what in m.taps if what[0] == "sel"]
-panel = [box for box, what in m.taps if what == ("keys", "a") and box[0] >= px - 8]
-check("...a tap on a row picks it, one on the cover plays the song", len(taps) == 5
-      and all(b[2] <= panel[0][0] for b, _ in taps) and len(panel) == 1)
-m.covers.pop(SONGS[3])                                 # (its cover's not been looked for lately)
-m.sels[MUSIC] = 3
-N = shot(m)
-check("the next song picked: the cover before stays while its own is found (no empty square between)",
-      m.cover_for(m.items[MUSIC][3], M.LIST_WAIT) is None
-      and near(N[py + int(M.LIST_COVER * 0.43), px + M.LIST_COVER // 2], (255, 226, 170), 16))
-found(m)
-N = shot(m, "list_next")
-check("...then its own", near(N[py + M.LIST_COVER // 2, px + M.LIST_COVER // 2], (55, 195, 110), 24))
-m.sels[MUSIC] = 4
-shot(m)
-found(m)
-N = shot(m, "list_none")
-check("one with no cover: a note in its square, no wash", near(N[py + 6, px + 20], g.ROW, 6)
-      and near(N[100, 300], g.BG, 2) and ink(N, (px + 60, py + 60, px + 150, py + 150), g.ACCENT))
-waits, hold = [], threading.Event()
-m.cover_want = None
-m.covers.clear()
-time.sleep = lambda s: waits.append(s) or hold.wait(8)   # (its wait before it looks: till it's let go of, here)
+check("a tap on a cover picks that song", [w[-1] for _, w in taps] == [0, 1, 2, 3, 4]
+      and all(b[0] <= at(gl, i)[0] and b[2] >= at(gl, i)[0] + gs and b[1] <= at(gl, i)[1]
+              for i, (b, _) in enumerate(taps))
+      and all(taps[i][0][2] <= taps[i + 1][0][0] for i in range(3)))
+moves = []
+for key in ("right", "right", "right", "right", "down", "up", "left", "left", "down"):
+    m.press(key)
+    moves.append(m.sels[MUSIC])
+check(f"the D-pad moves about it: across, down a row, up one ({moves})", moves == [1, 2, 3, 4, 4, 0, 0, 0, 4])
+played = []
+m.play = lambda queue, i, **k: played.append((len(queue), i))
+m.press("a")
+del m.play
+check(f"A: that song plays, all of them after it as before ({played})", played == [(5, 4)])
+m.press("start")
+check("START: Now playing, as before", m.view == "now")
+m.view = "list"
+MANY = SONGS + [f"{LOOSE}/extra {k:02d}.mp3" for k in range(31)]
+for p in MANY[5:]:
+    shutil.copy(BARE, p)
+m.items[MUSIC] = [g.item(p, g.title_of(p), "audio", p) for p in MANY]
 m.sels[MUSIC] = 0
 shot(m)
-m.sels[MUSIC] = 1
-shot(m)
-hold.set()
-found(m)
-time.sleep = real_sleep
-check(f"scrolling past one: its cover isn't looked for, only the one stopped on "
-      f"({sorted(map(os.path.basename, m.covers))})",
-      list(m.covers) == [SONGS[1]] and M.LIST_WAIT in waits)
+ready(m)
+looked = len(m.song_tiles)
+check(f"a lot of songs: only the ones on the screen and the rows just under them are looked at ({looked} of "
+      f"{len(MANY)})", looked == (rows + M.GRID_AHEAD) * cols)
+for _ in range(5):
+    m.press("down")
+D = shot(m)
+check(f"down past the foot of the screen: it scrolls a row at a time (the top row's now {m.tops[MUSIC]}), the picked "
+      f"one still on it", m.sels[MUSIC] == 20 and m.tops[MUSIC] == 4
+      and near(D[at(gl, 20, 4)[1] + 6, at(gl, 20, 4)[0] + 20], g.ROW, 8))
+ready(m)
+C.subprocess.run = real_run
+again = media()
+again.view = "list"
+shot(again)
+runs.clear()
+C.subprocess.run = counted
+ready(again)
+A2 = shot(again)
+C.subprocess.run = real_run
+check(f"another time: its covers come from the ones kept on disk (no FFmpeg: {len(runs)}), none made again",
+      len(runs) == 0 and near(A2[y1 + int(gs * 0.43), x1 + gs // 2], (255, 226, 170), 20)
+      and sorted(n for n in os.listdir(S + "/cache/thumbs") if f"-m{gs}." in n) == thumbs)
+M.GRID_IDLE = 0.3
+again.view = "home"
+end = time.time() + 5
+while again.tiles_busy and time.time() < end:
+    real_sleep(0.05)
+check("off the grid: the thread that gets them ready stops by itself", not again.tiles_busy)
+M.GRID_IDLE = 10.0
 VIDEOS = next(i for i, t in enumerate(g.LIBRARY) if t["name"] == "Videos")
 m.items[VIDEOS] = [g.item(S + f"/v{k}.mp4", f"Video {k}", "video", S + f"/v{k}.mp4") for k in range(3)]
 m.tab = VIDEOS
 V = shot(m)
-check("another list (Videos): as it was, the whole width, no cover", near(V[m.list_top() + 24, 600], g.ROW, 6)
-      and m.music_side(Image.new("RGB", (640, 480)), m.items[VIDEOS], 0) == 0)
+m.press("down")
+check("another tab (Videos): a list, as it was", not m.music_grid() and near(V[m.list_top() + 24, 600], g.ROW, 6)
+      and m.sels[VIDEOS] == 1)
 m.tab = MUSIC
 m.fb = FB(480, 640)
-m.fonts = None; m.load_fonts()
-check("a narrow screen: just the list", m.music_side(Image.new("RGB", (480, 640)), m.items[MUSIC], 0) == 0)
+nl = m.music_layout()
+check(f"a narrow screen: three across ({nl['cols']} by {nl['rows']}, {nl['side']} px)", nl["cols"] == 3
+      and nl["x"] + 2 * nl["dx"] + nl["side"] <= 480 - nl["x"] + 1 and nl["rows"] >= 2)
 m.items[MUSIC] = []
 m.fb = FB()
-check("no songs: just the page saying so", m.music_side(Image.new("RGB", (640, 480)), [], 0) == 0)
+E0 = shot(m)
+check("no songs: the page saying so, as before", not m.music_grid() and ink(E0, (100, 180, 540, 300), g.TEXT))
+
+# ---- covers from the internet ---------------------------------------------------------------------------------
+from pitato import coverfind as CF   # noqa: E402
+import json, urllib.error, urllib.parse   # noqa: E401, E402
+
+names = {n: CF.from_name(f"/m/{n}.mp3") for n in (
+    "Paper Lanterns - Green Hours", "03 Harbour Lights", "3. The Tide - Low", "99 Luftballons", "01_Artist_-_Song",
+    "50 Cent - In Da Club", "12 - Somebody - A Song - Live")}
+check(f"who a song's by and its name, from its file's name: {list(names.values())[:3]}", names == {
+    "Paper Lanterns - Green Hours": ("Paper Lanterns", "Green Hours"), "03 Harbour Lights": ("", "Harbour Lights"),
+    "3. The Tide - Low": ("The Tide", "Low"), "99 Luftballons": ("", "99 Luftballons"),
+    "01_Artist_-_Song": ("Artist", "Song"), "50 Cent - In Da Club": ("50 Cent", "In Da Club"),
+    "12 - Somebody - A Song - Live": ("Somebody", "A Song - Live")})
+check("two names being one: marks, capitals and what's in brackets don't matter; a short one inside a longer isn't it",
+      CF.same("Nevermind", "nevermind (Remastered 2011)") and CF.same("Sgt. Pepper's Lonely Hearts Club Band",
+                                                                     "Sgt Peppers Lonely Hearts Club Band")
+      and CF.same("Beyoncé", "Beyonce") and not CF.same("Queen", "Queen II")
+      and not CF.same("Low Tide", "Low Tide Blues")
+      and not CF.same("", "") and not CF.same("Abbey Road", "Let It Be"))
+check(f"a name as the search takes it: {CF.said('AC/DC: Back in Black (Live)')}", CF.said('AC/DC: Back in Black (Live)')
+      == '"AC\\/DC\\: Back in Black"' and CF.said('"Heroes"') == '"\\"Heroes\\""')
+TAGGED = S + "/home/u/Music/Tagged"
+os.makedirs(TAGGED)
+T1, T2, T3, T4, T5 = (TAGGED + "/01 a.mp3", TAGGED + "/02 b.mp3", TAGGED + "/Paper Lanterns - Green Hours.mp3",
+                      TAGGED + "/track7.mp3", TAGGED + "/Nobody - Nothing.mp3")
+for out, tags in ((T1, ("The Night Ferries", "Low Tide", "Night Bus")), (T2, ("The Night Ferries", "Low Tide", "")),
+                  (T3, None), (T4, None), (T5, None)):
+    meta = [x for k, v in zip(("artist", "album", "title"), tags or ()) if v for x in ("-metadata", f"{k}={v}")]
+    real_run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", TONE, "-t", "1", *meta, "-b:a", "64k", out],
+             check=True)
+picture(TAGGED + "/one.png", "grey")
+picture(TAGGED + "/two.png", "grey")                    # (two pictures, neither named for it: not a cover)
+check(f"a song's tags, as ffprobe reads them ({CF.song_tags(T1)}); none: its name says what it can ({CF.wanted(T3)})",
+      CF.song_tags(T1) == {"artist": "The Night Ferries", "album": "Low Tide", "title": "Night Bus"}
+      and CF.wanted(T2) == ("The Night Ferries", "Low Tide", "b")
+      and CF.wanted(T3) == ("Paper Lanterns", "", "Green Hours")
+      and CF.wanted(T4) == ("", "", "track7")
+      and CF.song_tags(S + "/gone.mp3") == {"artist": "", "album": "", "title": ""})
+
+
+def jpeg(kind):
+    picture(S + "/net.jpg", kind)
+    return open(S + "/net.jpg", "rb").read()
+
+
+SUN, HILLS = jpeg("sun"), jpeg("hills")
+credit = lambda who: [{"name": who, "artist": {"id": "a1", "name": who}}]   # noqa: E731
+GROUPS = {"release-groups": [
+    {"id": "rg-blues", "score": "100", "title": "Low Tide Blues", "artist-credit": credit("The Night Ferries")},
+    {"id": "rg-other", "score": 100, "title": "Low Tide", "artist-credit": credit("Somebody Else")},
+    {"id": "rg-low-tide", "score": 98, "title": "Low Tide", "primary-type": "Album",
+     "artist-credit": credit("The Night Ferries")},
+    {"id": "rg-unsure", "score": 60, "title": "Low Tide", "artist-credit": credit("The Night Ferries")}]}
+SONGS_SAID = {"recordings": [
+    {"id": "r0", "score": 100, "title": "Green Hours (karaoke)", "artist-credit": credit("Some Tribute Band"),
+     "releases": [{"id": "x", "release-group": {"id": "rg-tribute", "primary-type": "Album"}}]},
+    {"id": "r1", "score": "100", "title": "Green Hours", "artist-credit": credit("Paper Lanterns"), "releases": [
+        {"id": "l1", "title": "Now That's Music 7", "release-group": {
+            "id": "rg-hits", "primary-type": "Album", "secondary-types": ["Compilation"]}},
+        {"id": "l2", "title": "Green Hours", "release-group": {"id": "rg-single", "primary-type": "Single"}},
+        {"id": "l3", "title": "Lanterns", "release-group": {"id": "rg-album", "primary-type": "Album"}}]}]}
+net, down = [], [False]
+
+
+def internet(url):
+    net.append(url)
+    if down[0]:
+        raise urllib.error.URLError("no route to host")
+    q = urllib.parse.unquote(url)
+    if "musicbrainz.org/ws/2/release-group?" in url:
+        return json.dumps(GROUPS if 'releasegroup:"Low Tide"' in q and 'artist:"The Night Ferries"' in q
+                          else {"release-groups": []}).encode()
+    if "musicbrainz.org/ws/2/recording?" in url:
+        return json.dumps(SONGS_SAID if 'recording:"Green Hours"' in q and 'artist:"Paper Lanterns"' in q
+                          else {"recordings": []}).encode()
+    art = {"rg-low-tide": SUN, "rg-single": HILLS, "rg-album": None}
+    mbid = url.split("/release-group/")[1].split("/")[0]
+    if url.startswith("https://coverartarchive.org/release-group/") and url.endswith("/front-500") and art.get(mbid):
+        return art[mbid]
+    raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+
+asks = []
+check(f"the records a song might be on: the one its tags name, by that artist, and sure enough "
+      f"({CF.records('The Night Ferries', 'Low Tide', 'Night Bus', lambda w, q: asks.append((w, q)) or GROUPS)})",
+      CF.records("The Night Ferries", "Low Tide", "Night Bus", lambda w, q: GROUPS) == ["rg-low-tide"]
+      and asks == [("release-group", 'releasegroup:"Low Tide" AND artist:"The Night Ferries"')])
+check("...no album said: the ones a song of that name by that artist is on, its own record before a single, never a "
+      "compilation's", CF.records("Paper Lanterns", "", "Green Hours", lambda w, q: SONGS_SAID)
+      == ["rg-album", "rg-single"] and CF.records("", "Low Tide", "x", lambda w, q: 1 / 0) == []
+      and CF.records("Paper Lanterns", "", "", lambda w, q: 1 / 0) == [])
+clock, naps = [50.0], []
+
+
+def nap(secs):
+    naps.append(round(secs, 2))
+    clock[0] += secs
+
+
+finder = CF.CoverFinder(fetch=internet, pause=nap, clock=lambda: clock[0])
+got_for, steps = [], []
+finder.on_found = got_for.append
+finder.on_change = lambda: steps.append(finder.done)
+check("Y's search, for five songs with no cover", finder.start([T1, T2, T3, T4, T5, SONG], thread=False)
+      and not finder.busy and finder.total == 6 and steps[-1] == 6)
+who = [u.split("/")[2] for u in net]
+check(f"...found for three of them ({finder.note!r}): {[os.path.basename(p) for p in got_for]}", got_for == [T1, T2, T3]
+      and finder.found == 3 and finder.note == "Found covers for 3 songs")
+check(f"...MusicBrainz asked once for the record, the Cover Art Archive once for its picture, the record's second "
+      f"song not at all; a song with no album: its name; one nobody knows: asked, and none ({len(net)} in all)",
+      who == ["musicbrainz.org", "coverartarchive.org", "musicbrainz.org", "coverartarchive.org", "coverartarchive.org",
+              "musicbrainz.org"] and "release-group" in net[0] and net[1].endswith("/rg-low-tide/front-500")
+      and "recording" in net[2] and net[3].endswith("/rg-album/front-500") and net[4].endswith("/rg-single/front-500"))
+check(f"...never two questions to MusicBrainz within {CF.MB_GAP} s (it waited {naps})", naps == [CF.MB_GAP, CF.MB_GAP]
+      and "Pietato/" in CF.agent()["User-Agent"] and "( https://github.com/" in CF.agent()["User-Agent"])
+f1, f2, f3 = C.found_file(T1), C.found_file(T2), C.found_file(T3)
+check("each kept where a song's cover is looked for: the record's two songs share the one picture",
+      C.cover_file(T1) == f1 and C.cover_file(T2) == f2 and C.cover_file(T3) == f3 and os.path.samefile(f1, f2)
+      and near(Image.open(f1).convert("RGB").getpixel((300, 300)), (255, 226, 170), 20)
+      and near(Image.open(f3).convert("RGB").getpixel((300, 300)), (55, 195, 110), 24))
+check("...one with nothing to go by (no tags, a name that says nothing): not asked about; neither it nor the one "
+      "nobody knows is asked about again for a month", C.cover_file(T4) is None and CF.missed(T4) and CF.missed(T5)
+      and not CF.missed(T5, now=time.time() + CF.MISS_KEPT + 60) and not CF.missed(T1))
+net.clear()
+finder.start([T1, T2, T3, T4, T5], thread=False)
+check(f"again: nothing to ask ({finder.note!r})", net == [] and finder.note == "No covers found for these songs")
+os.remove(C.found_file(T5)[:-4] + ".none")
+os.remove(C.found_file(T4)[:-4] + ".none")
+down[0] = True
+finder.start([T5, T4, T5, T5, T5, T5], thread=False)
+check(f"the WiFi down: it gives up after {CF.NET_GIVES_UP} with no answer, and says so ({finder.note!r}); nothing's "
+      f"put down as not found", len(net) == CF.NET_GIVES_UP
+      and finder.note == "Couldn't reach MusicBrainz. Check the WiFi"
+      and not CF.missed(T5))
+down[0] = False
+bad = CF.CoverFinder(fetch=lambda url: b"<html>not a picture</html>" if "coverart" in url else internet(url),
+                     pause=nap, clock=lambda: clock[0])
+os.remove(f1); os.remove(f2)
+bad.start([T1], thread=False)
+check("what comes back isn't a picture: not kept, none found", C.cover_file(T1) is None and bad.found == 0)
+os.remove(C.found_file(T1)[:-4] + ".none")
+
+# Y on the grid
+m.items[MUSIC] = [g.item(p, g.title_of(p), "audio", p) for p in (T1, T2, T3, T4)]
+m.sels[MUSIC] = 0
+m.view = "list"
+m.tiles = None
+shot(m)
+ready(m)
+Y0 = shot(m)
+hints = [w[1] for _, w in m.taps if w[0] == "keys"]
+check(f"the grid's buttons: Y finds covers ({hints})", "y" in hints and "a" in hints and "b" in hints
+      and near(Y0[y1 + 6, x1 + 20], g.ROW, 6))
+made_finders = []
+M.CoverFinder = lambda: made_finders.append(CF.CoverFinder(fetch=internet, pause=lambda s: None)) or made_finders[-1]
+m.press("y")
+end = time.time() + 10
+while m.cover_finder.busy and time.time() < end:
+    real_sleep(0.02)
+check(f"Y: it says it's looking ({m.msg!r})", m.msg == "Finding covers for the songs with none"
+      and len(made_finders) == 1)
+m.msg = None
+m.tick()
+check(f"...and what it found, for the two that had none ({m.msg!r})", m.msg == "Found covers for 2 songs")
+m.msg = None
+shot(m)
+ready(m)
+Y1 = shot(m, "grid_found")
+check("...their covers on the grid now, the one it couldn't find still a note",
+      near(Y1[y1 + int(gs * 0.43), x1 + gs // 2], (255, 226, 170), 20) and near(Y1[y3 + 6, x3 + 20], g.ROW, 6)
+      and near(Y1[at(gl, 2)[1] + gs // 2, at(gl, 2)[0] + gs // 2], (55, 195, 110), 24))
+m.cover_finder.busy = True
+m.cover_finder.done, m.cover_finder.total = 2, 4
+shot(m)
+hints = [w[1] for _, w in m.taps if w[0] == "keys"]
+m.press("y")
+check(f"while it's looking: no Y along the bottom, and Y says it's at it already ({m.msg!r})", "y" not in hints
+      and m.msg == "Finding covers already")
+m.cover_finder.busy = False
+m.msg = None
+playing(m, 2)
+m.covers.clear()
+shot(m)
+found(m)
+P2 = shot(m)
+check("Now playing has the cover that was found too", near(P2[ay + side // 2, ax + side // 2], (55, 195, 110), 24))
+m.view = "list"
+m.press("x")
+H = shot(m)
+m.press("a")
+check("Controls (X) on Music: its own page, Y among its buttons", m.view == "list"
+      and ink(H, (20, 80, 320, 300), g.TEXT))
 
 # ---- a light page, a big screen, Full screen apps -----------------------------------------------------------
 m = media(look="Light")

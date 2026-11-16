@@ -11,10 +11,13 @@ Pietato starts on a home screen of apps:
 - **TV**: Plex (Continue watching, Watchlist, Live TV with news and sports), Jellyfin, about 250 old
   cartoons and 150 old films from the Internet Archive, and your own streams. Live channels and Plex videos are
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
-- **Music** and **Radio**. A song's cover shows beside the list and on Now playing, with a glow in its colour
-  that follows the beat while the battery saver is off. The cover is a `cover.jpg` or `folder.jpg` in the
-  song's folder, or the picture inside the song's file. On Now playing, SELECT puts on lofi art (a quiet scene
-  on the whole screen) and HOME has [Party mode](#party-mode),
+- **Music** and **Radio**. Music is a grid of your songs' covers. Now playing shows the cover big, with a glow in
+  its colour that follows the beat while the battery saver is off. A song's cover is a `cover.jpg` or
+  `folder.jpg` in its folder, or the picture inside its file. For songs with neither, Y on Music looks covers
+  up on [MusicBrainz](https://musicbrainz.org) and the Cover Art Archive (free, no account), by the artist and
+  the album or song name in the song's tags, or a file name like `Artist - Title.mp3`. Only those names are
+  sent, and the covers are kept on the Pi. On Now playing, SELECT puts on lofi art (a quiet scene on the whole
+  screen) and HOME has [Party mode](#party-mode),
   **Photos** (filters, delete), **Videos** (picks up where you left off)
 - **Weather** (press START there to set where you are, and °F or °C), and **Finance**: stock and coin prices
   and charts. Press Y on Finance to look up more to add

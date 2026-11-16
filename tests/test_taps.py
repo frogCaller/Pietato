@@ -125,24 +125,30 @@ tap(x, y)
 check("...tapped again: nothing more", m.tab == other)
 m.tab = music; m.load_tab(music)
 draw()
-# a long folder: the wheel and a swipe scroll it, the pick staying where it is on the screen
 check(f"Music: {len(m.tab_items())} songs", len(m.tab_items()) == 30)
+names, _ = touch("scroll", y=2)
+check(f"...a grid of their covers: the wheel's ▼ there, a row a notch, as on Photos ({names})",
+      names == ["down", "down"])
+# a long list: the wheel and a swipe scroll it, the pick staying where it is on the screen
+apps = next(i for i, t in enumerate(g.LIBRARY) if t["name"] == "Apps")
+m.tab = apps; m.load_tab(apps)
+long = len(m.tab_items())
 rows_fit = m.visible_rows()
-m.sels[music], m.tops[music] = 2, 0
+m.sels[apps], m.tops[apps] = 2, 0
 draw()
 touch("scroll", y=3)
-check(f"the wheel, 3 notches down: the list scrolled 3, the pick 3 on with it (top {m.tops[music]}, "
-      f"pick {m.sels[music]})", m.tops[music] == 3 and m.sels[music] == 5)
+check(f"the wheel, 3 notches down: the list ({long} long) scrolled 3, the pick 3 on with it (top {m.tops[apps]}, "
+      f"pick {m.sels[apps]})", long >= rows_fit + 5 and m.tops[apps] == 3 and m.sels[apps] == 5)
 touch("swipe", x=0, y=-2 * m.ROW_H / m.fb.h)
-check(f"a finger up two rows: 2 more (top {m.tops[music]}, pick {m.sels[music]})", m.tops[music] == 5
-      and m.sels[music] == 7)
+check(f"a finger up two rows: 2 more (top {m.tops[apps]}, pick {m.sels[apps]})", m.tops[apps] == 5
+      and m.sels[apps] == 7)
 touch("scroll", y=-12)
-check(f"back up: never past the top (top {m.tops[music]}, pick {m.sels[music]})", m.tops[music] == 0
-      and m.sels[music] == 0)
+check(f"back up: never past the top (top {m.tops[apps]}, pick {m.sels[apps]})", m.tops[apps] == 0
+      and m.sels[apps] == 0)
 for _ in range(5):
     touch("scroll", y=12)
-check(f"down: never past the end, the last one picked in the end (top {m.tops[music]}, pick {m.sels[music]})",
-      m.tops[music] == 30 - rows_fit and m.sels[music] == 29)
+check(f"down: never past the end, the last one picked in the end (top {m.tops[apps]}, pick {m.sels[apps]})",
+      m.tops[apps] == long - rows_fit and m.sels[apps] == long - 1)
 names, _ = touch("swipe", x=-0.3, y=0.02)
 check(f"a finger to the left: ◀▶'s ▶ (a screenful on) ({names})", names == ["right"])
 # the buttons along the bottom

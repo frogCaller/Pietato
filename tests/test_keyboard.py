@@ -237,9 +237,10 @@ n = len(m.tab_items())
 before = m.sels.get(m.tab, 0)
 bb.send((e.EV_KEY, e.KEY_S, 1)); wait(1.0); bb.send((e.EV_KEY, e.KEY_S, 0)); wait()
 moved = m.sels.get(m.tab, 0) - before
-check(f"S held: down the list, again and again ({moved} of {n})", moved >= 3)
+across = m.music_layout()["cols"]                      # (Music: a grid of covers, a row down each time)
+check(f"S held: down the grid, again and again ({moved} of {n})", moved >= 3 * across)
 tap(e.KEY_W)
-check("W: up one", m.sels.get(m.tab, 0) == before + moved - 1)
+check("W: up a row", m.sels.get(m.tab, 0) == before + moved - across)
 tab = m.tab
 tap(e.KEY_E)
 check(f"E: the next app (R) ({m.strip_tab()})", m.tab != tab)
