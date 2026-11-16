@@ -181,11 +181,11 @@ icon = g.draw_icon("Apps")
 check("...a sun, an orbit and three bodies on it", icon.size == (84, 84) and len(set(icon.tobytes()[i:i + 4] for i in range(0, 84 * 84 * 4, 4))) > 200)
 m.press("a")
 SIMI = m.tab
-rows = [(it["title"], it.get("icon")) for it in m.tab_items()]
+rows = [(it["title"], it.get("icon")) for it in m.tab_items()]   # (no The Cookie: this is the only Pietato on here)
 check(f"A opens Apps: a list of sims {rows}", m.tab_type() == "group" and g.LIBRARY[m.tab]["name"] == "Apps"
       and rows == [("Clock", "TIME"), ("Notes", "NOTE"), ("Fortune Cookie", "LUCK"),
                    ("Rock Paper Scissors", "RPS"),
-                   ("Fish Tank", "FISH"), ("Group chat", "CHAT"), ("The Cookie", "YUM"), ("Soundboard", "SFX"),
+                   ("Fish Tank", "FISH"), ("Group chat", "CHAT"), ("Soundboard", "SFX"),
                    ("Band", "JAM"),
                    ("Konami code", "CHEAT"),
                    ("cmatrix", "CODE"),

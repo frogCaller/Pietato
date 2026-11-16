@@ -3,6 +3,8 @@
 every 20 seconds, with the group chat's), and what theirs say is looked at every few seconds: a later one than the one
 known here is this one's word for it too. None yet: one of them gets the first, once two that play have heard each
 other. The one that got the last not heard for an hour: the one that's waited longest, of those on, gets the next.
+A Pietato that's the only one on your network gets none: there, Apps doesn't list The Cookie, and the small cookie
+by the time isn't shown.
 
 A throw for one: the one that wants a cookie sends its throw to the web page of the one to beat (POST /api/cookie,
 from your network only: webui.py, control.py), which answers with its own and how it went; a win, and it's told as
@@ -52,6 +54,8 @@ COOKIE_KEYS = {"left": "r", "up": "p", "right": "s"}   # its page's buttons: ◀
 
 class CookieScreen:
     """The Cookie: who has it, their Bots' tries for it and yours, and its page (cookie_setup: media mode's start)."""
+
+    cookie_alone = True                # no other of your Pietatos is on your network, as last looked (cookie_others)
 
     def cookie_setup(self):
         self.cookie_lock = threading.RLock()   # the cookie as it's known here, and a try being answered
@@ -113,6 +117,42 @@ class CookieScreen:
         st = getattr(self, "state", {}).get("cookie") or {}
         rec = st.get("rec")
         return bool(rec) and rec["at"] == st.get("id") and self.setting("share") != "Off"
+
+    def cookie_others(self):
+        """Another of your Pietatos is on your network now: its beacon's been heard lately (none with sharing off)."""
+        wall = time.time()
+        return any(wall - h["seen"] <= ON_WITHIN for h in self.cookie_heard())
+
+    def cookie_listed(self):
+        """(Apps' list, as it's made.) The Cookie's in it: not on a Pietato that's the only one on your network."""
+        self.cookie_alone = not self.cookie_others()
+        return not self.cookie_alone
+
+    def cookie_marked(self):
+        """The small cookie by the time (and by the date, on the home screen): on the one that got the last cookie,
+        while another of yours is on."""
+        return not self.cookie_alone and self.cookie_here()
+
+    def cookie_company(self):
+        """(Main loop, every few seconds.) Another of yours has turned up, or the last of them has gone: Apps' list
+        made again, with The Cookie or without it (what's picked there stays picked), and the small cookie by the
+        time with it."""
+        alone = not self.cookie_others()
+        if alone == self.cookie_alone:
+            return
+        self.cookie_alone = alone
+        self.next_status = 0.0
+        self.dirty = True
+        ci = next((k for k, t in enumerate(LIBRARY) if t.get("sim") == "cookie"), None)
+        pi = None if ci is None else self.parent_of(ci)
+        if pi is None or pi not in self.items:         # (Apps' list isn't made yet: it will be, as things are then)
+            return
+        rows, sel = self.items[pi], self.sels.get(pi, 0)
+        picked = rows[sel]["title"] if 0 <= sel < len(rows) else None
+        self.load_tab(pi)
+        rows = self.items[pi]
+        self.sels[pi] = next((k for k, it in enumerate(rows) if it["title"] == picked),
+                             max(0, min(sel, len(rows) - 1)))
 
     def cookie_keep(self, **changes):
         """Something of it kept (in the state: written down the next time that is)."""
@@ -184,6 +224,7 @@ class CookieScreen:
         if now < getattr(self, "cookie_next", math.inf):
             return
         self.cookie_next = now + COOKIE_TICK
+        self.cookie_company()
         if self.setting("share") == "Off":
             return
         try:
@@ -194,8 +235,8 @@ class CookieScreen:
     def cookie_look(self, now):
         """Who got the last cookie, as your others say: a later one than this one knows of is this one's word for it
         too. None yet anywhere: this one gets the first, if it's the one to. The one that got the last not heard for
-        an hour: this one gets the next, if it's the one to. That one on: this one's Bot plays it for one, when
-        that's due."""
+        an hour: this one gets the next, if it's the one to (never with no other on: a Pietato on its own gets none).
+        That one on: this one's Bot plays it for one, when that's due."""
         wall = time.time()
         heard = self.cookie_heard()
         said = [h["cookie"] for h in heard if h["cookie"] is not None]
@@ -230,7 +271,7 @@ class CookieScreen:
                 seen = min(st.get("seen") or 0.0, wall)   # the cookie's the one's that's waited longest)
                 heir = cookie_heir([(me, st.get("had") or 0)]
                                    + [(p["id"], p["had"]) for p in peers if p["id"] != mine["at"]])
-                if wall - seen >= COOKIE_DROP and up >= COOKIE_GRACE and heir == me:
+                if peers and wall - seen >= COOKIE_DROP and up >= COOKIE_GRACE and heir == me:
                     self.cookie_set({"n": mine["n"] + 1, "at": me, "name": self.own_name(), "t": wall,
                                      "from": mine["name"], "how": "left", "you": False})
                     return
@@ -529,7 +570,8 @@ class CookieScreen:
             head, can = f"{holder['name']} got a cookie", True
             sub = f"Throw again in {wait} s." if wait else "Beat it at rock paper scissors to win one."
         else:
-            head, sub = f"{rec['name']} got a cookie", "It's off. After an hour off, another gets one."
+            head = f"{rec['name']} got a cookie"
+            sub = "It's off. After an hour off, another gets one." if peers else "It's off. No other is on."
         if self.cookie_trying and ask is None:           # (a try on its way: yours, or its Bot's)
             other = holder["name"] if holder else rec["name"] if rec else "it"
             sub, can = (f"Waiting for {other}…" if self.cookie_trying == "you"

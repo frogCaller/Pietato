@@ -679,6 +679,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 boards = name == "LED backlight" and not self.glow_can()   # (an LED grid: only a Pi with the pins free
                 if boards and not self.lamps_on():                         #  for one. Any other: while ESP32 boards
                     continue                                               #  are on your network, their page)
+                if name == "The Cookie" and not self.cookie_listed():      # (only with another of yours on)
+                    continue
                 ci = next(k for k, t in enumerate(LIBRARY) if t["name"] == name)
                 rows.append(dict(item("grp:" + name, name, "child", str(ci),
                                       sub="Your ESP32 boards' LEDs" if boards else LIBRARY[ci].get("about", "")),
@@ -1128,6 +1130,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.camera.close()
         self.glow_stop()                               # (the LED backlight's LEDs dark)
         self.oled_stop()                               # (...and the OLED screen)
+        self.oled_out_stop()
         self.lamps_stop()
         self.glow_station_end()
         if self.active and self.fb is not None and system_stopping():
@@ -1645,6 +1648,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             grid = self.glow_beacon()                  # (its LED backlight: for your others to light)
             if grid is not None:
                 beacon["glow"] = grid
+            oled = self.oled_beacon()                  # (its OLED: for your others' music, as bars)
+            if oled is not None:
+                beacon["oled"] = oled
             try:
                 beacon["cookie"] = self.cookie_beacon()   # (the cookie, as it's known here: screens/cookie.py)
             except Exception:
@@ -1723,6 +1729,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
         self.glow_tick(now)                            # (your LED backlights: this one's music on them)
+        self.oled_tick(now)                            # (your others' OLEDs: this one's music, as bars)
         self.board_tick(now)                           # (Apps > Soundboard: its player, with its page; its sounds)
         self.band_tick(now)                            # (Apps > Band: its player, the others in it, each bar ahead)
         if self.prog is not None:

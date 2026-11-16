@@ -305,8 +305,9 @@ class DrawScreen:
     def status_signature(self):
         t = cpu_temp()
         sig = (time.strftime("%H:%M"), wifi_bars(wifi_quality()),
-               None if t is None else round(t), self.kind, self.meta.get("song"), self.cookie_here(),
-               self.assist_status())                   # (cookie_here: the cookie's on this one, a small one by the time)
+               None if t is None else round(t), self.kind, self.meta.get("song"), self.cookie_marked(),
+               self.assist_status())                   # (cookie_marked: this one got the last cookie, a small one by
+                                                       # the time)
         return sig + (battery(),) if is_handheld() else sig   # (an RK3326 handheld's battery: its level, on the bar)
 
     def status_bar(self, d, clock=True):
@@ -315,7 +316,7 @@ class DrawScreen:
         if clock:
             d.text((20, y), self.clock_text(), font=F["status_b"], fill=BODY, anchor="lm")
             after = 20 + d.textlength(self.clock_text(), font=F["status_b"])
-            if self.cookie_here():                     # (it got the last cookie: a small one, after the time)
+            if self.cookie_marked():                   # (it got the last cookie: a small one, after the time)
                 cookie_mark(d, after + 17, y, 6)
                 after += 24
             timer = self.assist_status()               # (a timer of yours, running: how long it has left)

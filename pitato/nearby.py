@@ -14,6 +14,7 @@ from .theme import ACCENTS
 from .circle import hw_clean
 from .cookie import cookie_said
 from .glow import glow_clean
+from .oled import oled_clean
 from .util import UA
 from .net import cam_address, cam_host, cam_key, CamHTTP, CamHTTPS, read_capped
 
@@ -89,13 +90,13 @@ def group_news(msg, old, now):
     knows it (pitato/cookie.py). The one to everyone doesn't say: what was heard before is kept."""
     out = {"id": clean_name(msg.get("id"), 24)}
     if "hw" not in msg:
-        out.update({k: old[k] for k in ("hw", "doing", "you", "game", "glow", "cookie") if k in old})
+        out.update({k: old[k] for k in ("hw", "doing", "you", "game", "glow", "oled", "cookie") if k in old})
         return out
     you = msg.get("you")
     out.update(hw=hw_clean(msg.get("hw")), doing=clean_name(msg.get("doing"), 60),
                you=now - you if isinstance(you, (int, float)) and not isinstance(you, bool) and 0 <= you <= 86400
                else None, game=game_clean(msg.get("game")), glow=glow_clean(msg.get("glow")),
-               cookie=cookie_said(msg.get("cookie")))
+               oled=oled_clean(msg.get("oled")), cookie=cookie_said(msg.get("cookie")))
     return out
 
 

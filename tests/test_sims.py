@@ -68,11 +68,12 @@ m.home_sel = [a for a, _ in m.home_apps()].index("Apps")
 m.press("a")
 SIMI = m.tab
 corner = (g.SIM_BOX[0], g.SIM_BOX[1])
-SHOWN = [it["title"] for it in m.tab_items()]          # (Apps' list as it is here: LED backlight only on a Pi with LEDs)
-check(f"Apps' list here: all of them but the LED backlight ({len(SHOWN)})",
-      SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n != "LED backlight"])
-check(f"...Group chat after the Fish Tank, and The Cookie after it: {SHOWN[:9]}", SHOWN == [
-    "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "Group chat", "The Cookie", "Soundboard",
+# (Apps' list as it is here: LED backlight only on a Pi with LEDs, The Cookie only with another Pietato on)
+SHOWN = [it["title"] for it in m.tab_items()]
+check(f"Apps' list here: all of them but the LED backlight and The Cookie ({len(SHOWN)})",
+      SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n not in ("LED backlight", "The Cookie")])
+check(f"...Group chat after the Fish Tank: {SHOWN[:9]}", SHOWN == [
+    "Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "Group chat", "Soundboard",
     "Band", "Konami code", "cmatrix", "hollywood", "nyancat", "cacafire", "htop"])
 gone = ("Game of Life", "Mandelbrot Set")
 check(f"...no Game of Life or Mandelbrot Set: not in the list, not among the apps, nothing of theirs behind it "

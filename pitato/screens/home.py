@@ -518,7 +518,7 @@ class HomeScreen:
                     F["home_ampm"], ink["text"], "ls", ink)
             say(d, (self.HOME_X, 95), date, F["home_date"], ink["date"], "ls", ink)
             after = (self.HOME_X + d.textlength(date, font=F["home_date"]), 89)
-        if self.cookie_here():                         # (the cookie's on this one: a small one, after the date)
+        if self.cookie_marked():                       # (the cookie's on this one: a small one, after the date)
             cookie_mark(d, after[0] + 18, after[1], 7)
 
     def home_playing(self, img, d):

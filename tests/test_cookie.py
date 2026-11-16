@@ -6,12 +6,13 @@ a cookie's got, never taken. Then three Pietatos, wired to each other here: none
 the one to; two that did at once become one; a Bot's throw, won (it got a cookie, as all of them know, and it says so
 in the group chat), lost and tied, too soon after the last, and sent to one that isn't the one to beat; not from one
 that isn't yours, nor with sharing off; the one that got the last gone quiet for an hour (the one that's waited
-longest gets the next), back again (it finds out), and one that's heard but doesn't answer; two with the same id (an
-SD card copied); one that wins again and again, called a cheat by the one it beat, and the argument that follows; not
-at night, in a game, or with the group chat quiet. Its page: who got the last, your throw (◀▲▶), another's throw
-waiting for yours (and its Bot's, if you don't), the small cookie on the status bar and the home screen of the one
-that got the last. Last, for real: this one's throw sent to another Pietato's web page (peer_pietato.py), and what it
-says in the group chat getting there."""
+longest gets the next, but never a Pietato that's the only one on), back again (it finds out), and one that's heard
+but doesn't answer; two with the same id (an SD card copied); one that wins again and again, called a cheat by the
+one it beat, and the argument that follows; not at night, in a game, or with the group chat quiet. Its page: who got
+the last, your throw (◀▲▶), another's throw waiting for yours (and its Bot's, if you don't), the small cookie on the
+status bar and the home screen of the one that got the last; and, on a Pietato that's the only one on your network,
+no The Cookie in Apps' list and no small cookie, till another's on. Last, for real: this one's throw sent to another
+Pietato's web page (peer_pietato.py), and what it says in the group chat getting there."""
 import importlib, json, os, random, shutil, subprocess, sys, time, urllib.parse
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 S = SP + "/tcookie"
@@ -239,7 +240,9 @@ def settle(secs=20):
 
 
 def look(*ms):
+    """Each one's look, as its main loop's every few seconds: who's on with it, then the cookie."""
     for m in ms or ALL:
+        m.cookie_company()
         m.cookie_look(time.monotonic())
     jobs()
 
@@ -264,9 +267,11 @@ def wins(*ms):
 real_post, SC.post_json = SC.post_json, fake_post
 lone = g.Media()
 lone.cookie_up = time.monotonic() - 1000
+lone.cookie_company()
 lone.cookie_look(time.monotonic())
 check("on its own, a Pietato has no cookie, and does nothing about one (no id of its own made for it)",
-      not lone.cookie_here() and lone.state["cookie"]["rec"] is None and "id" not in lone.state["cookie"])
+      not lone.cookie_here() and lone.state["cookie"]["rec"] is None and "id" not in lone.state["cookie"]
+      and lone.cookie_alone and not lone.cookie_others() and not lone.cookie_marked())
 A, B = make("Den", "10.0.0.21", IA, "Teal"), make("Kitchen", "10.0.0.22", IB, "Pink")
 D = make("TV", "10.0.0.23", IC, "Gold")
 basic, full = A.share_beacon("Den"), A.share_beacon("Den", full=True)
@@ -391,6 +396,28 @@ tell()
 look(B)
 check("the one that was off, back: it finds the cookie's moved on, and hasn't got it", knows(B) == (3, IA)
       and not B.cookie_here())
+
+# ...with nobody else on: none got
+solo = g.Media()
+solo.save_state = lambda: None
+solo.circle.send = lambda url, msg: None
+solo.circle.spawn = lambda fn, name: fn()
+solo.state["cookie"] = dict(solo.state["cookie"], id=IA, rec=rec(3, IB, "Kitchen", "Den", "pr"), had=1,
+                            seen=time.time() - 7200)
+solo.cookie_up = time.monotonic() - 1000
+said_solo = len(chat(solo))                            # (the group chat as it was kept: the others' lines so far)
+look(solo); jobs(solo)
+check("the one that got the last off for two hours, on a Pietato that's the only one on your network: it gets no "
+      "cookie, however long it waits", knows(solo) == (3, IB) and solo.cookie_alone and len(chat(solo)) == said_solo)
+SHED = "3333aaaa4444bbbb"
+solo.pie.hear("10.0.0.29", {"pietato": 1, "id": "f" * 12, "port": 5432, "host": "Shed", "accent": "",
+                            "hw": {"b": "Pi 4"}, "doing": "on",
+                            "cookie": CK.cookie_says(SHED, rec(3, IB, "Kitchen", "Den", "pr"), 3, "", 0)})
+look(solo); jobs(solo)
+r = solo.state["cookie"]["rec"]
+check(f"...another of yours on with it: then the one that's waited longest gets the next ({r['how']})",
+      knows(solo) == (4, IA) and r["how"] == "left" and r["from"] == "Kitchen" and not solo.cookie_alone
+      and len(chat(solo)) == said_solo + 1)
 
 # one that's heard, but doesn't answer
 DOWN.add("10.0.0.21")
@@ -879,6 +906,10 @@ for u in list(A.pie.heard):
 s = A.sim_game()
 check(f"no other on ({s.head[0]!r}): nothing listed", s.head[0] == "It needs two Pietatos" and s.rows == []
       and hints(s) == ["B"])
+A.state["cookie"] = dict(A.state["cookie"], rec=rec(9, IC, "TV", "Den", "left"))
+s = A.sim_game()
+check(f"...and the one that got the last off too: nobody gets the next ({s.head[1]!r})", s.head
+      == ("TV got a cookie", "It's off. No other is on.") and hints(s) == ["B"])
 A.state["settings"]["share"] = "Off"
 A.state["cookie"] = dict(A.state["cookie"], rec=rec(9, A.state["cookie"]["id"], "Den"))
 check(f"sharing off ({A.sim_game().head[0]!r}): out of it, and no small cookie on its bar",
@@ -890,6 +921,65 @@ check(f"all its page showed and all they said of it here ({len(words)} lines): n
       len(words) > 25 and not [x for x in words if BAD.search(x)])
 for x in words:
     print(f"       {x}")
+
+
+# on its own: not in Apps' list, and no small cookie
+def tick(m=A):
+    """Its look, as media mode's main loop has it every few seconds."""
+    m.cookie_next = 0.0
+    m.cookie_tick(time.monotonic())
+    jobs(m)
+
+
+def titles(m=A):
+    return [it["title"] for it in m.tab_items()]
+
+
+A.state["cookie"] = dict(A.state["cookie"], rec=rec(99, A.state["cookie"]["id"], "Den"))   # (the latest, whatever
+tick()                                                                                      # its others last said)
+A.press("b")
+alone = titles()
+check(f"the only one on your network (B, from its page: Apps' list): The Cookie isn't in it ({alone[4:8]})",
+      A.view == "list" and g.LIBRARY[A.tab]["name"] == "Apps" and A.cookie_alone and "The Cookie" not in alone
+      and alone[alone.index("Group chat") + 1] == "Soundboard" and len(alone) == len(apps) - 2)
+
+
+def marks(m=A):
+    """The small cookie's dough, by the time on its status bar (Apps' list) and by the date on its home screen."""
+    bar = dough(shot(m), (60, 2, 130, 26))
+    m.view = "home"
+    by_date = dough(shot(m), (0, 60, 400, 110))
+    m.view = "list"
+    return bar, by_date
+
+
+bar, by_date = marks()
+check(f"...and no small cookie by the time or the date, though it got the last ({bar} px, {by_date} px)",
+      A.cookie_here() and not A.cookie_marked() and bar == 0 and by_date == 0)
+A.sels[A.tab] = alone.index("Soundboard")
+A.dirty = False
+tell()
+tick()
+rows = titles()
+drawn = A.dirty
+bar, by_date = marks()
+check(f"another of yours turns up: The Cookie's in Apps again, after Group chat, and what was picked still is "
+      f"({rows[A.sels[A.tab]]}); the small cookie's back ({bar} px, {by_date} px)", not A.cookie_alone and drawn
+      and rows[rows.index("Group chat") + 1] == "The Cookie" and rows[A.sels[A.tab]] == "Soundboard"
+      and A.cookie_marked() and bar > 20 and by_date > 30)
+A.sels[A.tab] = rows.index("The Cookie")
+for u in list(A.pie.heard):
+    A.pie.heard[u]["seen"] = time.time() - 500
+A.dirty = False
+tick()
+check(f"...and the last of them gone: out of the list again, with the one after it picked ({titles()[A.sels[A.tab]]}), "
+      "and the screen drawn again", titles() == alone and titles()[A.sels[A.tab]] == "Soundboard" and A.dirty
+      and not A.cookie_marked())
+tell()
+tick()
+A.sels[A.tab] = titles().index("The Cookie")
+A.press("a")
+check("A on it there: its page", A.cookie_tab() and A.cookie_shown())
 A.press("b")
 check("B: back to Apps' list, The Cookie picked", A.view == "list" and g.LIBRARY[A.tab]["name"] == "Apps"
       and A.tab_items()[A.sels[A.tab]]["title"] == "The Cookie")

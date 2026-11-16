@@ -10,8 +10,11 @@ once, falling slowly, drawn only as they change, 25 times a second). Then media 
 plays through party mode's player (a song already playing moved to it), its bars up as the loud part of a song is
 heard, whatever the volume; one that's in another's party, by its leader's clock; an LED backlight on the same pin
 turned off for it, and the other way round; the Pi's SPI not on (turned on in config.txt, a restart asked for; the
-LED backlight's own part left as it is), its pins taken; the web page's Settings; and dark as Pietato goes."""
-import ctypes, errno, os, shutil, sys, threading, time, wave
+LED backlight's own part left as it is), its pins taken; the web page's Settings; and dark as Pietato goes. And
+another of your Pietatos' music: the one playing sends its bars as they're heard there (a packet each, to yours with
+an OLED lit, as their beacons say; its music on party mode's player for it), and the one with the OLED takes them
+from your Pietatos only, whichever's playing, and shows them while its own Pi plays nothing."""
+import ctypes, errno, os, shutil, socket, sys, threading, time, wave
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
 import numpy as np
@@ -468,6 +471,113 @@ until(lambda: fw.heights() == [0] * 25, 3)
 bars.close()
 check("...down again once it's over, and shut", fw.heights() == [0] * 25 and fw.closed)
 
+# ---- another of your Pietatos' music: its bars sent, and taken -------------------------------------------------------
+lv = np.array([0.0, 1.0, 0.5] + [0.2] * 22)
+pkt = O.bars_packet(lv, 12.5)
+got = O.read_bars(pkt)
+check(f"a packet of bars: when it was sent, and each bar, to a 255th ({len(pkt)} bytes)",
+      len(pkt) == O.BARS_HEAD.size + 25 and got[0] == 12.5 and abs(got[1] - lv).max() <= 1 / 255)
+check("...anything else: not one of these", all(O.read_bars(x) is None for x in (
+    pkt[:-1], pkt + b"\0", b"PG" + pkt[2:], pkt[:2] + b"\x02" + pkt[3:], G.music_packet((1, 2, 3), 0.0), b"")))
+check("what a beacon says of an OLED: where its bars are taken, or nothing",
+      O.oled_clean({"port": 5445, "more": 1}) == {"port": 5445}
+      and all(O.oled_clean(x) is None for x in (None, {}, {"port": 0}, {"port": True}, {"port": "5445"},
+                                                {"port": 70000}, "5445", [5445])))
+catch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+catch.bind(("127.0.0.1", 0))
+catch.settimeout(0.5)
+
+
+def caught():
+    """The next packet's bars, or None (none came)."""
+    try:
+        return O.read_bars(catch.recv(256))
+    except OSError:
+        return None
+
+
+clock.t = 2000.0
+out = O.BarsOut(clock=clock, run=False)
+out.heard(pcm_of(loud).tobytes(), 2000.0)
+check("the one playing, with nobody to tell: nothing kept, nothing sent", out.heard_of.t_end is None
+      and out.frame(2000.1) is False and caught() is None)
+out.aim([("127.0.0.1", catch.getsockname()[1])])
+feed(out.heard_of, pcm_of(np.concatenate([loud, quiet])), 2000.0)   # (loud till 2000.5, then quiet)
+sent1 = out.frame(2000.2)
+b1 = caught()
+check(f"...with one of yours' OLED to tell: its bars as the sound's heard, a packet "
+      f"({b1 and round(float(b1[1].max()), 2)})", sent1 is True and b1 is not None and b1[0] == 2000.2
+      and abs(b1[1] - 0.4).max() <= 1 / 255)
+said = [out.frame(2000.6 + k * 0.04) for k in range(O.QUIET_SAID + 3)]
+zeros = [caught() for _ in range(O.QUIET_SAID)]
+check(f"...quiet again: said {O.QUIET_SAID} times, then nothing more ({said})",
+      said == [True] * O.QUIET_SAID + [False] * 3 and all(z is not None and not z[1].any() for z in zeros)
+      and caught() is None)
+out.close()
+check("...shut: nothing more goes", out.frame(2001.0) is False and caught() is None)
+
+taken = []
+theirs = {"10.0.0.7": "Den", "10.0.0.8": "Kitchen"}
+ins = O.BarsIn(taken.append, theirs.get, port=0, clock=clock, listen=False)
+check("the one with the OLED: bars from an address that isn't one of yours aren't taken",
+      ins.take(pkt, "10.0.0.99", 100.0) is False and taken == [])
+check("...from one of yours: taken", ins.take(pkt, "10.0.0.7", 100.0) is True and len(taken) == 1
+      and abs(taken[0] - lv).max() <= 1 / 255)
+check("...an older packet, come late: not shown", ins.take(O.bars_packet(lv, 12.4), "10.0.0.7", 100.02) is False
+      and ins.take(O.bars_packet(lv, 12.54), "10.0.0.7", 100.04) is True and len(taken) == 2)
+check("...another of yours, while that one's playing: not yet",
+      ins.take(O.bars_packet(lv, 500.0), "10.0.0.8", 100.1) is False and len(taken) == 2)
+check(f"...once it's been quiet {O.HOLD} seconds: the other's",
+      ins.take(O.bars_packet(lv, 500.1), "10.0.0.8", 100.04 + O.HOLD + 0.1) is True and ins.source == "10.0.0.8")
+check("...one that's started again (its clock too): taken again after the same quiet",
+      ins.take(O.bars_packet(lv, 3.0), "10.0.0.8", 200.0) is True and len(taken) == 4)
+check("...not a packet of bars: nothing", ins.take(b"hello", "10.0.0.8", 200.1) is False)
+ins.close()
+fw = FakeWires()
+bars = O.OledBars(O.Screen(fw), clock=clock, run=False)
+clock.t = 3000.0
+bars.told(np.full(25, 0.5))
+bars.frame(clock.t)
+first = fw.heights()
+bars.frame(clock.t + 0.2)
+held = fw.heights()
+fell = []
+for k in range(1, 40):
+    bars.frame(clock.t + O.THEIRS_KEPT + k * 0.04)
+    fell.append(fw.heights()[0])
+check(f"another's bars on the OLED: as tall as they're loud there ({first[0]}), kept while they're new ({held[0]}), "
+      f"and falling once no more come ({fell[:6]}...)", first == [24] * 25 and held == [24] * 25
+      and fell == sorted(fell, reverse=True) and fell[0] < 24 and fell[-1] == 0)
+clock.t = 3010.0
+feed(bars.heard_of, pcm_of(np.full(RATE // 2, 0.2)), 3010.0)
+bars.own_at = bars.fed = clock.t                       # (this Pi's own song, heard from now)
+bars.told(np.full(25, 1.0))
+bars.frame(3010.1)
+own = fw.heights()
+clock.t = 3010.1 + O.OWN_FIRST + 0.5
+bars.told(np.full(25, 1.0))
+bars.frame(clock.t)
+check(f"...this Pi's own music comes first ({own[0]}, not 32); once it's over, another's again ({fw.heights()[0]})",
+      own == [9] * 25 and fw.heights() == [32] * 25)
+bars.close()
+ins = O.BarsIn(taken.append, lambda ip: "This one" if ip.startswith("127.") else None, port=0)
+out = O.BarsOut()
+out.aim([("127.0.0.1", ins.port)])
+n = len(taken)
+t0 = time.monotonic() + 0.1
+out.heard(pcm_of(np.full(RATE // 2, 0.3)).tobytes(), t0)
+came = until(lambda: len(taken) >= n + 8, 2)
+loudest = max((float(x.max()) for x in taken[n:]), default=0)
+until(lambda: time.monotonic() > t0 + 1.2, 3)
+m1 = len(taken)
+time.sleep(0.3)
+check(f"over the network (here, to itself): {m1 - n} packets for half a second of sound, about {O.FPS:.0f} a second, "
+      f"as loud as it is ({loudest:.2f}), and none once it's over", came and 8 <= m1 - n <= 30
+      and abs(loudest - 0.3) < 0.01 and len(taken) == m1)
+out.close()
+ins.close()
+catch.close()
+
 # ---- media mode -----------------------------------------------------------------------------------------------------
 open(S + "/bin/aplay", "w").write('''#!/usr/bin/env python3
 import sys, time
@@ -532,6 +642,7 @@ class FB:
 
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 m.set_setting("name", "gpi")
+m.oled_port = 0                                        # (your others' bars: taken at any port that's free, here)
 SETTINGS = next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.view, m.tab, m.set_page = "list", SETTINGS, "display"   # (Settings > Screen: its row's there)
 
@@ -815,7 +926,8 @@ wr = web_rows().get("oled") or {}
 check(f"the web page's Settings: Waveshare 2.23 OLED, the last of Screen's ({wr.get('label')!r}, "
       f"{wr.get('value')!r}, {wr.get('note')!r})",
       wr.get("kind") == "choice" and wr.get("value") == "Off" and wr.get("label") == "Waveshare 2.23 OLED"
-      and wr.get("note") == "The OLED HAT on the Pi's pins: bars that move with your music."
+      and wr.get("note") == "The OLED HAT on the Pi's pins: bars that move with the music, this Pi's or another "
+                            "of yours'."
       and [(s["title"], s["rows"][0]["key"], s["rows"][-1]["key"]) for s in m.web_settings()["sections"]
            if s["id"] == "screen"] == [("Screen", "screen", "oled")]
       and "status" not in wr)
@@ -830,6 +942,144 @@ said = m.web_settings_do({"key": "oled", "value": "Off"})
 m.case = None
 check(f"...where there can't be one: no such setting to pick ({said})", "error" in said
       and m.setting("oled") == "Music bars")
+
+# ---- another of your Pietatos' music, on this one's OLED ----------------------------------------------------------
+m.oled_stop()
+m.oled_start()
+fw = made[-1][1]
+beacon = m.share_beacon("gpi", full=True)
+check(f"lit: your others' music is listened for, and its beacon says where ({beacon.get('oled')})",
+      m.oled_in is not None and beacon.get("oled") == {"port": m.oled_in.port} and m.oled_in.port > 0
+      and "oled" not in m.share_beacon("gpi"))
+news = g.group_news(dict(beacon, hw={}), {}, time.time())
+kept = g.group_news({"id": "x"}, news, time.time())
+check(f"...as one of your others takes it from its beacon ({news.get('oled')}), and keeps it from the one to "
+      f"everyone ({kept.get('oled')})", news.get("oled") == {"port": m.oled_in.port} == kept.get("oled")
+      and g.group_news(dict(beacon, hw={}, oled={"port": "x"}), {}, time.time()).get("oled") is None)
+teller = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+
+def tell(level, secs):
+    """Another of yours, playing: its bars, this loud, for this long (from this Pi itself, here)."""
+    end = time.monotonic() + secs
+    while time.monotonic() < end:
+        teller.sendto(O.bars_packet(np.full(25, level), time.monotonic()), ("127.0.0.1", m.oled_in.port))
+        time.sleep(0.04)
+
+
+threading.Thread(target=tell, args=(0.5, 0.8), daemon=True).start()
+up = until(lambda: (fw.heights() or [0])[0] == 24, 2)
+down = until(lambda: fw.heights() == [0] * 25, 4)
+check(f"one of yours playing: its bars are on this one's OLED as they come ({up}), and down once it stops ({down})",
+      up and down)
+PEER = "http://10.0.0.7:5432"
+check("...bars from somewhere that isn't one of yours: not shown",
+      m.oled_in.take(O.bars_packet(np.full(25, 1.0), 1.0), "10.0.0.7", time.monotonic() + 10) is False)
+m.pie.heard[PEER] = {"host": "den", "seen": time.time() + 3600, "peer": True}
+m.glow_names = None
+check("...from one of yours, by its address: shown",
+      m.oled_in.take(O.bars_packet(np.full(25, 1.0), 2.0), "10.0.0.7", time.monotonic() + 20) is True)
+until(lambda: fw.heights() == [0] * 25, 4)
+m.play([item], 0)                                      # (this one's own song: quiet for its first second and a half)
+start = m.proc.player.anchor[0]
+threading.Thread(target=tell, args=(1.0, 1.0), daemon=True).start()
+tall = []
+while time.monotonic() < start + 1.3:
+    hs = fw.heights()
+    if hs is not None and time.monotonic() > start + 0.3:
+        tall.append(max(hs))
+    time.sleep(0.01)
+check(f"its own music playing (quiet, just now) while another's bars come: its own are shown ({max(tall or [-1])})",
+      tall and max(tall) == 0)
+m.stop()
+del m.pie.heard[PEER]
+m.glow_names = None
+m.oled_pick("Off")
+check("turned off: no more listened for, and its beacon says nothing of it", m.oled_in is None
+      and "oled" not in m.share_beacon("gpi", full=True))
+
+# ---- this one's music, on another of yours' OLED --------------------------------------------------------------------
+catch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+catch.bind(("127.0.0.1", 0))
+catch.settimeout(0.02)
+THERE = "http://127.0.0.1:5432"                        # (one of yours with an OLED lit: here, this Pi itself)
+
+
+def oled_there(on=True):
+    m.pie.heard[THERE] = {"host": "den", "seen": time.time() + 3600, "peer": True}
+    if on:
+        m.pie.heard[THERE]["oled"] = {"port": catch.getsockname()[1]}
+
+
+def look():
+    m.oled_seen = 0.0
+    m.oled_tick(time.monotonic())
+
+
+def heard_there(upto):
+    """Its bars as they come there, till the song's `upto` seconds in: [(seconds into the song, the tallest)]."""
+    start, got = m.proc.player.anchor[0], []
+    while time.monotonic() < start + upto:
+        look()
+        try:
+            p = O.read_bars(catch.recv(256))
+        except OSError:
+            continue
+        if p is not None:
+            got.append((time.monotonic() - start, float(p[1].max())))
+    return got
+
+
+check(f"no OLED here, none on your others: music's the plain player's ({m.oled_peers()})", m.oled_peers() == []
+      and not m.oled_wanted())
+oled_there(False)
+check("...one of yours on, with no OLED: still", m.oled_peers() == [] and not m.oled_wanted())
+oled_there()
+check(f"one of yours has its OLED lit: this one's music is wanted on party mode's player ({m.oled_peers()})",
+      m.oled_peers() == [("127.0.0.1", catch.getsockname()[1])] and m.oled_wanted())
+m.set_setting("share", "Off")
+off = m.oled_peers()
+m.set_setting("share", "On")
+check(f"...not with Share with other Pietatos off ({off})", off == [] and m.oled_wanted())
+spawned.clear()
+m.play([item], 0)
+on = type(m.proc).__name__
+look()
+got = heard_there(3.7)
+before, during, after = bars_seen(got)
+check(f"a song here: on party mode's player ({on}), its bars sent there as it's heard: {len(got)} packets, quiet "
+      f"through its start ({max(before or [-1]):.2f}), as loud as it is through its loud second "
+      f"({min(during or [-1]):.2f} to {max(during or [-1]):.2f}), and no more once it's quiet "
+      f"({len(after)} after)", on == "PartyProc" and not spawned and m.oled_out is not None and m.oled is None
+      and len(got) >= 20 and max(before or [0]) == 0 and during and min(during) >= 0.29 and max(during) <= 0.55
+      and not any(h for h in after))
+m.stop()
+del m.pie.heard[THERE]
+m.oled_out.fed = time.monotonic() - 100
+look()
+check("that one gone: its bars' sender's let go of, and the next song's the plain player's", m.oled_out is None
+      and not m.oled_wanted())
+m.play([item], 0)
+plain = type(m.proc).__name__
+oled_there()
+look()
+moved = type(m.proc).__name__
+check(f"a song only just begun on the plain player ({plain}) when one of yours' OLED turns up: moved to party "
+      f"mode's player ({moved})", plain == "Proc" and moved == "PartyProc")
+m.stop()
+del m.pie.heard[THERE]
+look()
+m.play([item], 0)
+m.started = time.monotonic() - SO.OLED_CATCH - 5       # (well under way)
+oled_there()
+look()
+check(f"...one well under way: left as it is; the next has them ({type(m.proc).__name__})",
+      type(m.proc).__name__ == "Proc" and m.oled_wanted())
+m.stop()
+del m.pie.heard[THERE]
+look()
+catch.close()
+m.set_setting("oled", "Music bars")
 
 # at start-up, and as it goes
 m.oled_stop()

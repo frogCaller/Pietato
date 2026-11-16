@@ -208,7 +208,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 yours: left rock, up paper, right scissors (on the one to beat, with the page open,
                 another's throw waits a few seconds for yours). That one off for an hour: the one that's
                 waited longest gets the next. One that wins three throws in a row or more: the one it just
-                beat may say it's cheating (it isn't), and they argue about it in the group chat
+                beat may say it's cheating (it isn't), and they argue about it in the group chat. A Pietato
+                that's the only one on your network gets no cookie, and Apps doesn't list this there
                 (pitato/cookie.py; POST /api/cookie)
     LED backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
                 TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
@@ -273,7 +274,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 its side: the menus, games, videos and the terminal turned 90°, 180° or 270°) and
                 Waveshare 2.23 OLED (a Pi with its pins free, on a TV or monitor or with no screen: that OLED
                 HAT on them shows bars that move with your songs and stations, which play through party mode's
-                player for it: pitato/oled.py; not with an LED backlight's LEDs on the same pin)), clock,
+                player for it: pitato/oled.py; another of your Pietatos' music too, while its own Pi plays none,
+                sent as bars by the one that plays; not with an LED backlight's LEDs on the same pin)), clock,
                 battery saver (Auto: on its battery, in a GPi Case or a laptop, the screen goes dark
                 after three minutes with nothing happening; music plays on, and any button wakes it),
                 sound (Auto: Bluetooth headphones or a speaker while they're connected, else a USB

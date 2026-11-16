@@ -6,11 +6,16 @@ start-up, then each of its four rows of 128 bytes with where it starts before it
 The bars are the sound itself, a moment of it at a time: the sound heard now (party.py's player says when each bit
 of a song is heard), cut into BARS pieces, a bar as tall as its piece is loud. A bar jumps up and falls back
 slowly, FPS times a second. screens/oled.py has its setting (Settings > Screen > Waveshare 2.23 OLED: only on a Pi
-with its pins free); as it's turned on there, the bars come up a little once, so you can tell it's lit."""
+with its pins free); as it's turned on there, the bars come up a little once, so you can tell it's lit.
+Another of your Pietatos' music too, while this Pi plays none of its own: the one playing sends its bars as they're
+heard there (BarsOut: a UDP packet each, FPS times a second), and the one with the OLED takes them from your Pietatos
+only (BarsIn), whichever's playing, and shows them as they come."""
 import errno
 import fcntl
 import glob
+import math
 import os
+import socket
 import struct
 import threading
 import time
@@ -66,6 +71,14 @@ JUMP = 0.05                  # seconds out: what's fed isn't the next of it (a s
 QUIET_GAIN = 0.01            # the volume, at least, that what's fed is made up for
 IDLE_AFTER, IDLE_EVERY = 1.0, 0.25   # nothing fed and its bars down: looked at only now and then
 HELLO = 0.25                 # its bars as it's turned on: up this far once, and down again (so you can tell it's lit)
+OLED_PORT = 5445             # another of yours' music, as bars, is taken here (UDP)
+BARS_MAGIC, BARS_VERSION = b"PO", 1
+BARS_HEAD = struct.Struct(">2sBd")   # ...a packet: magic, version, when it was sent (the sender's clock), then a
+                                     # byte for each bar (how loud its piece of the sound heard there now is)
+THEIRS_KEPT = 0.3            # seconds another's bars are shown after its last packet (it's stopped, or gone)
+OWN_FIRST = 1.0              # seconds after this Pi's own sound that another's bars aren't shown (its own come first)
+HOLD = 2.5                   # seconds the one that's followed is kept to, once it's quiet, before another's taken
+QUIET_SAID = 5               # (BarsOut) packets that say there's no sound, before it says no more
 
 
 # ---- the HAT's wires -----------------------------------------------------------------------------------------------
@@ -276,10 +289,171 @@ class Heard:
         return np.minimum(win.reshape(BARS, self.seg).mean(axis=1), 1.0)
 
 
+# ---- another of your Pietatos' music -----------------------------------------------------------------------------
+def bars_packet(levels, sent):
+    """The bars now (each 0 to 1), as a packet."""
+    return BARS_HEAD.pack(BARS_MAGIC, BARS_VERSION, sent) + \
+        np.clip(np.rint(np.asarray(levels, dtype=np.float64) * 255), 0, 255).astype(np.uint8).tobytes()
+
+
+def read_bars(data):
+    """What a packet says ((when it was sent, each bar 0 to 1)), or None: not one of these."""
+    if len(data) != BARS_HEAD.size + BARS:
+        return None
+    magic, version, sent = BARS_HEAD.unpack_from(data)
+    if magic != BARS_MAGIC or version != BARS_VERSION or not math.isfinite(sent):
+        return None
+    return sent, np.frombuffer(data, dtype=np.uint8, offset=BARS_HEAD.size).astype(np.float64) / 255.0
+
+
+def oled_clean(o):
+    """What another's beacon says of its OLED ({"port"}: where its bars are taken), kept to what makes sense, or
+    None."""
+    port = o.get("port") if isinstance(o, dict) else None
+    if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
+        return None
+    return {"port": port}
+
+
+class BarsOut:
+    """This one's music, as bars, to your other Pietatos' OLEDs: how loud each bar's piece of the sound heard now is,
+    a UDP packet FPS times a second while it plays (one that's lost is lost: the next is on its way). Fed as an
+    OledBars is (heard), from the player's thread. Silence is said a few times, then no more till there's sound."""
+
+    def __init__(self, clock=time.monotonic, run=True):
+        self.clock = clock
+        self.heard_of = Heard()
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setblocking(False)
+        self.to = ()                                   # where they go: [(address, port)]
+        self.fed = -1e9                                # when sound was last fed
+        self.quiet = QUIET_SAID                        # packets of silence said in a row
+        self.wake = threading.Event()
+        self.closed = False
+        if run:
+            threading.Thread(target=self.run, daemon=True, name="oled-out").start()
+
+    def aim(self, to):
+        self.to = tuple(to)
+
+    def heard(self, pcm, t, gain=1.0):
+        """(The player's thread.) Sound, its first sample heard at t (this Pi's clock)."""
+        if not self.to:
+            return
+        self.heard_of.feed(pcm, t, gain)
+        self.fed = self.clock()
+        self.wake.set()
+
+    def frame(self, now):
+        """The bars as they are now, sent: True if they were (False: nothing to say, after silence)."""
+        levels = self.heard_of.levels(now)
+        if levels.any():
+            self.quiet = 0
+        elif self.quiet >= QUIET_SAID:
+            return False
+        else:
+            self.quiet += 1
+        data = bars_packet(levels, now)
+        for addr in self.to:
+            try:
+                self.sock.sendto(data, addr)
+            except OSError:
+                pass
+        return True
+
+    def run(self):
+        due = self.clock()
+        while not self.closed:
+            now = self.clock()
+            try:
+                sent = self.frame(now)
+            except Exception as ex:                    # (never its thread's end)
+                print(f"oled: its bars, to your others: {ex!r}", flush=True)
+                sent = False
+            if not sent and now - self.fed > IDLE_AFTER:
+                self.wake.clear()
+                self.wake.wait(IDLE_EVERY)
+                due = self.clock()
+                continue
+            due += FRAME
+            wait = due - self.clock()
+            if wait > 0:
+                time.sleep(wait)
+            else:
+                due = self.clock()
+
+    def close(self):
+        self.closed = True
+        self.to = ()
+        self.wake.set()
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+class BarsIn:
+    """Your other Pietatos' music, as bars (BarsOut's packets), taken here. named(address): who's there (None: not
+    one of yours, so not listened to). Whichever's playing is followed, and kept to till it's been quiet a moment
+    (HOLD); its bars go to on_bars(levels), as they come."""
+
+    def __init__(self, on_bars, named, port=OLED_PORT, clock=time.monotonic, listen=True):
+        self.on_bars, self.named, self.clock = on_bars, named, clock
+        self.source = None                             # the address it follows now
+        self.heard_at = -1e9                           # ...when its last packet came
+        self.sent = -1e9                               # ...and when that was sent (its clock: an older one's late)
+        self.closed = False
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("", port))
+        self.port = self.sock.getsockname()[1]
+        if listen:
+            threading.Thread(target=self.listen, daemon=True, name="oled-in").start()
+
+    def listen(self):
+        while not self.closed:
+            try:
+                data, (ip, _) = self.sock.recvfrom(256)
+            except OSError:
+                if self.closed:
+                    break
+                time.sleep(0.1)
+                continue
+            try:
+                self.take(data, ip, self.clock())
+            except Exception as ex:                    # (never the listener's end)
+                print(f"oled: another's bars: {ex!r}", flush=True)
+
+    def take(self, data, ip, now):
+        """A packet from ip, come at now: True if its bars are shown."""
+        p = read_bars(data)
+        if p is None or self.named(ip) is None:
+            return False
+        sent, levels = p
+        held = now - self.heard_at < HOLD
+        if self.source != ip:
+            if self.source is not None and held:
+                return False                           # (another's being followed: it's still playing)
+            self.source, self.sent, held = ip, -1e9, False
+        if sent <= self.sent and held:
+            return False                               # (an older one, come late)
+        self.sent, self.heard_at = sent, now
+        self.on_bars(levels)
+        return True
+
+    def close(self):
+        self.closed = True
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
 class OledBars:
     """The bars on the OLED, FPS times a second, on a thread of its own: each bar up to how loud its piece of the sound
     heard now is, and falling back slowly. With nothing fed and its bars down, the screen's dark and it's looked at
-    only now and then (what's fed wakes it)."""
+    only now and then (what's fed wakes it). Another of yours' bars (told) are shown while this Pi's own sound isn't
+    fed."""
 
     def __init__(self, screen, clock=time.monotonic, run=True):
         self.screen, self.clock = screen, clock
@@ -287,7 +461,9 @@ class OledBars:
         self.h = np.zeros(BARS)                        # each bar now (0 to 1)
         self.px = np.zeros(BARS, dtype=np.int64)       # ...and as it's drawn (pixels)
         self.last = None
-        self.fed = -1e9                                # when sound was last fed
+        self.fed = -1e9                                # when sound was last fed (this Pi's, or another's bars)
+        self.own_at = -1e9                             # ...this Pi's own
+        self.theirs, self.theirs_at = None, -1e9       # another of yours' bars (0 to 1 each), and when they came
         self.up = 0.0                                  # its bars up this far, the next frame (hello's)
         self.writing = threading.Lock()                # (the screen written to by one at a time: never once it's shut)
         self.wake = threading.Event()
@@ -298,7 +474,13 @@ class OledBars:
     def heard(self, pcm, t, gain=1.0):
         """(The player's thread.) Sound, its first sample heard at t (this Pi's clock)."""
         self.heard_of.feed(pcm, t, gain)
-        self.fed = self.clock()
+        self.fed = self.own_at = self.clock()
+        self.wake.set()
+
+    def told(self, levels):
+        """(BarsIn's thread.) Another of yours' bars, as its music's heard there now."""
+        self.theirs, self.theirs_at = levels, self.clock()
+        self.fed = self.theirs_at
         self.wake.set()
 
     def hello(self):
@@ -310,6 +492,9 @@ class OledBars:
     def frame(self, now):
         """The bars as they are now, drawn (if they've changed)."""
         new = self.heard_of.levels(now)
+        theirs = self.theirs
+        if theirs is not None and now - self.theirs_at <= THEIRS_KEPT and now - self.own_at > OWN_FIRST:
+            new = theirs                               # (another of yours' music: this Pi plays none of its own)
         if self.up:
             new, self.up = np.maximum(new, self.up), 0.0
         fall = 1.0 if self.last is None else DECAY ** (max(0.0, now - self.last) / FRAME)

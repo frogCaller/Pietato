@@ -5,20 +5,27 @@ are the music player's sound: with the OLED on, a song or a station plays throug
 knows when each bit of it is heard), on its own, as it does for an LED backlight's beat (screens/glow.py), and is
 shown as it's heard. The HAT is on the Pi's SPI, and an LED backlight's LEDs are wired to the same pin (GPIO 10): one
 of them at a time, so turning one on turns the other off. The first time, the Pi's SPI is turned on in config.txt (if
-it isn't), and it's lit after a restart."""
+it isn't), and it's lit after a restart.
+Another of your Pietatos' music moves its bars too, while this Pi plays none of its own, as an LED backlight follows
+whichever of yours is playing: its beacon says its OLED's lit (oled_beacon), each of your others then plays its music
+on party mode's player and sends its bars here as they're heard there (oled.py's BarsOut, BarsIn)."""
 import errno
 import os
 import time
+import urllib.parse
 
 from ..config import OLED_CHOICES, SETTINGS_PAGES
 from ..glow import BLOCK, CONFIG_TXT, PI_MODEL, turn_spi_on
 from ..handheld import is_handheld
 from ..library import LISTEN_KINDS
-from ..oled import OLED_SPI, OledBars, Screen, wires
+from ..oled import BarsIn, BarsOut, OLED_PORT, OLED_SPI, OledBars, Screen, wires
 from ..party import PartyProc
 from ..system import is_pc, read_file
 
 OLED_BARS = OLED_CHOICES[1]
+OLED_LOOK = 2.0              # seconds between looks for your others' OLEDs (where this one's bars go)
+OLED_CATCH = 60.0            # seconds into a song that it's still moved to party mode's player, when one turns up
+OLED_OUT_QUIET = 10.0        # seconds with no music for them: its bars' sender is let go of
 OLED_LABEL = next(label for key, label, _ in SETTINGS_PAGES["display"] if key == "oled")   # (its row's name)
 OLED_NOTES = {errno.EBUSY: "Its pins are in use", errno.ENODEV: "No GPIO here"}
 RESTART = "Restart the Pi"   # its note, with SPI just turned on in config.txt
@@ -29,6 +36,10 @@ class OledScreen:
     oled = None              # the OLED, lit (oled.OledBars)
     oled_note = ""           # why it isn't lit ("" when it is, or it's off)
     oled_restart = False     # SPI turned on in config.txt for it: the Pi needs restarting
+    oled_in = None           # your others' music, as bars, taken for it (oled.BarsIn)
+    oled_out = None          # this one's music, as bars, to your others' OLEDs (oled.BarsOut)
+    oled_to = ()             # ...where they are: [(address, port)]
+    oled_seen = 0.0          # ...and when they were last looked for
 
     def oled_can(self):
         """An OLED HAT can go on this one: a Pi (not a PC or a handheld), and not in a GPi Case (its screen has the
@@ -37,8 +48,57 @@ class OledScreen:
             and not getattr(self, "case", None)
 
     def oled_wanted(self):
-        """The OLED's lit: music plays on party mode's player, which says when each bit of it is heard."""
-        return self.oled is not None
+        """The OLED's lit, or one of your others' is: music plays on party mode's player, which says when each bit of
+        it is heard (for the bars here, or sent there)."""
+        return self.oled is not None or bool(self.oled_peers())
+
+    # -- another of your Pietatos' music, on this one's OLED; and this one's, on theirs -------------------------------
+    def oled_beacon(self):
+        """What this one's beacon says of its OLED (to your others: so their music's bars come here), or None."""
+        i = self.oled_in
+        return {"port": i.port} if self.oled is not None and i is not None else None
+
+    def oled_peers(self):
+        """Your other Pietatos with an OLED lit, as their beacons say: [(address, port)]. None with sharing off."""
+        pie = getattr(self, "pie", None)
+        if pie is None or self.setting("share") == "Off":
+            return []
+        names = dict(self.saves_peers())
+        out = []
+        with pie.lock:
+            for url, h in pie.heard.items():
+                o = h.get("oled")
+                if url in names and o:
+                    host = urllib.parse.urlsplit(url).hostname
+                    if host:
+                        out.append((host, o["port"]))
+        return out
+
+    def oled_tick(self, now):
+        """(Media mode's main loop: every couple of seconds.) Your others' OLEDs, looked for: this one's music on
+        party mode's player has its bars sent to them (till there's been none for a while). One's just turned up, and
+        a song's only just begun on the plain player (which says nothing of its sound): moved over, from where it is."""
+        if now - self.oled_seen < OLED_LOOK:
+            return
+        self.oled_seen = now
+        was, to = self.oled_to, tuple(self.oled_peers())
+        self.oled_to = to
+        out = self.oled_out
+        if to and isinstance(self.proc, PartyProc) and self.kind in LISTEN_KINDS:
+            if out is None:
+                out = self.oled_out = BarsOut()
+            out.aim(to)
+        elif out is not None:
+            out.aim(to)
+            if not to or now - out.fed > OLED_OUT_QUIET:
+                self.oled_out_stop()
+        if to and not was and now - (self.started or 0.0) <= OLED_CATCH:
+            self.oled_catch()
+
+    def oled_out_stop(self):
+        out, self.oled_out = self.oled_out, None
+        if out is not None:
+            out.close()
 
     def oled_value(self):
         """Its row in Settings: what it's set to, or why it's dark when it should be lit."""
@@ -51,6 +111,7 @@ class OledScreen:
         self.set_setting("oled", value)
         if value != OLED_BARS:
             self.oled_stop()
+            self.share_news()                          # (your others hear it's off now, not in 20 seconds)
             return
         leds = self.glow_setting("glow_on") == "On"
         if leds:
@@ -59,6 +120,7 @@ class OledScreen:
         if self.oled is not None:
             self.oled.hello()                          # (its bars up once: it's lit)
             self.oled_catch()
+            self.share_news()                          # (...and your others hear of it now: their music's its too)
             if leds:
                 self.toast("The LED backlight is off: the OLED uses its pin", 4)
         elif self.oled_note == RESTART:
@@ -97,6 +159,10 @@ class OledScreen:
             return
         self.oled = OledBars(screen)
         print(f"oled: the OLED's on ({spi})", flush=True)
+        try:                                           # (your others' music, as bars: taken from them, for it)
+            self.oled_in = BarsIn(self.oled.told, self.glow_named, port=getattr(self, "oled_port", OLED_PORT))
+        except OSError as ex:
+            print(f"oled: your others' music can't be taken for it ({ex})", flush=True)
 
     def oled_spi_on(self):
         """SPI turned on in config.txt, in the LED backlight's own part of it (glow.py: uninstall.sh takes it out),
@@ -107,6 +173,9 @@ class OledScreen:
         return turn_spi_on(path, ["dtparam=spi=on"])
 
     def oled_stop(self):
+        i, self.oled_in = self.oled_in, None
+        if i is not None:
+            i.close()
         o, self.oled = self.oled, None
         if o is not None:
             o.close()
@@ -116,16 +185,20 @@ class OledScreen:
     def oled_heard(self, pcm, t, gain):
         """(Party mode's player, as it plays.) Sound, its first sample heard at t (its clock: the leader's, in another's
         party), as loud as the volume's made it (gain)."""
-        o = self.oled
-        if o is None:
+        o, out = self.oled, self.oled_out
+        if o is None and out is None:
             return
         if self.party is not None and not self.party.get("lead"):
             t -= self.party_clock() - time.monotonic()  # (the leader's clock, as this one's)
-        o.heard(pcm, t, gain)
+        if o is not None:
+            o.heard(pcm, t, gain)
+        if out is not None:                            # (...and for your others' OLEDs)
+            out.heard(pcm, t, gain)
 
     def oled_catch(self):
-        """The OLED's just been turned on, and music's playing on the plain player, which says nothing of its sound:
-        moved to party mode's player, from where it is, after a moment's quiet."""
+        """The OLED's just been turned on (or one of your others' has turned up), and music's playing on the plain
+        player, which says nothing of its sound: moved to party mode's player, from where it is, after a moment's
+        quiet."""
         p = self.proc
         plain = (p is not None and not isinstance(p, PartyProc) and self.kind in LISTEN_KINDS and p.poll() is None
                  and 0 <= self.qi < len(self.queue))
@@ -139,7 +212,8 @@ class OledScreen:
         if not self.oled_can():
             return None
         row = dict(key="oled", label=OLED_LABEL, kind="choice", value=self.setting("oled") or "Off",
-                   choices=list(OLED_CHOICES), note="The OLED HAT on the Pi's pins: bars that move with your music.")
+                   choices=list(OLED_CHOICES),
+                   note="The OLED HAT on the Pi's pins: bars that move with the music, this Pi's or another of yours'.")
         if self.oled_note:
             restart = self.oled_note == RESTART
             row.update(status="Restart the Pi to turn its SPI on" if restart else self.oled_note,

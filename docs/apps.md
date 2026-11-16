@@ -24,8 +24,8 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
   and sends it prompts you type. OpenClaw and Hermes can work the Pi too, and their answers show on it
-- **Apps**: [Group chat](#group-chat), [The Cookie](#the-cookie), the [LED backlight](#led-backlight) (on a Pi
-  with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
+- **Apps**: [Group chat](#group-chat), [The Cookie](#the-cookie) (while another Pietato is on your network), the
+  [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
@@ -117,9 +117,11 @@ learn it. When another Pietato got the last cookie, ◀ throws rock against it, 
 can throw again 15 seconds after a loss. When the Pietato in your hands got the last one and this page is open,
 you get a few seconds to throw when another plays it, and its Bot throws if you don't.
 
-When the one that got the last cookie has been off for an hour, the one that has waited longest gets the next,
-so there's always one to beat. A guest's Pietato on your network can play too. Settings > Share with other
-Pietatos needs to be on, and every Pietato needs this version or a newer one.
+When the one that got the last cookie has been off for an hour, the one of the others that has waited longest
+gets the next, so there's always one to beat. A Pietato that's the only one on the network never gets a cookie:
+Apps doesn't list The Cookie there, and the small cookie isn't shown, until another one is on. A guest's Pietato
+on your network can play too. Settings > Share with other Pietatos needs to be on, and every Pietato needs this
+version or a newer one.
 
 ## Party mode
 
@@ -194,6 +196,9 @@ The setting is there on a Pi, with a TV on HDMI or with no screen at all (turn i
 then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC or a handheld.
 
 - The bars follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
+- When its own Pi isn't playing, they follow whichever of your other Pietatos is, as an LED backlight does. Both
+  need Settings > Share with other Pietatos on. A song that was already playing when the OLED's Pi came on may
+  not show: the next one does.
 - They're the same at any volume, and dark when nothing plays.
 - With the OLED on, music takes a moment longer to start: it plays through the player that knows when each
   sound is heard, as it does for an LED backlight's beat.

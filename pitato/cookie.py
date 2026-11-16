@@ -18,7 +18,7 @@ This is its rules, with nothing of media mode in them:
   never throws the same twice, one throws what last beat it, one goes round in order. Its last few throws are told
   with the cookie, for your other Pietatos' pages to show: that's how you learn it;
 - which gets the next cookie when the one that got the last has gone quiet: of those that are on, the one that's
-  waited longest;
+  waited longest (two of them on, at least: a Pietato on its own gets none);
 - how many throws in a row a Pietato has won, told with the cookie too: from its third, the one it's just beaten may
   say it must be cheating (it isn't), and your others take sides in the group chat (circle.py's "cheat").
 (screens/cookie.py: media mode's part, who throws when. cookiepage.py: its page.)"""
