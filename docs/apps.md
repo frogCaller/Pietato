@@ -11,22 +11,22 @@ Pietato starts on a home screen of apps:
 - **TV**: Plex (Continue watching, Watchlist, Live TV with news and sports), Jellyfin, about 250 old
   cartoons and 150 old films from the Internet Archive, and your own streams. Live channels and Plex videos are
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
-- **Music** and **Radio**. Music is a grid of your songs' covers. Now playing shows the cover big, with a glow in
-  its colour that follows the beat while the battery saver is off. A song's cover is a `cover.jpg` or
-  `folder.jpg` in its folder, or the picture inside its file. For songs with neither, press Y on Music. Covers
-  your other Pietatos have for the same songs (the same file name and size) are copied from them. The rest are
-  looked up in the iTunes Store's search, then on [MusicBrainz](https://musicbrainz.org) and the Cover Art
-  Archive (free, no account), by the song's name and who it's by: from its tags, or a file name like
-  `Song - Artist.mp3` or `Artist - Song.mp3`. Only those names are sent, and the covers are kept on the Pi. On
-  Now playing, SELECT puts on lofi art (a quiet scene on the whole
-  screen) and HOME has [Party mode](#party-mode),
-  **Photos** (filters, delete), **Videos** (picks up where you left off)
+- **Music** and **Radio**. Music is a grid of your songs' covers; going right from the last song takes you back
+  to the first. Now playing shows the cover big, with a glow in its colour that follows the beat while the
+  battery saver is off. A song's cover is a `cover.jpg` or `folder.jpg` in its folder, or the picture inside its
+  file. For songs with neither, press Y on Music. Covers your other Pietatos have for the same songs (the same
+  file name and size) are copied from them. The rest are looked up in the iTunes Store's search, then on
+  [MusicBrainz](https://musicbrainz.org) and the Cover Art Archive (free, no account), by the song's name and
+  who it's by: from its tags, or a file name like `Song - Artist.mp3` or `Artist - Song.mp3`. Only those names
+  are sent, and the covers are kept on the Pi. On Now playing, SELECT puts on lofi art (a quiet scene on the
+  whole screen) and HOME has [Party mode](#party-mode), **Photos** (filters, delete), **Videos** (picks up where
+  you left off)
 - **Weather** (press START there to set where you are, and °F or °C), and **Finance**: stock and coin prices
   and charts. Press Y on Finance to look up more to add
 - **Files**: PDFs, documents, text, pictures, video and music, on the Pi or on your other computers
-- **Camera**: a USB camera plugged into the Pi (it shows up by itself), any camera on your network, or the ones
-  on your other Pis: switch between them with L and R, steer an OBSBOT, take pictures, and have your bot say
-  what it sees
+- **Camera**: a USB camera plugged into the Pi (it shows up by itself, and on your other Pietatos under On your
+  network), any camera on your network, or the ones on your other Pis: switch between them with L and R, steer
+  an OBSBOT, take pictures, and have your bot say what it sees
 - **Bot**: does what you ask, like setting a timer, adding to your list or playing some music, and chats
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,

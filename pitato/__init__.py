@@ -77,7 +77,7 @@
 Beside them, each run on its own:
   webui.py          the web page (port 5432): setup.sh makes it a service of its own
   camera.py         a Pi's USB camera on your network, for the Camera tab (setup.sh --camera); also
-                    imported for this Pi's own USB cameras (on 127.0.0.1 only)
+                    imported for this Pi's own USB cameras (on 127.0.0.1, and for your other Pietatos)
   hear.py           what a USB microphone hears, made out by Vosk (listen.py starts it, as you)
   coder_hooks.py    Claude Code's hooks, telling the Bot what it's doing (the web page hands it out)
   oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music

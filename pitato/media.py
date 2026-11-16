@@ -26,7 +26,7 @@ from .library import (
     SLIDESHOW_SECS, VOLUME_STEP)
 from .weather import Weather
 from .documents import doc_text
-from .cameras import CAM_BEACON, CAM_SHOT_SHOW, Camera
+from .cameras import CAM_BEACON, CAM_SAYS, CAM_SHOT_SHOW, Camera
 from .nearby import PEER_KEEP, PEER_SAYS, PieInk
 from .circle import YOU_WITHIN
 from .voice import Voice
@@ -323,6 +323,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.face_shot = None        # ...the page it was drawn on: (it, where the face is, the screen's count, where)
         self.pie = PieInk(cameras=self.pie_cameras)   # PiE-ink on another Pi: asked first for what it has
         self.camera.on_pie = self.pie_heard
+        self.camera.own.may = lambda ip: bool(self.saves_peers(ip))   # (a USB camera of this Pi's: who may see it)
+        self.camera.own.named = self.own_name
         self.share_id = uuid.uuid4().hex[:12]   # this Pietato, to your other Pietatos (share_loop): its beacon's its own
         self.pie.own = self.share_id
         self.pie.peers_on = lambda: self.setting("share") != "Off"
@@ -1579,6 +1581,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return
         self.sharing = True
         threading.Thread(target=self.share_loop, daemon=True, name="share").start()
+        threading.Thread(target=self.share_cameras_loop, daemon=True, name="share-cameras").start()
 
     def share_loop(self):
         while self.sharing:
@@ -1603,6 +1606,36 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                         pass                           # (no network yet: next time)
         except OSError:
             pass
+
+    def share_cameras_loop(self):
+        while self.sharing:
+            try:
+                self.share_cameras()
+            except Exception as ex:                    # (whatever a camera or the network says: tried again)
+                print(f"sharing a camera: {ex!r}", flush=True)
+            time.sleep(CAM_SAYS)
+
+    def share_cameras(self):
+        """A USB camera plugged into this Pi, said to each of your other Pietatos every few seconds, as camera.py
+        says a Pi's camera is there: it shows up on their Camera tabs, under "On your network", and answers them
+        alone (camera.py's OwnCameras). Sharing off, or none plugged in: nothing. How many were told."""
+        if self.setting("share") == "Off":
+            return 0
+        cams = self.camera.own.share()
+        peers = self.pie.peer_tell() if cams else []
+        if not peers:
+            return 0
+        host = socket.gethostname()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            for cam in cams:                           # ("gpicam": the word a camera's beacon has always had)
+                msg = json.dumps({"gpicam": 1, "id": cam["id"], "host": host, "port": cam["port"],
+                                  "name": cam["name"]}).encode()
+                for ip in peers:
+                    try:
+                        s.sendto(msg, (ip, CAM_BEACON))
+                    except OSError:
+                        pass
+        return len(peers)
 
     def share_news(self):
         """What this one's doing has changed (a game started or ended, say): your others told now, not at its next
@@ -2197,7 +2230,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         cols = (self.games_cols() if ttype == "games" else self.grid_cols()) if grid else 1
         page = self.grid_rows() * cols if grid else self.visible_rows()
         tiles = grid or self.music_grid()              # (Music: its songs' covers, a grid of its own)
-        if tiles and not grid:
+        songs = tiles and not grid
+        if songs:
             cols = self.music_layout()["cols"]
 
         if self.ha_menu is not None:                   # Home Assistant's settings, over the page
@@ -2422,7 +2456,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             step = {"up": -cols, "down": cols,
                     "left": -1 if tiles else -page, "right": 1 if tiles else page}.get(name)
             if step is not None:
-                if tiles or repeat or name in ("left", "right"):
+                if songs and not repeat:               # (Music's grid: off either end, round to the other)
+                    sel = self.music_step(sel, name, n, cols)
+                elif tiles or repeat or name in ("left", "right"):
                     sel = max(0, min(sel + step, n - 1))
                 else:
                     sel = (sel + step) % n

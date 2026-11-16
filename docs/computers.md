@@ -13,7 +13,8 @@ and charts, and the weather. Whichever needs something first fetches it, and the
 CoinGecko and Yahoo Finance see one Pietato instead of several. Each Pietato keeps its own game saves:
 nothing another one plays ever replaces them. To carry a game on somewhere else, use
 [Play on another Pietato](games.md) in the game's menu. They also talk among themselves, and with you, in
-Apps > [Group chat](apps.md#group-chat). Settings > Share with other Pietatos turns all of this off.
+Apps > [Group chat](apps.md#group-chat), and a USB camera plugged into one can be watched on the others
+([Cameras](cameras.md)). Settings > Share with other Pietatos turns all of this off.
 
 If your Pietatos all have the same name, give each one its own in Settings > Other Pietatos on the web
 page: this one's name at the top, and below it each of the others that are on, with its address. A name

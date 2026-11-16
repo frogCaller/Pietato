@@ -6,7 +6,8 @@ after each. Now playing: the cover on the left with its glow, a wash of it behin
 colour, the buttons (each tappable); a note for a song with no cover, a sign for a station; the glow following the
 beat with the battery saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off
 the page. Music's grid: every song a square with its cover (made small once and kept on disk, a folder's shared
-by its songs), its name under it, the picked one bigger with a glow all round it, the D-pad moving about it, A
+by its songs), its name under it, the picked one bigger with a glow all round it, the D-pad moving about it (off
+either end, round to the other: right on the last song is the first; a held D-pad stops at the ends), A
 playing as before, only the covers near the screen looked at, another tab still a list. Covers from the internet
 (Y on the grid): a song's name and who it's by from its tags or its file's name (either way round), the iTunes
 Store's search asked first (the likeliest of its answers, never more than twenty questions a minute, told that's too
@@ -591,10 +592,29 @@ check("a tap on a cover picks that song", [w[-1] for _, w in taps] == [0, 1, 2, 
               for i, (b, _) in enumerate(taps))
       and all(taps[i][0][2] <= taps[i + 1][0][0] for i in range(3)))
 moves = []
-for key in ("right", "right", "right", "right", "down", "up", "left", "left", "down"):
+for key in ("right", "right", "right", "right", "left", "up", "down", "down"):
     m.press(key)
     moves.append(m.sels[MUSIC])
-check(f"the D-pad moves about it: across, down a row, up one ({moves})", moves == [1, 2, 3, 4, 4, 0, 0, 0, 4])
+check(f"the D-pad moves about it: across, back one, and up and down between its rows ({moves}); down where "
+      f"there's no song under: the last one", moves == [1, 2, 3, 4, 3, 4, 0, 4]
+      and M.MusicScreen.music_step(m, 1, "down", 5, 4) == 4)
+m.sels[MUSIC] = 4
+rounds = []
+for key, held in (("right", False), ("left", False), ("left", True), ("right", True), ("right", False),
+                  ("left", True), ("up", False), ("down", False), ("up", True)):
+    m.press(key, repeat=held)
+    rounds.append(m.sels[MUSIC])
+check(f"off the end, round to the start: right on the last song is the first, left on the first the last; up from "
+      f"the top row and down from the bottom one go round too; a held D-pad stops at the ends ({rounds})",
+      rounds == [0, 4, 3, 4, 0, 0, 4, 0, 0])
+step = lambda sel, way, n=10: M.MusicScreen.music_step(m, sel, way, n, 4)   # noqa: E731  (ten songs, four across)
+check("...in a longer grid: down from the bottom row to the same place in the top one, up from the top to the "
+      "bottom (the last song, where the bottom row's short)", (step(9, "right"), step(0, "left"), step(9, "down"),
+                                                              step(8, "down"), step(1, "up"), step(3, "up"),
+                                                              step(5, "down"), step(6, "down"), step(5, "up"))
+      == (0, 9, 1, 0, 9, 9, 9, 9, 1) and step(0, "right", 1) == 0 and step(0, "down", 1) == 0
+      and step(2, "up", 3) == 2)
+m.sels[MUSIC] = 4
 played = []
 m.play = lambda queue, i, **k: played.append((len(queue), i))
 m.press("a")

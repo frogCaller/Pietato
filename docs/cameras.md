@@ -7,6 +7,9 @@ Add a camera on the Camera tab or the web page by typing its address. It can be:
   page. A link straight to its stream or picture works too.
 - a Pi with a USB camera: run `sudo bash setup.sh --camera` on it. If the camera turns (an OBSBOT,
   a PTZ webcam), the d-pad steers it.
+- a USB camera plugged into another of your Pietatos: nothing to set up. While it's plugged in, it shows up
+  on your other Pietatos' Camera tab under On your network, by that Pietato's name. Only your Pietatos can
+  see it, and Settings > Share with other Pietatos turns that off.
 
 Pis running the camera server show up by themselves under On your network. If a camera is on its
 side, press Y on it in your list of cameras to rotate its picture. If it turns the wrong way when you

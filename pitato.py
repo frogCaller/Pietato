@@ -101,7 +101,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 HOME there has Party mode: your other Pietatos that are on play it too, at the same moment
                 (pitato/party.py: each one's clock set against this one's, as NTP sets a clock, then "start at
                 time T"); A, L, R, START and the d-pad on any of them pause or skip for all of them
-  Camera      - a USB camera plugged into this Pi (there by itself, while it's plugged in), cameras
+  Camera      - a USB camera plugged into this Pi (there by itself, while it's plugged in; your other
+                Pietatos list it too, and only they can see it), cameras
                 on your other Pis (PiE-ink, or this repo's camera.py: setup.sh
                 --camera) or any camera on your network (its address and port: the picture is
                 found on its page, or where camera servers put it; or its stream's link), listed

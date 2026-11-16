@@ -448,6 +448,17 @@ class MusicScreen:
         return {"cols": cols, "rows": max(1, room // (side + GRID_WORDS)), "side": side,
                 "x": (W - cols * side - (cols - 1) * gap) // 2, "y": y, "dx": side + gap, "dy": side + GRID_WORDS}
 
+    def music_step(self, sel, way, n, cols):
+        """Where a press of the D-pad (not one that's held) goes from a song in the grid: on to the next, and off
+        either end round to the other (right of the last: the first). Up from the top row and down from the bottom
+        one go round too, in the same column."""
+        if way in ("left", "right"):
+            return (sel + (1 if way == "right" else -1)) % n
+        last = (n - 1) // cols * cols                  # (where the bottom row starts)
+        if way == "down":
+            return sel + cols if sel + cols < n else sel % cols if sel >= last else n - 1
+        return sel - cols if sel >= cols else min(last + sel, n - 1)
+
     def music_tile(self, it, px):
         """A song's cover at the grid's size (px of the screen's own pixels a side) and its glow's colour, or (None,
         None): it has none, or it's not ready yet (the thread that gets them ready draws the page again)."""

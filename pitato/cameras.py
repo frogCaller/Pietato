@@ -48,6 +48,8 @@ CAM_LINK_WORDS = re.compile(r"stream|video|mjpe?g|jpe?g|snap|shot|feed|cam|frame
                             re.I)
 CAM_BEACON = 5151        # PiE-inks, camera.py and Pietatos say they're there, a few times a minute
 CAM_FOUND_FOR = 30       # a camera gone quiet this long drops off "On your network"
+CAM_SAYS = 5.0           # seconds between a USB camera of this Pietato's being said to your others (as camera.py
+                         # says a Pi's is there)
 CAM_FOUND_KEEP = 16      # at most this many cameras heard on the network are kept in mind
 USB_CAMERA = "USB camera"   # what a USB camera plugged into this Pi answers as (camera.py's OwnCameras)
 
@@ -407,7 +409,8 @@ class Camera:
     servers usually put it), and A keeps the picture on screen. Your cameras are in camera.txt; Pis
     that say they have one (PiE-ink and camera.py announce themselves) are listed as found. A USB
     camera plugged into this Pi is first among yours, by itself, while it's plugged in: camera.py's
-    OwnCameras answers for it, on this Pi only, as camera.py does for one on another Pi."""
+    OwnCameras answers for it, as camera.py does for one on another Pi; and for your other Pietatos, which are
+    told it's there (media mode's share_cameras) and list it as found, like a Pi running camera.py."""
 
     def __init__(self):
         self.patterns = []

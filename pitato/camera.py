@@ -20,10 +20,12 @@ setup.sh tells the service where that is; run by hand, it's the one beside the f
     hosts =            other names you reach this Pi by, if your router gives it one
 
 Pietato uses it on its own Pi too, for a USB camera plugged into that Pi (OwnCameras): each one plugged in
-answers the same calls at /usb/<its id>, on 127.0.0.1 only, so it isn't shared on the network.
+answers the same calls at /usb/<its id>, on 127.0.0.1 only. With Settings > Share with other Pietatos on, each
+answers your other Pietatos too, and nobody else on the network, on a port of its own.
 """
 import glob
 import hashlib
+import http.client
 import io
 import ipaddress
 import json
@@ -608,15 +610,20 @@ p {{ color: #8b95a3; margin: 10px 2px; }}
 </main></body></html>"""
 
 
+SHARED_AS = "Pitato camera"      # what a shared camera says it is (its name from before Pietato's: what other Pis
+                                 # look for)
+
+
 def shared_about(feed):
-    return {"server": "Pitato camera",                 # (its name from before Pietato's: what other Pis look for)
+    return {"server": SHARED_AS,
             "name": settings().get("name") or socket.gethostname(),
             "hostname": socket.gethostname()}
 
 
-def serve(feed, ptz, shutter, port=PORT, host="", pick=None, about=shared_about):
+def serve(feed, ptz, shutter, port=PORT, host="", pick=None, about=shared_about, may=None):
     """The camera's calls on port (host "": every address; "127.0.0.1": this Pi only). pick(path): (feed, ptz,
-    shutter, the path inside) for a server of several cameras (Pietato's own: /usb/<id>/api/...), None for none."""
+    shutter, the path inside) for a server of several cameras (Pietato's own: /usb/<id>/api/...), None for none.
+    may(address): whether whoever's at that address may ask (None: anyone who can reach it)."""
     if pick is None:
         pick = lambda path: (feed, ptz, shutter, path)   # noqa: E731
 
@@ -643,6 +650,9 @@ def serve(feed, ptz, shutter, port=PORT, host="", pick=None, about=shared_about)
             return host in names
 
         def allowed(self):
+            if may is not None and not may(self.client_address[0]):
+                self.reply(403, {"ok": False, "error": "Only your other Pietatos can see this camera"})
+                return False
             if not self.host_ok():
                 self.reply(403, {"ok": False, "error": "Open this by the Pi's name or address"})
                 return False
@@ -759,6 +769,8 @@ VIDIOC_QUERYCAP = 0x80685600     # what a node is: _IOR('V', 0, struct v4l2_capa
 CAP_CAPTURE, CAP_DEVICE_CAPS = 0x00000001, 0x80000000
 OWN_PORTS = (5434, 5435, 5436, 5437)   # on 127.0.0.1 only (5433 is this script's, shared): the first that's free
 OWN_LOOK = 2.0                   # seconds between looks for one plugged in or taken out
+SHARE_PORTS = (5438, 5439, 5440, 5441)   # where each answers your other Pietatos (one port a camera)
+SHARE_ELSE = 30.0                # seconds between looks for this script itself sharing this Pi's camera
 
 
 def read_text(path):
@@ -862,13 +874,18 @@ def own_about(feed):
 
 
 class OwnCameras:
-    """The USB cameras plugged into Pietato's own Pi, for its Camera tab and its bot. They aren't shared on the
-    network (that's what the rest of this script is for): each answers the same calls as a camera on another Pi, at
-    /usb/<its id> on 127.0.0.1, and its picture is taken only while someone's watching, as this script's is."""
+    """The USB cameras plugged into Pietato's own Pi, for its Camera tab and its bot: each answers the same calls as
+    a camera on another Pi, at /usb/<its id> on 127.0.0.1, and its picture is taken only while someone's watching,
+    as this script's is. For your other Pietatos (share: media mode asks for it while Settings > Share with other
+    Pietatos is on) each answers on a port of its own too, as this script does for a Pi's camera, but only them."""
 
-    def __init__(self, ports=OWN_PORTS):
+    def __init__(self, ports=OWN_PORTS, share_ports=SHARE_PORTS):
         self.lock = threading.Lock()
-        self.ports = ports
+        self.ports, self.share_ports = ports, share_ports
+        self.shared = {}            # its id -> (the server your other Pietatos ask, its port)
+        self.may = lambda ip: False   # (media mode's: whoever's at that address is one of your other Pietatos)
+        self.named = socket.gethostname   # (...and what this Pietato's called)
+        self.script = (-1e9, False)   # when this script was looked for on this Pi, sharing its camera; if it is
         self.server, self.port = None, 0
         self.cams = {}              # its id -> (Feed, Ptz, Shutter), once it's been asked for
         self.seen = {}              # video0... -> (which it was, what it is)
@@ -920,15 +937,72 @@ class OwnCameras:
                 have = self.cams[m.group(1)] = (feed, Ptz(feed), Shutter(feed))
         return have + (m.group(2) or "/",)
 
+    # for your other Pietatos
+    def script_shares(self):
+        """This script itself is sharing this Pi's camera (setup.sh --camera): it has the camera, and says so to
+        everyone. (Asked at its port, every so often.)"""
+        when, there = self.script
+        if time.monotonic() - when >= SHARE_ELSE:
+            conn = http.client.HTTPConnection("127.0.0.1", PORT, timeout=1)
+            try:
+                conn.request("GET", "/api/ptz")
+                there = json.loads(conn.getresponse().read(4096)).get("server") == SHARED_AS
+            except (OSError, ValueError, AttributeError, http.client.HTTPException):
+                there = False
+            finally:
+                conn.close()
+            self.script = (time.monotonic(), there)
+        return there
+
+    def shared_name(self, card):
+        """What a camera's called on your other Pietatos: this Pietato's name (and the camera's, with several)."""
+        name = str(self.named() or socket.gethostname())
+        return f"{name}: {camera_name(card)}"[:60] if len(self.found) > 1 else name
+
+    def shared_about(self, feed):
+        return {"server": SHARED_AS, "name": self.shared_name(feed.card),
+                "hostname": socket.gethostname(), "trouble": (feed.error or "") if not feed.running() else ""}
+
+    def share(self):
+        """The USB cameras plugged in, each answering your other Pietatos (may: nobody else) on a port of its own, at
+        every address of this Pi's: [{"id", "port", "name"}], for the beacon that tells them so. None while this
+        script itself shares this Pi's camera."""
+        cams = self.look()
+        if not cams or self.script_shares():
+            return []
+        out = []
+        for c in cams:
+            with self.lock:
+                have = self.shared.get(c["id"])
+                used = {port for _, port in self.shared.values()}
+            if have is None:
+                for port in [p for p in self.share_ports if p not in used]:
+                    try:
+                        server = serve(None, None, None, port=port, host="", about=self.shared_about,
+                                       may=lambda ip: bool(self.may(ip)),
+                                       pick=lambda path, cid=c["id"]: self.pick(f"/usb/{cid}{path}"))
+                    except OSError:
+                        continue
+                    have = (server, server.server_address[1])
+                    with self.lock:
+                        self.shared[c["id"]] = have
+                    threading.Thread(target=server.serve_forever, daemon=True, name="shared-camera").start()
+                    break
+            if have is not None:
+                out.append({"id": c["id"], "port": have[1], "name": self.shared_name(c["card"])})
+        return out
+
     def close(self):
         with self.lock:
-            server, self.server = self.server, None
+            servers = [self.server] + [server for server, _ in self.shared.values()]
+            self.server, self.shared = None, {}
             cams = list(self.cams.values())
         for feed, _, _ in cams:
             feed.stop()
-        if server is not None:
-            server.shutdown()
-            server.server_close()
+        for server in servers:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
 
 
 def main():
