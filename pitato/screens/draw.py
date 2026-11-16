@@ -430,7 +430,7 @@ class DrawScreen:
         d.line((0, self.HEADER, W, self.HEADER), fill=LINE)
 
     def app_title(self, d, title, right=None, right_fill=None):
-        """Full screen apps' top: the app's name (or Now playing, a document's) and a note on the right, no status
+        """Full screen apps' top: the app's name (or a document's) and a note on the right, no status
         bar."""
         F, W = self.fonts, self.fb.w
         right_fill = MUTED if right_fill is None else right_fill
@@ -457,10 +457,10 @@ class DrawScreen:
             d.text((W - 20, y), right, font=F["small"], fill=right_fill, anchor="rm")
         d.line((0, self.HEADER, W, self.HEADER), fill=LINE)
 
-    def scrollbar(self, d, top, rows, n, t0, t1):
+    def scrollbar(self, d, top, rows, n, t0, t1, sx=None):
         if n <= rows:
             return
-        sx = self.fb.w - 10
+        sx = self.fb.w - 10 if sx is None else sx
         d.rounded_rectangle((sx, t0, sx + 4, t1), radius=2, fill=LINE)
         th = max((t1 - t0) * rows / n, 24)
         ty = t0 + (t1 - t0 - th) * top / max(n - rows, 1)
@@ -707,7 +707,8 @@ class DrawScreen:
         items = self.tab_items()
         n = len(items)
         sel = self.sels.get(self.tab, 0)
-        self.header(img, d)
+        side = self.music_side(img, items, sel)        # (Music: the picked song's cover beside its list, screens/
+        self.header(img, d)                            #  music.py; any other list: none)
         top_y = self.list_top()
         if ttype == "browser":
             busy = self.net_busy
@@ -788,8 +789,8 @@ class DrawScreen:
         top = max(min(top, n - rows), 0)
         self.tops[self.tab] = top
 
-        x0, x1 = 12, W - 22
-        self.tap_rows(0, W, top_y, self.ROW_H, top, min(top + rows, n), "sel", "sels", self.tab)
+        x0, x1 = 12, W - 22 - side
+        self.tap_rows(0, x1 + 8 if side else W, top_y, self.ROW_H, top, min(top + rows, n), "sel", "sels", self.tab)
         # one column width for the artwork, so titles line up when posters and stills mix
         slot = max([self.plex_size(it)[0] for it in items[top:top + rows]
                     if not it.get("icon")] or [0])
@@ -843,7 +844,9 @@ class DrawScreen:
                 d.rounded_rectangle((tx, by, tx + (bx1 - tx) * min(frac, 1), by + 3),
                                     radius=1, fill=ACCENT)
 
-        self.scrollbar(d, top, rows, n, top_y + 4, top_y + rows * self.ROW_H - 4)
+        self.scrollbar(d, top, rows, n, top_y + 4, top_y + rows * self.ROW_H - 4, x1 + 6 if side else None)
+        if side:
+            self.music_panel(img, d, items[min(sel, n - 1)])
         self.footer(d, self.list_hints(),
                     right=f"{sel + 1} of {n}" if ttype not in ("browser", "system", "group") else None)
         self.fb.show(img)

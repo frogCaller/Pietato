@@ -103,6 +103,7 @@ from .screens.soundboard import SoundboardScreen
 from .screens.band import BandScreen, Brain as BandBrain
 from .screens.glow import GlowScreen
 from .screens.oled import OledScreen
+from .screens.music import MusicScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
 UPDATE_STEP = 0.233            # seconds between the update screen's dots lighting up, one after another
@@ -117,7 +118,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, CookieScreen, FishScreen,
-            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BandScreen):
+            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BandScreen, MusicScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -649,6 +650,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return max(0.0, min(0.25, self.update_next - time.monotonic()))   # (its dots' next step)
         if self.now_art():
             return max(0.0, min(0.25, self.lofi_next - time.monotonic()))   # (the lofi art's next frame)
+        if self.ear is not None and not self.paused:   # (Now playing's glow, following the beat: its next frame)
+            return max(0.0, min(0.25, self.pulse_next - time.monotonic()))
         if self.on_sim_page() and self.sim_opts is None:      # (its next frame; the Clock's: a second or so off)
             return max(0.0, min(0.25 if self.sim_paced() is not None else 0.05, self.sim_next - time.monotonic()))
         if self.on_face_page() or self.on_char_page():   # (the bot's face: as it next changes)
@@ -1131,6 +1134,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.glow_stop()                               # (the LED backlight's LEDs dark)
         self.oled_stop()                               # (...and the OLED screen)
         self.oled_out_stop()
+        self.ear_stop()                                # (...and Now playing's ear for the beat)
         self.lamps_stop()
         self.glow_station_end()
         if self.active and self.fb is not None and system_stopping():
@@ -1899,6 +1903,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.now_art() and not self.resting and now >= self.lofi_next:   # (Now playing's lofi art: its rain...)
             self.lofi_next = now + 1.0 / self.lofi_fps()
             self.dirty = True
+        self.pulse_tick(now)                           # (...and its cover's glow, following the beat)
         if self.coder.heard and not self.setting("coder_seen"):
             self.set_setting("coder_seen", "yes")     # (an agent has found it: no more "how to connect")
         if (self.fin_auto and self.active and not self.resting and self.view == "list"

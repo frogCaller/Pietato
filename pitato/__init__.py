@@ -81,6 +81,8 @@ Beside them, each run on its own:
   hear.py           what a USB microphone hears, made out by Vosk (listen.py starts it, as you)
   coder_hooks.py    Claude Code's hooks, telling the Bot what it's doing (the web page hands it out)
   oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music
+  cover.py          a song's cover art (beside it in its folder, or inside its file), and what Music draws of it
+  ear.py            the beats of the song that's playing, for the glow round its cover on Now playing
   agent_link.py     OpenClaw or Hermes, connected both ways: your prompts from the Bot at work to it and its
                     answers back, and a skill with which it works this Pietato (the web page hands it out)
   convert_videos.sh videos made smaller on your computer (the Pi does it by itself too)

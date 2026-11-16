@@ -1,6 +1,7 @@
 """Settings > Appearance > Full screen apps: Off at first, ◀▶ changes it, kept. On: an app's page, Now playing, a
-picture and a document have no status bar, no tabs and no buttons along the bottom, just the app's name (or Now
-playing's, the document's) along the top (a delete's are-you-sure keeps its buttons; a credit stays, small); a list
+picture and a document have no status bar, no tabs and no buttons along the bottom, just the app's name (or the
+document's) along the top, and Now playing the whole screen (a delete's are-you-sure keeps its buttons; a credit
+stays, small); a list
 shows more rows; L R: the next app's name there. Not the home screen, Controls, a box to type in, or a sim (SELECT
 has its own). The class's own sizes as they were. Off again: as before."""
 import json, os, shutil, sys, time, types
@@ -126,8 +127,8 @@ m.meta = {"title": "Song 1", "artist": "Someone", "length": 200}
 m.shuffle = True
 m.view = "now"
 keys, bar = draw()
-check(f"Now playing: its title and Shuffle on top, no bars ({drawn['titles']}, {keys}, {bar})", not bar and keys == []
-      and drawn["titles"] == [("Now playing", "Shuffle")])
+check(f"Now playing: the whole screen its own (the cover, the words, the buttons' drawings), no bars and no title "
+      f"({drawn['titles']}, {keys}, {bar})", not bar and keys == [] and drawn["titles"] == [])
 m.shuffle = False
 m.proc, m.kind, m.cur = None, None, None
 m.view = "list"

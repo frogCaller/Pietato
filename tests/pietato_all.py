@@ -25,7 +25,7 @@ _ORDER = ["theme", "config", "asyou", "util", "lengths", "net", "system", "gpica
           "screens.hasettings", "screens.websettings", "screens.www", "screens.chromium", "screens.handoff",
           "screens.attract", "screens.together", "screens.konami", "screens.notes", "screens.fortune", "screens.pilot",
           "screens.group", "cookie", "cookiepage", "screens.cookie", "fishtank", "screens.fishtank", "screens.lobby",
-          "glow", "party", "screens.glow", "oled", "screens.oled",
+          "glow", "party", "screens.glow", "oled", "screens.oled", "cover", "ear", "screens.music",
           "screens.party", "soundbank", "soundboard", "screens.soundboard", "screens.band",
           "media", "app",
           "assist", "face", "screens.assist"]   # (last: their names never hide another module's, as computers' parse)

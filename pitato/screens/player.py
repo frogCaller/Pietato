@@ -9,7 +9,7 @@ import threading
 import time
 import urllib.parse
 
-from ..theme import ACCENT, BODY, LINE, MUTED, on_dark, ROW, TEXT
+from ..theme import ACCENT, on_dark
 from ..ahead import Ahead
 from ..asyou import as_you, nice_now
 from ..config import home_dir, SCREEN_MODES
@@ -345,11 +345,12 @@ class PlayerScreen:
                 try:
                     if k == "ANS_TIME_POSITION":
                         self.pos = float(v)
+                        self.pos_said(self.pos)        # (Now playing's glow goes by it, between its words)
                     else:
                         self.meta["length"] = float(v)
                 except ValueError:
                     pass
-            elif k in ("ANS_META_TITLE", "ANS_META_ARTIST") and v:
+            elif k in ("ANS_META_TITLE", "ANS_META_ARTIST", "ANS_META_ALBUM") and v:
                 self.meta[k[9:].lower()] = v
                 self.dirty = True
             elif k == "ANS_pause":
@@ -524,7 +525,7 @@ class PlayerScreen:
             threading.Thread(target=lambda u=it["uuid"]: rb_get(f"/json/url/{u}"), daemon=True).start()
         self.spawn(args, target)
         if kind == "audio":
-            for c in ("get_meta_title", "get_meta_artist", "get_time_length"):
+            for c in ("get_meta_title", "get_meta_artist", "get_meta_album", "get_time_length"):
                 self.cmd("pausing_keep_force " + c)
         elif kind not in LISTEN_KINDS:
             self.cmd("pausing_keep_force get_video_resolution")
@@ -709,69 +710,4 @@ class PlayerScreen:
             d.rounded_rectangle((x0, by, x0 + max(3, (x1 - x0) * min(self.pos / length, 1)), by + 3), radius=1,
                                 fill=on_dark("ACCENT"))
         self.msg_pill(d)                               # (a notice, over it)
-        self.fb.show(img)
-
-    def render_now(self):
-        if self.setting("now_art") == "On":
-            return self.render_lofi()
-        F = self.fonts
-        img, d = self.canvas()
-        W = self.fb.w
-        it = self.cur or {"title": "", "src": "", "sub": ""}
-        radio = self.kind == "radio"
-        self.title_row(d, "Now playing", "Shuffle" if self.shuffle and not radio else
-                       ("LIVE" if radio else None), ACCENT)
-
-        cx, cy, cs = 24, self.LIST_TOP + 20 + self.spare() // 3, 160   # (a taller screen: lower down)
-        if self.full_app():                                       # (no bars: in the middle, under its title)
-            cy = max(cy, self.HEADER + (self.fb.h - self.HEADER - cs - (0 if radio else 116)) // 2)
-        d.rounded_rectangle((cx, cy, cx + cs, cy + cs), radius=16, fill=ROW)
-        if radio:   # a little broadcast symbol
-            ox, oy = cx + cs / 2, cy + cs / 2 + 18
-            d.ellipse((ox - 9, oy - 9, ox + 9, oy + 9), fill=ACCENT)
-            for r in (26, 44, 62):
-                d.arc((ox - r, oy - r, ox + r, oy + r), 225, 315, fill=ACCENT, width=5)
-        else:
-            d.text((cx + cs / 2, cy + cs / 2), "♪", font=F["note"], fill=ACCENT, anchor="mm")
-
-        tx, tw = cx + cs + 28, W - (cx + cs + 28) - 24
-        if radio:
-            title = it["title"]
-            sub = self.meta.get("song") or it.get("sub") or ""
-        else:
-            title = self.meta.get("title") or it["title"]
-            sub = self.meta.get("artist") or os.path.basename(os.path.dirname(it["src"]))
-        y = cy + 18
-        for l in self.wrap(d, title, F["big"], tw, 2):
-            d.text((tx, y), l, font=F["big"], fill=TEXT, anchor="lm")
-            y += 32
-        if sub:
-            for l in self.wrap(d, sub, F["row"], tw, 2 if radio else 1):
-                d.text((tx, y + 2), l, font=F["row"], fill=BODY, anchor="lm")
-                y += 28
-        what = "Station" if radio else "Track"
-        d.text((tx, y + 10), f"{what} {self.qi + 1} of {len(self.queue)}",
-               font=F["small"], fill=MUTED, anchor="lm")
-        d.text((tx, cy + cs - 10), ("Paused" if self.paused else f"Volume {self.volume}"),
-               font=F["small"], fill=ACCENT if self.paused else MUTED, anchor="lm")
-
-        by = cy + cs + 44
-        if not radio:
-            length = self.meta.get("length") or self.length(it) or 0
-            d.rounded_rectangle((24, by, W - 24, by + 5), radius=2, fill=LINE)
-            if length:
-                frac = min(self.pos / length, 1)
-                d.rounded_rectangle((24, by, 24 + (W - 48) * frac, by + 5), radius=2, fill=ACCENT)
-            d.text((24, by + 22), clock(self.pos), font=F["small"], fill=BODY, anchor="lm")
-            if length:
-                d.text((W - 24, by + 22), clock(length), font=F["small"], fill=MUTED, anchor="rm")
-            if not self.shuffle and self.qi + 1 < len(self.queue):
-                nxt = self.fit(d, "Next: " + self.queue[self.qi + 1]["title"], F["small"], W - 48)
-                d.text((24, by + 58), nxt, font=F["small"], fill=MUTED, anchor="lm")
-            hints = [("A", "Pause" if not self.paused else "Play"), ("◀▶", "Seek"),
-                     ("L R", "Prev/next"), ("Y", "Shuffle"), ("SELECT", "Art"), ("B", "List")]
-        else:
-            hints = [("A", "Pause" if not self.paused else "Play"), ("◀▶", "Station"),
-                     ("▲▼", "Volume"), ("SELECT", "Art"), ("B", "List")]
-        self.footer(d, hints)
         self.fb.show(img)
