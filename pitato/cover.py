@@ -110,6 +110,21 @@ def cover_file(path):
     return found if os.path.exists(found) else beside(path, only=True)
 
 
+def cover_at_hand(path):
+    """A song's cover if there's one to hand without looking inside its file (quick: for another Pietato that asks
+    for it, and to tell which songs have none): the one named for it in its folder, one got out of its file or found
+    for it before, or the only picture in its folder."""
+    if "://" in path or not os.path.isfile(path):
+        return None
+    named = beside(path)
+    if named:
+        return named
+    for kept in (os.path.join(covers_dir(), cache_name(path, ".jpg")), found_file(path)):
+        if os.path.exists(kept):
+            return kept
+    return beside(path, only=True)
+
+
 def cover_colour(im):
     """The colour a cover's glow takes: the one there's most of among its vivid, bright ones (a sunset's orange, not
     the orange and the sea's blue stirred together), as bright as a glow is. None: a cover with hardly any colour in
@@ -170,16 +185,18 @@ def cover_tile(im, side, radius):
 
 def glow_mask(side, reach, radius):
     """How strongly the glow shows round a square side big, reach past it each way (L: the whole of it at its
-    strongest, 255 right at the square, fading out to nothing at reach)."""
+    strongest, bright right at the square, fading out to nothing at reach)."""
     from PIL import Image, ImageDraw, ImageFilter
-    k = 4                                              # (made small and enlarged: it's soft anyway, and quick so)
     full = side + 2 * reach
-    small = Image.new("L", (max(8, full // k), max(8, full // k)), 0)
-    r = reach * small.width / full
-    edge = r * 0.62                                    # (lit from a little outside the square, in to its middle)
-    ImageDraw.Draw(small).rounded_rectangle((edge, edge, small.width - 1 - edge, small.height - 1 - edge),
-                                            radius=radius / k + r * 0.3, fill=255)
-    return small.filter(ImageFilter.GaussianBlur(r * 0.34)).resize((full, full), Image.BILINEAR)
+    k = max(1, min(4, reach // 6))                     # (made small and enlarged, where it's still smooth so: quick)
+    n = max(8, full // k)
+    r = reach * n / full
+    small = Image.new("L", (n, n), 0)
+    edge = int(round(r * 0.72))                        # (whole numbers: an older Pillow takes a part of one as the
+    ImageDraw.Draw(small).rounded_rectangle(           #  one below, and the glow would sit up and to the left)
+        (edge, edge, n - 1 - edge, n - 1 - edge), radius=int(round(radius * n / full + r * 0.28)), fill=255)
+    small = small.filter(ImageFilter.GaussianBlur(r * 0.3))
+    return small if small.size == (full, full) else small.resize((full, full), Image.BILINEAR)
 
 
 def glow_step(level):

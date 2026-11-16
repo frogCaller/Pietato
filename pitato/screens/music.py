@@ -10,12 +10,12 @@ import time
 
 from ..theme import ACCENT, BG, BODY, look, MUTED, ROW, TEXT
 from ..config import CACHE_DIR
-from ..cover import (cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir, GLOW_REACH, glow_mask,
-                     glow_step, glow_strength, mixed, rounded)
-from ..coverfind import CoverFinder
+from ..cover import (cover_at_hand, cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir,
+                     GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded)
+from ..coverfind import cover_bytes, CoverFinder, covers_had
 from ..ear import Ear
 from ..library import LIBRARY, LISTEN_KINDS
-from ..util import cache_name, clock
+from ..util import cache_name, clock, find_files
 
 NOW_RADIUS = 12                  # the cover's corners
 PULSE_FPS = 15                   # the glow's frames a second, while it follows the beat
@@ -25,13 +25,14 @@ POS_KEPT = 3.0                   # ...and how long its word's good for (seconds)
 GLOW_MOST = 0.68                 # how much of the glow's colour shows at its strongest (on a beat)
 GRID_LIT = 0.75                  # ...and round the picked cover in Music's grid
 COVERS_KEPT = 12                 # songs' covers kept ready for Now playing (each COVER_SIDE a side at most)
-GRID_GAP = 18                    # Music's grid: the least between two covers (the menus' pixels)...
-GRID_WORDS = 52                  # ...the room under each for its name and its folder's, and the gap to the next row
-GRID_SIDE = (96, 176)            # ...a cover's side: no smaller, no bigger
+GRID_GAP = 16                    # Music's grid: the least between two covers (the menus' pixels)...
+GRID_WORDS = 38                  # ...the room under each for its name, and the gap to the next row
+GRID_SIDE = (96, 190)            # ...a cover's side: no smaller, no bigger
 GRID_RADIUS = 10                 # ...its corners
-GRID_RAISED = 5                  # ...how much bigger the picked one is, each way
-GRID_GLOW = 13                   # ...and how far its glow reaches
+GRID_RAISED = 4                  # ...how much bigger the picked one is, each way
+GRID_GLOW = 9                    # ...and how far its glow reaches
 GRID_AHEAD = 2                   # rows below the ones on the screen whose covers are got ready too
+SONGS_FRESH = 60.0               # seconds a list of this one's songs, made for another of yours, is good for
 TILES_KEPT = 80                  # covers kept ready at the grid's size
 GRID_IDLE = 10.0                 # seconds off the grid before the thread that gets them ready stops
 
@@ -51,7 +52,9 @@ class MusicScreen:
     song_tiles = None            # the grid's covers: {song: which of the tiles is its, or None: it has no cover}
     tiles = None                 # ...{which: (the picture at the grid's size, its glow's colour)}, the ones lately used
     tiles_busy = False           # ...and that there's a thread getting them ready
-    cover_finder = None          # finding covers on the internet for the songs with none (Y on the grid), once asked
+    cover_finder = None          # finding covers for the songs with none (Y on the grid), once asked
+    songs_named = None           # this one's songs by name and size, for another of yours that asks for covers:
+                                 # (the list they were made from, {(name, size): path})
     ear = None                   # listening to the song for its beats (ear.py), while the glow follows them
     pulse_next = 0.0             # when the glow's next frame is due
     pos_off, pos_off_at = None, 0.0   # where the song is, less the clock (as the player last said, and when)
@@ -358,16 +361,56 @@ class MusicScreen:
         return tab.get("type") == "files" and tab.get("kind") == "audio" and bool(self.items.get(self.tab))
 
     def music_find_covers(self):
-        """Y on the grid: covers for the songs that have none, found on the internet (coverfind.py)."""
+        """Y on the grid: covers for the songs that have none, from your other Pietatos and the internet
+        (coverfind.py)."""
         if self.cover_finder is None:
-            self.cover_finder = CoverFinder()
+            self.cover_finder = CoverFinder(peers=self.saves_peers)
             self.cover_finder.on_change = self.music_changed
             self.cover_finder.on_found = self.music_cover_found
+            self.cover_finder.known = lambda path: bool((self.song_tiles or {}).get(path))
         f = self.cover_finder
         if f.busy:
             self.toast("Finding covers already", 2)
         elif f.start(it["src"] for it in self.tab_items() if it["kind"] == "audio"):
             self.toast("Finding covers for the songs with none", 3)
+
+    # -- covers, for another of your Pietatos that asks (Y on its Music) ------------------------------------------
+    def music_songs(self):
+        """This one's songs, by what says one's the same song as another Pietato's: {(file name in small letters,
+        size): path}. Looked for afresh if it's a while since (Music needn't have been opened here)."""
+        made, now = self.songs_named, time.monotonic()
+        if made is None or not 0 <= now - made[0] < SONGS_FRESH:
+            tab = next(t for t in LIBRARY if t.get("type") == "files" and t.get("kind") == "audio")
+            named = {}
+            for path in find_files(tab["dirs"], tab["exts"]):
+                try:
+                    named.setdefault((os.path.basename(path).lower(), os.path.getsize(path)), path)
+                except OSError:
+                    pass
+            made = self.songs_named = (now, named)
+        return made[1]
+
+    def web_covers(self, cmd):
+        """POST /api/covers (the control server's thread): another of yours lists songs of its own with no cover
+        ([[file name, size]]). Which of them this one has a cover for: their numbers in that list."""
+        if self.setting("share") == "Off" or not self.saves_peers(str(cmd.get("from") or "")):
+            return {"ok": False, "error": "Not one of yours"}
+        songs = cmd.get("songs")
+        if not isinstance(songs, list):
+            return {"ok": False, "error": "What's that?"}
+        return {"ok": True, "have": covers_had(songs, self.music_songs())}
+
+    def web_cover_file(self, name, size, asker):
+        """GET /api/covers/file: the cover this one has for that song (a JPEG's bytes), for another of yours; None:
+        it has none, or it isn't one of yours asking."""
+        if self.setting("share") == "Off" or not self.saves_peers(str(asker or "")):
+            return None
+        try:
+            path = self.music_songs().get((str(name or "").lower(), int(size)))
+            found = cover_at_hand(path) if path else None
+            return cover_bytes(found) if found else None
+        except (OSError, ValueError, TypeError):
+            return None
 
     def music_changed(self):
         """(The finder's thread.) It's got somewhere: the page drawn again."""
@@ -397,11 +440,11 @@ class MusicScreen:
         y = self.HEADER + GRID_GLOW + GRID_RAISED + 4  # (room over the top row for the picked one's glow)
         room = H - self.FOOTER - 2 - y
         cols = 3 if W < 560 else 4 if W < 800 else 5 if W < 1120 else 6
-        side = min(GRID_SIDE[1], (W - 48 - (cols - 1) * GRID_GAP) // cols)
+        side = min(GRID_SIDE[1], (W - 40 - (cols - 1) * GRID_GAP) // cols)
         if room // (side + GRID_WORDS) < 2 and room // 2 - GRID_WORDS >= GRID_SIDE[0]:
             side = room // 2 - GRID_WORDS
         side = max(GRID_SIDE[0], side)
-        gap = max(GRID_GAP, min(28, (W - 48 - cols * side) // (cols - 1)))
+        gap = max(GRID_GAP, min(28, (W - 40 - cols * side) // (cols - 1)))
         return {"cols": cols, "rows": max(1, room // (side + GRID_WORDS)), "side": side,
                 "x": (W - cols * side - (cols - 1) * gap) // 2, "y": y, "dx": side + gap, "dy": side + GRID_WORDS}
 
@@ -485,8 +528,8 @@ class MusicScreen:
             self.tiles_busy = False
 
     def render_music(self):
-        """Music: a grid of its songs' covers, each with its name (and the folder it's in) under it; the picked one
-        a little bigger, with a glow in its cover's colour; the one that's playing marked."""
+        """Music: a grid of its songs' covers, each with its name under it; the picked one a little bigger, with a
+        glow in its cover's colour all round it; the one that's playing marked."""
         from PIL import Image as Plain
         from ..fine import made_fine, scale
         F = self.fonts
@@ -510,7 +553,7 @@ class MusicScreen:
                 made = getattr(self, "grid_glow", None)
                 if made is None or made[0] != (big, s):
                     made = self.grid_glow = ((big, s), glow_mask(big * s, GRID_GLOW * s, GRID_RADIUS * s))
-                at = (x - GRID_RAISED - GRID_GLOW, y - GRID_RAISED - 2 - GRID_GLOW)
+                at = (x - GRID_RAISED - GRID_GLOW, y - GRID_RAISED - GRID_GLOW)
                 img.paste(made_fine(Plain.new("RGB", made[1].size, tiles[i][1] or ACCENT), s), at,
                           made_fine(made[1].point(lambda v: int(v * GRID_LIT)), s))
         half = (lay["dx"] - side) // 2
@@ -518,8 +561,8 @@ class MusicScreen:
             it = items[i]
             self.tappable((x - half, y - 6, x + side + half, y + lay["dy"] - 6), "sel", "sels", self.tab, i)
             pic = tiles[i][0]
-            if i == sel:                               # (a little bigger, and a touch higher)
-                x0, y0, w = x - GRID_RAISED, y - GRID_RAISED - 2, big
+            if i == sel:                               # (a little bigger, about its own middle)
+                x0, y0, w = x - GRID_RAISED, y - GRID_RAISED, big
                 pic = None if pic is None else pic.resize((big * s, big * s), Plain.LANCZOS)
             else:
                 x0, y0, w = x, y, side
@@ -531,12 +574,8 @@ class MusicScreen:
                 self.cover_sign(d, x0 + w / 2, y0 + w / 2, "note")
             on = playing is not None and it["key"] == playing
             name = self.fit(d, ("♪ " if on else "") + it["title"], F["small_b"], side)
-            d.text((x, y + side + 17), name, font=F["small_b"],
+            d.text((x, y + side + 21), name, font=F["small_b"],     # (under the picked one's glow, not in it)
                    fill=ACCENT if on else TEXT if i == sel else BODY, anchor="lm")
-            folder = os.path.basename(os.path.dirname(it["src"]))
-            if folder and folder != "Music":
-                d.text((x, y + side + 35), self.fit(d, folder, F["label"], side), font=F["label"], fill=MUTED,
-                       anchor="lm")
         self.scrollbar(d, top, rows, total, lay["y"], lay["y"] + rows * lay["dy"] - GRID_WORDS)
         f = self.cover_finder
         self.footer(d, self.music_hints(self.list_hints()), right=f"Finding covers: {f.done} of {f.total}"

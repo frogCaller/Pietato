@@ -325,7 +325,7 @@ PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "comp
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party",     # Pietatos ask these
-              "/api/band", "/api/cookie")
+              "/api/band", "/api/cookie", "/api/covers", "/api/covers/file")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1258,6 +1258,26 @@ def group_chat():
     since = request.args.get("since", "0")[:24]
     return pi_reply(ask_pi("GET", "/group?" + urllib.parse.urlencode({"since": since, "from": request.remote_addr or ""}),
                            timeout=8))
+
+
+# ---- songs' covers, for your other Pietatos (pitato/coverfind.py, screens/music.py) ---------------------------------
+@app.post("/api/covers")
+def covers_have():
+    """Another of your Pietatos lists songs it has no cover for ([[file name, size]]: Y on its Music): which of them
+    this one has a cover for. Pietato answers only one of yours (one it's heard lately, at this address)."""
+    body = request.get_json(silent=True)
+    songs = body.get("songs") if isinstance(body, dict) else None
+    if not isinstance(songs, list) or len(songs) > 200:
+        return jsonify(ok=False, error="What's that?"), 400
+    return pi_reply(ask_pi("POST", "/covers", {"songs": songs, "from": request.remote_addr}, timeout=20))
+
+
+@app.get("/api/covers/file")
+def covers_file():
+    """...and one of those covers (a JPEG), for it to keep."""
+    q = urllib.parse.urlencode({"name": request.args.get("name", "")[:300], "size": request.args.get("size", "")[:20],
+                                "from": request.remote_addr or ""})
+    return pi_reply(ask_pi("GET", "/coverfile?" + q, timeout=20))
 
 
 # ---- the cookie between your Pietatos (pitato/cookie.py, screens/cookie.py) -------------------------------------------

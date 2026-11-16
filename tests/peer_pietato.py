@@ -20,7 +20,8 @@ beacon, as JSON, heard as if it came from this machine's own address), cookie (t
 for it), quit. Its emulator,
 asked to open its game (nethost, watchhost), says it has (at 5442 and 5444), and the ask goes in the log.
 PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone. PITATO_COOKIE_BOT: what its
-Bot throws for the cookie (r, p or s), every time; PITATO_COOKIE_GAP: seconds between one Pietato's tries for it."""
+Bot throws for the cookie (r, p or s), every time; PITATO_COOKIE_GAP: seconds between one Pietato's tries for it.
+PITATO_OWN_MUSIC: its songs are the ones in its own home's Music (not this machine's)."""
 import json
 import os
 import sys
@@ -76,6 +77,8 @@ if os.environ.get("PITATO_PILOT_GONE"):
     g.PILOT_GONE = float(os.environ["PITATO_PILOT_GONE"])
 if os.environ.get("PITATO_COOKIE_GAP"):
     g.COOKIE_GAP = float(os.environ["PITATO_COOKIE_GAP"])
+if os.environ.get("PITATO_OWN_MUSIC"):
+    next(t for t in g.LIBRARY if t["name"] == "Music")["dirs"] = [HOME + "/Music"]
 
 
 # ---- its emulator: started, and its saves written as it ends -------------------------------------------------------

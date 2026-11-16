@@ -92,8 +92,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
   Radio       - real stations by genre, popular near you, or search by name (from the free
                 Radio Browser directory), and your own list in static/radio.txt
                 Music's songs are a grid of their covers (cover.jpg or folder.jpg in a song's folder, or
-                the picture inside its file: pitato/cover.py; Y there finds covers for the songs with
-                none, on MusicBrainz and the Cover Art Archive: pitato/coverfind.py). Now playing (music or
+                the picture inside its file: pitato/cover.py; Y there gets covers for the songs with
+                none, from your other Pietatos, then online: pitato/coverfind.py). Now playing (music or
                 radio) has the cover big, with a glow in its colour that follows the beat while the
                 battery saver's off (pitato/ear.py). SELECT there puts on lofi art, a pixel-art scene on the whole
                 screen (a rainy window, a rooftop at dusk or a night train: each song or station has its

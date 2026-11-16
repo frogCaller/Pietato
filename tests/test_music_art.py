@@ -6,12 +6,16 @@ after each. Now playing: the cover on the left with its glow, a wash of it behin
 colour, the buttons (each tappable); a note for a song with no cover, a sign for a station; the glow following the
 beat with the battery saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off
 the page. Music's grid: every song a square with its cover (made small once and kept on disk, a folder's shared
-by its songs), its name and its folder's under it, the picked one bigger with a glow, the D-pad moving about it, A
+by its songs), its name under it, the picked one bigger with a glow all round it, the D-pad moving about it, A
 playing as before, only the covers near the screen looked at, another tab still a list. Covers from the internet
-(Y on the grid): who a song's by from its tags or its file's name, MusicBrainz asked which record it's on (the sure
-match only, no compilation's, never more than a question a second), the Cover Art Archive for its picture, a
-record's songs sharing one, what isn't found not asked about again for a month, the WiFi down said. A light page,
-and a screen drawn finely. Last, for real: FFmpeg listening to a song with a kick drum every half second."""
+(Y on the grid): a song's name and who it's by from its tags or its file's name (either way round), the iTunes
+Store's search asked first (the likeliest of its answers, never more than twenty questions a minute, told that's too
+many: once more, later), then MusicBrainz for which record it's on (the sure match only, no compilation's, never more
+than a question a second) and the Cover Art Archive for its picture, a record's songs sharing one, what isn't found
+not asked about again for a month, the WiFi down said. Your other
+Pietatos first: asked which of the songs they have covers for (the same file name and size), those copied here, only
+one of yours answered. A light page, and a screen drawn finely. Last, for real: another Pietato (peer_pietato.py)
+asked for its covers through its web page, and FFmpeg listening to a song with a kick drum every half second."""
 import io, os, shutil, subprocess, sys, threading, time, types
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
@@ -559,17 +563,28 @@ check(f"...kept on disk at the grid's size: one for the folder's cover (its thre
       and m.song_tiles[SONGS[0]] == m.song_tiles[SONGS[1]] == m.song_tiles[SONG] != m.song_tiles[INSIDE]
       and m.song_tiles[BARE] is None and len(runs) == 0)
 x0, y0 = at(gl, 0)
-beside, plain = G[y0 + gs // 2, x0 - M.GRID_RAISED - 5], G[y1 + gs // 2, x1 + gs + 8]
-check(f"the picked one: a little bigger, a glow in its cover's colour round it {tuple(beside)} (the others: none "
-      f"{tuple(plain)})", near(G[y0 - 4, x0 + gs // 2], (250, 150, 62), 30) and beside[0] > beside[2] + 40
-      and near(plain, g.BG, 4) and near(G[y1 - 4, x1 + gs // 2], g.BG, 4))
+off, mid = M.GRID_RAISED + 3, gs // 2                   # (three pixels out from the picked cover, on each side of it)
+lit = [G[y0 + mid, x0 - off], G[y0 + mid, x0 + gs - 1 + off], G[y0 - off, x0 + mid], G[y0 + gs - 1 + off, x0 + mid]]
+plain = G[y1 + mid, x1 + gs + 8]
+check(f"the picked one: a little bigger, a glow in its cover's colour round it, the same on all four sides "
+      f"{[tuple(int(v) for v in p) for p in lit]} (the others: none {tuple(plain)})",
+      near(G[y0 - M.GRID_RAISED + 1, x0 + mid], (250, 150, 62), 30)
+      and all(p[0] > p[2] + 25 and near(p, lit[0], 10) for p in lit)
+      and near(G[y0 + mid, x0 - M.GRID_RAISED - M.GRID_GLOW - 2], g.BG, 6)
+      and near(plain, g.BG, 4) and near(G[y1 - 4, x1 + mid], g.BG, 4))
+masks = [np.asarray(C.glow_mask(*sized)).astype(int) for sized in (
+    (gs + 2 * M.GRID_RAISED, M.GRID_GLOW, M.GRID_RADIUS), (230, C.GLOW_REACH, M.NOW_RADIUS), (460, 44, 24))]
+check(f"...the glow itself, as it's made (the grid's, Now playing's): the same left and right, above and below, on "
+      f"any Pillow, and fading to nothing at its edge ({[int(a[0].max()) for a in masks]} of 255)",
+      all(np.abs(a - a[:, ::-1]).max() == 0 and np.abs(a - a[::-1]).max() == 0 and a[0].max() <= 8
+          and a.max() == 255 for a in masks))
 x2, y2 = at(gl, 2)
-check("each one's name under it, and the folder it's in; the one that's playing marked in the accent's colour",
-      ink(G, (x0, y0 + gs + 8, x0 + gs, y0 + gs + 26), g.TEXT)
-      and ink(G, (x1, y1 + gs + 8, x1 + gs, y1 + gs + 26), g.BODY)
-      and ink(G, (x2, y2 + gs + 8, x2 + gs, y2 + gs + 26), g.ACCENT, 30)
-      and not ink(G, (x1, y1 + gs + 8, x1 + gs, y1 + gs + 26), g.ACCENT, 30)
-      and ink(G, (x1, y1 + gs + 27, x1 + gs, y1 + gs + 44), g.MUTED))
+check("each one's name under it, clear of the glow; the one that's playing marked in the accent's colour",
+      ink(G, (x0, y0 + gs + 14, x0 + gs, y0 + gs + 30), g.TEXT)
+      and ink(G, (x1, y1 + gs + 14, x1 + gs, y1 + gs + 30), g.BODY)
+      and ink(G, (x2, y2 + gs + 14, x2 + gs, y2 + gs + 30), g.ACCENT, 30)
+      and not ink(G, (x1, y1 + gs + 14, x1 + gs, y1 + gs + 30), g.ACCENT, 30)
+      and not ink(G, (x0, y0 + gs + M.GRID_RAISED + M.GRID_GLOW, x0 + gs, y0 + gs + 14), g.TEXT, 60))
 taps = [(box, what) for box, what in m.taps if what[0] == "sel"]
 check("a tap on a cover picks that song", [w[-1] for _, w in taps] == [0, 1, 2, 3, 4]
       and all(b[0] <= at(gl, i)[0] and b[2] >= at(gl, i)[0] + gs and b[1] <= at(gl, i)[1]
@@ -648,17 +663,21 @@ import json, urllib.error, urllib.parse   # noqa: E401, E402
 names = {n: CF.from_name(f"/m/{n}.mp3") for n in (
     "Paper Lanterns - Green Hours", "03 Harbour Lights", "3. The Tide - Low", "99 Luftballons", "01_Artist_-_Song",
     "50 Cent - In Da Club", "12 - Somebody - A Song - Live")}
-check(f"who a song's by and its name, from its file's name: {list(names.values())[:3]}", names == {
+check(f"the two sides of a song's file's name, a track number left off: {list(names.values())[:3]}", names == {
     "Paper Lanterns - Green Hours": ("Paper Lanterns", "Green Hours"), "03 Harbour Lights": ("", "Harbour Lights"),
     "3. The Tide - Low": ("The Tide", "Low"), "99 Luftballons": ("", "99 Luftballons"),
     "01_Artist_-_Song": ("Artist", "Song"), "50 Cent - In Da Club": ("50 Cent", "In Da Club"),
     "12 - Somebody - A Song - Live": ("Somebody", "A Song - Live")})
-check("two names being one: marks, capitals and what's in brackets don't matter; a short one inside a longer isn't it",
+check("two names being one: marks, capitals, what's in brackets and who else is on it don't matter; a short one "
+      "inside a longer isn't it",
       CF.same("Nevermind", "nevermind (Remastered 2011)") and CF.same("Sgt. Pepper's Lonely Hearts Club Band",
                                                                      "Sgt Peppers Lonely Hearts Club Band")
       and CF.same("Beyoncé", "Beyonce") and not CF.same("Queen", "Queen II")
       and not CF.same("Low Tide", "Low Tide Blues")
-      and not CF.same("", "") and not CF.same("Abbey Road", "Let It Be"))
+      and not CF.same("", "") and not CF.same("Abbey Road", "Let It Be")
+      and CF.same("Stay ft. Somebody", "Stay (feat. Somebody Else)")
+      and CF.bare("Stay (Live) [Official Video]") == "Stay"
+      and CF.bare("(Untitled)") == "(Untitled)" and CF.bare("Lift Off") == "Lift Off")
 check(f"a name as the search takes it: {CF.said('AC/DC: Back in Black (Live)')}", CF.said('AC/DC: Back in Black (Live)')
       == '"AC\\/DC\\: Back in Black"' and CF.said('"Heroes"') == '"\\"Heroes\\""')
 TAGGED = S + "/home/u/Music/Tagged"
@@ -672,12 +691,28 @@ for out, tags in ((T1, ("The Night Ferries", "Low Tide", "Night Bus")), (T2, ("T
              check=True)
 picture(TAGGED + "/one.png", "grey")
 picture(TAGGED + "/two.png", "grey")                    # (two pictures, neither named for it: not a cover)
-check(f"a song's tags, as ffprobe reads them ({CF.song_tags(T1)}); none: its name says what it can ({CF.wanted(T3)})",
+
+
+def tagged(**tags):
+    """A pretend ffprobe: these are the song's tags."""
+    return lambda *a, **k: type("Ran", (), {"stdout": json.dumps({"format": {"tags": tags}}).encode()})
+
+
+check(f"a song's tags, as ffprobe reads them ({CF.song_tags(T1)}); none: its name says what it can, which side of "
+      f"it is which not known ({CF.wanted(T3)})",
       CF.song_tags(T1) == {"artist": "The Night Ferries", "album": "Low Tide", "title": "Night Bus"}
-      and CF.wanted(T2) == ("The Night Ferries", "Low Tide", "b")
-      and CF.wanted(T3) == ("Paper Lanterns", "", "Green Hours")
-      and CF.wanted(T4) == ("", "", "track7")
+      and CF.wanted(T2) == ("The Night Ferries", "Low Tide", "b", False)
+      and CF.wanted(T3) == ("Paper Lanterns", "", "Green Hours", True)
+      and CF.wanted(T4) == ("", "", "track7", False)
       and CF.song_tags(S + "/gone.mp3") == {"artist": "", "album": "", "title": ""})
+band, one = ("The Band", "", "Song One", False), "/m/Song One - The Band.mp3"
+check("...a tag for one of the two: the other is the side of the name that isn't it, whichever way round the name is",
+      CF.wanted(one, tagged(artist="The Band")) == band and CF.wanted(one, tagged(title="Song One")) == band
+      and CF.wanted("/m/The Band - Song One.mp3", tagged(artist="The Band")) == band
+      and CF.wanted("/m/The Band - Song One.mp3", tagged(title="Song One")) == band
+      and CF.wanted("/m/07 Song One.mp3", tagged(artist="The Band")) == band
+      and CF.wanted("/m/Song One.mp3", tagged(title="Song One")) == ("", "", "Song One", False)
+      and CF.wanted(one, tagged(artist="Them", title="It", album="Theirs")) == ("Them", "Theirs", "It", False))
 
 
 def jpeg(kind):
@@ -701,7 +736,53 @@ SONGS_SAID = {"recordings": [
             "id": "rg-hits", "primary-type": "Album", "secondary-types": ["Compilation"]}},
         {"id": "l2", "title": "Green Hours", "release-group": {"id": "rg-single", "primary-type": "Single"}},
         {"id": "l3", "title": "Lanterns", "release-group": {"id": "rg-album", "primary-type": "Album"}}]}]}
-net, down = [], [False]
+
+
+def sold(who, name, art, record=""):
+    """One of the iTunes Store's answers, as its search gives them (the parts that are looked at)."""
+    return {"wrapperType": "track", "kind": "song", "artistName": who, "trackName": name, "collectionName": record,
+            "artworkUrl100": f"https://is1-ssl.mzstatic.com/image/thumb/Music/{art}/100x100bb.jpg"}
+
+
+def big(art):
+    return f"https://is1-ssl.mzstatic.com/image/thumb/Music/{art}/600x600bb.jpg"
+
+
+DAYS = [sold("Some Tribute Band", "Blinding Days (Karaoke Version)", "karaoke"),
+        sold("The Weekenders", "Blinding Days", "days", "After Days")]
+RECORDS = [sold("Various Artists", "", "various", "After Days"),
+           sold("The Weekenders", "", "deluxe", "After Days (Deluxe)"),
+           sold("The Weekenders", "", "before", "Before Days")]
+LIKE = [sold("Somebody Else", "Another Song", "neither"), sold("The Weekenders", "Deep Cut", "theirs"),
+        sold("The Wknd", "Blinding Days", "named")]
+asks = []
+check("the iTunes Store's answers for a song: the one of that name by that artist, its picture at the size a cover's "
+      "kept", CF.shop_art("The Weekenders", "", "Blinding Days (Official Video)", False,
+                          lambda w, q: asks.append((w, q)) or DAYS) == big("days")
+      and asks == [("song", "The Weekenders Blinding Days")])
+check("...a file's name may have the two either way round (\"Song - Artist\"); what tags say isn't turned round",
+      CF.shop_art("Blinding Days", "", "The Weekenders", True, lambda w, q: DAYS) == big("days")
+      and CF.shop_art("Blinding Days", "", "The Weekenders", False, lambda w, q: DAYS) is None)
+check("...none by that name and artist: that name by whoever (who it's by, spelt another way) before another of the "
+      "artist's; nothing like it, no picture, or nobody it's by: none",
+      CF.shop_art("The Weekenders", "", "Blinding Days", False, lambda w, q: LIKE) == big("named")
+      and CF.shop_art("The Weekenders", "", "Blinding Days", False, lambda w, q: LIKE[:2]) == big("theirs")
+      and CF.shop_art("The Weekenders", "", "Blinding Days", False, lambda w, q: LIKE[:1]) is None
+      and CF.shop_art("The Weekenders", "", "Blinding Days", False, lambda w, q: [
+          dict(DAYS[1], artworkUrl100="http://elsewhere/100x100bb.jpg"),
+          {"artistName": "The Weekenders", "trackName": "Blinding Days"}]) is None
+      and CF.shop_art("", "", "Blinding Days", False, lambda w, q: 1 / 0) is None)
+asks.clear()
+check("...a record its tags name: that record's picture, by that artist before anybody's; no such record there: the "
+      "song's asked about", CF.shop_art("The Weekenders", "After Days", "Hardest", False,
+                                        lambda w, q: asks.append((w, q)) or RECORDS) == big("deluxe")
+      and asks == [("album", "The Weekenders After Days")]
+      and CF.shop_art("The Weekenders", "After Days", "Hardest", False, lambda w, q: RECORDS[:1]) == big("various")
+      and CF.shop_art("The Weekenders", "Days Gone", "Blinding Days", False,
+                      lambda w, q: RECORDS if w == "album" else DAYS) == big("days"))
+STORE = {}                                             # what the pretend Store has: {(what, words): its answers}
+PICTURES = {"days": "sun", "deluxe": "hills", "home": "sun"}
+net, down, busy = [], [False], [0]
 
 
 def internet(url):
@@ -709,21 +790,32 @@ def internet(url):
     if down[0]:
         raise urllib.error.URLError("no route to host")
     q = urllib.parse.unquote(url)
+    if url.startswith("https://itunes.apple.com/search?"):
+        if busy[0]:                                    # (too many questions, it says)
+            busy[0] -= 1
+            raise urllib.error.HTTPError(url, 403, "Forbidden", None, None)
+        said = dict(urllib.parse.parse_qsl(url.split("?", 1)[1]))
+        got = STORE.get((said["entity"], said["term"]), []) if said["media"] == "music" else []
+        return json.dumps({"resultCount": len(got), "results": got}).encode()
+    if url.startswith("https://is1-ssl.mzstatic.com/") and url.endswith("/600x600bb.jpg"):
+        kind = PICTURES.get(url.split("/")[-2])
+        if kind:
+            return SUN if kind == "sun" else HILLS
     if "musicbrainz.org/ws/2/release-group?" in url:
         return json.dumps(GROUPS if 'releasegroup:"Low Tide"' in q and 'artist:"The Night Ferries"' in q
                           else {"release-groups": []}).encode()
     if "musicbrainz.org/ws/2/recording?" in url:
         return json.dumps(SONGS_SAID if 'recording:"Green Hours"' in q and 'artist:"Paper Lanterns"' in q
                           else {"recordings": []}).encode()
-    art = {"rg-low-tide": SUN, "rg-single": HILLS, "rg-album": None}
-    mbid = url.split("/release-group/")[1].split("/")[0]
-    if url.startswith("https://coverartarchive.org/release-group/") and url.endswith("/front-500") and art.get(mbid):
-        return art[mbid]
+    if url.startswith("https://coverartarchive.org/release-group/") and url.endswith("/front-500"):
+        art = {"rg-low-tide": SUN, "rg-single": HILLS}.get(url.split("/release-group/")[1].split("/")[0])
+        if art:
+            return art
     raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
 
 
 asks = []
-check(f"the records a song might be on: the one its tags name, by that artist, and sure enough "
+check(f"MusicBrainz: the records a song might be on: the one its tags name, by that artist, and sure enough "
       f"({CF.records('The Night Ferries', 'Low Tide', 'Night Bus', lambda w, q: asks.append((w, q)) or GROUPS)})",
       CF.records("The Night Ferries", "Low Tide", "Night Bus", lambda w, q: GROUPS) == ["rg-low-tide"]
       and asks == [("release-group", 'releasegroup:"Low Tide" AND artist:"The Night Ferries"')])
@@ -743,17 +835,22 @@ finder = CF.CoverFinder(fetch=internet, pause=nap, clock=lambda: clock[0])
 got_for, steps = [], []
 finder.on_found = got_for.append
 finder.on_change = lambda: steps.append(finder.done)
-check("Y's search, for five songs with no cover", finder.start([T1, T2, T3, T4, T5, SONG], thread=False)
-      and not finder.busy and finder.total == 6 and steps[-1] == 6)
+check("Y's search, for five songs with no cover, none of them the Store's", finder.start(
+    [T1, T2, T3, T4, T5, SONG], thread=False) and not finder.busy and finder.total == 6 and steps[-1] == 6)
 who = [u.split("/")[2] for u in net]
 check(f"...found for three of them ({finder.note!r}): {[os.path.basename(p) for p in got_for]}", got_for == [T1, T2, T3]
       and finder.found == 3 and finder.note == "Found covers for 3 songs")
-check(f"...MusicBrainz asked once for the record, the Cover Art Archive once for its picture, the record's second "
-      f"song not at all; a song with no album: its name; one nobody knows: asked, and none ({len(net)} in all)",
-      who == ["musicbrainz.org", "coverartarchive.org", "musicbrainz.org", "coverartarchive.org", "coverartarchive.org",
-              "musicbrainz.org"] and "release-group" in net[0] and net[1].endswith("/rg-low-tide/front-500")
-      and "recording" in net[2] and net[3].endswith("/rg-album/front-500") and net[4].endswith("/rg-single/front-500"))
-check(f"...never two questions to MusicBrainz within {CF.MB_GAP} s (it waited {naps})", naps == [CF.MB_GAP, CF.MB_GAP]
+STORE_, MB_, ART_ = "itunes.apple.com", "musicbrainz.org", "coverartarchive.org"
+check(f"...the Store asked first (for a record its tags name, then for the song); then MusicBrainz, once for the "
+      f"record, and the Cover Art Archive for its picture; the record's second song: nobody. A song with no album: "
+      f"by its name. One nobody knows: MusicBrainz asked with its name's two sides both ways round ({len(net)} in all)",
+      who == [STORE_, STORE_, MB_, ART_, STORE_, MB_, ART_, ART_, STORE_, MB_, MB_]
+      and "entity=album" in net[0] and "term=The%20Night%20Ferries%20Low%20Tide&" in net[0] and "entity=song" in net[1]
+      and "release-group" in net[2] and net[3].endswith("/rg-low-tide/front-500")
+      and "recording" in net[5] and net[6].endswith("/rg-album/front-500") and net[7].endswith("/rg-single/front-500")
+      and 'recording:"Nothing" AND artist:"Nobody"' in urllib.parse.unquote(net[9])
+      and 'recording:"Nobody" AND artist:"Nothing"' in urllib.parse.unquote(net[10]))
+check(f"...never two questions to MusicBrainz within {CF.MB_GAP} s (it waited {naps})", naps == [CF.MB_GAP] * 3
       and "Pietato/" in CF.agent()["User-Agent"] and "( https://github.com/" in CF.agent()["User-Agent"])
 f1, f2, f3 = C.found_file(T1), C.found_file(T2), C.found_file(T3)
 check("each kept where a song's cover is looked for: the record's two songs share the one picture",
@@ -766,21 +863,177 @@ check("...one with nothing to go by (no tags, a name that says nothing): not ask
 net.clear()
 finder.start([T1, T2, T3, T4, T5], thread=False)
 check(f"again: nothing to ask ({finder.note!r})", net == [] and finder.note == "No covers found for these songs")
-os.remove(C.found_file(T5)[:-4] + ".none")
-os.remove(C.found_file(T4)[:-4] + ".none")
+os.remove(C.found_file(T5)[:-4] + CF.MISS)
+os.remove(C.found_file(T4)[:-4] + CF.MISS)
 down[0] = True
 finder.start([T5, T4, T5, T5, T5, T5], thread=False)
-check(f"the WiFi down: it gives up after {CF.NET_GIVES_UP} with no answer, and says so ({finder.note!r}); nothing's "
-      f"put down as not found", len(net) == CF.NET_GIVES_UP
-      and finder.note == "Couldn't reach MusicBrainz. Check the WiFi"
-      and not CF.missed(T5))
+check(f"the WiFi down: it gives up after {CF.NET_GIVES_UP} songs with no answer from either, and says so "
+      f"({finder.note!r}); nothing's put down as not found", len(net) == 2 * CF.NET_GIVES_UP
+      and finder.note == "Couldn't look covers up. Check the WiFi" and not CF.missed(T5))
 down[0] = False
 bad = CF.CoverFinder(fetch=lambda url: b"<html>not a picture</html>" if "coverart" in url else internet(url),
                      pause=nap, clock=lambda: clock[0])
 os.remove(f1); os.remove(f2)
 bad.start([T1], thread=False)
 check("what comes back isn't a picture: not kept, none found", C.cover_file(T1) is None and bad.found == 0)
-os.remove(C.found_file(T1)[:-4] + ".none")
+os.remove(C.found_file(T1)[:-4] + CF.MISS)
+STORED = S + "/home/u/Music/Stored"                     # ...and songs the Store does know
+os.makedirs(STORED)
+V1, V2, V3, V4, V5 = (STORED + "/Blinding Days - The Weekenders.mp3", STORED + "/02 hardest.mp3",
+                      STORED + "/03 cheers.mp3", STORED + "/Home Song - Sombody Misspelt.mp3",
+                      STORED + "/Nobody - Heard Of.mp3")
+for out in (V1, V2, V3, V4, V5):
+    shutil.copy(BARE, out)
+TAGS = {V2: dict(artist="The Weekenders", album="After Days", title="Hardest To Love"),
+        V3: dict(artist="The Weekenders", album="After Days", title="Save Your Cheers")}
+STORE.update({("song", "Blinding Days The Weekenders"): DAYS, ("album", "The Weekenders After Days"): RECORDS,
+              ("song", "Home Song Sombody Misspelt"): [sold("Somebody Misspelled", "Home Song", "home")],
+              ("song", "Nobody Heard Of"): [sold("Somebody", "Something Else", "neither")]})
+open(C.found_file(V1)[:-4] + ".none", "w").close()      # (what the version before left by a song it couldn't find)
+net.clear(); naps.clear(); got_for.clear()
+shop = CF.CoverFinder(fetch=internet, run=lambda cmd, **k: tagged(**TAGS.get(cmd[-1], {}))(), pause=nap,
+                      clock=lambda: clock[0])
+shop.on_found = got_for.append
+shop.start([V1, V2, V3, V4, V5], thread=False)
+who = [u.split("/")[2] for u in net]
+check(f"songs the Store knows ({shop.note!r}): one question each and then its picture, a record's second song "
+      f"neither; one it has nothing like: MusicBrainz asked, and none",
+      got_for == [V1, V2, V3, V4] and shop.note == "Found covers for 4 songs" and CF.missed(V5)
+      and who == [STORE_, "is1-ssl.mzstatic.com"] * 3 + [STORE_, MB_, MB_]
+      and net[1] == big("days") and net[3] == big("deluxe") and net[5] == big("home"))
+check("...a file called \"Song - Artist\" has its cover (the last version's word that it has none isn't gone by), "
+      "the record's two songs share theirs, and a song whose artist's misspelt has one",
+      near(Image.open(C.found_file(V1)).convert("RGB").getpixel((300, 258)), (255, 226, 170), 20)
+      and os.path.samefile(C.found_file(V2), C.found_file(V3))
+      and near(Image.open(C.found_file(V2)).convert("RGB").getpixel((300, 300)), (55, 195, 110), 24)
+      and C.cover_file(V4) == C.found_file(V4) and naps == [CF.MB_GAP])
+os.remove(C.found_file(V5)[:-4] + CF.MISS)
+busy[0] = 1
+naps.clear()
+shop.start([V5], thread=False)
+check(f"the Store saying that's too many questions: left alone for {CF.SHOP_BUSY:.0f} s, then asked once more "
+      f"({naps})", [n for n in naps if n] == [CF.SHOP_BUSY, CF.MB_GAP] and CF.missed(V5) and shop.found == 0)
+os.remove(C.found_file(V5)[:-4] + CF.MISS)
+busy[0] = 99
+shop.start([V5, V5, V5, V5, V5], thread=False)
+check(f"...and still saying so: MusicBrainz is asked all the same, the song's not put down as having none, and it "
+      f"stops after {CF.NET_GIVES_UP} ({shop.note!r})", not CF.missed(V5) and shop.done == CF.NET_GIVES_UP
+      and shop.note == "Couldn't look covers up. Try again in a minute" and MB_ in net[-1])
+busy[0] = 0
+naps.clear()
+quick, waited = CF.CoverFinder(fetch=internet, pause=nap, clock=lambda: clock[0]), None
+for k in range(CF.SHOP_MOST + 2):
+    quick.shop("song", f"anything {k}")
+    if k == CF.SHOP_MOST - 1:
+        waited = list(naps)
+check(f"the Store's never asked more than {CF.SHOP_MOST} questions in a minute: that many straight off ({waited}), "
+      f"the next when the first is a minute old ({naps})", waited == [] and naps == [CF.SHOP_SPAN, 0.0])
+
+# ---- covers from your other Pietatos ----------------------------------------------------------------------------
+SHARED = S + "/home/u/Music/Shared"
+os.makedirs(SHARED)
+U1, U2, U3 = SHARED + "/one.mp3", SHARED + "/two.mp3", SHARED + "/Lost Song - Nobody.mp3"
+for k, out in enumerate((U1, U2, U3)):                  # (each a different length: its size says which it is)
+    real_run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", TONE, "-t", str(1 + k), "-b:a", "64k", out],
+             check=True)
+OTHER = S + "/other/Music"                              # another Pietato's Music: the same songs, and covers
+os.makedirs(OTHER + "/A")
+os.makedirs(OTHER + "/B")
+shutil.copy(U1, OTHER + "/A/ONE.mp3")                   # (the same song, whatever its name's capitals)
+shutil.copy(U2, OTHER + "/B/two.mp3")
+shutil.copy(BARE, OTHER + "/B/Lost Song - Nobody.mp3")  # (the name of one here, but not that song: another size)
+picture(OTHER + "/A/folder.jpg", "sun")
+other = media()
+del other.items[MUSIC]                                  # (Music never opened on it: it looks in its folder)
+TAB = g.LIBRARY[MUSIC]
+
+
+def theirs(answer, *a):
+    """The other Pietato answering: its Music is OTHER."""
+    was, TAB["dirs"] = TAB["dirs"], [OTHER]
+    try:
+        return answer(*a)
+    finally:
+        TAB["dirs"] = was
+
+
+picture(S + "/found.jpg", "hills")
+os.makedirs(os.path.dirname(C.found_file(OTHER + "/B/two.mp3")), exist_ok=True)
+shutil.copy(S + "/found.jpg", C.found_file(OTHER + "/B/two.mp3"))    # (one it found on the internet itself)
+check("a cover that's to hand, with no looking inside a file: the folder's, one found before; none: none",
+      C.cover_at_hand(OTHER + "/A/ONE.mp3") == OTHER + "/A/folder.jpg"
+      and C.cover_at_hand(OTHER + "/B/two.mp3") == C.found_file(OTHER + "/B/two.mp3")
+      and C.cover_at_hand(OTHER + "/B/Lost Song - Nobody.mp3") is None
+      and C.cover_at_hand(S + "/gone.mp3") is None)
+keys = [CF.song_key(p) for p in (U1, U2, U3)]
+yours = [True]
+other.saves_peers = lambda ip=None: yours[0] if ip is not None else []
+said = theirs(other.web_covers, {"songs": keys + [["nope.mp3", 5], "junk", ["x"]], "from": "10.0.0.7"})
+check(f"another of yours asks which of its songs this one has covers for (the same name and size): {said}",
+      said == {"ok": True, "have": [0, 1]} and keys[0] == ["one.mp3", os.path.getsize(U1)]
+      and MUSIC not in other.items)
+sent = other.web_cover_file("one.mp3", str(os.path.getsize(U1)), "10.0.0.7")
+check(f"...and for one of them: a JPEG, no bigger than a cover's kept ({len(sent or b'')} bytes)",
+      sent[:2] == b"\xff\xd8"
+      and Image.open(io.BytesIO(sent)).size == (600, 600)
+      and other.web_cover_file("Lost Song - Nobody.mp3", os.path.getsize(U3), "10.0.0.7") is None
+      and other.web_cover_file("lost song - nobody.mp3", os.path.getsize(BARE), "10.0.0.7") is None
+      and other.web_cover_file("../../etc/passwd", "5", "10.0.0.7") is None
+      and other.web_cover_file("one.mp3", "lots", "10.0.0.7") is None)
+yours[0] = False
+check("not one of yours asking, or sharing off: told so, and given nothing",
+      other.web_covers({"songs": keys, "from": "10.0.0.99"})["ok"] is False
+      and other.web_cover_file("one.mp3", os.path.getsize(U1), "10.0.0.99") is None
+      and (yours.__setitem__(0, True) or other.state["settings"].__setitem__("share", "Off")
+           or other.web_covers({"songs": keys, "from": "10.0.0.7"})["ok"] is False))
+other.state["settings"]["share"] = "On"
+posted, fetched = [], []
+
+
+def lan_post(url, body, timeout=None):
+    posted.append((url, len(body["songs"])))
+    if "10.0.0.9:" in url:
+        raise OSError("no route to host")
+    return theirs(other.web_covers, dict(body, **{"from": "10.0.0.7"}))
+
+
+def lan_fetch(url):
+    fetched.append(url)
+    if url.startswith("http://10.0.0.8:5432/api/covers/file?"):
+        q = dict(urllib.parse.parse_qsl(url.split("?", 1)[1]))
+        got = other.web_cover_file(q["name"], q["size"], "10.0.0.7")
+        if got is None:
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        return got
+    return internet(url)
+
+
+net.clear()
+lan = CF.CoverFinder(fetch=lan_fetch, post=lan_post, pause=nap, clock=lambda: clock[0],
+                     peers=lambda: [("http://10.0.0.9:5432", "Attic"), ("http://10.0.0.8:5432", "Kitchen")])
+got_for.clear()
+lan.on_found = got_for.append
+lan.known = lambda path: path == SONG
+lan.start([SONG, U1, U2, U3], thread=False)
+check(f"Y with others of yours on: they're asked first (one that doesn't answer: the next), what they have copied "
+      f"here ({lan.note!r})", got_for == [U1, U2] and lan.shared == 2 and lan.found == 2 and lan.done == 4
+      and lan.note == "Found covers for 2 songs, 2 from your other Pietatos"
+      and posted == [("http://10.0.0.9:5432/api/covers", 3), ("http://10.0.0.8:5432/api/covers", 3)])
+check("...the folder's cover from one, the one it had found from the other: kept here as these songs' covers",
+      C.cover_file(U1) == C.found_file(U1) and C.cover_file(U2) == C.found_file(U2)
+      and near(Image.open(C.found_file(U1)).convert("RGB").getpixel((300, 258)), (255, 226, 170), 20)
+      and near(Image.open(C.found_file(U2)).convert("RGB").getpixel((300, 300)), (55, 195, 110), 24))
+check(f"...only what's left is looked up on the internet ({len(net)} questions: nobody knows it), and the song known "
+      f"to have a cover wasn't looked at", [u.split("/")[2] for u in net] == [STORE_, MB_, MB_] and CF.missed(U3)
+      and len([u for u in fetched if "/api/covers/file" in u]) == 2)
+sys.path.append(ROOT + "/pitato")
+import webui  # noqa: E402
+web = webui.app.test_client()
+check("the web page takes these from your other Pietatos without its password, and only these",
+      "/api/covers" in webui.PEER_PATHS and "/api/covers/file" in webui.PEER_PATHS
+      and web.post("/api/covers", json={"songs": "all of them"}).status_code == 400
+      and web.post("/api/covers", json={"songs": [["a", 1]] * 201}).status_code == 400
+      and web.post("/api/covers", data="x", content_type="text/plain").status_code == 400)
 
 # Y on the grid
 m.items[MUSIC] = [g.item(p, g.title_of(p), "audio", p) for p in (T1, T2, T3, T4)]
@@ -794,7 +1047,8 @@ hints = [w[1] for _, w in m.taps if w[0] == "keys"]
 check(f"the grid's buttons: Y finds covers ({hints})", "y" in hints and "a" in hints and "b" in hints
       and near(Y0[y1 + 6, x1 + 20], g.ROW, 6))
 made_finders = []
-M.CoverFinder = lambda: made_finders.append(CF.CoverFinder(fetch=internet, pause=lambda s: None)) or made_finders[-1]
+M.CoverFinder = lambda **kw: made_finders.append(
+    CF.CoverFinder(fetch=internet, pause=lambda s: None, **kw)) or made_finders[-1]
 m.press("y")
 end = time.time() + 10
 while m.cover_finder.busy and time.time() < end:
@@ -866,6 +1120,52 @@ check("Full screen apps: the wash to the foot of the screen, no status bar, no b
       not near(fa[474, 320], g.BG, 6) and not ink(fa, (0, 0, 640, 24), g.BODY, 30) and m.now_layout()["ay"] > ay)
 fine.set_scale(1)
 g.set_look("Dark")
+
+# ---- for real: another Pietato, asked through its web page -------------------------------------------------------
+TV = S + "/tv"
+os.makedirs(TV + "/Music/Tide")
+shutil.copy(U1, TV + "/Music/Tide/one.mp3")
+shutil.copy(U2, TV + "/Music/two.mp3")                  # (it has this song too, but no cover for it)
+picture(TV + "/Music/Tide/cover.jpg", "hills")
+os.remove(C.found_file(U1)); os.remove(C.found_file(U2))
+tv = subprocess.Popen([sys.executable, TESTS + "/peer_pietato.py", TV, S + "/tv.log", "tv", "http://127.0.0.1:1",
+                       "none"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
+                      env=dict(os.environ, PITATO_OWN_MUSIC="1"))
+try:
+    line = tv.stdout.readline().split()
+    tv_url = line[1] if line[:1] == ["READY"] else ""
+    keys = [CF.song_key(U1), CF.song_key(U2)]
+
+    def tell(words):
+        tv.stdin.write(words + "\n")
+        tv.stdin.flush()
+        return tv.stdout.readline().strip()
+
+    def tv_cover():
+        """Its cover for the first of them, asked for as the finder asks (a JPEG, or what it says instead)."""
+        try:
+            return CF.fetch(f"{tv_url}/api/covers/file?" + urllib.parse.urlencode({"name": "one.mp3",
+                                                                                   "size": keys[0][1]}))
+        except urllib.error.HTTPError as ex:
+            return ex.code
+
+    tell("peer http://10.0.0.9:5432 Attic")                # (its only other Pietato: not at this address)
+    first = CF.post_json(tv_url + "/api/covers", {"songs": keys}, timeout=10)
+    check(f"another Pietato up ({tv_url}); this isn't one of its own asking: it says nothing of its covers ({first})",
+          bool(tv_url) and first.get("ok") is False and "have" not in first and tv_cover() == 404)
+    tell("hear " + json.dumps(dict(m.share_beacon("Den", full=True), port=5432)))
+    net.clear()
+    real = CF.CoverFinder(fetch=lambda url: CF.fetch(url) if url.startswith(tv_url) else internet(url),
+                          pause=lambda secs: None, peers=lambda: [(tv_url, "tv")])
+    real.start([U1, U2], thread=False)
+    check(f"...heard it: asked through its web page (Music never opened there), the cover it has for one of the two "
+          f"comes over ({real.note!r})", real.shared == 1 and real.found == 1
+          and real.note == "Found covers for 1 song, 1 from your other Pietatos"
+          and C.cover_file(U1) == C.found_file(U1)
+          and near(Image.open(C.found_file(U1)).convert("RGB").getpixel((300, 300)), (55, 195, 110), 24)
+          and C.cover_file(U2) is None and tv_cover()[:2] == b"\xff\xd8" and net == [])
+finally:
+    tv.kill()
 
 # ---- for real: FFmpeg, listening --------------------------------------------------------------------------------
 M.Ear = E.Ear

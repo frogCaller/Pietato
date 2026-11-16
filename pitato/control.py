@@ -133,6 +133,10 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_shared())
                 if u.path == "/saves":                 # (a game's saves, for your other Pietatos)
                     return self.reply(200, media.web_saves(q.get("game")))
+                if u.path == "/coverfile":             # (a song's cover, for another of yours that has none for it)
+                    jpeg = media.web_cover_file(q.get("name"), q.get("size"), q.get("from"))
+                    return self.reply(200, jpeg, "image/jpeg") if jpeg else \
+                        self.reply(404, {"error": "No cover for that song here"})
                 if u.path == "/handoff/file":          # (the file a key opens, for another of your Pietatos)
                     path = media.web_handoff_file(q.get("token", ""))
                     return self.reply(200, {"path": path}) if path else self.reply(404, {"error": "No such file"})
@@ -250,6 +254,12 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_group(cmd))
                 except Exception as ex:
                     print(f"group chat: {ex!r}", flush=True)
+                    return self.reply(500, {"error": "Something went wrong on the Pi"})
+            if cmd["cmd"] == "covers":                 # another of yours asks which covers this one has: answered
+                try:                                   # here, off the main loop
+                    return self.reply(200, media.web_covers(cmd))
+                except Exception as ex:
+                    print(f"covers: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "cookie":                 # another of yours tries for the cookie: answered here (it
                 try:                                   # may wait a few seconds for your throw), off the main loop

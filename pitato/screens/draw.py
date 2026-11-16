@@ -964,8 +964,8 @@ class DrawScreen:
                 ("Music", [("PAD", "Move (hold)"), ("A", "Play"), ("Y", "Find covers"), ("START", "Now playing"),
                            ("L R", "Switch tab"), ("B", "Home"), ("HOME", "and ◀: Terminal")]),
                 ("Covers", [("", "A song's cover: cover.jpg or"), ("", "folder.jpg in its folder, or"),
-                            ("", "the picture inside its file."), ("", "Y looks up the rest online,"),
-                            ("", "on MusicBrainz, by the artist"), ("", "and the album or song name")]),
+                            ("", "the picture inside its file."), ("", "Y gets the rest: from your"),
+                            ("", "other Pietatos, then online,"), ("", "by song and artist name")]),
             ]
         elif self.help_from == "now":
             target = self.handoff_target() if self.media_sendable() else None
