@@ -169,6 +169,98 @@ for k in range(0, len(hum), 960):
 B.feed(bytes(4 * RATE), 10.0)
 check(f"...none in a steady hum, or silence ({found})", found == [])
 
+
+def band_noise(n, lo, hi, rng):
+    """Noise with nothing in it but what's between lo and hi (Hz): n samples, as loud as 1 at its loudest."""
+    spec = np.fft.rfft(rng.standard_normal(n))
+    f = np.fft.rfftfreq(n, 1.0 / RATE)
+    spec[(f < lo) | (f > hi)] = 0
+    x = np.fft.irfft(spec, n)
+    return x / np.abs(x).max()
+
+
+def drums(secs, seed=2):
+    """A drum kit of sorts: a kick each half second (as kicks' are), a snare between every other pair of them (a
+    burst of noise in the middle of what's heard), a hi-hat between a kick and a snare (a shorter one at the top of
+    it), over a tune's hum and some hiss. The samples, and when each is hit: {"bass": [...], "mid": [...], "high"}."""
+    rng = np.random.default_rng(seed)
+    sig, kick = kicks(secs, seed=seed)
+    hits = {"bass": list(kick), "mid": list(np.arange(0.75, secs - 0.2, 1.0)),
+            "high": list(np.arange(0.375, secs - 0.2, 0.5))}
+    for part, lo, hi, long, loud in (("mid", 1800.0, 4500.0, 0.08, 0.5), ("high", 8000.0, 14000.0, 0.04, 0.4)):
+        for at in hits[part]:
+            a, n = int(at * RATE), int(long * RATE)
+            sig[a:a + n] += loud * band_noise(n, lo, hi, rng) * np.exp(-np.arange(n) / RATE / (long / 4))
+    return sig, hits
+
+
+sig, hits = drums(8)
+pcm = (np.stack([sig, sig], -1) * 0.5 * 32767).astype("<i2")
+plain, found = [], {"bass": [], "mid": [], "high": []}
+B0 = G.Beats(RATE, lambda when, s: plain.append(when))
+B = G.Beats(RATE, lambda when, s: found["bass"].append(when), lambda part, when, s: found[part].append(when))
+for k in range(0, len(pcm), 960):
+    B0.feed(pcm[k:k + 960].tobytes(), 100.0 + k / RATE)
+    B.feed(pcm[k:k + 960].tobytes(), 100.0 + k / RATE)
+off = {part: max([min(abs(w - 100.0 - b) for b in hits[part]) for w in got] or [9]) for part, got in found.items()}
+check(f"the rest of what's played, listened to the same way when that's asked for (your boards, each a beat of its "
+      f"own): the snare's beats found in the middle of it ({len(found['mid'])} of {len(hits['mid'])}), the hi-hat's "
+      f"at the top ({len(found['high'])} of {len(hits['high'])}), each as it's heard (the furthest out "
+      f"{max(off.values()) * 1000:.0f} ms) and none of them another's",
+      len(found["mid"]) >= len(hits["mid"]) - 2 and len(found["high"]) >= len(hits["high"]) - 3
+      and max(off.values()) < 0.025 and [b[0] for b in G.BEAT_BANDS] == ["mid", "high"]
+      and [n for n, _ in G.BEAT_NAMES] == ["bass", "mid", "high"])
+check(f"...the kick's as ever, with the rest listened to or not ({len(plain)} of {len(hits['bass'])})",
+      found["bass"] == plain and len(plain) >= len(hits["bass"]) - 1 and B0.more == [] and len(B.more) == 2)
+
+
+def kit(bars=8, bpm=110.0, seed=5):
+    """Drums as broad as real ones, a bar of sixteen steps over and over: a kick on steps 0, 8 and 10 with its click
+    (a moment of noise in the middle of what's heard), a snare on 4 and 12 (its wires: noise from the middle to the
+    top, for a while), a hi-hat on every other step (the top, briefly): so on the kick's and the snare's too. The
+    samples, how long a step is, and the steps each is hit on."""
+    rng = np.random.default_rng(seed)
+    step = 60.0 / bpm / 4
+    n = int(bars * 16 * step * RATE) + RATE
+    tt = np.arange(n) / RATE
+    sig = 0.02 * np.sin(2 * np.pi * 330 * tt) + 0.004 * rng.standard_normal(n)
+    steps = {"kick": (0, 8, 10), "snare": (4, 12), "hat": (0, 2, 4, 6, 8, 10, 12, 14)}
+
+    def put(at, snd):
+        a = int(at * RATE)
+        sig[a:a + len(snd)] += snd
+
+    for bar in range(bars):
+        for s in steps["kick"]:
+            x = np.arange(int(0.25 * RATE)) / RATE
+            put((bar * 16 + s) * step, 0.8 * np.sin(2 * np.pi * (50 * x + 3 * (1 - np.exp(-x * 30)))) * np.exp(-x * 14))
+            c = int(0.006 * RATE)
+            put((bar * 16 + s) * step, 0.25 * band_noise(c, 1500, 6000, rng) * np.exp(-np.arange(c) / RATE / 0.002))
+        for s in steps["snare"]:
+            w = int(0.18 * RATE)
+            put((bar * 16 + s) * step, 0.45 * band_noise(w, 800, 11000, rng) * np.exp(-np.arange(w) / RATE / 0.05))
+        for s in steps["hat"]:
+            h = int(0.04 * RATE)
+            put((bar * 16 + s) * step, 0.22 * band_noise(h, 6000, 16000, rng) * np.exp(-np.arange(h) / RATE / 0.012))
+    return sig / max(1.0, np.abs(sig).max()), step, steps
+
+
+sig, step, steps = kit()
+pcm = (np.stack([sig, sig], -1) * 0.6 * 32767).astype("<i2")
+found = {"bass": [], "mid": [], "high": []}
+B = G.Beats(RATE, lambda when, s: found["bass"].append(when), lambda part, when, s: found[part].append(when))
+for k in range(0, len(pcm), 960):
+    B.feed(pcm[k:k + 960].tobytes(), k / RATE)
+found = {part: [w for w in got if 32 * step < w < 128 * step] for part, got in found.items()}   # (once it's heard
+on = {part: sorted({round(w / step) % 16 for w in got}) for part, got in found.items()}           #  what's usual)
+late = max(abs(w / step - round(w / step)) * step for got in found.values() for w in got)
+check(f"real drums are heard all the way up (a kick's click in the middle, a snare's wires at the top), so each "
+      f"light's beat is its own: the kick's on the kick's steps {on['bass']}; the middle's just the snare's, which "
+      f"stays, and not the kick's click, which doesn't {on['mid']}; the top's just the hi-hats with no drum under "
+      f"them {on['high']} (the furthest from its step: {late * 1000:.0f} ms)",
+      set(steps["kick"]) <= set(on["bass"]) and on["mid"] == [4, 12] and on["high"] == [2, 6, 14] and late < 0.025
+      and len(found["mid"]) >= 11 and len(found["high"]) >= 16 and G.BEAT_WAIT == 2)
+
 # ---- the LEDs' bits -----------------------------------------------------------------------------------------------------
 grb = bytes(range(192))
 check("an LED's bytes as SPI sends them, three bits each of theirs: back as they were",

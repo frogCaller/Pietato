@@ -7,7 +7,9 @@ moment it's due by the sender's clock (not before), a game's colours (their blen
 gold, dark again once it's quiet; nothing for a packet that isn't one; one Pietato followed at a time. A strip of LEDs
 instead: all of them that colour. Then media mode: a light found is one of the places a game's colours and music's
 beats go, and music's played for its beat while one's there (unless Pulse to music is off: Apps > LED backlight has
-that, on a Pietato with no LEDs of its own too while a board's on); the song at start-up, which begins before the
+that, on a Pietato with no LEDs of its own too while a board's on); more than one of them, each following a beat of
+its own when that's picked (the kick's, the snare's, the hi-hat's, in turn by their names: X on their page, a row on
+the web page), your grids the kick's as ever; the song at start-up, which begins before the
 network's up and any board's heard (moved to that player once one is, and on it from the start the next time, the
 boards remembered); however many there are, a
 game's pictures go to a couple of them at a time, in turn (a beat to all at once), and a board that gets them only now
@@ -756,6 +758,9 @@ check("...a beat, and music's colour: every one of them, at once", came() == [2]
 out.event("beat", 1.0, lamps=False)
 check("...a beat that's not for the lights (Pulse to music off, where it's played): just the grid",
       came() == [1, 0, 0, 0, 0, 0])
+out.event("beat", 1.0, only=addrs[2:4])
+check("...one that's for two of the lights alone (each following a beat of its own): just those two",
+      came() == [0, 0, 1, 1, 0, 0])
 out.aim(addrs[:3], addrs[1:3])
 for _ in range(10):
     out.frame(pic)
@@ -968,6 +973,100 @@ check("...its other buttons: nothing (there's no card of LEDs to set here), B go
       and m.press_glow(page, "b", False) is False)
 m.press_glow(page, "a", False)
 check("...A again: on", m.setting("glow_beat") == "On" and m.glow_beats_wanted())
+
+# ---- more than one board: each a beat of its own (ESP32 boards: Different beats) -------------------------------------
+BOARDS = (("another", "10.0.0.81"), ("ESP32 77AA01", "10.0.0.82"), ("ESP32 A1B2C3", "127.0.0.1"))   # (by name)
+
+
+def boards_there(more=()):
+    for name, ip in BOARDS + tuple(more):
+        m.glow_lamps.take(G.lamp_packet(name, 1, 1.0), ip, m.glow_lamps.clock())
+
+
+class Sent(Out):
+    """(Where this one's beats go, noted: to its grids and all its lights, to its grids alone, or to which lights.)"""
+    lamps = ()
+
+    def event(self, name, strength=1.0, at=None, lamps=True, only=None):
+        self.said.append("all" if only is None and lamps else "grids" if only is None else sorted(a[0] for a in only))
+
+    def aim(self, to, lamps=()):
+        self.to, self.lamps = tuple(to), tuple(sorted(lamps))
+
+
+def beats():
+    """A beat in each part of the music, in turn: where each went."""
+    m.glow_seen = 0.0
+    m.glow_look(time.monotonic())
+    m.glow_out.said.clear()
+    m.glow_beat(time.monotonic(), 1.0)
+    kick = list(m.glow_out.said)
+    m.glow_out.said.clear()
+    m.glow_band("mid", time.monotonic(), 0.6)
+    snare = list(m.glow_out.said)
+    m.glow_out.said.clear()
+    m.glow_band("high", time.monotonic(), 0.4)
+    return kick, snare, list(m.glow_out.said)
+
+
+boards_there()
+m.glow_out = Sent()
+m.glow_page(page)
+rows = m.web_glow_now()["rows"]
+check(f"three boards, as it comes: all of them to the one beat, the kick drum's ({beats()}); its page has a button "
+      f"for it ({page.own_hints}), and the web page a row ({[(r['key'], r['value']) for r in rows]})",
+      m.glow_each_of() == [] and beats() == (["all"], [], []) and page.follows == []
+      and page.facts == [("ESP32 boards", "3"), ("Pulse to music", "On")]
+      and page.own_hints == [("A", "Pulse off"), ("X", "Different beats")]
+      and [(r["key"], r["value"], r["choices"]) for r in rows] == [
+          ("glow_beat", "On", ["On", "Off"]), ("glow_each", "The same beat", ["The same beat", "Different beats"])]
+      and not [b for b in m.web_lamps() if "beat" in b])
+m.msg = None
+m.press_glow(page, "x", False)
+m.glow_page(page)
+check(f"X: each a beat of its own, said ({m.msg!r}): the kick's, the snare's, the hi-hat's, in turn by their names "
+      f"({m.glow_each_of()})", m.setting("glow_each") == "Different beats" and m.msg == "ESP32 boards: different beats"
+      and m.glow_each_of() == [("10.0.0.81", "bass", "Kick"), ("10.0.0.82", "mid", "Snare"),
+                               ("127.0.0.1", "high", "Hi-hats")])
+check(f"...its page says so ({page.facts[-1]}), which under each board's name ({page.follows}), and X goes back "
+      f"({page.own_hints[-1]}); the web page too ({[b.get('beat') for b in m.web_lamps()]})",
+      page.facts == [("ESP32 boards", "3"), ("Pulse to music", "On"), ("Beats", "Different")]
+      and page.follows == ["Kick", "Snare", "Hi-hats"]
+      and page.own_hints == [("A", "Pulse off"), ("X", "The same beat")]
+      and [b.get("beat") for b in m.web_lamps()] == ["Kick", "Snare", "Hi-hats"]
+      and m.web_glow_now()["rows"][1]["value"] == "Different beats")
+got = beats()
+check(f"...a kick's beat: your grids as ever, and the first board alone; a snare's: the second; a hi-hat's: the "
+      f"third ({got})", got == (["grids", ["10.0.0.81"]], [["10.0.0.82"]], [["127.0.0.1"]]))
+boards_there([("zz top", "10.0.0.83")])
+got = beats()
+check(f"...a fourth board: the kick's again, round in turn ({got[0]})",
+      got == (["grids", ["10.0.0.81", "10.0.0.83"]], [["10.0.0.82"]], [["127.0.0.1"]])
+      and m.glow_each_of()[-1] == ("10.0.0.83", "bass", "Kick"))
+m.glow_pick("glow_beat", "Off")
+m.glow_page(page)
+got = beats()
+check(f"...Pulse to music off: none of them to any board ({got}), and no button for it ({page.own_hints})",
+      got == (["grids"], [], []) and page.own_hints == [("A", "Pulse on")] and m.glow_each_of() == [])
+m.glow_pick("glow_beat", "On")
+with m.glow_lamps.lock:                                # (all but one of them gone)
+    m.glow_lamps.heard = {ip: v for ip, v in m.glow_lamps.heard.items() if ip == "127.0.0.1"}
+m.glow_page(page)
+got = beats()
+check(f"...just the one board: the kick's, as ever, and nothing to pick ({got}; {page.own_hints}; "
+      f"{[r['key'] for r in m.web_glow_now()['rows']]})", got == (["all"], [], []) and m.glow_each_of() == []
+      and page.own_hints == [("A", "Pulse off")] and page.follows == []
+      and [r["key"] for r in m.web_glow_now()["rows"]] == ["glow_beat"])
+boards_there()
+r = (m.web_settings_do({"key": "glow_each", "value": "Sideways"}),
+     m.web_settings_do({"key": "glow_each", "value": "The same beat"}))
+got = beats()
+check(f"...the same beat again, from the web page ({r}): all of them to the kick's ({got})",
+      "error" in r[0] and r[1] == {"ok": True} and m.setting("glow_each") == "The same beat"
+      and got == (["all"], [], []) and not [b for b in m.web_lamps() if "beat" in b])
+m.glow_out = None
+with m.glow_lamps.lock:                                # (as they were: the first, and another)
+    m.glow_lamps.heard = {ip: v for ip, v in m.glow_lamps.heard.items() if ip in ("127.0.0.1", "10.0.0.81")}
 
 # ---- the song at start-up (Settings > Random song at start-up): playing before the network's up -----------------------
 import wave
@@ -1250,6 +1349,14 @@ check(f"its page, drawn: in its box, your boards, by name ({sim.lamps}), an LED 
       and sim.lamps == [("another", 1, None), ("ESP32 77AA01", 1, None), ("ESP32 A1B2C3", 64, (255, 0, 0))]
       and about(pic, (255, 0, 0)) > 250 and about(pic, (40, 44, 51), 3) > 600)
 FB.last.convert("RGB").save(S + "/boards_page.png")
+m.set_setting("glow_each", "Different beats")
+sim, each = drawn()
+said = sorted(k[0] for k in sim.tags)
+check(f"...each following a beat of its own: which, under its name ({sim.follows}; the words drawn: {said})",
+      sim.follows == ["Kick", "Snare", "Hi-hats"] and {"Kick", "Snare", "64 LEDs, hi-hats"} <= set(said)
+      and "64 LEDs" in said and (each != pic).any() and about(each, (255, 0, 0)) == about(pic, (255, 0, 0)))
+FB.last.convert("RGB").save(S + "/boards_page_beats.png")
+m.set_setting("glow_each", "The same beat")
 m.set_setting("sim_full", "On")                        # (SELECT on any sim: full screen, kept for every one of them)
 sim, full = drawn()
 bright = int((full.max(axis=2) > 150).sum())
@@ -1324,6 +1431,7 @@ LOOK = """(() => {
           board: shown(document.querySelector('.gl-board')), sub: document.querySelector('.content-h .src').textContent,
           set: [...document.querySelectorAll('.gl-set .set-row')].filter(shown).map((r) => r.dataset.key),
           more: [...document.querySelectorAll('.gl-lamps .set-row:not([data-key^="lamp:"])')].map((r) => r.dataset.key),
+          beats: rows.map((r) => [...r.querySelectorAll('.gl-meta span')].slice(1).map((x) => x.textContent).join(' ')),
           under: (() => {                        // (the boards' list: under the picture of the LEDs, beside the settings)
             const a = document.querySelector('.gl-board').getBoundingClientRect();
             const c = document.querySelector('.gl-lamps').getBoundingClientRect();
@@ -1367,8 +1475,9 @@ async def browse():
               f"({got['rows'][1][4]}); one with the older sketch has none to give, and it's said why "
               f"({got['rows'][2][6]!r})", got["rows"][0][4] == ["Auto"] and got["rows"][1][4] == ["Purple"]
               and got["rows"][2][2:4] == [0, 0] and "newer sketch" in got["rows"][2][6])
-        check(f"...and their pulse to music, with them ({got['more']})", got["more"] == ["glow_beat"]
-              and got["set"] == [])
+        check(f"...and their pulse to music, with them, and whether each follows a beat of its own ({got['more']}: "
+              f"not yet, {got['beats']})", got["more"] == ["glow_beat", "glow_each"] and got["set"] == []
+              and got["beats"] == ["", "", ""])
         await pg.screenshot(path=S + "/boards_web.png")
         await pg.click(f"{ROW} .swatch[aria-label='Red']")
         pressed = await pg.eval_on_selector_all(f"{ROW} .swatch[aria-pressed='true']", "xs => xs.map((x) => x.title)")
@@ -1408,6 +1517,18 @@ async def browse():
         check("their pulse to music, off from here", took and not m.glow_beats_wanted())
         await pg.click(".gl-lamps .set-row[data-key='glow_beat'] .seg button:has-text('On')")
         await asyncio.to_thread(until, lambda: m.setting("glow_beat") == "On", 5)
+        await pg.click(".gl-lamps .set-row[data-key='glow_each'] .seg button:has-text('Different')")
+        took = await asyncio.to_thread(until, lambda: m.setting("glow_each") == "Different beats", 5)
+        await pg.wait_for_function("document.querySelectorAll('.gl-lamps .gl-meta span').length === 6", timeout=8000)
+        got = await pg.evaluate(LOOK)
+        check(f"each a beat of its own, picked here: which, said with each board ({got['beats']})", took
+              and got["beats"] == ["Follows the kick", "Follows the snare", "Follows the hi-hats"]
+              and len(got["rows"]) == 3)
+        await pg.screenshot(path=S + "/boards_web_beats.png")
+        await pg.click(".gl-lamps .set-row[data-key='glow_each'] .seg button:has-text('The same beat')")
+        took = await asyncio.to_thread(until, lambda: m.setting("glow_each") == "The same beat", 5)
+        await pg.wait_for_function("document.querySelectorAll('.gl-lamps .gl-meta span').length === 3", timeout=8000)
+        check("...and the same beat for all of them again", took)
         await pg.set_viewport_size({"width": 390, "height": 844})
         await asyncio.sleep(0.4)
         wide = await pg.evaluate("document.documentElement.scrollWidth")
@@ -1421,7 +1542,8 @@ async def browse():
         got = await pg.evaluate(LOOK)
         check(f"a Pi with LEDs of its own: its picture and settings as ever ({got['set'][:3]}), the boards under "
               f"the picture ({len(got['rows'])}), their pulse to music the LEDs' own ({got['more']})", got["board"]
-              and got["set"][:2] == ["glow_on", "glow_colour"] and "glow_beat" in got["set"] and got["more"] == []
+              and got["set"][:2] == ["glow_on", "glow_colour"] and "glow_beat" in got["set"]
+              and "glow_each" in got["set"] and got["more"] == []
               and len(got["rows"]) == 3 and got["under"] and got["sub"].endswith("3 ESP32 boards found"))
         await pg.screenshot(path=S + "/boards_web_pi.png", full_page=True)
         for x in (one, two, old):                      # (the boards unplugged)

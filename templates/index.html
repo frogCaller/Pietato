@@ -5217,7 +5217,7 @@ function glLamps(d) {
   const boards = d.boards || [], rows = d.can ? [] : d.rows || [];
   GL.lamps.hidden = !boards.length && d.can;
   if (GL.lamps.hidden) { GL.lampSig = ""; return; }
-  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null]), d.colours, rows]);
+  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null, b.beat || ""]), d.colours, rows]);
   const picking = GL.lamps.contains(document.activeElement) && document.activeElement.matches("input[type=color]");
   if (sig !== GL.lampSig && !picking) {        // (other boards than before: drawn again, though not under the
     GL.lampSig = sig;                          //  browser's picker while a colour's being picked in it)
@@ -5239,6 +5239,7 @@ function glLamp(b, colours) {
   const [row, c, l] = setRow({ key: "lamp:" + b.ip, label: b.name });
   const meta = el("span", "set-note gl-meta");
   meta.append(el("span", "", b.leds === 1 ? "1 LED" : b.leds + " LEDs"));
+  if (b.beat) meta.append(el("span", "", "Follows the " + b.beat.toLowerCase()));   // (each has a beat of its own)
   l.append(meta);
   if (b.colour === null) {                     // (the older sketch: it can't keep one)
     c.append(el("span", "set-note", "Put the newer sketch on it to give it a colour"));

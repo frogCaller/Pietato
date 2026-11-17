@@ -162,6 +162,13 @@ music played on that Pietato. On a Pietato with no LEDs of its own, the page is 
 shows the boards instead: an LED for each, in its own colour. The sketch can light a strip of LEDs on one of the
 board's pins instead (with the FastLED library).
 
+With two or more boards, each can follow a different beat instead of all pulsing to the kick drum. Set ESP32
+boards to Different beats: under START on the LED backlight's page, with X on that page on a Pietato with no LEDs
+of its own, or on the web page. One board then follows the kick, the next the snare and claps, the next the
+hi-hats, and round again, in the order of their names. The page shows which follows which. These are low, middle
+and high parts of the sound rather than instruments, so a voice or a guitar can move the snare's board too. It's
+set on each Pietato, for the music that one plays, and the boards' sketch stays as it is.
+
 The web page's Library > LED backlight lists the boards it has found. Tap a colour for one and it's lit in that
 instead of the colours of what's playing, still pulsing to the beat. Auto goes back to what's playing. The board
 keeps its colour itself, so it's the same from every Pietato and after a power cut. Which one? lights a board

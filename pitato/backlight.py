@@ -33,6 +33,7 @@ class Backlight(Sim):
         super().__init__(w, h, rng, values)
         self.plain = False               # no LEDs of this Pietato's own: your ESP32 boards' picture instead
         self.lamps = []                  # ...those boards: (name, how many LEDs, its own colour or None)
+        self.follows = []                # ...and, with each following a beat of its own, which ("Kick"...): as many
         self.tags = {}                   # (words, size, bold, detail) -> their mask, and its size
         self.grid = None                 # the LEDs, while they're on (glow.Grid): media mode's
         self.points = None               # a strip's LEDs, where each is round the TV (0 to 1 across and down), or None
@@ -175,8 +176,11 @@ class Backlight(Sim):
                 tuple(max(v, u) for v, u in zip(colour, UNLIT)) if max(colour) < 40 else tuple(colour))
             if named:
                 words(name, cx, cy + core_d / 2 + 9, 12, True, BODY)
-                if count > 1:
-                    words(f"{count} LEDs", cx, cy + core_d / 2 + 26, 11, False, MUTED)
+                beat = self.follows[k] if k < len(self.follows) else ""   # (the beat it follows, if each has its own)
+                more = ", ".join(([f"{count} LEDs"] if count > 1 else []) + ([beat if count == 1 else beat.lower()]
+                                                                           if beat else []))
+                if more:
+                    words(more, cx, cy + core_d / 2 + 26, 11, False, MUTED)
 
     def draw(self, img, x0, y0):
         from .fine import ImageDraw

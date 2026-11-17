@@ -6,7 +6,9 @@ and the ESP32 boards on your network (esp32/pietato_led: found by themselves; th
 a colour of its own, which the board keeps). A game's colours come from its emulator
 (told where they go: glow ADDRESS:PORT...); music's beats from its player, when one of your grids or boards wants them:
 a song or a station then plays through party mode's player (party.py: it knows when each bit of it is heard), on its
-own, as if it were a party. A song is put on one player or the other as it starts, and at start-up the song
+own, as if it were a party. With more than one board, each can follow a beat of its own (ESP32 boards: Different
+beats): the kick, the snare, the hi-hats, in turn, by the boards' names. A song is put on one player or the other as
+it starts, and at start-up the song
 (Settings > Random song at start-up) starts before the network's up and any light on it is heard: so lights on your
 network that had this one's beats are remembered for the next start (glow_expected), and a song that's only just
 begun on the plain player is moved over when one turns up (glow_catch). The Soundboard's sounds light them too
@@ -18,7 +20,8 @@ import time
 import urllib.parse
 
 from ..config import SETTINGS_DEFAULT
-from ..glow import (ANY, colour_of, COLOURS, CONFIG_TXT, GLOW_PORT, GlowOut, Grid, LAMP_PORT, Lamps, NOBODY, PI_MODEL,
+from ..glow import (ANY, BEAT_NAMES, colour_of, COLOURS, CONFIG_TXT, GLOW_PORT, GlowOut, Grid, LAMP_PORT, Lamps, NOBODY,
+                    PI_MODEL,
                     spi_lines, SPI_DEV, STARTS, Strip, STRIP_LEAST, STRIP_MOST, strip_points, target_words,
                     THIS_ONE, turn_spi_on)
 from ..handheld import is_handheld
@@ -31,9 +34,14 @@ from ..theme import ACCENT, ACCENTS, BODY, co_mix, LINE, MUTED, ROW, TEXT
 GLOW_BRIGHT = ["10%", "25%", "50%", "100%"]
 GLOW_SHAPES = ["8x8 grid", "Strip"]
 GLOW_COUNTS = [str(n) for n in range(STRIP_LEAST, STRIP_MOST + 1)]
+GLOW_EACH = ("The same beat", "Different beats")   # your ESP32 boards, pulsing to music: all to its kick drum, or
+                             # each to a part of it, in turn (glow.py's BEAT_NAMES)
+GLOW_EACH_NOTE = "Different beats: one follows the kick, the next the snare, the next the hi-hats."
+GLOW_EACH_SHORT = {GLOW_EACH[1]: "Different"}      # (the web page's two buttons for it: short enough to be buttons)
 GLOW_ROWS = [("glow_on", "LEDs", ["Off", "On"]), ("glow_colour", "Colour", [n for n, _ in COLOURS]),
              ("glow_bright", "Brightness", GLOW_BRIGHT), ("glow_follow", "Follows", None),
-             ("glow_beat", "Pulse to music", ["On", "Off"]), ("glow_shape", "Shape", GLOW_SHAPES),
+             ("glow_beat", "Pulse to music", ["On", "Off"]), ("glow_each", "ESP32 boards", list(GLOW_EACH)),
+             ("glow_shape", "Shape", GLOW_SHAPES),
              ("glow_turn", "Turn", ["0°", "90°", "180°", "270°"]), ("glow_mirror", "Mirror", ["On", "Off"]),
              ("glow_wiring", "Wiring", ["Rows", "Zigzag"]),
              ("glow_count", "LEDs on it", GLOW_COUNTS), ("glow_start", "Starts at", list(STARTS)),
@@ -41,8 +49,8 @@ GLOW_ROWS = [("glow_on", "LEDs", ["Off", "On"]), ("glow_colour", "Colour", [n fo
 GLOW_KEYS = tuple(k for k, _, _ in GLOW_ROWS)
 GLOW_GRID_ONLY = ("glow_turn", "glow_mirror", "glow_wiring")
 GLOW_STRIP_ONLY = ("glow_count", "glow_start", "glow_way", "glow_bottom")
-GLOW_CARD = ("glow_follow", "glow_beat", "glow_shape") + GLOW_GRID_ONLY + GLOW_STRIP_ONLY + ("glow_test",
-                                                                                             "glow_reboot")
+GLOW_CARD = ("glow_follow", "glow_beat", "glow_each", "glow_shape") + GLOW_GRID_ONLY + GLOW_STRIP_ONLY + (
+    "glow_test", "glow_reboot")
                              # START's card on its page (its buttons do the rest: on, its colour, how bright)
 GLOW_SWATCH = {"Off": "linear-gradient(135deg, #23272e 44%, #8b95a3 44% 56%, #23272e 56%)",
                "Rainbow": "conic-gradient(#ff3b30, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff2d55, #ff3b30)"}
@@ -71,6 +79,7 @@ class GlowScreen:
     glow_seen = glow_music_at = 0.0
     glow_to = ()             # your grids (and this one's), and the lights of your own: [(address, port)]
     glow_to_lamps = ()       # ...the lights among them
+    glow_parts = {}          # ...and, with each following a beat of its own, which: (address, port) -> "bass", "mid"...
     glow_party = False       # a party's on among your others, and this one's not in it: the lights are the party's
     glow_names = None        # address -> (name, when looked up)
     glow_early = False       # the song at start-up's being started: lights it had last time are on their way
@@ -109,8 +118,23 @@ class GlowScreen:
         """It's a strip round the TV (not the grid)."""
         return self.glow_setting("glow_shape") == "Strip"
 
+    def glow_each(self):
+        """Your ESP32 boards each follow a beat of their own (ESP32 boards: Different beats), while they pulse to
+        music at all."""
+        return self.glow_setting("glow_each") == GLOW_EACH[1] and self.glow_setting("glow_beat") != "Off"
+
+    def glow_each_of(self):
+        """Which beat each board there now follows, when each has its own: [(its address, "bass", "Kick")...], in
+        turn, by their names (so each of your Pietatos says the same). [] when they all follow the one (or there's
+        just one of them)."""
+        lamps = self.glow_lamps
+        boards = lamps.boards() if lamps is not None and self.glow_each() else []
+        return [(b["ip"],) + BEAT_NAMES[k % len(BEAT_NAMES)] for k, b in enumerate(boards)] if len(boards) > 1 else []
+
     def glow_rows(self):
         skip = GLOW_GRID_ONLY if self.glow_strip() else GLOW_STRIP_ONLY   # (a grid's turn and wiring, or a strip's)
+        if self.glow_lamps is None or not self.glow_lamps.ever:           # (no ESP32 board's been found: nor theirs)
+            skip += ("glow_each",)
         rows = [(k, label, self.glow_follow_choices() if k == "glow_follow" else choices)
                 for k, label, choices in GLOW_ROWS if k not in skip]
         rows.append(("glow_test", "Show which way is up", None))
@@ -178,12 +202,17 @@ class GlowScreen:
             s.grid, s.points = None, None
             lamps = self.glow_lamps                    # (its picture: an LED for each, in its own colour)
             s.lamps = [(b["name"], b["leds"], b["colour"]) for b in (lamps.boards() if lamps is not None else [])]
-            s.facts = [("ESP32 boards", str(boards) if boards else "None"),
-                       ("Pulse to music", "On" if beat else "Off")]
+            each = self.glow_each_of()                 # (each following a beat of its own: which, under its name)
+            s.follows = [name for _, _, name in each]
+            s.facts = [("ESP32 boards", str(boards) if boards else "None"), ("Pulse to music", "On" if beat else "Off")]
+            if each:
+                s.facts.append(("Beats", "Different"))
             s.says = ("No LEDs here", "They go on a Pi behind the TV") if not boards else (
                 "1 ESP32 board" if boards == 1 else f"{boards} ESP32 boards",
                 "Lit by this Pietato's games and music" if beat else "Lit by this Pietato's games")
             s.own_hints = [("A", "Pulse off" if beat else "Pulse on")] if boards else [("B", "Back")]
+            if boards > 1 and beat:                    # (more than one, pulsing: all to the one beat, or each its own)
+                s.own_hints.append(("X", GLOW_EACH[0] if each else GLOW_EACH[1]))
             return
         s.grid, s.shade, s.points = self.glow_grid, self.glow_shade(), self.glow_points()
         s.facts = [("LEDs", "On" if on else "Off"),
@@ -217,7 +246,8 @@ class GlowScreen:
     def press_glow(self, s, name, repeat):
         """Its page's buttons: A turns the LEDs on or off, ◀▶ go through its colours, ▲▼ make it brighter or dimmer
         (START has the rest). False: not one of these (as any sim's: screens/sims.py). On a Pietato with no LEDs of
-        its own, A is your ESP32 boards' pulse to music, on or off, and that's all."""
+        its own, A is your ESP32 boards' pulse to music, on or off; with more than one of them pulsing, X has each
+        follow a beat of its own, or all the one; and that's all."""
         if not self.glow_can():
             if name in ("b", "l", "r"):
                 return False
@@ -228,6 +258,11 @@ class GlowScreen:
                     self.toast(f"Pulse to music: {new.lower()}", 2)
                 else:
                     self.toast("The LED backlight goes on a Pi behind the TV", 3)
+                self.dirty = True
+            elif name == "x" and not repeat and len(self.lamps_on()) > 1 and self.glow_setting("glow_beat") != "Off":
+                new = GLOW_EACH[0] if self.glow_each() else GLOW_EACH[1]
+                self.glow_pick("glow_each", new)
+                self.toast(f"ESP32 boards: {new[0].lower() + new[1:]}", 2)
                 self.dirty = True
             return None
         if name not in ("a", "left", "right", "up", "down"):
@@ -408,10 +443,13 @@ class GlowScreen:
 
     def web_lamps(self):
         """The ESP32 boards there now, for the web page: each one's name, its LEDs, and its own colour ("#rrggbb"; ""
-        for none: it takes what's playing; None for a board with the older sketch, which can't keep one)."""
+        for none: it takes what's playing; None for a board with the older sketch, which can't keep one). With each
+        following a beat of its own: which ("beat": "Kick"...)."""
         lamps = self.glow_lamps
-        return [{"ip": b["ip"], "name": b["name"], "leds": b["leds"],
-                 "colour": None if not b["keeps"] else "#%02x%02x%02x" % b["colour"] if b["colour"] else ""}
+        each = {ip: {"beat": name} for ip, _, name in self.glow_each_of()}   # (each following a beat of its own:
+        return [dict({"ip": b["ip"], "name": b["name"], "leds": b["leds"],   #  which, said with it)
+                      "colour": None if not b["keeps"] else "#%02x%02x%02x" % b["colour"] if b["colour"] else ""},
+                     **each.get(b["ip"], {}))
                 for b in (lamps.boards() if lamps is not None else [])]
 
     def web_set_glow_lamp(self, value, cmd):
@@ -655,6 +693,7 @@ class GlowScreen:
             self.glow_seen = now
             self.glow_to = self.glow_targets()
             self.glow_to_lamps = frozenset((ip, GLOW_PORT) for ip, _, _ in self.lamps_on())
+            self.glow_parts = {(ip, GLOW_PORT): part for ip, part, _ in self.glow_each_of()}
             self.glow_party = self.party_elsewhere()
             if self.glow_out is not None:
                 self.glow_out.aim(self.glow_to, self.glow_to_lamps)
@@ -668,8 +707,10 @@ class GlowScreen:
             if run.send(f"glow {say}") is not False:
                 run.glow_said = say
 
-    def glow_beat(self, t, strength):
-        """(Party mode's player, as it plays.) A beat, heard at t (its clock: the leader's, in another's party)."""
+    def glow_beat(self, t, strength, part="bass"):
+        """(Party mode's player, as it plays.) A beat, heard at t (its clock: the leader's, in another's party). part:
+        where in the music it is (glow.py's BEAT_NAMES: "bass", a kick drum's, is the beat your grids have, and your
+        boards too, unless each follows its own: then each has just its own part's)."""
         out = self.glow_out
         if out is None or not out.to:
             return
@@ -677,7 +718,23 @@ class GlowScreen:
             t -= self.party_clock() - time.monotonic()  # (the leader's clock, as this one's)
         # (a grid has its own say in it. The lights of your own: not with Pulse to music off here, nor while another
         # of yours leads a party this one isn't in: the party's music lights them, not this one's)
-        out.event("beat", strength, at=t, lamps=self.glow_setting("glow_beat") != "Off" and not self.glow_party)
+        lamps = self.glow_setting("glow_beat") != "Off" and not self.glow_party
+        parts = self.glow_parts if lamps else {}
+        if not parts:                                  # (all of them to the one beat, as ever)
+            if part == "bass":
+                out.event("beat", strength, at=t, lamps=lamps)
+            return
+        if part == "bass":
+            out.event("beat", strength, at=t, lamps=False)
+        mine = [a for a in out.lamps if parts.get(a, "bass") == part]
+        if mine:
+            out.event("beat", strength, at=t, only=mine)
+
+    def glow_band(self, part, t, strength):
+        """(Party mode's player.) ...and one in the rest of the music (its middle, its top): for the boards that
+        follow that."""
+        if self.glow_parts:
+            self.glow_beat(t, strength, part)
 
     def glow_music_on(self):
         """Music's on party mode's player for your LEDs: in a party, or with its beats found. (One that's there for
@@ -739,8 +796,12 @@ class GlowScreen:
         if not self.glow_can():
             if not self.lamps_on():
                 return []
-            return [dict(key="glow_beat", label="Pulse to music", kind="choice", value=self.glow_value("glow_beat"),
+            rows = [dict(key="glow_beat", label="Pulse to music", kind="choice", value=self.glow_value("glow_beat"),
                          choices=["On", "Off"], note="Your ESP32 boards, to this Pietato's music.")]
+            if len(self.lamps_on()) > 1:               # (more than one: all to the one beat, or each its own)
+                rows.append(dict(key="glow_each", label="ESP32 boards", kind="choice", choices=list(GLOW_EACH),
+                                 value=self.glow_value("glow_each"), note=GLOW_EACH_NOTE, names=GLOW_EACH_SHORT))
+            return rows
         rows = [dict(key=k, label=label, kind="choice", value=self.glow_value(k), choices=list(choices))
                 if k != "glow_count" else dict(key=k, label=label, kind="count", value=self.glow_count(),
                                                min=STRIP_LEAST, max=STRIP_MOST)
@@ -752,6 +813,8 @@ class GlowScreen:
         for r in rows:
             if r["key"] == "glow_way":
                 r["note"] = "As you look at the TV."
+            elif r["key"] == "glow_each":
+                r["note"], r["names"] = GLOW_EACH_NOTE, GLOW_EACH_SHORT
         rows.append({"key": "glow_test", "label": "Which way is up", "kind": "action", "button": "Show it",
                      "note": "Its top lights red, its left side green.", "disabled": self.glow_grid is None})
         if self.glow_restart:

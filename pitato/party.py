@@ -364,12 +364,14 @@ class PartyPlayer:
     sum of the clock from then on (paused: as it was, till it plays on)."""
 
     def __init__(self, src, at, pos=0.0, device="", volume=80, clock=None, pre=(), you=None, on_beat=None,
-                 on_sound=None):
+                 on_sound=None, on_band=None):
         self.src, self.pos0 = src, max(0.0, float(pos or 0))
         self.late = 0.0                                # seconds later than it's played here that it's heard (the web
                                                        # page's Sound here: its listener's a moment behind the Pi)
-        self.beats = (Beats(PARTY_RATE, lambda when, hard: on_beat(when + self.late, hard))   # (an LED grid's, as
-                      if on_beat is not None else None)                                       #  they're heard: glow.py)
+        self.beats = (Beats(PARTY_RATE, lambda when, hard: on_beat(when + self.late, hard),   # (an LED grid's, as
+                            None if on_band is None else                                      #  they're heard: glow.py;
+                            lambda which, when, hard: on_band(which, when + self.late, hard))  # on_band: the rest of
+                      if on_beat is not None else None)                                       #  it, for your boards)
         self.on_sound = on_sound                       # what it plays, said as it's written (the samples, when the
                                                        # first is heard, the volume they're at): an OLED's bars
         self.clock = clock or time.monotonic

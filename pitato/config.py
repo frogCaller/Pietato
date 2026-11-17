@@ -106,7 +106,8 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "group_talk": "On", "group_eyes": "On",   # (Apps > Group chat: they talk among themselves; a USB
                                                               # camera notices you: screens/group.py)
                     "glow_on": "Off", "glow_colour": "Off", "glow_follow": "Any of yours", "glow_bright": "25%",
-                    "glow_beat": "On", "glow_shape": "8x8 grid", "glow_turn": "0°", "glow_mirror": "On",
+                    "glow_beat": "On", "glow_each": "The same beat", "glow_shape": "8x8 grid", "glow_turn": "0°",
+                    "glow_mirror": "On",
                     "glow_wiring": "Rows", "glow_count": "60", "glow_start": "Bottom left", "glow_way": "Clockwise",
                     "glow_bottom": "Yes",             # (Apps > LED backlight: screens/glow.py)
                     "oled": "Off"}

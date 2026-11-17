@@ -50,6 +50,15 @@ RUMBLE_HIT = 0x3000          # how hard a game shakes player 1's controller befo
 BEAT_FRAME = 1024            # samples looked at, at a time, for a beat (21 ms)...
 BEAT_HOP = 512               # ...each half that on from the one before
 BEAT_BASS = (40.0, 180.0)    # what's listened to for a beat (Hz): the bass, a kick drum's
+BEAT_BANDS = (("mid", (1500.0, 5000.0), "stays"),    # ...and, for lights that each follow a beat of their own, more
+              ("high", (7000.0, 16000.0), "alone"))  # of it, listened to the same way: the middle (a snare, claps)
+                             # and the top (hi-hats). A drum's heard all the way up, though, so a beat in the middle
+                             # is one that stays (a kick drum's click is gone at once: not the snare's light's), and
+                             # one at the top is one that's alone there (with a drum lower down: that drum's, not the
+                             # hi-hat's): each light has a beat the others haven't
+BEAT_WAIT = 2                # ...settled this many looks later (21 ms: the beat's still some way off being heard)
+BEAT_STAYS = 0.3             # ...one that stays: this much of its rise is still there then
+BEAT_NAMES = (("bass", "Kick"), ("mid", "Snare"), ("high", "Hi-hats"))   # each of them, and what's mostly heard there
 BEAT_GAP = 0.28              # seconds: beats at least this far apart
 BEAT_RISE = 1.7              # a beat: the bass rising this much more than it has been, lately
 BEAT_KEEP = 1.5              # ...lately: seconds
@@ -482,9 +491,10 @@ class GlowOut:
             self.send(data, [self.lamps[(self.turn + k) % n] for k in range(each)])
             self.turn += each
 
-    def event(self, name, strength=1.0, at=None, lamps=True):
-        """Something happening (now, or at): to all of them (lamps False: just the grids, not the lights of your own)."""
-        to = self.to if lamps else self.grids
+    def event(self, name, strength=1.0, at=None, lamps=True, only=None):
+        """Something happening (now, or at): to all of them (lamps False: just the grids, not the lights of your own;
+        only: just these of them)."""
+        to = tuple(only) if only is not None else self.to if lamps else self.grids
         if to:
             now = self.clock()
             self.send(event_packet(name, strength, now if at is None else at, now), to)
@@ -547,22 +557,68 @@ class HitWatch:
 
 
 # ---- music's beats ---------------------------------------------------------------------------------------------------
+class Rises:
+    """One range of what's played, listened to for a beat: how loud it is, look after look. A beat: that rising
+    suddenly, more than it has been lately, at most one each BEAT_GAP. take(how loud it is now, when that's heard):
+    how hard the beat there is (0 to 1), or None."""
+
+    def __init__(self, keep):
+        self.prev = None
+        self.rises = collections.deque(maxlen=keep)
+        self.loud = collections.deque(maxlen=keep)
+        self.last = -1e9
+
+    def rose(self, now):
+        """It's as loud as this now: how hard it's just risen (0 to 1), whenever the last beat was; None: it hasn't."""
+        if now < BEAT_QUIET:                           # (silence: nothing to go by, and none of it kept)
+            self.prev = None
+            return None
+        hard = None
+        if self.prev is not None:
+            rise = max(0.0, now - self.prev)
+            lately = sum(self.rises) / len(self.rises) if self.rises else 0.0
+            loud = max(self.loud)
+            usual = sum(self.loud) / len(self.loud)
+            warm = len(self.rises) >= self.rises.maxlen // 3   # (heard a moment first: what's usual for it)
+            if warm and rise > BEAT_RISE * lately and rise > 0.1 * loud and rise > BEAT_OVER * usual:
+                hard = min(1.0, rise / (0.5 * loud))
+            self.rises.append(rise)
+        self.loud.append(now)
+        self.prev = now
+        return hard
+
+    def beat(self, when):
+        """One at `when` is a beat, if the last was long enough before it: True, and it's the last now."""
+        if when - self.last < BEAT_GAP:
+            return False
+        self.last = when
+        return True
+
+    def take(self, now, when):
+        hard = self.rose(now)
+        return hard if hard is not None and self.beat(when) else None
+
+
 class Beats:
     """Beats in what's played (a song, a station), as they're heard: the bass rising suddenly, more than it has been
     lately (a kick drum), at most one each BEAT_GAP. feed(pcm, t): s16le stereo samples, the first one heard at t (the
-    player's clock); on_beat(when it's heard, how hard: 0 to 1)."""
+    player's clock); on_beat(when it's heard, how hard: 0 to 1). With on_band, the rest of it's listened to the same
+    way (BEAT_BANDS: the middle, the top), from the same look at it: on_band(which, when it's heard, how hard), a
+    couple of looks after the beat's found (BEAT_WAIT: one in the middle has to stay, one at the top to be alone)."""
 
-    def __init__(self, rate, on_beat):
-        self.rate, self.on_beat = rate, on_beat
+    def __init__(self, rate, on_beat, on_band=None):
+        self.rate, self.on_beat, self.on_band = rate, on_beat, on_band
         self.buf = np.zeros(0, dtype=np.float32)
         self.t0 = None
         self.window = np.hanning(BEAT_FRAME).astype(np.float32)
         f = np.fft.rfftfreq(BEAT_FRAME, 1.0 / rate)
+        keep = max(4, int(BEAT_KEEP * rate / BEAT_HOP))
         self.bass = (f >= BEAT_BASS[0]) & (f <= BEAT_BASS[1])
-        self.prev = None
-        self.rises = collections.deque(maxlen=max(4, int(BEAT_KEEP * rate / BEAT_HOP)))
-        self.loud = collections.deque(maxlen=max(4, int(BEAT_KEEP * rate / BEAT_HOP)))
-        self.last = -1e9
+        self.kick = Rises(keep)
+        self.more = [(name, (f >= lo) & (f <= hi), Rises(keep), how, collections.deque())   # (...and what's risen
+                     for name, (lo, hi), how in BEAT_BANDS] if on_band is not None else []  #  there, not settled yet)
+        self.looks = 0                                 # looks at it so far
+        self.lower = collections.deque(maxlen=16)      # ...the ones a drum was heard at, below the top
 
     def feed(self, pcm, t):
         a = np.frombuffer(pcm, dtype="<i2")
@@ -570,30 +626,39 @@ class Beats:
             return
         mono = a[: len(a) // 2 * 2].reshape(-1, 2).mean(axis=1, dtype=np.float32)
         if self.t0 is None or abs(t - (self.t0 + len(self.buf) / self.rate)) > 0.05:
-            self.buf, self.t0, self.prev = mono, t, None   # (a jump: it starts again from here)
+            self.buf, self.t0, self.kick.prev = mono, t, None   # (a jump: it starts again from here)
+            self.lower.clear()
+            for _, _, rises, _, waiting in self.more:
+                rises.prev = None
+                waiting.clear()
         else:
             self.buf = np.concatenate((self.buf, mono))
         while len(self.buf) >= BEAT_FRAME:
-            bass = float(np.abs(np.fft.rfft(self.buf[:BEAT_FRAME] * self.window))[self.bass].sum())
+            heard = np.abs(np.fft.rfft(self.buf[:BEAT_FRAME] * self.window))
             when = self.t0 + BEAT_FRAME / 2 / self.rate
             self.buf = self.buf[BEAT_HOP:]
             self.t0 += BEAT_HOP / self.rate
-            if bass < BEAT_QUIET:                      # (silence: nothing to go by, and none of it kept)
-                self.prev = None
-                continue
-            if self.prev is not None:
-                rise = max(0.0, bass - self.prev)
-                lately = sum(self.rises) / len(self.rises) if self.rises else 0.0
-                loud = max(self.loud)
-                usual = sum(self.loud) / len(self.loud)
-                warm = len(self.rises) >= self.rises.maxlen // 3   # (heard a moment first: what's usual for it)
-                if warm and rise > BEAT_RISE * lately and rise > 0.1 * loud and rise > BEAT_OVER * usual \
-                        and when - self.last >= BEAT_GAP:
-                    self.last = when
-                    self.on_beat(when, min(1.0, rise / (0.5 * loud)))
-                self.rises.append(rise)
-            self.loud.append(bass)
-            self.prev = bass
+            self.looks += 1
+            hard = self.kick.take(float(heard[self.bass].sum()), when)
+            if hard is not None:
+                self.on_beat(when, hard)
+                self.lower.append(self.looks)
+            for name, part, rises, how, waiting in self.more:
+                now = float(heard[part].sum())
+                while waiting and self.looks - waiting[0][0] >= BEAT_WAIT:   # (the ones from a moment ago: settled)
+                    look, at, was, under, top = waiting.popleft()
+                    if how == "stays":
+                        ours = now - under >= BEAT_STAYS * (top - under)
+                    else:
+                        ours = not any(abs(look - other) <= BEAT_WAIT for other in self.lower)
+                    if ours and rises.beat(at):
+                        self.on_band(name, at, was)
+                under = rises.prev
+                hard = rises.rose(now)
+                if hard is not None:
+                    waiting.append((self.looks, when, hard, under, now))
+                    if how == "stays":
+                        self.lower.append(self.looks)
 
 
 # ---- the grid --------------------------------------------------------------------------------------------------------
