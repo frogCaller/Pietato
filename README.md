@@ -5,10 +5,10 @@ photos, smart home controls and the games you own. It also works on a PC with Ub
 GPi Case 2W or GPi Case 2.
 
 <p>
+  <img src="docs/home-screen.png" height="260">
   <img src="docs/tv.gif" height="260">
   <img src="docs/tv_remote.gif" height="260">
   <img src="docs/obsbot-controller.gif" height="260">
-  <img src="docs/matrix.gif" height="260">
 </p>
 
 ## Install
