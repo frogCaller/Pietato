@@ -125,6 +125,8 @@ PI_MODEL = "/proc/device-tree/model"            # a Pi's model ("Raspberry Pi 4 
 DMI = os.environ.get("PITATO_DMI") or "/sys/class/dmi/id"   # a PC's description of itself, from its firmware (none
                                                             # on a Pi). The tests' stand-in, when it's set
 DESKTOP = "/etc/systemd/system/display-manager.service"   # a desktop it can start (Ubuntu's, Debian's), if there's one
+WAS_DESKTOP = "/var/lib/pitato/was-graphical"   # (setup.sh's note: it started in its desktop before Pietato was set up)
+STARTED = "/run/pitato-started"   # (there once Pietato's started since the machine did: /run begins empty each time)
 PC_WORDS = re.compile(r"\b([Tt]he|[Tt]his|[Yy]our|[Aa]) Pi\b(?![-\w]| \d| Zero| OS| Case)")
 NO_NAME = re.compile(r"to be filled|default string|system product name|system manufacturer|not specified|"
                      r"not applicable|o\.e\.m|^none$|^unknown$", re.I)   # (what some firmware leaves in its names)
@@ -162,8 +164,19 @@ def pc_name():
 
 
 def has_desktop():
-    """A PC with a desktop it can start (Ubuntu's or Debian's): System > Desktop."""
-    return is_pc() and os.path.exists(DESKTOP)
+    """A desktop it can start (System > Desktop): a PC's (Ubuntu's or Debian's), or anything else's that started in
+    one till setup.sh set it to start in Pietato (a board of another make's own system, Raspberry Pi OS's)."""
+    return os.path.exists(DESKTOP) and (is_pc() or os.path.exists(WAS_DESKTOP))
+
+
+def first_start():
+    """Pietato's first start since the machine started (True), noted so that the next isn't (Restart media mode, an
+    update, Pietato opened from the desktop). Where the note can't be kept, it never is."""
+    try:
+        os.close(os.open(STARTED, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+    except OSError:                                # (there already, or nowhere to keep it)
+        return False
+    return True
 
 
 def wifi_dev():

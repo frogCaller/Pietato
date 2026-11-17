@@ -256,16 +256,12 @@ class WebSettingsScreen:
                          "list": True,
                          "choices": [""] + [c["id"] for c in found],
                          "names": dict([("", "Auto")] + [(c["id"], c["name"]) for c in found])})
-        rows += [{"key": "bot_mode", "label": "Its page", "kind": "choice", "value": self.bot_mode(),
-                  "choices": ["chat", "work"], "names": {"chat": "Chat", "work": "At work (your coding agent)"}},
-                 {"key": "f_face", "label": "Just its face", "kind": "choice",
+        rows += [{"key": "f_face", "label": "Just its face", "kind": "choice",
                   "value": "on" if self.bot_face_only() else "off", "choices": ["on", "off"],
                   "names": {"on": "Yes", "off": "No"},
                   "note": "Its chat page shows only its face, big, in the middle of the screen. It still talks and "
                           "listens. SELECT on the Bot switches it on or off, and on its face up and down change its "
-                          "colour, left and right its background."},
-                 choice("coder_sound", "Sounds at work", ["On", "Off"],
-                        value="Off" if self.setting("coder_sound") == "Off" else "On")]
+                          "colour, left and right its background."}]
         sec("bot", "Bot", rows, "It talks through Ollama on another computer on your network.")
 
         # the Bot's character: who it is, its look and its voice (on the Pi: X > Edit Character on the Bot)
@@ -391,7 +387,7 @@ class WebSettingsScreen:
             self.glow_pick("glow_count", str(int(str(value).strip())))
             return {"ok": True}
         if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "look",
-                   "sound", "screen", "units", "sim_full", "coder_sound", "ds_screens", "ds_touch", "battery",
+                   "sound", "screen", "units", "sim_full", "ds_screens", "ds_touch", "battery",
                    "share", "attract", "oled") \
                 or key.startswith("game_picture_") or key in GLOW_KEYS:
             return self.web_pick(key, value)
@@ -772,12 +768,6 @@ class WebSettingsScreen:
         if value not in [""] + [c["id"] for c in mics()]:
             return {"error": "That microphone isn't plugged in"}
         return {"ok": True} if self.friend_set(mic=value) else {"error": "Couldn't save static/bot.txt"}
-
-    def web_set_bot_mode(self, value, cmd):
-        if value not in ("chat", "work"):
-            return {"error": "That isn't one of its choices"}
-        self.set_setting("bot_mode", value)
-        return {"ok": True}
 
     # Finance
     def web_set_fin_stocks(self, value, cmd):

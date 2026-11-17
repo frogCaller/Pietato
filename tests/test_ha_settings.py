@@ -83,7 +83,7 @@ m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 toasts = []
 was_toast = m.toast
 m.toast = lambda text, secs=4: (toasts.append(text), was_toast(text, secs))
-m.coder_addresses = lambda: ("http://pi.local:5432", "http://192.168.1.50:5432", False)
+m.web_addresses = lambda: ("http://pi.local:5432", "http://192.168.1.50:5432", False)
 
 
 def draw(name):

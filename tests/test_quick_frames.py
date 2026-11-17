@@ -3,11 +3,8 @@ screens (files): the usual 16-bit and 32-bit pixels packed the quick ways give t
 part that's most of the way across goes as whole rows in one go, a narrow one a row at a time, and what's on the
 screen is the picture either way (the GPi Case's screen, one with rows longer than its pixels, one that starts
 further down); a TV's doubled pixels, mapped or written, are the picture's, each twice (four times on a 4K one),
-on its side too. Rock Paper Scissors' pieces put on the picture the quick way make the picture PIL's own paste
-does, and it goes back to that for good if the quick way can't be had. And how often it's drawn: 20 times a second
-to begin with, as ever; 30 or 60 where a frame leaves the machine the time, a couple of seconds on; back down if
-frames get dearer, but not for a little; worked out afresh for another size of it; the other apps as ever."""
-import os, random, shutil, sys
+on its side too. And how often a world's drawn: 20 times a second, 10 on a Pi Zero's TV."""
+import os, shutil, sys
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
     import evdev  # noqa: F401
@@ -111,7 +108,8 @@ def changed(img, box):
 
 
 SC.pi_model = lambda: "Raspberry Pi Zero 2 W Rev 1.0"   # (pictures as ever, not drawn finely: fine ones further on)
-BOXES = (("the Bot's desk", tuple(g.CO_DIRTY)), ("an app's box", tuple(g.SIM_BOX)), ("its box and its numbers", tuple(g.SIM_DIRTY)),
+BOXES = (("a wide one in the middle", (100, 69, 548, 384)), ("an app's box", tuple(g.SIM_BOX)),
+         ("its box and its numbers", tuple(g.SIM_DIRTY)),
          ("a narrow one", (100, 69, 300, 384)), ("one at the corner", (400, 300, 640, 480)),
          ("the whole width", (0, 200, 640, 260)), ("one pixel", (639, 479, 640, 480)))
 for name, bpp, fields, stride, yo in (("the GPi Case's", 16, RGB16, None, 0), ("a 32-bit one its size", 32, BGRX, None, 0),
@@ -224,109 +222,7 @@ check("a picture drawn finely on a 4K TV: its own pixels, each 2 x 2, the whole 
       "and written", all(seen))
 SC.pi_model = lambda: "Raspberry Pi Zero 2 W Rev 1.0"
 
-# ---- Rock Paper Scissors' pieces: the quick way's picture is paste's -------------------------------------------------
-QUICK = SIMS.RPS_QUICK
-QUICK[0] = True
-same, kept = [], True
-for size, at in (((436, 342), (14, 80)), ((640, 480), (0, 0))):
-    for r in ("Small", "Medium", "Large"):
-        s = SIMS.RockPaperScissors(size[0], size[1], random.Random(3), {"size": r, "count": 30})
-        s.start()
-        for _ in range(40):
-            s.update(0.05)
-        s.x[0], s.y[0] = s.r, s.r                       # (some at the walls, and past them: their pictures' corners
-        s.x[1], s.y[1] = s.w - s.r, s.h - s.r           #  off the picture's edge)
-        s.x[2], s.y[2] = 0, s.h / 2
-        s.x[3], s.y[3] = s.w, 0
-        out = []
-        for quick in (True, False):
-            QUICK[0] = quick
-            img = Image.new("RGB", (640, 480), SIMS.SIM_FLOOR)
-            s.draw(img, *at)
-            out.append(img.tobytes())
-            kept = kept and QUICK[0] == quick
-        same.append(out[0] == out[1] and out[0] != Image.new("RGB", (640, 480), SIMS.SIM_FLOOR).tobytes())
-check(f"Rock Paper Scissors' pieces put on the picture the quick way: the picture PIL's own paste makes, in its box "
-      f"and on the whole screen, every size of them, at the walls too ({same.count(True)} of {len(same)})",
-      all(same) and kept)
-same = []
-for fs in (2, 3):
-    F.set_scale(fs)
-    s = SIMS.RockPaperScissors(772, 406, random.Random(4), {"size": "Medium", "count": 30})
-    s.start()
-    for _ in range(40):
-        s.update(0.05)
-    s.x[0], s.y[0] = 0.25, 0.75                         # (between the menus' pixels: where a fine picture can put it)
-    s.x[1], s.y[1] = s.w, s.h
-    out = []
-    for quick in (True, False):
-        QUICK[0] = quick
-        img = F.Image.new("RGB", (960, 540), SIMS.SIM_FLOOR)
-        s.draw(img, 14, 80)
-        out.append(img.pic.tobytes())
-        kept = kept and QUICK[0] == quick and F.detail(img) == fs
-    same.append(out[0] == out[1])
-F.set_scale(1)
-check(f"...drawn finely too (twice, three times): the same picture ({same})", all(same) and kept)
-
-
-class Odd:
-    """A picture whose inside can't be had the quick way."""
-    def __init__(self, img):
-        self.img = img
-
-    def load(self):
-        raise AttributeError("no such thing here")
-
-    def paste(self, *a):
-        return self.img.paste(*a)
-
-
-QUICK[0] = True
-s = SIMS.RockPaperScissors(436, 342, random.Random(3), {"size": "Medium", "count": 30})
-s.start()
-plain = Image.new("RGB", (640, 480), SIMS.SIM_FLOOR)
-QUICK[0] = False
-s.draw(plain, 14, 80)
-QUICK[0] = True
-odd = Odd(Image.new("RGB", (640, 480), SIMS.SIM_FLOOR))
-F_detail = SIMS.detail
-SIMS.detail = lambda img: 1
-try:
-    s.draw(odd, 14, 80)
-finally:
-    SIMS.detail = F_detail
-check("...a picture it can't be done to: pasted as ever, the same picture", odd.img.tobytes() == plain.tobytes())
-
-
-class Core:
-    """PIL's inner picture, but one that takes a piece another way than this."""
-    def paste(self, *a):
-        raise TypeError("not like that")
-
-
-class Inner:
-    def __init__(self, img):
-        self.img, self.im = img, Core()
-
-    def load(self):
-        pass
-
-    def paste(self, *a):
-        return self.img.paste(*a)
-
-
-inner = Inner(Image.new("RGB", (640, 480), SIMS.SIM_FLOOR))
-SIMS.detail = lambda img: 1
-try:
-    s.draw(inner, 14, 80)
-finally:
-    SIMS.detail = F_detail
-check(f"...a PIL that takes a piece another way: pasted as ever from then on, for good ({QUICK[0]}), the same picture",
-      inner.img.tobytes() == plain.tobytes() and QUICK[0] is False)
-QUICK[0] = True
-
-# ---- how often it's drawn -------------------------------------------------------------------------------------------
+# ---- how often a world's drawn ---------------------------------------------------------------------------------------
 g.STATE_FILE = S + "/state.json"; g.CACHE_DIR = S + "/cache"; g.PLEX_FILE = S + "/plex.json"
 g.home_dir = lambda: S + "/home/u"
 g.wifi_quality = lambda: 62.0
@@ -335,13 +231,12 @@ g.cpu_temp = lambda: 48.0
 
 class FB:
     w, h, same = 640, 480, True
-    count = 0
 
     def __init__(self):
         self.last, self.frames = None, 0
 
     def show(self, img):
-        self.last = img; FB.count += 1; self.frames = FB.count
+        self.last = img
 
     def show_part(self, img, box):
         self.show(img)
@@ -350,77 +245,24 @@ class FB:
         pass
 
 
-m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
-m.pi_slow = False
-rps = SIMS.RockPaperScissors(436, 342, random.Random(1))
-fish = next(c for c in SIMS.Sim.__subclasses__() if c.key == "fish")
-check(f"Rock Paper Scissors is the one that's drawn as often as there's time for ({rps.smooth}); the Fish Tank and the "
-      f"rest, as ever ({[c.key for c in SIMS.Sim.__subclasses__() if getattr(c, 'smooth', False)]})",
-      rps.smooth is True and [c.key for c in SIMS.Sim.__subclasses__() if getattr(c, "smooth", False)] == ["rps"])
-BASE = g.SIM_FPS
-
-
-def run(cost, secs, t, sim=rps, step=0.01):
-    """Frames costing that much for a while (from t), as the main loop has them: when the next is due asked first,
-    then the frame drawn, and how long it took. The rates it was drawn at, in turn, and when it's over."""
-    rates = []
-    end = t + secs
-    while t < end - 1e-9:
-        fps = m.sim_fps(sim, t)
-        m.sim_frame_took(sim, cost, t)
-        if not rates or rates[-1] != fps:
-            rates.append(fps)
-        t += step
-    return rates, t
-
-
-t = 100.0
-check(f"just opened: {BASE} frames a second, as ever, nothing known of what one costs",
-      m.sim_fps(rps, t) == BASE and m.sim_cost is None)
-rates, t = run(0.002, 1.9, t)
-check(f"...and for its first couple of seconds, however cheap ({rates})", rates == [BASE])
-rates, t = run(0.002, 1.0, t)
-check(f"a frame taking 2 ms: 60 a second from then on ({rates})", rates == [BASE, 60] and m.sim_rate == 60)
-rates, t = run(0.0045, 4.0, t)
-check(f"...frames a little dearer than 60 has the time for (4.5 ms): it stays, not back and forth ({rates})",
-      rates == [60])
-rates, t = run(0.006, 1.5, t)
-check(f"...dearer still (6 ms): 30 a second ({rates})", rates == [60, 30] and m.sim_rate == 30)
-rates, t = run(0.002, 0.4, t)
-check(f"...cheap again at once: still 30, a rate's kept a couple of seconds before another's tried ({rates})",
-      rates == [30])
-rates, t = run(0.002, 1.5, t)
-check(f"...then 60 again ({rates})", rates == [30, 60])
-rates, t = run(0.012, 3.0, t)
-check(f"a frame taking 12 ms: 30 a second, a quarter of the time between at 60 being 4 ms ({rates})", rates[-1] == 30)
-rates, t = run(0.030, 6.0, t)
-check(f"a frame taking 30 ms: {BASE} a second, as ever ({rates})", rates[-1] == BASE and m.sim_rate == BASE)
-rates, t = run(0.002, 3.0, t)
-check(f"...and up again once they're cheap ({rates})", rates[-1] == 60)
-full = [False]
-m.sim_full = lambda: full[0]
-full[0] = True
-rates, t = run(0.020, 1.9, t)
-check(f"made the whole screen: worked out afresh from its first frame there, {BASE} a second while it is ({rates}), "
-      f"then what its frames there leave time for", rates == [60, BASE] and run(0.020, 3.0, t)[0] == [BASE])
-t += 3.0
-rates, t = run(0.002, 3.0, t)
-check(f"...cheap there too: 60 ({rates})", rates[-1] == 60)
-rates, t = run(0.0005, 5.0, t, sim=fish(436, 342, random.Random(1)))
-check(f"the Fish Tank, however cheap: {BASE} a second, as ever ({rates})", rates == [BASE])
-
-
 class TV(FB):
     w, h, same = 853, 480, False
 
 
-m.fb, m.pi_slow = TV(), True
-slow = g.SIM_FPS_BIG
-rates, t = run(0.030, 6.0, t + 10)
-check(f"a Pi Zero on a TV, a frame taking 30 ms: {slow} a second, as ever ({rates})", rates == [60, slow])
-rates, t = run(0.015, 6.0, t)
-check(f"...15 ms: {BASE} ({rates}); never more than a frame's cost leaves room for", rates == [slow, BASE])
-check(f"what it's given to go by: half the time between frames at 20 and 30 a second, a quarter at 60 "
-      f"({g.SIM_SMOOTH}); a rate kept {g.SIM_SETTLE} s, and a little leeway either way ({g.SIM_KEEN})",
-      g.SIM_SMOOTH == ((20, 0.5), (30, 0.5), (60, 0.25)) and g.SIM_SETTLE == 2.0 and g.SIM_KEEN[0] < 1 < g.SIM_KEEN[1])
+m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
+m.pi_slow = False
+rates = [m.sim_fps()]
+m.fb = TV()
+rates.append(m.sim_fps())
+check(f"a world's drawn {g.SIM_FPS} times a second, on a TV too ({rates})", rates == [20, 20] and g.SIM_FPS == 20)
+m.pi_slow = True
+rates = [m.sim_fps()]
+m.fb = FB()
+rates.append(m.sim_fps())
+check(f"...a Pi Zero on a TV: {g.SIM_FPS_BIG}, each of them scaled up; on its own screen, as ever ({rates})",
+      rates == [10, 20] and g.SIM_FPS_BIG == 10)
+check("...and none of them more often than that: nothing's left of the one that was",
+      not [c.key for c in SIMS.Sim.__subclasses__() if getattr(c, "smooth", False)]
+      and not [n for n in ("SIM_SMOOTH", "SIM_SETTLE", "SIM_KEEN", "RockPaperScissors") if hasattr(SIMS, n)]
+      and not [n for n in ("sim_frame_took", "sim_cost", "sim_rate") if hasattr(m, n)])
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}")

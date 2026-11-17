@@ -387,6 +387,15 @@ check(f"Y goes round: shuffle ({first}), then the one song again and again ({sec
       f"in it, lit in the cover's colour", first == (True, False, "Shuffle")
       and second == (False, True, "Repeat this song") and ink(rp, (ax, keys - 12, ax + 34, keys + 12), colour, 30)
       and not np.array_equal(rp[spot], sh[spot]) and not np.array_equal(rp[spot], a[spot]))
+loop = rp[keys - 9:keys + 10, ax + 2:ax + 33]          # (the loop, 31 across and 19 down)
+lit_in = lambda rows, cols: np.nonzero(np.abs(rp[rows, cols] - np.array(colour)).max(axis=2) < 100)   # noqa: E731
+across = lit_in(slice(keys - 3, keys + 7), slice(ax + 7, ax + 28))[1]     # (its 1: below the arrowhead,
+down = lit_in(slice(keys - 6, keys + 7), slice(ax + 7, ax + 21))[0]       #  and to the left of it)
+mid = (float(across.min() + across.max() + 1) / 2 + 5, float(down.min() + down.max() + 1) / 2 - 6) if len(across) \
+    else None
+check(f"...its 1 in the loop's middle, across and up and down (the loop's is at 15.5, 0.5 from the buttons' line: "
+      f"the 1's is at {mid})", mid is not None and abs(mid[0] - 15.5) <= 1 and abs(mid[1] - 0.5) <= 1
+      and ink(loop, (0, 8, 2, 11), colour, 30) and ink(loop, (29, 8, 31, 11), colour, 30))
 check(f"...the song played through: it's the next ({m.next_index(1, ended=True)}, of {m.qi}); skipped with R, the "
       f"one after it as ever ({m.next_index(1)}); and one that stopped as soon as it started isn't played again and "
       f"again", m.next_index(1, ended=True) == m.qi and m.next_index(1) == as_ever and as_ever != m.qi

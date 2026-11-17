@@ -18,6 +18,10 @@ Custom, or run `sudo bash setup.sh --login`, to keep the password prompt), and r
 The first time takes a while (an hour or more on a Pi 4 with everything in), so leave the Pi on until it says
 All set.
 
+If your system starts in a desktop, it starts in Pietato instead from then on, as the desktop would cover it.
+System > Desktop (SELECT for System's list) opens the desktop, and Pietato in the desktop's menu comes back
+(the desktop closes, so save your work first). To start in the desktop, set Settings > At start-up to Desktop.
+
 ## Screens
 
 A small square screen (like Waveshare's 4-inch 720x720) may tell the Pi it's a TV, which squeezes the picture:

@@ -257,6 +257,10 @@ time.sleep(60)
     p, took = stop_timed()
     time.sleep(0.5)
     left = hw_procs()
+    end = time.time() + 3.0                            # (one of byobu's own, told to go and on its way: a moment more)
+    while left and time.time() < end:
+        time.sleep(0.2)
+        left = hw_procs()
     check(f"B: it all closes ({p.returncode}, {took:.2f} s), the console back in graphics mode, in front; nothing "
           f"left running ({left})", p.poll() is not None and took < 1.5 and mode() == KD_GRAPHICS and fg() == N
           and not left and not g.hw_up())

@@ -145,7 +145,7 @@ def wizard(env, keys, cols=100, rows=40):
 def order(env, case=None):
     m = machine(env)
     return (W.available(m, case) + (["autologin"] if m.user not in ("", "root") else [])
-            + (["desktop"] if m.pc and m.desktop else []))
+            + (["desktop"] if m.desktop else []))
 
 
 def moves(items, *values):
@@ -427,6 +427,17 @@ if not ONLY or "questions" in ONLY:
           and "◇  This computer ─" in sc and "│  Ubuntu 24.04.1 LTS" in sc and "│  16 GB of memory · 200 GB free  " in sc
           and all(x in t.snaps[0] for x in ("│    ◼ PlayStation 2", "│    ◼ GameCube and Wii", "│  > ◻ Start in Pietato",
                                             "not the desktop (System > Desktop opens it)")))
+    BOARD = dict(BASE_ENV, MODEL="OrangePi Zero2W", BIG="no", ARCH="arm64", DESKTOP="yes")
+    items = order(BOARD)
+    got, sc, t = wizard(BOARD, ["down", "enter", *moves(items, "desktop"), ("snap", "enter"), "enter", "enter",
+                                "enter"])
+    check(f"not a PC, but its system starts in a desktop (a board of another make's own): Start in Pietato, or its "
+          f"desktop, there too ({got['DESKTOP']})", got["DESKTOP"] == "keep" and "◇  This Pi ─" in sc
+          and all(x in t.snaps[0] for x in ("│  > ◻ Start in Pietato", "not the desktop (System > Desktop opens it)")))
+    got, sc, t = wizard(BOARD, ["enter", "enter", "enter", "enter"])
+    check(f"...Default: in Pietato ({got['DESKTOP']})", got["DESKTOP"] == "pietato")
+    got, sc, t = wizard(dict(BOARD, DESKTOP="no"), ["down", "enter", ("snap", "enter"), "enter", "enter", "enter"])
+    check("...one that doesn't start in a desktop: nothing about one", "Start in Pietato" not in t.snaps[0])
     got, sc, t = wizard(PC, ["down", "enter", ("snap", "enter"), "enter", "enter", "enter"], rows=16)
     tall = t.snaps[0]
     got2, sc2, t2 = wizard(PC, ["down", "enter", *["down"] * 17, ("snap", "enter"), "enter", "enter", "enter"],

@@ -248,39 +248,24 @@ def tour(which):
     shot("finance")
     m.fin_card = m.fin_cards().index(("coin", "bitcoin")); m.fin_focus()
     shot("crypto")
-    # bot: a conversation, its X menu, at work (typing), and the card START shows there
+    # bot: a conversation, and its X menu
     open(HOME + "/bot.txt", "w").write("server = 192.168.1.20\nmodel = llama3.2:3b\n")
     m.friend.load(m.friend_files())
     now = time.time()                       # (it said something a minute ago: no hello from it as its tab opens, so
     m.friend.log = [                        # nothing's asked of its server, and nothing comes between the drawings){"who": "friend", "kind": "remark", "t": now - 300, "text": "Evening! It's 71 and clear. A good night for a walk."},
-                    {"who": "you", "kind": "chat", "t": now - 60, "text": "what's my coding agent up to?"},
-                    {"who": "friend", "kind": "chat", "t": now - 55, "text": "It's been typing for four minutes. I'll ring the bell when it's done."}]
+                    {"who": "you", "kind": "chat", "t": now - 60, "text": "what's the weather up to now?"},
+                    {"who": "friend", "kind": "chat", "t": now - 55,
+                     "text": "It's been clear for four hours now. I'll tell you if any rain's due."}]
     tab("Bot")
     shot("bot")
     try:
         m.press("x")
         shot("bot_menu")
         m.press("b")
-        m.coder.ask("typing")
-        m.press("right")
-        time.sleep(1.0)
-        import types                                   # (its coder stands still from one drawing to the next: on a
-        import pitato.screens.coder as CODER_PAGE      #  slow machine its hands had typed on by the second)
-        at, wall, clock = time.monotonic(), time.time(), CODER_PAGE.time
-        CODER_PAGE.time = types.SimpleNamespace(monotonic=lambda: at, time=lambda: wall, localtime=time.localtime)
-        try:
-            shot("bot_work")
-        finally:
-            CODER_PAGE.time = clock
-        m.press("start")
-        shot("bot_work_card")
-        m.press("start")
-        m.press("left")
     except Exception as ex:
-        problems.append(f"{which} bot work: {ex!r}")
+        problems.append(f"{which} bot menu: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Fish Tank", "Snake", "LED backlight", "LED backlight strip",
-                 "LED backlight boards"):
+    for name in ("Fish Tank", "Snake", "LED backlight", "LED backlight strip", "LED backlight boards"):
         try:
             if name == "LED backlight boards":          # (a Pietato with no LEDs of its own: its ESP32 boards' picture,
                 import pitato.glow as GLOW              #  an LED each in its own colour, with their names)

@@ -4,9 +4,7 @@ import time
 
 from ..theme import ACCENT, BG, BODY, co_mix, LINE, look, MUTED, PILL, PILL_TEXT, ROW, TEXT
 from ..library import LIBRARY
-from ..sims import (
-    RockPaperScissors, RPS_COLOUR, RPS_TEAMS, SIM_BOX, sim_clock,
-    SIM_FLOOR, SIM_FULL, SIM_IN, SIM_PANEL)
+from ..sims import SIM_BOX, SIM_FLOOR, SIM_FULL, SIM_IN, SIM_PANEL
 from ..fishtank import FishTank, fish_default
 from ..backlight import Backlight
 from ..clock import Clock
@@ -15,11 +13,9 @@ from ..fortune import Fortune
 from ..snake import Snake, SNAKE_AI_HINT
 from ..soundboard import Soundboard
 from ..bandstage import BandStage
-from ..cookiepage import CookiePage
 
 
-SIMS = {s.key: s for s in (Clock, Notes, Fortune, RockPaperScissors, FishTank, Backlight, Soundboard, BandStage,
-                           CookiePage, Snake)}
+SIMS = {s.key: s for s in (Clock, Notes, Fortune, FishTank, Backlight, Soundboard, BandStage, Snake)}
 CLOCK_KEYS = {"a": "look", "up": "colour", "down": "colour", "left": "font", "right": "font",
               "x": "background", "y": "date"}    # the Clock's buttons: the option each changes (its seconds: START's)
 
@@ -52,10 +48,9 @@ class SimScreen:
     def sim_full(self):
         """Full screen: just the sim, on the whole screen (for every sim). Not the LED backlight's page on a Pietato
         with no LEDs of its own: what it says is beside its box and at its foot, and full screen has neither. Nor the
-        Soundboard: its page is the whole of it already, and SELECT there stops the sounds. Nor The Cookie: its
-        buttons are along the bottom."""
+        Soundboard: its page is the whole of it already, and SELECT there stops the sounds."""
         return (self.setting("sim_full") == "On" and not self.sim_plain() and not self.board_tab()
-                and not self.band_tab() and not self.cookie_tab())
+                and not self.band_tab())
 
     def sim_plain(self):
         """This page is the LED backlight's on a Pietato with no LEDs of its own: your ESP32 boards' page."""
@@ -102,10 +97,6 @@ class SimScreen:
             s = self.sims[kind.key] = kind(w, h, values={k: self.sim_value(kind, k) for k, _, _, _ in kind.options})
             if kind is Snake:
                 s.best = self.snake_best()
-            calls = self.setting("sim_rps_calls")
-            if (kind is RockPaperScissors and isinstance(calls, list) and len(calls) == 2
-                    and all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in calls)):
-                s.calls = [min(calls), calls[1]]
         elif (s.w, s.h) != (w, h):
             s.refit(w, h)
         if kind is Clock:
@@ -119,8 +110,6 @@ class SimScreen:
             self.board_page(s)                                 # (its bank and buttons, as they are: screens/soundboard.py)
         if kind is BandStage:
             self.band_page(s)                                  # (who's on what, the chord, your buttons: screens/band.py)
-        if kind is CookiePage:
-            self.cookie_page(s)                                # (who has it, what's just happened: screens/cookie.py)
         return s
 
     def sim_set_full(self, on):
@@ -142,9 +131,8 @@ class SimScreen:
         self.dirty = True
 
     def press_sim(self, name, repeat):
-        """A sim: A pauses (Rock Paper Scissors: starts, pauses, plays again), X pokes it, Y starts it again, SELECT
-        is full screen, START has its options, B goes back to the list. In Rock Paper Scissors, left and right pick a
-        winner (until the first capture). The Clock: press_clock."""
+        """A sim: A pauses, X pokes it, Y starts it again, SELECT is full screen, START has its options, B goes back
+        to the list. The Clock: press_clock."""
         s = self.sim_game()
         if self.sim_opts is not None:
             return self.press_sim_opts(s, name, repeat)
@@ -160,10 +148,6 @@ class SimScreen:
             got = self.press_glow(s, name, repeat)
             if got is not False:
                 return got
-        if s.key == "cookie":                          # (The Cookie: your throw, screens/cookie.py)
-            got = self.press_cookie(s, name, repeat)
-            if got is not False:
-                return got
         if name in ("b", "l", "r"):
             return "pass"
         if s.key == "snake" and name in ("up", "down", "left", "right", "a", "x", "y", "start"):
@@ -177,30 +161,18 @@ class SimScreen:
             return None
         if repeat:
             return None
-        full, rps = self.sim_full(), s.key == "rps"
+        full = self.sim_full()
         if s.key == "fish" and name in ("a", "y"):     # (the Fish Tank: A calls your fish; Y's nothing there)
             if name == "a":
                 self.aquarium.call()
                 self.toast("Here, fish!", 2)
                 self.dirty = True
             return None
-        if name in ("left", "right") and rps:
-            if s.is_open():
-                s.choose(1 if name == "right" else -1)
-                if full:                               # (nothing else on the screen says so)
-                    self.toast("No pick" if s.pick is None else f"Your pick: {RPS_TEAMS[s.pick]}", 2)
-            else:
-                self.toast("Picks are locked until the next round", 2)
-        elif name == "a":
-            if rps and s.phase == "ready":
-                s.start()
-            elif rps and s.phase == "over":
-                s.new_round()
-            else:
-                s.paused = not s.paused
-                if full and s.paused:
-                    self.toast("Paused", 2)
-        elif name == "x" and s.poke_label and not (rps and s.phase == "ready"):
+        if name == "a":
+            s.paused = not s.paused
+            if full and s.paused:                      # (nothing else on the screen says so)
+                self.toast("Paused", 2)
+        elif name == "x" and s.poke_label:
             s.poke()
         elif name == "y":
             s.restart()
@@ -279,13 +251,6 @@ class SimScreen:
         own = s.hints()
         if own is not None:
             return own
-        if s.key == "rps":
-            first = (("A", "Start") if s.phase == "ready" else ("A", "Play again") if s.phase == "over"
-                     else ("A", "Play") if s.paused else ("A", "Pause"))
-            hints = [first] + ([("X", "Shake")] if s.phase != "ready" else []) + [("Y", "New round")]
-            if s.is_open():
-                hints.append(("◀▶", "Pick"))
-            return hints + [("START", "Options")]
         hints = [("A", "Play" if s.paused else "Pause")]
         if s.poke_label:
             hints.append(("X", s.poke_label))
@@ -340,55 +305,6 @@ class SimScreen:
             x, y = pts[-1]
             d.ellipse((x - 2.5, y - 2.5, x + 2.5, y + 2.5), fill=colour)
 
-    def rps_scores(self, s, sig):
-        """Beside Rock Paper Scissors' box: each team's pieces, the time and captures, a chart of the
-        round, your pick. What changes only now and then (the names, your pick) is kept, drawn again
-        when sig changes."""
-        from ..fine import Image, ImageDraw
-        _, panel, _ = self.sim_layout()
-        W, H = panel[2] - panel[0], panel[3] - panel[1]
-        chart = (0, 186, W - 1, 252)
-        if self.sim_still[0] != sig:
-            img = Image.new("RGB", (W, H), BG)
-            d = ImageDraw.Draw(img)
-            for k, name in enumerate(RPS_TEAMS):
-                y, c, mine = k * 42, RPS_COLOUR[k], s.pick == k
-                d.rounded_rectangle((0, y + 4, 10, y + 14), radius=3, fill=c)
-                self.sim_text(img, (18, y + 9), name, "small_b" if mine else "small", c if mine else BODY, BG)
-            for k, label in enumerate(("Time", "Captures")):
-                self.sim_text(img, (0, 140 + k * 24), label, "label", MUTED, BG)
-            y = 272
-            self.sim_text(img, (0, y), "Your pick", "label", MUTED, BG)
-            if s.is_open():
-                state, fill = "Open", MUTED
-            else:
-                state, fill = ("Locked in", TEXT) if s.pick is not None else ("Closed", MUTED)
-            self.sim_text(img, (W, y), state, "status", fill, BG, anchor="r")
-            if s.pick is not None:
-                self.sim_text(img, (0, y + 24), RPS_TEAMS[s.pick], "small_b", RPS_COLOUR[s.pick], BG)
-            else:
-                self.sim_text(img, (0, y + 24), "◀ ▶ to pick" if s.is_open() else "None this round",
-                              "small", BODY, BG)
-            hits, made = s.calls
-            d.text((0, y + 48), f"Called {hits} of {made}" if made else "No calls yet",
-                   font=self.fonts["status"], fill=MUTED, anchor="lm")
-            self.sim_still = (sig, img)
-        img = self.sim_still[1].copy()
-        d = ImageDraw.Draw(img)
-        counts, total = s.counts(), max(1, len(s.t))
-        for k in range(3):
-            y = k * 42
-            self.sim_digits(img, (W, y + 9), str(counts[k]))
-            d.rounded_rectangle((0, y + 22, W - 1, y + 28), radius=3, fill=ROW)
-            if counts[k]:
-                d.rounded_rectangle((0, y + 22, max(6, round((W - 1) * counts[k] / total)), y + 28), radius=3,
-                                    fill=RPS_COLOUR[k])
-        self.sim_digits(img, (W, 140), sim_clock(s.clock))
-        self.sim_digits(img, (W, 164), str(s.captures))
-        d.rounded_rectangle(chart, radius=6, fill=SIM_FLOOR, outline=LINE)
-        self.sim_chart(d, s.history, RPS_COLOUR, total, chart)
-        return img
-
     def sim_numbers(self, s, sig):
         """Beside a sim's box: its name, what it is, its numbers and (for some) a chart. The words that
         don't change are kept, drawn again when sig changes. Snake: while the AI plays, its decisions there
@@ -431,8 +347,7 @@ class SimScreen:
 
     def sim_overlay(self, s):
         """The card over the box, if there's one, as (picture, where): START's options; Paused; a sim's
-        note (Snake's start and its game over); in Rock Paper Scissors the moment to pick a winner, and who won.
-        Full screen: just START's options."""
+        note (Snake's start and its game over). Full screen: just START's options."""
         if self.sim_opts is not None and s.key == "glow":   # (the LED backlight's card: screens/glow.py)
             key = self.glow_card_key()
         elif self.sim_opts is not None and s.key == "sound":   # (the Soundboard's: screens/soundboard.py)
@@ -444,10 +359,6 @@ class SimScreen:
                    self.sim_box(), ACCENT)
         elif self.sim_full():
             return None
-        elif s.key == "rps" and s.phase == "ready":
-            key = ("ready", s.pick, math.ceil(s.wait))
-        elif s.key == "rps" and s.phase == "over":
-            key = ("over", s.winner, s.pick, int(s.clock), s.captures, math.ceil(s.wait))
         elif s.paused:
             key = ("paused",)
         elif s.note():
@@ -462,33 +373,16 @@ class SimScreen:
         return self.sim_card[1]
 
     def sim_note(self, s, key):
-        """A card of a few lines: in the middle of the box (the moment to pick, Paused), or at its foot
-        (who won, a sim's note). Its words are kept pictures: they come back again and again."""
+        """A card of a few lines: in the middle of the box (Paused), or at its foot (a sim's note). Its words
+        are kept pictures: they come back again and again."""
         from ..fine import Image, ImageDraw
         bx0, by0, bx1, by1 = self.sim_layout()[0]
         rows = []                                      # ([(text, font, colour)...], height)
-        middle = key[0] in ("ready", "paused")
-        if key[0] == "ready":
-            if s.pick is None:
-                rows += [([("Pick a winner", "head", TEXT)], 30),
-                         ([(f"◀ ▶ to choose. Starts in {key[2]}", "small", BODY)], 24)]
-            else:
-                rows += [([("Your pick: ", "head", TEXT), (RPS_TEAMS[s.pick], "head", RPS_COLOUR[s.pick])], 30),
-                         ([(f"Starts in {key[2]}", "small", BODY)], 24)]
-        elif key[0] == "paused":
+        middle = key[0] == "paused"
+        if middle:
             rows.append(([("Paused", "head", TEXT)], 30))
         elif key[0] == "note":
             rows += [([(key[1], "head", TEXT)], 30), ([(key[2], "small", BODY)], 24)]
-        else:
-            w = s.winner
-            meta = f"After {sim_clock(s.clock)} and {s.captures} captures."
-            if s.pick is not None:
-                meta = ("You called it. " if s.pick == w else f"Your pick, {RPS_TEAMS[s.pick]}, didn't make it. ") + meta
-            probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-            rows += [([("Last team standing", "label", MUTED)], 23),
-                     ([(f"{RPS_TEAMS[w]} wins", "big", RPS_COLOUR[w])], 39)]
-            rows += [([(line, "small", BODY)], 24) for line in self.wrap(probe, meta, self.fonts["small"], bx1 - bx0 - 80)]
-            rows.append(([(f"Next round in {key[5]} s", "status", MUTED)], 24))
         tiles = [[self.sim_tile(t, f, colour, ROW) for t, f, colour in segs] for segs, _ in rows]
         widths = [sum(t.width - 2 for t in ts) for ts in tiles]
         px, py = (26, 12) if middle else (22, 10)
@@ -570,7 +464,6 @@ class SimScreen:
         from ..fine import Image
         fb = self.fb
         now = time.monotonic()
-        began = time.perf_counter()
         s = self.sim_game()
         if self.sim_opts is None:                      # (it waits while its options are open)
             dt = 0.0 if self.sim_t is None else min(now - self.sim_t, 0.1)
@@ -581,9 +474,7 @@ class SimScreen:
                     self.brain_frame = self.brain_frame * 0.9 + dt * 0.1
                 self.snake_ai_take(s)
             news = s.update(dt)
-            if news == "won" and s.key == "rps" and s.pick is not None:
-                self.set_setting("sim_rps_calls", list(s.calls))
-            elif news == "over" and s.key == "snake":
+            if news == "over" and s.key == "snake":
                 self.snake_over(s)
             if s.key == "snake":
                 self.snake_ai_ask(s)
@@ -627,17 +518,13 @@ class SimScreen:
                 elif s.backdrop != BG:                 # (between the tabs and the buttons)
                     d.rectangle((0, self.HEADER + 1, fb.w, fb.h - self.FOOTER - 1), fill=s.backdrop)
                 self.sim_base = (key, img, [] if bare else self.sim_corners(img))
-            if s.key == "rps":
-                sig = ("rps", s.phase, s.pick, s.is_open(), tuple(s.calls), s.round, ACCENT)   # drawn at once
-                pkey = (sig, tuple(s.counts()), int(s.clock), s.captures, len(s.history))     # ...or every 0.25 s
-            else:
-                sig = (s.key, self.tab, tuple(label for label, _ in s.stats()), ACCENT)
-                pkey = (sig, tuple(s.stats()), len(s.history), s.look())
+            sig = (s.key, self.tab, tuple(label for label, _ in s.stats()), ACCENT)   # (drawn at once)
+            pkey = (sig, tuple(s.stats()), len(s.history), s.look())                  # (...or every 0.25 s)
             old = self.sim_panel[0]
             fresh = not bare and (old is None or old[0] != sig or (s.look_now and pkey[-1] != old[-1])
                                   or (pkey != old and now - self.sim_panel[2] >= 0.25))
             if fresh:
-                self.sim_panel = (pkey, self.rps_scores(s, sig) if s.key == "rps" else self.sim_numbers(s, sig), now)
+                self.sim_panel = (pkey, self.sim_numbers(s, sig), now)
         img = self.sim_base[1].copy()
         (bx, by, _, _), inset = self.sim_box()
         if not full and not bare:
@@ -665,8 +552,6 @@ class SimScreen:
             box, _, dirty = self.sim_layout()
             fb.show_part(img, dirty if fresh else box)
         self.sim_shown = (key, getattr(fb, "frames", None), now, whole_t)
-        if not card_open:                              # (how long its frames take: sim_fps draws it as often as
-            self.sim_frame_took(s, time.perf_counter() - began, now)   # this machine has the time for)
 
     def sim_msg(self, img, low=False):
         """A notice (toast) over the sim: as msg_pill draws it, from a kept picture of the words. Low: at

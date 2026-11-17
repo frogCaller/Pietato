@@ -67,7 +67,7 @@ class Machine:
         self.saved = get("SAVED") == "yes"           # set up before: what it left out (LEAVE_OUT), as it was
         self.left_out = set(get("LEAVE_OUT").split())
         self.keep_login = get("KEEP_LOGIN") == "yes"
-        self.desktop = get("DESKTOP") == "yes"       # a PC that starts in its desktop now
+        self.desktop = get("DESKTOP") == "yes"       # it starts in its desktop now (a PC, or anything else with one)
         self.handheld = get("HANDHELD")              # an RK3326 handheld (on dArkOS): what it's called, or "" (a Pi, a PC)
         self.es = get("ES") == "yes"                 # ...that starts in dArkOS's EmulationStation now (in Pietato after)
         self.darkos = get("DARKOS_CORES")            # ...and dArkOS's own emulators (RetroArch's cores), where they are
@@ -788,7 +788,7 @@ class Wizard:
             items.append((pid, words, f"{when:<11} {what}", pid in self.parts, group))
         start = [("autologin", "Sign in by itself", f"{'':<11} no password at the console", self.autologin,
                   "Start-up")]
-        if m.pc and m.desktop:
+        if m.desktop:
             start.append(("desktop", "Start in Pietato", f"{'':<11} not the desktop (System > Desktop opens it)",
                           not self.keep_desktop, "Start-up"))
         if m.user in ("", "root"):
@@ -804,7 +804,7 @@ class Wizard:
         self.parts = {p for p in got if p in PART_IDS}
         if m.user not in ("", "root"):
             self.autologin = "autologin" in got
-        if m.pc and m.desktop:
+        if m.desktop:
             self.keep_desktop = "desktop" not in got
         return "custom"
 

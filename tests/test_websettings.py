@@ -142,6 +142,13 @@ check(r["web_hosts"]["value"] == "tv.example.lan", "this page: its other names")
 check(sorted(k for k in r if k.startswith("game_picture_")) == ["game_picture_gb", "game_picture_nds"],
       f"Games: a picture setting for each console you have games for ({[k for k in r if k.startswith('game_pic')]})")
 check("ds_screens" in r and "ds_touch" in r, "...the DS's own two, as there are DS games")
+ds = r["ds_screens"]
+check(ds["choices"] == ["Left/Right", "Top/Bottom", "Hybrid Top", "Hybrid Bottom", "Top Only", "Bottom Only"]
+      and ds["names"]["Top Only"] == "Just the top one" and ds["names"]["Bottom Only"] == "Just the touch screen"
+      and ds["value"] == "Left/Right", f"...its two screens: side by side, or just one of them ({ds['names']})")
+check("error" not in do("ds_screens", "Top Only") and m.setting("ds_screens") == "Top Only"
+      and rows()["ds_screens"]["value"] == "Top Only" and "error" in do("ds_screens", "Sideways")
+      and "error" not in do("ds_screens", "Left/Right"), "...just the top one: kept (one there isn't: not)")
 check("resolution" not in r, "no Resolution without a TV or monitor's sizes")
 check(r["accent"]["colours"]["Blue"].startswith("#") and len(r["accent"]["colours"]) == len(r["accent"]["choices"]),
       "Accent: each with its colour")
@@ -252,8 +259,7 @@ check("error" in do("f_model", "llama3"), "...a model it doesn't have: refused")
 check("error" in do("f_chatter", "5"), "...not one of its choices: refused")
 check(do("f_chatter", "60").get("ok") and "chatter = 60" in text("bot.txt"), "...Every hour")
 check(do("f_name", "  Sam\n\tSmith ").get("ok") and "name = Sam Smith" in text("bot.txt"), "...what it calls you")
-check("error" in do("bot_mode", "play") and do("bot_mode", "work").get("ok") and m.setting("bot_mode") == "work",
-      "...its page: At work")
+check("error" in do("bot_mode", "work") and m.setting("bot_mode") != "work", "...its page at work: there's none now")
 
 # ---- Finance --------------------------------------------------------------------------------------------------------------
 check(do("fin_stocks", "aapl, ^gspc, brk-b, 7203.t, aapl").get("ok") and m.stocks.symbols() == [

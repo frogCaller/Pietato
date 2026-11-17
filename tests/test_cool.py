@@ -63,7 +63,7 @@ def stop():
 
 
 m.prog_stop = stop
-SIMS = ["Rock Paper Scissors", "Fish Tank"]
+SIMS = ["Fish Tank"]
 PROGS = ["cmatrix", "hollywood", "nyancat", "cacafire"]
 
 
@@ -77,7 +77,7 @@ def showing():
 # none of Linux's programs installed: just Apps' own
 SA.prog_path = lambda name: None
 names = [t["name"] for t in m.cool_choices()]
-check(f"none of Linux's programs here: Apps' own two worlds to watch ({names})", names == SIMS)
+check(f"none of Linux's programs here: Apps' own world to watch ({names})", names == SIMS)
 SA.prog_path = lambda name: "/usr/bin/" + name
 names = [t["name"] for t in m.cool_choices()]
 check(f"...all of them installed: those too, but never the Clock or htop ({names})", names == SIMS + PROGS)
@@ -107,7 +107,7 @@ for _ in range(60):
     seen.append(now)
     last = now
 check(f"asked 60 more times: never the same one twice in a row ({again})", again)
-check(f"...all six in turn, never the Clock or htop ({sorted(set(seen))})", set(seen) == set(SIMS + PROGS))
+check(f"...all five in turn, never the Clock or htop ({sorted(set(seen))})", set(seen) == set(SIMS + PROGS))
 
 # a sim on already: not that one
 again = set()
@@ -140,15 +140,15 @@ m.fb.last.save(S + "/fish.png")
 check(f"...on the screen: the Fish Tank's page ({g.LIBRARY[m.tab]['name']}, {m.view})",
       g.LIBRARY[m.tab]["name"] == "Fish Tank" and m.view == "list")
 
-# none installed, a world on: only the other one
+# none installed: the Fish Tank, the only one there is then (from another page, and with it on already)
 SA.prog_path = lambda name: None
 started.append(None); m.cool_last = None
 picks = set()
-for _ in range(30):
-    m.web_tab("Rock Paper Scissors"); m.cool_last = None
+for on in ("Weather", "Fish Tank") * 5:
+    m.web_tab(on); m.cool_last = None
     m.assist_heard("show me something cool")
-    picks.add(showing())
-check(f"nothing of Linux's here, Rock Paper Scissors on: the other one ({sorted(picks)})", picks == {"Fish Tank"})
+    picks.add((showing(), spoken[-1].startswith("Here's the Fish Tank")))
+check(f"nothing of Linux's here: the Fish Tank, on already or not ({sorted(picks)})", picks == {("Fish Tank", True)})
 
 # its model asking for it ("[[show me something cool]]"), in its own words
 m.cool_last = None

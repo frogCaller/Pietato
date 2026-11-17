@@ -28,8 +28,8 @@ LIBRARY = [
     {"name": "Finance", "type": "finance", "files": [settings_glob("finance.txt")], "empty": ""},
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
-     "children": ["Clock", "Notes", "Fortune Cookie", "Rock Paper Scissors", "Fish Tank", "Group chat",
-                  "The Cookie", "LED backlight", "Soundboard", "Band", "Konami code", "cmatrix", "hollywood",
+     "children": ["Clock", "Notes", "Fortune Cookie", "Fish Tank", "Group chat",
+                  "LED backlight", "Soundboard", "Band", "Konami code", "cmatrix", "hollywood",
                   "nyancat", "cacafire", "htop"]},     # (LED backlight: on a Pi that can have one, screens/glow.py)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
@@ -73,14 +73,10 @@ LIBRARY = [
      "about": "Type with a keyboard", "empty": ""},
     {"name": "Fortune Cookie", "type": "sim", "sim": "fortune", "parent": "Apps", "badge": "LUCK",   # (pitato/fortune.py)
      "about": "A new fortune with A", "empty": ""},
-    {"name": "Rock Paper Scissors", "type": "sim", "sim": "rps", "parent": "Apps", "badge": "RPS",
-     "about": "Last team standing", "empty": ""},
     {"name": "Fish Tank", "type": "sim", "sim": "fish", "parent": "Apps", "badge": "FISH",   # (fishtank.py)
      "about": "Your fish, and your other Pietatos'", "empty": ""},
     {"name": "Group chat", "type": "chat", "parent": "Apps", "badge": "CHAT",   # (screens/group.py, circle.py)
      "about": "Your Pietatos, talking", "empty": ""},
-    {"name": "The Cookie", "type": "sim", "sim": "cookie", "parent": "Apps", "badge": "YUM",   # (cookie.py,
-     "about": "Your Pietatos play for cookies", "empty": ""},                                    # screens/cookie.py)
     {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
      "about": "The LEDs behind your TV", "empty": ""},
     {"name": "Soundboard", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "SFX",   # (soundboard.py)

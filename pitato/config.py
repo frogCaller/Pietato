@@ -10,7 +10,7 @@ from .theme import ACCENTS, LOOKS
 
 
 CONTROL_PORT = 5480        # the web page (webui.py) works media mode through this, on this Pi only
-WEB_PORT = 5432            # ...which is itself on this port (the Bot at work gives its address to agents)
+WEB_PORT = 5432            # ...which is itself on this port
 CONTROL_KEY = "/run/pitato/control-key"   # ...with this key, readable by you and root only
 # passwords and tokens: never shown
 WEB_PRIVATE = {"webui.txt", "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt", "retroachievements.txt"}
@@ -73,7 +73,8 @@ SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page o
     ("friend", "Bot", None),
     ("homeassistant", "Home Assistant", None),   # its address and token, for the TV Remote and Lights
     ("start", "At start-up", ["Home screen", "Terminal", "Game"]),   # (Game: the one you played last, where you
-                                                                     # were: screens/games.py game_boot)
+                                                                     # were: screens/games.py game_boot. Desktop too,
+                                                                     # where there's one: screens/settings.py)
     ("start_song", "Random song at start-up", ["Off", "On"]),   # one of yours from ~/Music, as it starts
     ("share", "Share with other Pietatos", ["On", "Off"]),   # prices and the weather fetched once for them all, and
                                                             # a game carried on on another of them (savesync.py)
@@ -98,7 +99,7 @@ SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on 
 }
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
-                    "screen": "Fit", "sound": "Auto", "coder_sound": "On", "sim_full": "Off", "bot_mode": "chat",
+                    "screen": "Fit", "sound": "Auto", "sim_full": "Off", "bot_mode": "chat",
                     "game_picture": "Fit", "start_song": "Off", "home_style": "Glass",
                     "ds_screens": "Left/Right", "ds_touch": "Right stick, R2", "app_full": "Off", "turn": "Off",
                     "sys_view": "Dashboard", "battery": "Auto", "share": "On", "attract": "On",

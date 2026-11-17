@@ -155,10 +155,10 @@ m.press("up")
 check(f"its chat page: up scrolls the conversation, its colour as it was ({m.friend_scroll}, {m.bot_colour()})",
       m.friend_scroll > 0 and m.bot_colour() == "Pink")
 m.friend_scroll = 0
-m.press("right")
-check(f"...right: its next page, Work, as ever; its background as it was ({m.bot_mode()}, {m.bot_back()})",
-      m.bot_mode() == "work" and m.bot_back() == "Navy")
 m.press("left")
+check(f"...left: its other page, Today, as ever; its background as it was ({m.bot_mode()}, {m.bot_back()})",
+      m.bot_mode() == "today" and m.bot_back() == "Navy")
+m.press("right")
 m.dirty = True; m.flush()
 chat = m.fb.last
 chat.save(S + "/pics/chat-pink.png")

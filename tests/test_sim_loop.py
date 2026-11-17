@@ -1,8 +1,7 @@
-"""Apps in the real main loop, in real time: opened with the d-pad from the home screen, Rock
-Paper Scissors runs at about SIM_FPS frames a second to begin with, mostly sending just its box, and a couple of
-seconds on as often as the machine has the time for (30 or 60: test_quick_frames.py has how that's worked out);
-START's card stops the frames; leaving it stops them too; full screen, the same; the Fish Tank keeps up full
-screen too at SIM_FPS. A button held down on the web page's remote is one press in Apps' worlds."""
+"""Apps in the real main loop, in real time: opened with the d-pad from the home screen, the Fish Tank runs at about
+SIM_FPS frames a second, mostly sending just its box; START's card stops the frames; leaving it stops them too; full
+screen, it keeps up, each frame the whole screen. A button held down on the web page's remote is one press in Apps'
+worlds."""
 import os, sys, time, shutil, threading
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -159,43 +158,25 @@ press(e.BTN_DPAD_DOWN, 0.2)                    # (past the Clock, Notes and the 
 press(e.BTN_DPAD_DOWN, 0.2)
 press(e.BTN_DPAD_DOWN, 0.2)
 press(e.BTN_SOUTH, 0.3)
-check("A again: Rock Paper Scissors", m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "rps")
-G = m.sims["rps"]
-press(e.BTN_SOUTH, 0.1)                        # (start now)
+check("A again: the Fish Tank", m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "fish")
+G = m.sims["fish"]
+time.sleep(0.5)                                # (its first frames, with its pictures to make: not like the rest)
 t0 = time.monotonic()
 time.sleep(1.2)
 got = since(t0)
 fps = len(got) / 1.2
 small = sum(b == g.SIM_BOX for b in got)
-check(f"{fps:.1f} frames a second to begin with, as ever ({len(got)} in 1.2 s)", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
+check(f"{fps:.1f} frames a second ({len(got)} in 1.2 s)", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
 check(f"...{small} of them just the box, {got.count('whole')} whole", small >= 0.6 * len(got) and got.count("whole") <= 2)
-check(f"...it plays: {G.captures} captures by now", G.phase == "on" and G.clock > 0.8)
-
-
-def settled(what):
-    """A couple of seconds on, it's drawn as often as this machine has the time for (a screen that costs nothing,
-    here): the rate it's settled on, and the frames in a second and a half since."""
-    time.sleep(1.4)
-    rate, t0 = m.sim_rate, time.monotonic()
-    time.sleep(1.5)
-    got = since(t0)
-    lo, hi = sorted((rate or 0, m.sim_rate or 0))       # (a busy machine may change its mind meanwhile)
-    fps = len(got) / 1.5
-    check(f"...a couple of seconds on, a frame taking {(m.sim_cost or 0) * 1000:.1f} ms: {what} {rate} times a second "
-          f"({fps:.1f})", lo >= 30 and hi in (30, 60) and 0.7 * lo <= fps <= hi + 3)
-    return got
-
-
-got = settled("drawn")
-check(f"...mostly just its box still ({sum(b == g.SIM_BOX for b in got)} of {len(got)})",
-      sum(b == g.SIM_BOX for b in got) >= 0.6 * len(got))
+check(f"...its fish swims: {G.clock:.1f} s of it by now", G.clock > 0.8)
 press(e.BTN_START, 0.3)
 drawn()
 t0 = time.monotonic()
 time.sleep(1.0)
 check(f"START's card: no frames meanwhile ({len(since(t0))})", m.sim_opts == 0 and len(since(t0)) == 0)
-press(e.BTN_DPAD_DOWN); press(e.BTN_DPAD_DOWN); press(e.BTN_DPAD_RIGHT)
-check(f"...Speed: {m.setting('sim_rps_speed')}", m.setting("sim_rps_speed") == "Fast" and G.speed == 120)
+press(e.BTN_DPAD_DOWN); press(e.BTN_DPAD_RIGHT)
+check(f"...Light: {m.setting('sim_fish_light')}", m.setting("sim_fish_light") == "Night"
+      and G.values["light"] == "Night")
 press(e.BTN_EAST, 0.3)
 check("B closes it, and on it goes", m.sim_opts is None and len(since(time.monotonic() - 0.25)) >= 2)
 clock = G.clock
@@ -204,7 +185,7 @@ check("R: the next app, Files", g.LIBRARY[m.tab]["name"] == "Files")
 press(e.BTN_TR, 0.3)
 t0 = time.monotonic()
 time.sleep(1.0)
-check(f"R again: System; the game waits, no more frames ({len(since(t0))})",
+check(f"R again: System; the world waits, no more frames ({len(since(t0))})",
       m.tab_type() == "system" and len(since(t0)) <= 2 and G.clock - clock < 0.5)
 press(e.BTN_TL, 0.3)
 press(e.BTN_TL, 0.4)
@@ -214,24 +195,13 @@ check("...A: and on it goes", m.tab_type() == "sim" and G.clock > clock)
 press(e.BTN_SELECT, 0.4)
 check("SELECT: full screen", m.sim_full() and (G.w, G.h) == (640, 480))
 t0 = time.monotonic()
-time.sleep(1.2)
-got = since(t0)
-fps = len(got) / 1.2
-check(f"...{fps:.1f} frames a second to begin with, each the whole screen", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2
-      and all(b == "whole" for b in got))
-got = settled("the whole screen")
-check("...each the whole screen still", got and all(b == "whole" for b in got))
-press(e.BTN_EAST, 0.3)
-press(e.BTN_DPAD_DOWN)
-press(e.BTN_SOUTH, 0.5)
-check(f"B, down to the Fish Tank, A: full screen too ({g.LIBRARY[m.tab]['name']})",
-      m.tab_type() == "sim" and g.LIBRARY[m.tab]["sim"] == "fish" and m.sim_full())
-t0 = time.monotonic()
 time.sleep(2.0)
-fps = len(since(t0)) / 2.0
-check(f"...it keeps up: {fps:.1f} frames a second", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2)
+got = since(t0)
+fps = len(got) / 2.0
+check(f"...it keeps up: {fps:.1f} frames a second, each the whole screen", g.SIM_FPS - 3 <= fps <= g.SIM_FPS + 2
+      and all(b == "whole" for b in got))
 press(e.BTN_SELECT, 0.4)
-check("SELECT: back beside its numbers", not m.sim_full() and (m.sims["fish"].w, m.sims["fish"].h) == (436, 342))
+check("SELECT: back beside its numbers", not m.sim_full() and (G.w, G.h) == (436, 342))
 calls = []
 real_call = m.aquarium.call
 m.aquarium.call = lambda: (calls.append(1), real_call())[1]

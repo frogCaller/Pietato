@@ -1,9 +1,9 @@
 """The bot as an assistant, in media mode: what you ask it to do done at once, typed, said or sent from the web page,
 with its bot set up or not (asked of one that is, its model still answers the questions it knows the answers to); its
-pages, Today, Chat and Work, left to right; the Today page (your list ticked off and taken off, timers, reminders,
-notes); timers and reminders said as they come due (a chime with no voice, its face looking up); the status bar's
-timer; how it talks (Settings > Bot, the web page; a persona of yours still wins); its face, drawn as it changes and
-only it; and the web page's Bot tab: your day, and things done from there."""
+pages, Today and Chat, left to right, in the middle of its card; the Today page (your list ticked off and taken off,
+timers, reminders, notes); timers and reminders said as they come due (a chime with no voice, its face looking up); the
+status bar's timer; how it talks (Settings > Bot, the web page; a persona of yours still wins); its face, drawn as it
+changes and only it; and the web page's Bot tab: your day, and things done from there."""
 import json, os, shutil, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -122,13 +122,38 @@ m.press("left")
 check("left: Today", m.bot_mode() == "today" and m.on_today_page() and m.on_face_page() and not m.on_friend_page())
 m.press("left")
 check("...left again: still Today (the first)", m.bot_mode() == "today")
-m.press("right"); m.press("right")
-check("right, right: at work", m.bot_mode() == "work" and m.on_coder_page() and not m.on_face_page())
 m.press("right")
-check("...right again: still at work (the last)", m.bot_mode() == "work")
-m.press("left"); m.press("left")
+check("right: Chat", m.bot_mode() == "chat" and m.on_friend_page())
+m.press("right")
+check("...right again: still Chat (the last)", m.bot_mode() == "chat")
+m.set_setting("bot_mode", "work")                      # (as an older Pietato left it: it had a page at work then)
+check("...kept from an older Pietato as At work: Chat", m.bot_mode() == "chat" and m.on_friend_page()
+      and m.on_face_page())
+m.press("left")
 check("back to Today", m.bot_mode() == "today")
 empty_today = frame()
+
+
+def labels(pic):
+    """Along the top of the Bot's card (16 to 196 across): where the lit page's name is (the page's colour behind
+    it), and where the other's is, as (first, last) columns."""
+    import numpy as np
+    band = np.asarray(pic.convert("RGB")).astype(int)[m.LIST_TOP + 18:m.LIST_TOP + 40, 16:197]
+    lit = np.nonzero((np.abs(band - np.array(g.BG)).max(axis=2) < 3).any(axis=0))[0]
+    ink = (np.abs(band - np.array(g.ROW)).max(axis=2) > 30).any(axis=0)
+    ink[lit.min():lit.max() + 1] = False
+    other = np.nonzero(ink)[0]
+    return (16 + int(lit.min()), 16 + int(lit.max())), (16 + int(other.min()), 16 + int(other.max()))
+
+
+today_lit, chat_dim = labels(empty_today)
+chat_lit, today_dim = labels(unset)
+check(f"its two pages' names, in the middle of its card (it's from 16 to 196: they're from {today_lit[0]} to "
+      f"{chat_lit[1]}), Today then Chat", abs((today_lit[0] - 16) - (196 - chat_lit[1])) <= 1
+      and today_lit[1] < chat_lit[0] and today_lit[0] > 30)
+check(f"...each keeps its place, lit or not (Today: {today_lit} lit, {today_dim} not; Chat: {chat_lit} lit, "
+      f"{chat_dim} not)", today_lit[0] < today_dim[0] and today_dim[1] < today_lit[1]
+      and chat_lit[0] < chat_dim[0] and chat_dim[1] < chat_lit[1])
 
 # ---- the Today page, with no bot set up ---------------------------------------------------------------------------
 toasts.clear()

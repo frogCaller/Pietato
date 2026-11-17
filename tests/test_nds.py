@@ -177,6 +177,14 @@ check(f"the top one big, the touch screen small beside it: 768 by 384, as wide a
       near(lit(frame(spec)), (60, 1019, 0, 1919)))
 rgb = frame(spec)
 check(f"...the big one red ({colour(rgb[540, 640])})", colour(rgb[540, 640]) == "red")
+run.send("option melonds_screen_layout Top Only")
+check(f"just the top one: 256 by 192, as tall as the TV "
+      f"({lit(frame(spec)) if until(lambda: near(lit(frame(spec)), (0, 1079, 240, 1679)), 8) else None})",
+      near(lit(frame(spec)), (0, 1079, 240, 1679)))
+check(f"...and it's the top one ({colour(frame(spec)[540, 960])})", colour(frame(spec)[540, 960]) == "red")
+run.send("option melonds_screen_layout Bottom Only")
+check("just the touch screen: there instead", until(lambda: colour(frame(spec)[540, 960]) != "red", 8)
+      and near(lit(frame(spec)), (0, 1079, 240, 1679)))
 run.send("option melonds_screen_layout Left/Right")
 check("back side by side", until(lambda: lit(frame(spec)) == (180, 899, 0, 1919), 8))
 sound = os.path.getsize(S + "/sound.raw") if os.path.exists(S + "/sound.raw") else 0
@@ -296,6 +304,11 @@ m.press("right")
 check(f"◀▶ on Screens: the next layout, told to the game and kept ({sent}, {m.setting('ds_screens')})",
       sent == ["option melonds_screen_layout Hybrid Bottom"] and m.setting("ds_screens") == "Hybrid Bottom"
       and m.game_value("screens") == "Touch screen big")
+m.press("right")
+m.press("right")
+check(f"...then just the top one, then just the touch screen ({sent[1:]}, {m.game_value('screens')})",
+      sent[1:] == ["option melonds_screen_layout Top Only", "option melonds_screen_layout Bottom Only"]
+      and m.setting("ds_screens") == "Bottom Only" and m.game_value("screens") == "Just the touch screen")
 m.press("right")
 check(f"...round to side by side ({m.setting('ds_screens')})", m.setting("ds_screens") == "Left/Right")
 FB.last.save(S + "/menu.png")

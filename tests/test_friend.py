@@ -117,9 +117,9 @@ def settle(cond, secs=8):
     return False
 
 
-# the home screen: 15 icons (Apps' and Games too; the Bot at work is the Bot), three full rows of five
+# the home screen: 15 icons (Apps' and Games too), three full rows of five
 apps = [a for a, _ in m.home_apps()]
-check(f"Bot on the home screen: {apps}", "Bot" in apps and "Coder" not in apps and len(apps) == 15)
+check(f"Bot on the home screen: {apps}", "Bot" in apps and len(apps) == 15)
 m.view = "home"; m.home_sel = 0
 m.dirty = True; m.flush()
 home_shot = shots[-1]

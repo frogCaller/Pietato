@@ -9,6 +9,8 @@ sudo isn't there (you gave root a password when you installed Debian), use `su -
 scripts ([Setting it up](setup.md) has them).
 It builds every game emulator (about an hour, or fewer in Custom), so leave the computer on until it says All set.
 After that, the computer starts in Pietato, like a console. If you have a desktop, open System,
-press SELECT for its list and pick Desktop to use it, then restart the computer to come back to Pietato.
+press SELECT for its list and pick Desktop to use it. To come back, pick Pietato in the desktop's menu (the
+desktop closes, so save your work first) or restart the computer. To start in the desktop instead, set
+Settings > At start-up to Desktop.
 Settings > Screen > Resolution sets the screen's size at start-up. With a desktop installed, Bluetooth
 headphones only play sound on the desktop, so in Pietato use the computer's speakers, HDMI or a USB speaker.

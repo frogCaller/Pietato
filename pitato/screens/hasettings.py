@@ -2,10 +2,12 @@
 Lights. Opened from the TV Remote or Lights before it's set up, and from Settings > Home Assistant. (The web page's
 Settings has them too: easier for pasting a token.)"""
 import re
+import socket
 import threading
 import time
 
-from ..config import settings_glob
+from ..config import read_config, settings_glob, WEB_PORT
+from ..system import run_out
 from ..homeassistant import HA_FILE, ha_check, ha_typed_url, save_ha
 from ..theme import ACCENT, BODY, DONE, MUTED, ROW, TEXT, WARN
 
@@ -20,6 +22,13 @@ class HaSettingsScreen:
     @staticmethod
     def ha_files():
         return [settings_glob(HA_FILE)]
+
+    def web_addresses(self):
+        """The web page by name and by number, and whether it has a password."""
+        ips = [x for x in run_out(["hostname", "-I"]).split() if ":" not in x]
+        locked = bool(read_config([settings_glob("webui.txt")]).get("password"))
+        return (f"http://{socket.gethostname()}.local:{WEB_PORT}",
+                f"http://{ips[0]}:{WEB_PORT}" if ips else "", locked)
 
     def ha_open(self):
         """Its settings, over the page you're on: on the row that wants something first."""
@@ -172,7 +181,7 @@ class HaSettingsScreen:
                        font=F["small"] if key in ("check", "forget") else F["row"],
                        fill=colour if not on or key in ("check", "forget") else ACCENT, anchor="rm")
         if not self.hass.token:                        # (a token's long: easier pasted on the web page)
-            _, ip, _ = self.coder_addresses()
+            _, ip, _ = self.web_addresses()
             if ip:
                 note = f"Easier on your phone or computer: {ip.split('//', 1)[1]}, Settings"
                 d.text((W / 2, H - self.FOOTER - 22), self.fit(d, note, F["small"], W - 40), font=F["small"],

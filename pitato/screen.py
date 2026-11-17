@@ -1184,7 +1184,7 @@ class Framebuffer:
 
     def show_part(self, img, box):
         """Only box (x0, y0, x1, y1) has changed since the last picture: just that goes to the screen
-        (the Bot at work moves ten times a second on a Pi Zero), scaled as the whole picture is (the
+        (one of Apps' worlds moves several times a second on a Pi Zero), scaled as the whole picture is (the
         same pixels: a big screen's frames cost about what its box does). The whole picture is kept,
         for the web page."""
         if self.clear_next or self.last is None or img.size != (self.w, self.h) or detail(img) != detail(self.last):

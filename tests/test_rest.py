@@ -207,11 +207,6 @@ ticks(1.0, flush=False)
 check("a game: no rest", not m.resting)
 m.game = None
 m.game_tick = real_game_tick
-m.go_home(); m.tab = m.tab_index("friend"); m.view = "list"; m.load_tab(m.tab); m.set_setting("bot_mode", "work")
-ticks(1.0, flush=False)
-check(f"the Bot at work (your coding agent, acted out): no rest ({m.on_coder_page()})", m.on_coder_page()
-      and not m.resting)
-m.set_setting("bot_mode", "chat")
 m.go_home()
 m.open_keyboard("Type", "", lambda t: None)
 ticks(1.0)

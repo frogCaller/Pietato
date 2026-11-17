@@ -55,7 +55,6 @@ LOCAL = {
     "test_glow_game": "Genesis test games (sega)",
     "test_link_cable": "gambatte built (gambatte)",
     "test_here_game": "EmulatorJS and its Game Boy core, as npm has them (ejs), and a web browser (Playwright's Chromium)",
-    "test_hooks_rename": "a copy of Pietato from before its rename (gpi-media.before_rename), and Claude Code",
     "test_listen": "Vosk and its model (vosk_whl, vosk_model_npm, listen_t)",
     "test_listen_ui": "Vosk and its model (vosk_whl, vosk_model_npm, listen_t)",
     "test_music_talk": "Vosk and its model, and recordings to hear (vosk_whl, vosk_model_npm, listen_t, wakeexp)",
@@ -72,7 +71,8 @@ LOCAL = {
 }
 TIMEOUT = 900
 TIMEOUTS = {"test_setup_pc": 2400, "test_setup_full": 2400, "test_setup_gpi2": 2400, "test_stop_uninstall": 2400,
-            "test_setup_debian": 2400, "test_setup_working": 1200, "test_setup_image": 1200, "test_setup_wizard": 2400}
+            "test_setup_debian": 2400, "test_setup_working": 1200, "test_setup_image": 1200, "test_setup_wizard": 2400,
+            "test_setup_board": 2400}
 HELPERS = ("_child",)                     # (run by other tests, not on their own)
 
 

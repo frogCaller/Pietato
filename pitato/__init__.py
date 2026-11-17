@@ -30,7 +30,6 @@
   assist.py         what you ask the bot to do, understood without a model; your list, notes, reminders
                     and timers, kept
   face.py           the bot's face: its eyes and mouth, drawn as shapes, blinking and glancing
-  coder.py          the Bot at work
   crypto.py         coin prices (CoinGecko), for the Finance tab
   stocks.py         stock prices (Yahoo Finance), for the Finance tab
   homeassistant.py  the TV remote and lights (Home Assistant)
@@ -45,9 +44,6 @@
   clock.py          Apps' Clock
   notes.py          Apps' Notes: what you type on a keyboard (screens/notes.py: its files, the keyboard, its buttons)
   fortune.py        Apps' Fortune Cookie: a new fortune with A (screens/fortune.py: its buttons)
-  cookie.py         Apps' The Cookie: your Pietatos play each other at rock paper scissors, and a win gets a cookie:
-                    its rules (screens/cookie.py: who throws when, your others asked through their web pages)
-  cookiepage.py     ...its page, and the small cookie on the status bar of the one that got the last
   soundboard.py     Apps' Soundboard: a sound on every button (screens/soundboard.py: its buttons, recording)
   soundbank.py      ...its sounds (sounds/: the starter pack, public domain) and its banks' file
   soundplay.py      ...its player, a process of its own, as you: the sounds mixed for aplay, and recording
@@ -79,13 +75,10 @@ Beside them, each run on its own:
   camera.py         a Pi's USB camera on your network, for the Camera tab (setup.sh --camera); also
                     imported for this Pi's own USB cameras (on 127.0.0.1, and for your other Pietatos)
   hear.py           what a USB microphone hears, made out by Vosk (listen.py starts it, as you)
-  coder_hooks.py    Claude Code's hooks, telling the Bot what it's doing (the web page hands it out)
   oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music
   cover.py          a song's cover art (beside it in its folder, or inside its file), and what Music draws of it
   coverfind.py      covers for the songs with none: from your other Pietatos, then looked up online (Y on Music)
   ear.py            the beats of the song that's playing, for the glow round its cover on Now playing
-  agent_link.py     OpenClaw or Hermes, connected both ways: your prompts from the Bot at work to it and its
-                    answers back, and a skill with which it works this Pietato (the web page hands it out)
   convert_videos.sh videos made smaller on your computer (the Pi does it by itself too)
 """
 

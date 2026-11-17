@@ -40,6 +40,11 @@ check("only its own fonts", c.get("/static/fonts/..%2Fwebui.py", **B).status_cod
       and c.get("/static/fonts/OFL.txt", **B).status_code == 404 and c.get("/static/fonts/x.woff2", **B).status_code == 404
       and c.get("/fonts/next-latin.woff2", **B).status_code == 404)
 check("other names are turned away", c.get("/static/fonts/next-latin.woff2", base_url="http://evil.example").status_code == 403)
+gone = {p: c.open(p, method=how, json={"throw": "r"}, **B).status_code
+        for how, p in (("POST", "/api/cookie"), ("GET", "/coder"), ("POST", "/coder/say"), ("POST", "/coder/hook"),
+                       ("GET", "/coder_hooks.py"))}
+check(f"what there isn't any more (a throw for the cookie, the Bot at work): not found ({gone})",
+      set(gone.values()) == {404})
 
 # the static folder holds your settings: none of it handed out as it is
 for name, text in (("radio.txt", "Jazz | http://x\n"), ("webui.txt", "hosts = tv.lan\n"),

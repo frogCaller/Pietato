@@ -5,7 +5,10 @@ at start-up on); none played yet: the home screen, saying so; a new screen size 
 The power switch, with the game going: where you are saved (the game ended, as when you leave it) before the Pi
 shuts down. And where you are is saved as it plays, not only as it ends: a real game (a test core, where there's
 one: tests/run.py --list) saving every moment here (every minute on a Pi), killed as a flat battery would, and
-started again: it picks up from the last one."""
+started again: it picks up from the last one.
+At start-up's Desktop, on a system with a desktop it can start (not among its choices on any other): as the machine
+starts, Pietato stops and the desktop starts in its place; Pietato started again after that (from the desktop's menu,
+Restart media mode, an update) opens on the home screen; its desktop gone since: the home screen."""
 import json, os, signal, shutil, sys, threading, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -185,6 +188,57 @@ check("...a new screen size to ask about first: media mode for that, no game ove
 settings(start="Home screen")
 check("...Home screen and Terminal, as they were", g.Media().boot_media and not g.Media().boot_game
       and (settings(start="Terminal") or not g.Media().boot_media))
+
+# ---- At start-up > Desktop: on a system with a desktop, as the machine starts ---------------------------------------
+def start_choices(m):
+    return {k: c for k, _, c in m.settings_root_rows()}["start"]
+
+
+real_has_desktop = g.has_desktop
+settings(start="Home screen")
+m = g.Media()
+check(f"no desktop here: At start-up's choices as they were ({start_choices(m)})",
+      start_choices(m) == ["Home screen", "Terminal", "Game"])
+g.has_desktop = lambda: True                           # (a system with a desktop it can start: system.py)
+check(f"a system with a desktop: Desktop too, after the rest ({start_choices(m)})",
+      start_choices(m) == ["Home screen", "Terminal", "Game", "Desktop"])
+m.settings_pick("start", "Desktop")
+check(f"...picked: kept, and it says how to come back from the desktop ({m.msg!r})", m.setting("start") == "Desktop"
+      and m.msg == "It starts in the desktop. Pietato's in the desktop's menu"
+      and m.desktop_back() == "Pietato in the desktop's menu comes back here")
+m = g.Media()
+check(f"...its cue as the machine starts, and the home screen for any start after ({m.boot_desktop}, {m.boot_media})",
+      m.boot_desktop and m.boot_media and not m.boot_game)
+JOB = ["systemd-run", "--no-block", "--collect", "--unit=pietato-desktop", "sh", "-c",
+       "systemctl stop pitato; systemctl start display-manager || { systemctl start getty@tty1; systemctl start "
+       "pitato; }"]
+happened.clear()
+m.first = True                                         # (the machine's just started: app.py's main says so)
+done = threading.Event()
+threading.Thread(target=lambda: g.run(UI(), m, None, stop=done.is_set), daemon=True).start()
+time.sleep(0.6)
+check(f"the machine starts: Pietato stops and the desktop starts in its place, by a job of its own (the desktop not "
+      f"starting: Pietato again, and the console's sign-in), nothing of Pietato's on the screen meanwhile ({happened}, "
+      f"{m.active})",
+      happened == [JOB] and not m.active and not m.boot_song)
+done.set()
+m, done = boot(start="Desktop")
+check(f"Pietato started again after that (from the desktop's menu, Restart media mode, an update): the home screen, "
+      f"the desktop left alone ({m.view}, {happened})", until(lambda: m.active) and m.view == "home" and not happened)
+done.set()
+g.STARTED = S + "/started"
+check("Pietato's first start since the machine did: said once, and noted", g.first_start() and not g.first_start()
+      and os.path.exists(S + "/started"))
+g.STARTED = S + "/nowhere/started"
+check("...nowhere to note it: never the first", not g.first_start())
+g.has_desktop = lambda: False
+settings(start="Desktop")
+m = g.Media()
+check(f"its desktop gone since: the home screen at start-up, and Desktop not among its choices ({m.setting('start')})",
+      m.setting("start") == "Home screen" and m.boot_media and not m.boot_desktop
+      and start_choices(m) == ["Home screen", "Terminal", "Game"]
+      and m.desktop_back() == "Restarting the computer comes back to Pietato")
+g.has_desktop = real_has_desktop
 
 # ---- the Pi starting: the game played last, from where you were ---------------------------------------------------
 gone = f"{GAMES}/gb/Deleted Since.gb"

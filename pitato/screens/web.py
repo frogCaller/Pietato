@@ -504,7 +504,7 @@ class WebScreen:
 
     def web_type(self, text, enter):
         """Typed on the web page, into the box on the screen: what's in it now (and Done, with enter). It's the web
-        page's typing, as the remote's would be (a prompt for your coding agent isn't sent from it)."""
+        page's typing, as the remote's would be."""
         kb = self.kb
         if not (self.active and self.view == "keys" and kb):
             return {"error": "There's no box to type in on the screen"}
@@ -853,9 +853,6 @@ class WebScreen:
             if cmd.get("home") is True:                 # the home screen (the app called Home is a tab)
                 self.go_home()
                 return {"ok": True}
-            if app == "Coder":                         # (the Bot at work had its own app once)
-                self.bot_open("work")
-                return {"ok": True}
             if self.web_tab(app) is None:
                 return {"error": "No such app"}
             return {"ok": True}
@@ -1097,7 +1094,7 @@ class WebScreen:
                         for x in list(fr.log)],
                 "models": list(fr.models) if fr.server and fr.models_at == fr.server else [],
                 "modelsStatus": fr.models_status, "showing": self.on_friend_page(), "voice": self.web_voice(),
-                "work": self.web_work(), "style": fr.style()["key"],
+                "style": fr.style()["key"],
                 "styles": [[k, n] for k, n, *_ in FRIEND_STYLES], "today": self.web_today()}
 
     def web_today(self):
@@ -1112,13 +1109,6 @@ class WebScreen:
                             "secs": x["secs"]} for x in list(A.timers)],
                 "reminders": [{"text": r["text"], "when": self.when_text(r["at"], h24)} for r in list(A.reminders)[:8]],
                 "notes": [x["text"] for x in list(A.notes)[-6:]][::-1], "showing": self.on_today_page()}
-
-    def web_work(self):
-        """Your coding agent, as the Bot at work sees it."""
-        s = self.coder.snapshot(time.monotonic())
-        title, sub = self.coder_status(s)
-        return {"heard": bool(s["heard"]), "pose": s["anim"], "title": title, "sub": sub,
-                "showing": self.on_coder_page()}
 
     def web_voice(self):
         here = voices_here()
@@ -1177,10 +1167,10 @@ class WebScreen:
         if do == "models":
             fr.fetch_models()
             return {"ok": True}
-        if do in ("open", "work", "today"):
+        if do in ("open", "today"):
             if not self.web_ready():
                 return {"error": "There's no screen to show it on"}
-            self.bot_open({"work": "work", "today": "today"}.get(do, "chat"))
+            self.bot_open("today" if do == "today" else "chat")
             return {"ok": True}
         if do == "set":
             if "voice" in cmd:

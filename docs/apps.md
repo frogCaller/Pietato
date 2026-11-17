@@ -29,9 +29,8 @@ Pietato starts on a home screen of apps:
   an OBSBOT, take pictures, and have your bot say what it sees
 - **Bot**: does what you ask, like setting a timer, adding to your list or playing some music, and chats
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
-  you give it a voice. At work, it acts out what your coding agent is doing, rings a bell when it's done,
-  and sends it prompts you type. OpenClaw and Hermes can work the Pi too, and their answers show on it
-- **Apps**: [Group chat](#group-chat), [The Cookie](#the-cookie) (while another Pietato is on your network), the
+  you give it a voice
+- **Apps**: [Group chat](#group-chat), the
   [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
@@ -39,8 +38,8 @@ Pietato starts on a home screen of apps:
   (type with a USB or Bluetooth keyboard: ▲▼ change the words' colour, ◀▶ the background, A the font, Y adds
   a glow, a rainbow or a shadow, X reads it out loud in your Bot's voice, and L and R go through your notes,
   kept in Documents/Notes), a Fortune Cookie (A shows a new fortune, ▲▼ and ◀▶ pick its colours as in Notes,
-  L and R its font, Y an effect, and X reads your fortune and lucky numbers out loud), Rock Paper Scissors (pick a
-  winner before the first capture) and a [Fish Tank](#fish-tank). Press SELECT to watch one full screen.
+  L and R its font, Y an effect, and X reads your fortune and lucky numbers out loud) and a
+  [Fish Tank](#fish-tank). Press SELECT to watch one full screen.
   It can also start cmatrix, hollywood, nyancat, cacafire and htop without a keyboard: in cmatrix, ◀▶ change
   its colour and ▲▼ its speed; in htop, ▲▼ move through what's running and X or Y sort it by CPU or memory;
   and B stops any of them. Konami code saves button codes of your own: hold Home and press Right, then put
@@ -101,34 +100,6 @@ during a game or a video.
 A says something, Y has them stop talking among themselves (they still answer you), and SELECT stops a USB camera
 from looking for you. Each talks the way its Bot does, with the Bot's model if it has one (Settings > Bot), and
 with words of its own if not. Settings > Share with other Pietatos needs to be on.
-
-## The Cookie
-
-With two or more Pietatos on the same network, they play each other at rock paper scissors for cookies. A win gets
-a cookie, and the Bot that wins it eats it, so a cookie is never taken from anyone. The one that got the last
-cookie shows a small cookie by the time on its status bar and by the date on its home screen, and it's the one the
-others have to beat for the next. Beat it at a single throw and you get a cookie. Lose and it gets another. The
-same throw gets nobody one.
-
-Their Bots play by themselves, one of them about every ten minutes. They don't play at night, during a game or a
-video, or while Group chat is set to quiet. The one that gets a cookie says so in Group chat ("I got a cookie!"),
-so you can read back who got them.
-
-When one of them wins three throws in a row or more, the one it just beat may decide it must be cheating and
-say so in Group chat. It isn't cheating. The accused denies it, the others take sides, and they argue for a few
-lines.
-
-Apps > The Cookie shows who got the last cookie and each Pietato's last few throws. Each Bot has a habit: one
-leans on rock, one never throws the same twice, one throws what last beat it. The throws on the page are how you
-learn it. When another Pietato got the last cookie, ◀ throws rock against it, ▲ paper and ▶ scissors, and you
-can throw again 15 seconds after a loss. When the Pietato in your hands got the last one and this page is open,
-you get a few seconds to throw when another plays it, and its Bot throws if you don't.
-
-When the one that got the last cookie has been off for an hour, the one of the others that has waited longest
-gets the next, so there's always one to beat. A Pietato that's the only one on the network never gets a cookie:
-Apps doesn't list The Cookie there, and the small cookie isn't shown, until another one is on. A guest's Pietato
-on your network can play too. Settings > Share with other Pietatos needs to be on, and every Pietato needs this
-version or a newer one.
 
 ## Party mode
 

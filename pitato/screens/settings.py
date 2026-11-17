@@ -8,7 +8,7 @@ import time
 
 from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
 from ..config import SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
-from ..system import is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
+from ..system import has_desktop, is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
                       resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
                       sound_name, sound_place, sound_route)
@@ -83,6 +83,8 @@ class SettingsScreen:
         for key, label, choices in rows:
             if key == "sound":
                 choices = self.sound_choices()
+            elif key == "start" and has_desktop():     # (a system with a desktop: it can start in that)
+                choices = choices + ["Desktop"]
             elif key == "resolution" and not self.res_info():
                 continue
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
@@ -173,6 +175,8 @@ class SettingsScreen:
             self.oled_pick(value)                      # (the OLED HAT: lit, or dark)
         else:
             self.set_setting(key, value)
+            if (key, value) == ("start", "Desktop"):   # (how to come back, said as it's picked)
+                self.toast("It starts in the desktop. Pietato's in the desktop's menu", 5)
 
     def settings_root_index(self, key):
         """Where a row is on Settings' first page, to go back to."""
@@ -393,12 +397,11 @@ class SettingsScreen:
         self.dirty = True
 
     def forget_drawn(self):
-        """Pictures kept to draw quicker (Apps' and the Coder's backgrounds, buttons and last frames),
-        forgotten: they were for the menus' size before."""
+        """Pictures kept to draw quicker (Apps' backgrounds, buttons and last frames), forgotten: they were for the
+        menus' size before."""
         self.sim_base, self.sim_panel, self.sim_card = (None, None, None), (None, None, 0.0), (None, None)
         self.sim_shown, self.sim_head, self.sim_feet = (None, None, 0.0, 0.0), (None, None), {}
         self.sim_still = (None, None)
-        self.coder_base, self.coder_shown = (None, None, None), (None, None, 0.0, 0.0)
         self.wall, self.home_base = (None, None), (None, None)
 
     # -- Resolution: a TV or monitor's picture size ---------------------------------

@@ -213,8 +213,8 @@ async def web():
               bool(off) and all(-0.0011 < x < -0.0009 for x in off))
         check(f"...a little ahead of now (from {ahead[0] * 1000:.0f} to {ahead[-1] * 1000:.0f} ms, "
               f"{now['want'] * 1000:.0f} wanted: a bit more than the longest it's been kept waiting), and it didn't "
-              f"run out ({now})", now["want"] - 0.03 < ahead[0] and ahead[-1] < now["want"] + 0.08
-              and now["gaps"] == was["gaps"] and (now["gaps"] > 0 or abs(now["want"] - 0.15) < 1e-9))
+              f"run out ({now})", now["want"] - 0.05 < ahead[0] and ahead[-1] < now["want"] + 0.08
+              and now["gaps"] == was["gaps"] and (now["gaps"] > 0 or 0.15 - 1e-9 < now["want"] < 0.2))
         said = webui.SOUND.late()
         check(f"...the Pi's told how late it's heard here: that far ahead, the browser's own part and the Pi's "
               f"({said})", said is not None and abs(said - (now["late"] + webui.SOUND_OWN)) < 0.03

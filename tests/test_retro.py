@@ -407,7 +407,6 @@ check("the buttons go to the game", (before != after).sum() > 500)
 fit_box = box()
 check(f"the web page: which game ({m.where_text()!r}), the picture refreshed as for a video",
       m.where_text() == "Games › nestest" and m.web_state_now()["video"] is True)
-check("the Bot at work keeps quiet meanwhile", m.coder_may_sound() is None)
 
 # its menu
 check("HOME: the game's menu", m.game_home() and m.view == "gamemenu" and m.game.state == "paused")

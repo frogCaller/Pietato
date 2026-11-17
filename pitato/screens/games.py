@@ -45,7 +45,8 @@ WATCH_MENU = ("resume", "volume", "picture", "quit")   # (another's game, watche
 DS_ONLY = ("screens", "touch")      # (a DS game's own)
 GAME_CHANGE = ("disc", "volume", "picture", "screens", "touch", "ai", "together", "send")   # (◀▶ changes these)
 DS_SCREENS = [("Left/Right", "Side by side"), ("Top/Bottom", "One above the other"),
-              ("Hybrid Top", "Top one big"), ("Hybrid Bottom", "Touch screen big")]   # (melonDS's names, and ours)
+              ("Hybrid Top", "Top one big"), ("Hybrid Bottom", "Touch screen big"),
+              ("Top Only", "Just the top one"), ("Bottom Only", "Just the touch screen")]  # (melonDS's names, and ours)
 DS_TOUCH = ["Right stick, R2", "D-pad, A"]   # what moves the pointer on the touch screen, and touches
 DS_POINTER = 24                     # the d-pad's pointer: as a stick pushed this far (of 127: 3 pixels a frame)
 DS_STICK_DPAD = 64                  # the left stick, as the d-pad: pushed this far (of 127), a direction

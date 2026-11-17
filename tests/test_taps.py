@@ -415,7 +415,7 @@ check(f"a link tapped: opened ({names}, {want})", names == ["a"]
 srv.shutdown()
 
 # ---- Apps: its buttons along the bottom, though they're drawn once and kept ------------------------------
-sim = next((i for i, t in enumerate(g.LIBRARY) if t.get("sim") == "rps"), None)
+sim = next((i for i, t in enumerate(g.LIBRARY) if t.get("sim") == "fish"), None)
 if sim is not None:
     m.tab, m.view = sim, "list"; m.load_tab(sim)
     for _ in range(3):

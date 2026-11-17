@@ -14,6 +14,7 @@ from .inputs import (
     STAR_TAP, TERMINAL, Touch)
 from .control import Control, control_key, serve_control
 from .media import Media
+from .system import first_start
 from .pilot import changes, PILOT_MOST, Pilots
 
 
@@ -353,7 +354,7 @@ def run(ui, media, control=None, stop=None):
     def pilot_button(pad, name, down):
         """A button from another of yours controlling this one: as one from a controller plugged in here (its
         player's, in a game). But as the web page's remote's, it works media mode only, never the terminal (HOME
-        brings media mode back), and it can't answer your coding agent."""
+        brings media mode back)."""
         media.web_guard = "pilot"
         learn_check()
         if not media.active and name != MEDIA_TOGGLE:
@@ -540,6 +541,10 @@ def run(ui, media, control=None, stop=None):
     if getattr(media, "wake_r", None) is not None:
         sel.register(media.wake_r, selectors.EVENT_READ, "wake")   # (a camera's new picture: drawn at once)
     found(pads.scan(time.monotonic(), force=True), quiet=True)
+    if media.boot_desktop:                        # Settings > At start-up > Desktop: as the machine starts, its
+        media.boot_desktop = False                # desktop in Pietato's place (started again later: the home screen)
+        if getattr(media, "first", False) and media.desktop_boot():
+            media.boot_media = False
     if media.boot_media:                          # Settings: open on the home screen
         media.boot_media = False
         media.enter()
@@ -679,6 +684,7 @@ def main():
     ui = UInput({e.EV_KEY: keys}, name=NAME)
     move_old_places()                              # (what it kept by its old name: where it keeps it now)
     media = Media()
+    media.first = first_start()                    # (the machine just started: Settings > At start-up > Desktop's cue)
     media.shrinker.start()                         # (big videos made smaller, in the background)
     media.updater.start()                          # (a newer version looked for now and then: System > Update software)
     media.share_start()                            # (your other Pietatos told it's here: what it fetches, shared)

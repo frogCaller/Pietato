@@ -36,7 +36,7 @@ While a video plays, Y turns full screen on or off (the choice is kept for the n
 Settings > Screen > Video size picks Fit (all of the picture), Full screen (zoomed) or Stretch.
 
 It starts in media mode (Settings > At start-up can start it in the terminal instead, or in the game you played
-last, where you were).
+last, where you were; on a system with a desktop, in the desktop, with Pietato in the desktop's menu).
 Home button toggles between:
   terminal mode - buttons type keys in the console (arrows, Enter, Tab...)
   media mode    - opens on a home screen of app icons (d-pad and A to open one,
@@ -182,40 +182,13 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 With a voice (Piper, on the Pi) it says its replies out loud; SELECT says the
                 last one again. With a USB microphone plugged in, say the wake phrase ("hey potato")
                 and what you want (Vosk makes it out, on the Pi; X > Talk to it skips the phrase;
-                Settings > Bot > Listens turns it off). Right of chatting is work: at work it sits
-                at a desk and acts out what your coding agent is doing: typing, reading, thinking,
-                ringing its bell when it's done, waving when it needs you. Claude Code tells it
-                through hooks that coder_hooks.py sets up on the computer it runs on; anything else
-                can POST to the web page's /coder?pose=typing, and a WAV to /coder/say is said out
-                loud. At work, A types a prompt for Claude Code (which takes it through
-                coder_hooks.py's channel), Y rings the bell, X turns its sounds off, up and down
-                set the volume, START shows how to connect an agent. OpenClaw and Hermes are
-                connected by agent_link.py, run on their computer: it gives them a skill that works
-                this Pi as the web page's remote does, and (listen) hands them the prompts you type
-                at work and shows what they answer on a card (up and down through a long one, X
-                reads it out, B closes it, SELECT shows it again)
+                Settings > Bot > Listens turns it off)
   Apps        - little worlds to watch, each in a box beside its numbers or full screen (SELECT):
     Clock       - the time and the date in the middle of the page: a dial (the date under its middle) or big
                 figures (AM or PM and the seconds beside them, the date under them); A switches between
                 them, START has the look, the seconds and the colour (Settings > Clock: 12 or 24 hours)
-    Rock Paper Scissors - pieces bounce around, and one hit by its counter switches sides until
-                one team is left; left and right pick a winner before the first capture (drawn 20
-                times a second, or 30 or 60 where a frame leaves the machine the time)
     Fish Tank   - a fish of its own; your other Pietatos' tanks join it, and the fish swim from one to the
                 next; A calls it, X feeds it (the web page arranges the tanks)
-    The Cookie  - your Pietatos play each other at rock paper scissors for cookies: the one that got the
-                last cookie (a small one by its clock says so) is the one to beat, and another that beats
-                it at one throw gets a cookie, and is the one to beat next (a loss: the one it played gets
-                another; the same throw: nobody does). A cookie's eaten, never taken: "Den got a cookie".
-                Their Bots play by themselves, one of them about every ten minutes (not at night, in a
-                game, or with the group chat quiet), each with a habit of its own; the one that gets a
-                cookie says so in the group chat. Its page: who got the last, each one's last throws, and
-                yours: left rock, up paper, right scissors (on the one to beat, with the page open,
-                another's throw waits a few seconds for yours). That one off for an hour: the one that's
-                waited longest gets the next. One that wins three throws in a row or more: the one it just
-                beat may say it's cheating (it isn't), and they argue about it in the group chat. A Pietato
-                that's the only one on your network gets no cookie, and Apps doesn't list this there
-                (pitato/cookie.py; POST /api/cookie)
     LED backlight - (a Pi with its pins free) an 8x8 grid of WS2812B LEDs, or a strip of them round the
                 TV, on GPIO 10 (SPI: the first time, config.txt's lines for it, then a restart), lit with
                 the edges of the game on whichever of your Pietatos it follows (pitato/glow.py: a UDP

@@ -12,7 +12,6 @@ from ..handheld import battery, is_handheld
 from ..library import LIBRARY, LISTEN_KINDS
 from ..screen import slow_pi
 from ..home import mix
-from ..cookiepage import cookie_mark
 from .chromium import CHROME_HELP, CHROME_NOTES
 
 
@@ -305,9 +304,7 @@ class DrawScreen:
     def status_signature(self):
         t = cpu_temp()
         sig = (time.strftime("%H:%M"), wifi_bars(wifi_quality()),
-               None if t is None else round(t), self.kind, self.meta.get("song"), self.cookie_marked(),
-               self.assist_status())                   # (cookie_marked: this one got the last cookie, a small one by
-                                                       # the time)
+               None if t is None else round(t), self.kind, self.meta.get("song"), self.assist_status())
         return sig + (battery(),) if is_handheld() else sig   # (an RK3326 handheld's battery: its level, on the bar)
 
     def status_bar(self, d, clock=True):
@@ -315,13 +312,9 @@ class DrawScreen:
         y = self.STATUS_H // 2 + 1
         if clock:
             d.text((20, y), self.clock_text(), font=F["status_b"], fill=BODY, anchor="lm")
-            after = 20 + d.textlength(self.clock_text(), font=F["status_b"])
-            if self.cookie_marked():                   # (it got the last cookie: a small one, after the time)
-                cookie_mark(d, after + 17, y, 6)
-                after += 24
             timer = self.assist_status()               # (a timer of yours, running: how long it has left)
             if timer:                                  # (an hourglass, then how long)
-                tx = after + 18
+                tx = 20 + d.textlength(self.clock_text(), font=F["status_b"]) + 18
                 d.line((tx, y - 6, tx + 10, y - 6), fill=ACCENT, width=2)
                 d.line((tx, y + 6, tx + 10, y + 6), fill=ACCENT, width=2)
                 d.line((tx + 1.5, y - 5, tx + 5, y, tx + 8.5, y - 5), fill=ACCENT, width=1)
@@ -673,8 +666,7 @@ class DrawScreen:
         if ttype == "camera":
             return self.render_cameras() if self.cam_list else self.render_camera()
         if ttype == "friend":                          # (its settings: on it, X > Settings)
-            return self.render_settings() if self.bot_settings else \
-                self.render_coder() if self.bot_mode() == "work" else self.render_friend()
+            return self.render_settings() if self.bot_settings else self.render_friend()
         if ttype == "sim":
             return self.render_sim()
         if ttype == "chat":                            # (Apps > Group chat: screens/group.py)

@@ -87,6 +87,9 @@ modprobe -r snd-aloop 2> /dev/null || true
 
 # its programs, the emulators it built, and what it kept for itself
 rm -f /usr/local/bin/pitato.py /var/log/pitato-update.log
+rm -f /usr/local/bin/pietato-back /usr/local/share/applications/pietato.desktop \
+  /usr/share/polkit-1/actions/org.pietato.back.policy    # (Pietato in a desktop's menu: setup.sh's)
+rmdir /usr/local/share/applications 2> /dev/null || true
 rm -rf /usr/local/share/pitato /usr/local/lib/pitato /var/lib/pitato /var/cache/pitato
 for core in pcsx_rearmed mupen64plus_next ppsspp melonds flycast mednafen_ngp gambatte fbneo_neogeo dolphin pcsx2; do
   rm -f "/usr/local/lib/libretro/${core}_libretro.so" "/usr/local/lib/libretro/$core.version"

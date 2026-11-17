@@ -12,7 +12,6 @@ import urllib.parse
 from .config import CACHE_DIR, clean_name, read_config, settings_glob, WEB_PORT
 from .theme import ACCENTS
 from .circle import hw_clean
-from .cookie import cookie_said
 from .glow import glow_clean
 from .oled import oled_clean
 from .util import UA
@@ -86,17 +85,17 @@ def pie_addr(text):
 def group_news(msg, old, now):
     """What another Pietato's beacon says for the group chat (pitato/circle.py): which run of it this is, always; and,
     in the one told straight to this one, what it's doing, what it's made of and how long ago you were last noticed
-    there (as when, here), the game it's playing (for the home screen's lobby: screens/lobby.py), and the cookie as it
-    knows it (pitato/cookie.py). The one to everyone doesn't say: what was heard before is kept."""
+    there (as when, here), and the game it's playing (for the home screen's lobby: screens/lobby.py). The one to
+    everyone doesn't say: what was heard before is kept."""
     out = {"id": clean_name(msg.get("id"), 24)}
     if "hw" not in msg:
-        out.update({k: old[k] for k in ("hw", "doing", "you", "game", "glow", "oled", "cookie", "party") if k in old})
+        out.update({k: old[k] for k in ("hw", "doing", "you", "game", "glow", "oled", "party") if k in old})
         return out
     you = msg.get("you")
     out.update(hw=hw_clean(msg.get("hw")), doing=clean_name(msg.get("doing"), 60),
                you=now - you if isinstance(you, (int, float)) and not isinstance(you, bool) and 0 <= you <= 86400
                else None, game=game_clean(msg.get("game")), glow=glow_clean(msg.get("glow")),
-               oled=oled_clean(msg.get("oled")), cookie=cookie_said(msg.get("cookie")),
+               oled=oled_clean(msg.get("oled")),
                party=msg.get("party") == 1)            # (it's leading a party: screens/party.py)
     return out
 
@@ -480,17 +479,6 @@ class PieInk:
                               "doing": h.get("doing") or "", "hw": h.get("hw") or kept.get("hw") or {},
                               "you": h.get("you")}
         return list(out.values())
-
-    def cookie_heard(self):
-        """Your other Pietatos as their beacons were last heard, for the cookie (screens/cookie.py): [{"url", "name",
-        "seen", "accent", "full": the beacon told straight to this one has been heard (it says what follows),
-        "cookie": what it says of the cookie (cookie.cookie_said), or None: an older Pietato, which doesn't play}].
-        None with sharing off."""
-        if not self.peers_on():
-            return []
-        with self.lock:
-            return [{"url": u, "name": h["host"], "seen": h["seen"], "accent": h.get("accent") or "",
-                     "full": "hw" in h, "cookie": h.get("cookie")} for u, h in self.heard.items() if h.get("peer")]
 
     def peer_accent(self, url):
         """Another Pietato's colour (its Settings > Appearance > Accent colour, as its beacon says): (r, g, b), or

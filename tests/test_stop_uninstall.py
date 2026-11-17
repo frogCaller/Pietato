@@ -78,6 +78,7 @@ asked2 = stub.split("### start.sh\n")[2].split("### ")[0].splitlines()
 check(f"...without the desktop up: on at once ({said2})", "systemctl start pitato" in asked2
       and said2 == ["Pietato's on, now and every time the computer starts."])
 said, rc, asked, left = step(out, stub, "uninstall.sh")
+in_menu = left["MENU"]                                 # (Pietato in the desktop's menu: setup.sh's, there still)
 check(f"uninstall.sh: asked first, and no answer changes nothing ({said[-1:]}, {left['UNITS']})",
       rc == 0 and said[-1] == "Nothing changed." and "pitato.service" in left["UNITS"] and not asked)
 said, rc, asked, left = step(out, stub, "uninstall.sh --yes")
@@ -88,6 +89,9 @@ check(f"...its programs, what it kept, and the emulators it built, not one of yo
       "pitato" not in left["LOCAL"].split("[", 1)[1] and left["VARLIB"] == "[]" and left["CORES"] == "[other_libretro.so ]")
 check(f"...the web page's sound card and Chromium's session gone, and its copies of your pictures ({left['ETC']}, {left['HOME']})",
       left["ETC"] == "[] []" and left["HOME"].endswith("[]"))
+check(f"...Pietato out of the desktop's menu, where setup.sh put it ({left['MENU']}; there till then: {in_menu})",
+      left["MENU"] == "[]" and "pietato.desktop" in in_menu and "pietato-back" in in_menu
+      and "org.pietato.back.policy" in in_menu and "applications" not in left["LOCAL"])
 check(f"...your files and the Pietato folder still here ({left['HOME']})",
       "pitato" in left["HOME"].split("]")[0] and "Videos" in left["HOME"] and "mine.mp4" in left["HOME"])
 check(f"...the desktop at start-up again, and now ({said[-3:]})",

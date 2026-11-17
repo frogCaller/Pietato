@@ -18,8 +18,7 @@ let go of there, then pressed again; gone for long: the TV says it's lost touch,
 itself. SELECT and START held two seconds let go of it, the TV never seeing that HOME. The TV's web page has a
 password: typed here once (a wrong one said), then kept. Not for one that isn't one of yours, or with the TV's sharing
 off; the web page's part from your network only. Over there, it's a player of its own in a game, Swap A and B is kept
-for it, and it's on the web page's list of controllers; its WiFi isn't left saving power while it's controlled; and
-like the web page's remote, it can't answer your coding agent."""
+for it, and it's on the web page's list of controllers; its WiFi isn't left saving power while it's controlled."""
 import json, os, shutil, socket, subprocess, sys, threading, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -650,16 +649,6 @@ check(f"another controlling this one: said as it begins and ends ({toasts}); its
       toasts == ["den is controlling this Pietato", "den stopped controlling this Pietato"]
       and wifi == [False, True])
 g.wifi_power_save = lambda dev, on=None: None
-
-# like the web page's remote, it can't answer your coding agent
-said = []
-m.prompts.answer = lambda *a, **k: said.append(a) or True
-m.web_guard = "pilot"
-toasts.clear()
-m.coder_answer({"id": 1, "tool": "Bash"}, "a")
-check(f"your coding agent's asking, A from another Pietato: not answered ({toasts[-1:]})",
-      said == [] and toasts[-1:] == ["Answer it on the Pi itself, not from another Pietato"])
-m.web_guard = False
 
 done.set()
 tv_say("quit")

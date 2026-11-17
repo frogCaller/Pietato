@@ -67,6 +67,11 @@ check("...a bad one isn't: no id, a time to come, no words, an answer that isn't
 check("...its kind, accent and topic only if they're ones there are", C.clean_msg(dict(GOOD, kind="hack", accent="Neon",
                                                                                       topic="rm"))
       == {k: v for k, v in dict(got, kind="chat").items() if k not in ("accent", "topic")})
+check("...one from a Pietato not updated yet, about a cookie or one of them cheating for it (topics there aren't any "
+      "more): its words kept, as any line's",
+      not {"cookie", "cheat"} & set(C.TOPICS) and not [k for k in C.LINES if k.startswith(("cookie", "cheat"))]
+      and all(C.clean_msg(dict(GOOD, topic=old)) == {k: v for k, v in got.items() if k != "topic"}
+              for old in ("cookie", "cheat")))
 
 
 # ---- three of them, on a pretend clock -----------------------------------------------------------------------------
@@ -316,6 +321,12 @@ check(f"a beacon told straight to this one: what it's doing, what it's made of, 
 m.pie.hear("10.0.0.21", {"pietato": 1, "id": "bbbbbbbbbbbb", "port": 5432, "host": "Kitchen", "accent": "Gold"})
 check("...the one to everyone doesn't say: what was heard is kept", m.pie.heard[K]["doing"] == "playing Tetris"
       and m.pie.heard[K]["hw"]["b"] == "Pi 4")
+m.pie.hear("10.0.0.21", {"pietato": 1, "id": "bbbbbbbbbbbb", "port": 5432, "host": "Kitchen", "accent": "Gold",
+                         "doing": "playing Tetris", "you": 30, "hw": {"b": "Pi 4", "c": 4, "r": 3.7, "s": 3.0},
+                         "cookie": {"id": "cccccccccccccccc", "n": 4, "name": "Kitchen", "t": now - 60}})
+check("...one from a Pietato not updated yet, saying who got the last cookie: heard as ever, nothing kept of that",
+      "cookie" not in m.pie.heard[K] and m.pie.heard[K]["doing"] == "playing Tetris"
+      and "cookie" not in m.pie.peers_kept[K])
 check("...kept on disk with the rest (its colour and what it is too)", m.pie.peers_kept[K]["hw"]["b"] == "Pi 4")
 members = m.group_members()
 check(f"the group's members, from the beacons ({members})", len(members) == 1 and members[0]["name"] == "Kitchen"
@@ -326,7 +337,7 @@ check(f"this one's beacon to everyone says no more than it did ({basic})",
 m.you_noticed()
 full = m.share_beacon("Den", full=True)
 check(f"...straight to yours: what it's doing and what it's made of, and that you're here ({full})",
-      full["doing"] and full["hw"]["c"] >= 1 and full["you"] == 0)
+      full["doing"] and full["hw"]["c"] >= 1 and full["you"] == 0 and "cookie" not in full)
 m.tab, m.view = m.tab_index("chat"), "list"
 m.load_tab(m.tab)
 m.dirty = True; m.flush()

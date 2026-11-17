@@ -1,6 +1,6 @@
 """Every screen drawn at the GPi Case's 640x480 and at wider screens' shapes (a 1080p and a 720p TV, 16:10,
 21:9, a 1024x600 one), and a square one's (720x720): each picture the size the screen's menus are, nothing going
-wrong, and Apps, the Bot at work and Photos using the width. A square screen: the menus square, its own
+wrong, and Apps and Photos using the width. A square screen: the menus square, its own
 pixels (a bigger one's scaled); one near 4:3 (5:4, 4:3 itself) as before."""
 import json, math, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -208,31 +208,24 @@ def tour(which):
     shot("finance")
     m.fin_card = m.fin_cards().index(("coin", "bitcoin")); m.fin_focus()
     shot("crypto")
-    # bot: a conversation, its X menu, at work (typing), and the card START shows there
+    # bot: a conversation, and its X menu
     open(HOME + "/bot.txt", "w").write("server = 192.168.1.20\nmodel = llama3.2:3b\n")
     tab("Bot")
     m.friend.load(m.friend_files())
     now = time.time()
     m.friend.log = [{"who": "friend", "kind": "remark", "t": now - 300, "text": "Evening! It's 71 and clear. A good night for a walk."},
-                    {"who": "you", "kind": "chat", "t": now - 60, "text": "what's my coding agent up to?"},
-                    {"who": "friend", "kind": "chat", "t": now - 55, "text": "It's been typing for four minutes. I'll ring the bell when it's done."}]
+                    {"who": "you", "kind": "chat", "t": now - 60, "text": "what's the weather up to now?"},
+                    {"who": "friend", "kind": "chat", "t": now - 55,
+                     "text": "It's been clear for four hours now. I'll tell you if any rain's due."}]
     shot("bot")
     try:
         m.press("x")
         shot("bot_menu")
         m.press("b")
-        m.coder.ask("typing")
-        m.press("right")
-        time.sleep(1.0)
-        shot("bot_work")
-        m.press("start")
-        shot("bot_work_card")
-        m.press("start")
-        m.press("left")
     except Exception as ex:
-        problems.append(f"{which} bot work: {ex!r}")
+        problems.append(f"{which} bot menu: {ex!r}")
     # Apps' worlds
-    for name in ("Rock Paper Scissors", "Fish Tank", "Snake", "LED backlight", "LED backlight strip"):
+    for name in ("Fish Tank", "Snake", "LED backlight", "LED backlight strip"):
         try:
             if name.startswith("LED backlight"):        # (its LEDs lit, as a grid or a strip has them: a rainbow)
                 from types import SimpleNamespace
@@ -387,14 +380,10 @@ def lit_cols(im, y0, y1, ref=None):
 for which in SIZES:
     w = widths[which]
     h = sizes[which][1]
-    a = np.asarray(shots[which]["bot_work"].crop((0, 130 + h - 480, w, 240 + h - 480))).astype(int)   # its head
-    xs = np.nonzero((np.abs(a - np.array(g.CO_SHELL)).sum(axis=2) < 30).any(axis=0))[0]
-    mid = (xs.min() + xs.max()) / 2 if len(xs) else -1
-    check(f"{which}: the Bot at work's coder in the middle ({mid:.0f} of {w})", abs(mid - w / 2) < 30)
-    im = shots[which]["sim_rock_paper_scissors"]
+    im = shots[which]["sim_fish_tank"]
     a = np.asarray(im).astype(int)
-    floor = np.array(g.SIM_FLOOR)
-    row = np.nonzero((np.abs(a[250 + (h - 480) // 2][:w - 175] - floor).sum(axis=1) < 4))[0]   # (left of the numbers)
+    page = np.array(g.BG)                              # (its water goes up to the box's edge: the page isn't there)
+    row = np.nonzero((np.abs(a[250 + (h - 480) // 2][:w - 175] - page).sum(axis=1) > 40))[0]   # (left of the numbers)
     check(f"{which}: Apps' box as wide as the screen leaves it ({row.max() if len(row) else 0} of {w})",
           len(row) and w - 200 < row.max() < w - 180)
 check(f"Photos: 4 columns on the GPi Case, 5 at 1080p", True)

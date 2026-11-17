@@ -11,6 +11,8 @@
 #   - on a PC (Intel or AMD, Ubuntu or Debian): every emulator built for it, and it starts in Pietato; with a desktop,
 #     the terminal instead of the desktop at start-up (System > Desktop starts the desktop till it restarts); on
 #     Debian, its non-free packages on (the SNES and Genesis emulators are there, as Raspberry Pi OS has them on)
+#   - anything else whose system starts in a desktop (a board of another make with its own system, Raspberry Pi OS
+#     with its desktop): the terminal instead of the desktop at start-up too, as on a PC
 #   - game controller buttons as keys + media mode (the case buttons, or any USB or
 #     Bluetooth controller), which opens at start-up on a home screen of app icons: TV (Plex,
 #     cartoons, free movies, news, sports, streams, a TV remote through Home Assistant),
@@ -18,8 +20,7 @@
 #     the web (a browser of its own, and Chromium on a Pi 4 or 5),
 #     a file browser for PDFs/documents/text, cameras on your other Pis (see
 #     --camera below) with OBSBOT steering and pictures, a bot (Ollama on another
-#     computer, a Piper voice on the Pi; at work it acts out your coding agent and sends
-#     it your prompts), Apps (a clock, notes, rock paper scissors, a fish tank, a soundboard,
+#     computer, a Piper voice on the Pi), Apps (a clock, notes, a fish tank, a soundboard,
 #     cmatrix, hollywood, nyancat, cacafire, htop), Snake
 #     and your own Game Boy, Game Boy Advance, NES, SNES, Genesis, Master System, Game Gear,
 #     PlayStation and (on a Pi 4 or
@@ -272,7 +273,7 @@ if [ "$CAMERA" = yes ]; then
   exit 0
 fi
 
-for f in pitato.py pitato/app.py pitato/webui.py pitato/coder_hooks.py pitato/agent_link.py templates/index.html; do
+for f in pitato.py pitato/app.py pitato/webui.py templates/index.html; do
   if [ ! -f "$HERE/$f" ]; then
     echo "$f isn't here. Run this from the Pietato folder."
     exit 1
@@ -304,6 +305,15 @@ print(nice_name(sys.argv[2]))' "$HERE" "$MODEL" 2> /dev/null || true)"
 fi
 if [ "$PC" = yes ]; then MACHINE=computer; elif [ "$HANDHELD" = yes ]; then MACHINE=handheld; else MACHINE=Pi; fi
                                                                     # (what to leave on while it works)
+# A system that starts in a desktop, which would cover Pietato on the screen: a PC whose start-up target is the
+# graphical one; anything else whose is, with a display manager to start (a board of another make's own system,
+# Raspberry Pi OS with its desktop: one with no desktop can name that target too, as Debian does till it's told
+# otherwise). Not an RK3326 handheld (dArkOS starts EmulationStation its own way), nor an image being made.
+STARTS_IN_DESKTOP=no
+if [ "$HANDHELD" != yes ] && [ "$IMAGE" != yes ] && [ "$(systemctl get-default 2>/dev/null)" = graphical.target ] \
+   && { [ "$PC" = yes ] || [ -e /etc/systemd/system/display-manager.service ]; }; then
+  STARTS_IN_DESKTOP=yes
+fi
 os_field() {       # os_field NAME: os-release's (ID: ubuntu, or debian, as Raspberry Pi OS's is too; VERSION_CODENAME)
   sed -n "s/^$1=//p" "${PITATO_OS_RELEASE:-/etc/os-release}" 2> /dev/null | tr -d '"' | head -n 1
 }
@@ -430,7 +440,7 @@ if [ -z "$GPI" ]; then
     ASK_CASE=2
   elif [ "$CM4" = yes ]; then                      # (a CM4 is often on a board of its own, on HDMI: no, unless you say)
     ASK_CASE=2 ASK_YES=no
-  elif [[ "$MODEL" == *Zero* ]] || [ "$WAS" = 2w ]; then
+  elif [[ "$MODEL" == *"Raspberry Pi"*Zero* ]] || [ "$WAS" = 2w ]; then   # (not another make's Zero: no case takes it)
     ASK_CASE=2w
   else
     GPI=no      # the cases take a Pi Zero (the 2W) or a Compute Module 4 (the GPi Case 2)
@@ -463,12 +473,10 @@ if [ "$UPDATE" != yes ] && [ "$IMAGE" != yes ] && [ "$PLAIN" != yes ] && [ "${PI
   UI=rich
 fi
 AUTO_AGAIN=no      # (signing in by itself picked again, after a --login)
-KEEP_DESKTOP=no    # (a PC that starts in its desktop: left so)
+KEEP_DESKTOP=no    # (one that starts in its desktop: left so)
 REBOOT_ANS=""
 if [ "$UI" = rich ]; then
   ANSWERS="$(mktemp /var/tmp/pietato-answers-XXXXXX)"
-  DESK=no
-  if [ "$PC" = yes ] && [ "$(systemctl get-default 2>/dev/null)" = graphical.target ]; then DESK=yes; fi
   KEPT=no
   if [ -f "$KEEP_LOGIN" ] || [ -f /var/lib/gpi-keys/keep-login ] || [ "$LOGIN" = yes ]; then KEPT=yes; fi
   rc=0
@@ -478,7 +486,7 @@ if [ "$UI" = rich ]; then
     PIETATO_W_STATIC="$STATIC" PIETATO_W_USER="$USER_NAME" PIETATO_W_HOME="$USER_HOME" \
     PIETATO_W_OS="$(os_field PRETTY_NAME)" PIETATO_W_MEM="$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)" \
     PIETATO_W_FREE="$(df -Pm "$HERE" 2> /dev/null | awk 'NR == 2 {print $4}')" PIETATO_W_SAVED="$SAVED" \
-    PIETATO_W_LEAVE_OUT="$LEAVE_OUT" PIETATO_W_KEEP_LOGIN="$KEPT" PIETATO_W_DESKTOP="$DESK" \
+    PIETATO_W_LEAVE_OUT="$LEAVE_OUT" PIETATO_W_KEEP_LOGIN="$KEPT" PIETATO_W_DESKTOP="$STARTS_IN_DESKTOP" \
     PIETATO_W_MODE="$MODE" PIETATO_W_WITHOUT="$WITHOUT" PIETATO_W_HANDHELD="$HANDHELD_NAME" PIETATO_W_ES="$ES_ON" \
     PIETATO_W_DARKOS_CORES="$DARKOS_CORES" \
     python3 "$HERE/pitato/wizard.py" ask "$ANSWERS" || rc=$?
@@ -1624,15 +1632,70 @@ AUTO
 fi
 
 # --------------------------------------------------------------------------
-# A PC with a desktop (Ubuntu's or Debian's): it starts in the terminal instead, with Pietato on the screen, as a Pi
-# does. System > Desktop starts the desktop when you want it, and the computer restarting comes back to Pietato. (Not
-# on an update: you may have set it back yourself.)
-if [ "$PC" = yes ] && [ "$UPDATE" != yes ] && [ "$KEEP_DESKTOP" != yes ] \
-   && [ "$(systemctl get-default 2>/dev/null)" = graphical.target ]; then
-  step "This computer starts in Pietato now, not the desktop (System > Desktop starts the desktop)"
+# A system that starts in a desktop (STARTS_IN_DESKTOP: a PC's Ubuntu or Debian, a board of another make's own,
+# Raspberry Pi OS with its desktop): it starts in the terminal instead, with Pietato on the screen, as Raspberry Pi OS
+# Lite does. System > Desktop starts the desktop when you want it, and restarting comes back to Pietato. (Not on an
+# update: you may have set it back yourself.)
+DESK_OFF=no        # (the desktop taken out of start-up just now: said again at the end)
+if [ "$STARTS_IN_DESKTOP" = yes ] && [ "$UPDATE" != yes ] && [ "$KEEP_DESKTOP" != yes ]; then
+  step "This $MACHINE starts in Pietato now, not the desktop (System > Desktop starts the desktop)"
   systemctl set-default multi-user.target
   install -d /var/lib/pitato
   touch /var/lib/pitato/was-graphical          # (it started in its desktop: stop.sh and uninstall.sh put that back)
+  DESK_OFF=yes
+fi
+
+# A system with a desktop: Pietato in the desktop's menu too, to come back from the desktop without restarting (after
+# System > Desktop, or on one that starts in its desktop: Settings > At start-up > Desktop). It stops the desktop and
+# starts Pietato, never both at once, as root through pkexec: whoever's at the desktop may, with no password (its
+# polkit action says so). pkexec's put in where it isn't (a desktop nearly always has it).
+BACK=/usr/local/bin/pietato-back
+MENU=/usr/local/share/applications/pietato.desktop
+POLKIT=/usr/share/polkit-1/actions/org.pietato.back.policy
+if [ "$HANDHELD" != yes ] && [ "$IMAGE" != yes ] && [ -e /etc/systemd/system/display-manager.service ]; then
+  if ! command -v pkexec > /dev/null 2>&1; then
+    apt-get install -y pkexec > /dev/null 2>&1 || apt-get install -y policykit-1 > /dev/null 2>&1 || true
+  fi
+  cat > "$BACK" <<'BACKEOF'
+#!/bin/sh
+# Pietato, from the desktop (its entry in the desktop's menu runs this, as root through pkexec): the desktop stops and
+# Pietato starts, by a job of its own, as this goes when the desktop does. The console's sign-in too (a display manager
+# can stop it as it starts: GDM does), for Pietato's terminal.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+exec systemd-run --no-block --collect --unit=pietato-back sh -c \
+  "systemctl stop display-manager; systemctl start getty@tty1; systemctl start pitato"
+BACKEOF
+  chmod 755 "$BACK"
+  install -d "$(dirname "$MENU")" "$(dirname "$POLKIT")"
+  cat > "$MENU" <<MENUEOF
+[Desktop Entry]
+Type=Application
+Name=Pietato
+Comment=Leave the desktop for Pietato (the desktop closes: save your work first)
+Exec=pkexec $BACK
+Icon=applications-multimedia
+Terminal=false
+Categories=AudioVideo;Game;
+MENUEOF
+  cat > "$POLKIT" <<POLKITEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <action id="org.pietato.back">
+    <description>Leave the desktop for Pietato</description>
+    <message>Leave the desktop for Pietato</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">$BACK</annotate>
+  </action>
+</policyconfig>
+POLKITEOF
+else
+  rm -f "$BACK" "$MENU" "$POLKIT"              # (no desktop here, or not any more)
 fi
 
 # An RK3326 handheld on dArkOS: it starts in Pietato now, in EmulationStation's place (never both at once: they'd fight
@@ -1654,8 +1717,7 @@ fi
 step "Installing the web page (port 5432, and 5443 for its secure page)"
 install -d /usr/local/share/pitato/templates
 install -m 644 "$HERE/pitato/webui.py" /usr/local/share/pitato/
-install -m 644 "$HERE/pitato/coder_hooks.py" /usr/local/share/pitato/    # (the page hands it to Claude Code's computer)
-install -m 644 "$HERE/pitato/agent_link.py" /usr/local/share/pitato/     # (...and this one to OpenClaw's or Hermes's)
+rm -f /usr/local/share/pitato/coder_hooks.py /usr/local/share/pitato/agent_link.py   # (an older Pietato's: gone)
 install -m 644 "$HERE/templates/index.html" "$HERE/templates/play.html" "$HERE/templates/play.js" \
   /usr/local/share/pitato/templates/                                     # (play: a game on your phone, Play here)
 install -d /usr/local/share/pitato/static/fonts    # the typefaces: the page's, and the home screen's (without them: the system's)
@@ -1982,8 +2044,8 @@ elif [ "$GPI" = yes ]; then
 else
   echo "All set. Reboot to start."
 fi
-if [ "$PC" = yes ] && [ -e /etc/systemd/system/display-manager.service ]; then
-  echo "This computer starts in Pietato. System > Desktop starts the desktop, and restarting comes back to Pietato."
+if { [ "$PC" = yes ] || [ "$DESK_OFF" = yes ]; } && [ -e /etc/systemd/system/display-manager.service ]; then
+  echo "This $MACHINE starts in Pietato. System > Desktop starts the desktop, and restarting comes back to Pietato."
 fi
 if [ "$HANDHELD" = yes ] && [ -f /var/lib/pitato/was-emulationstation ]; then
   echo "The $HANDHELD_NAME starts in Pietato. System > EmulationStation starts EmulationStation, and restarting comes"

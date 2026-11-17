@@ -1,7 +1,6 @@
 """The web page's requests: a server on this Pi only (webui.py asks it), and the key it wants."""
 import hmac
 import json
-import math
 import os
 import secrets
 import threading
@@ -9,7 +8,6 @@ import urllib.parse
 
 from .config import CONTROL_KEY, CONTROL_PORT, home_dir
 from .bot import Friend
-from .coder import CODER_CLIP_MAX
 from .screens.sketch import sketch_image, SKETCH_BYTES
 
 
@@ -142,8 +140,6 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, {"path": path}) if path else self.reply(404, {"error": "No such file"})
                 if u.path == "/computers":             # (asks a computer: here, not on the screen's thread)
                     return self.reply(200, media.web_computers(q.get("addr", "")))
-                if u.path == "/coder":
-                    return self.reply(200, media.coder_state())
                 if u.path == "/bluetooth":
                     return self.reply(200, media.web_bluetooth())
                 if u.path == "/fish":                  # (the web page's Fish Tank: the whole grid, now)
@@ -176,22 +172,6 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 return self.reply(500, {"error": "Something went wrong on the Pi"})
             self.reply(404, {"error": "Not found"})
 
-        def coder_say(self, q):
-            """A clip for the Bot to say at work: a WAV, answered once it's been said."""
-            try:
-                n = int(self.headers.get("Content-Length") or -1)
-            except ValueError:
-                n = -1
-            if not 0 <= n <= CODER_CLIP_MAX:
-                return self.reply(413, {"ok": False, "error": "clip too big (8 MB at most)"})
-            data = self.rfile.read(n)
-            try:
-                code, out = media.coder_say(data, q.get("pose") or "talking")
-            except Exception as ex:
-                print(f"coder clip: {ex!r}", flush=True)
-                code, out = 500, {"ok": False, "error": "Something went wrong on the Pi"}
-            self.reply(code, out)
-
         def sketch(self):
             """A drawing from the web page's Draw tab (a PNG): opened here, then put on the screen."""
             try:
@@ -210,23 +190,8 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
             if not self.allowed():
                 return
             u = urllib.parse.urlsplit(self.path)
-            if u.path == "/coder/say":
-                return self.coder_say(dict(urllib.parse.parse_qsl(u.query)))
             if u.path == "/sketch":
                 return self.sketch()
-            if u.path == "/coder/prompts":               # your agent asks for prompts: waits a while for one
-                q = dict(urllib.parse.parse_qsl(u.query))
-                try:
-                    wait, got = float(q.get("wait") or 0), int(q.get("got") or 0)
-                except ValueError:
-                    return self.reply(400, {"ok": False, "error": "wait is seconds, got is a prompt's number"})
-                if not math.isfinite(wait):
-                    wait = 0.0
-                try:
-                    return self.reply(200, media.prompts.take(wait, got, q.get("run") or ""))
-                except Exception as ex:
-                    print(f"prompts: {ex!r}", flush=True)
-                    return self.reply(500, {"ok": False, "error": "Something went wrong on the Pi"})
             try:
                 n = int(self.headers.get("Content-Length") or 0)
             except ValueError:
@@ -267,12 +232,6 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 except Exception as ex:
                     print(f"party: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
-            if cmd["cmd"] == "cookie":                 # another of yours tries for the cookie: answered here (it
-                try:                                   # may wait a few seconds for your throw), off the main loop
-                    return self.reply(200, media.web_cookie(cmd))
-                except Exception as ex:
-                    print(f"the cookie: {ex!r}", flush=True)
-                    return self.reply(500, {"error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "computer":               # another computer's files: it can take a while, so here
                 try:
                     return self.reply(200, media.web_computer(cmd))
@@ -287,14 +246,6 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                 except Exception as ex:
                     print(f"bluetooth: {ex!r}", flush=True)
                     return self.reply(500, {"error": "Something went wrong on the Pi"})
-            if cmd["cmd"] in ("coder", "coder/ask", "coder/reply"):   # your agent's word, its request, or its
-                try:                                   # answer: taken at once, off the main loop
-                    return self.reply(200, media.web_coder(cmd) if cmd["cmd"] == "coder" else
-                                      media.web_coder_ask(cmd) if cmd["cmd"] == "coder/ask" else
-                                      media.web_coder_reply(cmd))
-                except Exception as ex:
-                    print(f"coder: {ex!r}", flush=True)
-                    return self.reply(500, {"ok": False, "error": "Something went wrong on the Pi"})
             if cmd["cmd"] == "term":                   # the Pi's terminal on the page: here too (a look waits a while)
                 try:
                     return self.reply(200, media.web_term(cmd))

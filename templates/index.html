@@ -615,9 +615,6 @@
   .face { font: 400 42px/1.1 "DejaVu Sans", "Noto Sans", "Segoe UI Symbol", "Apple Symbols", system-ui, sans-serif; white-space: nowrap; }
   .fr-model { font-size: 13.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fr-model.busy { color: var(--accent); }
-  .fr-agent { font-size: 13px; line-height: 1.4; color: var(--muted); }
-  .fr-agent.busy { color: var(--accent); }
-  .fr-agent.warn { color: var(--bad); }
   .fr-links { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .fr-chat, .fr-setup { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   .fr-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 16px; }
@@ -3530,16 +3527,12 @@ function drawFriend() {
   const face = el("aside", "fr-face");
   const show = button("linkbtn", "Show on the Pi");
   show.onclick = () => friendDo("open");
-  const atWork = button("linkbtn", "Show it at work");               // (your coding agent, acted out)
-  atWork.onclick = () => friendDo("work");
   const links = el("div", "fr-links");
-  links.append(show, atWork);
-  const agent = el("div", "fr-agent", "");
-  agent.hidden = true;
+  links.append(show);
   const day = button("linkbtn", "Show your day on the Pi");          // (the Bot's Today page)
   day.onclick = () => friendDo("today");
   links.append(day);
-  face.append(el("div", "face", FR.data ? FR.data.face : "(•‿•)"), el("div", "fr-model", ""), agent, links,
+  face.append(el("div", "face", FR.data ? FR.data.face : "(•‿•)"), el("div", "fr-model", ""), links,
     el("div", "fr-today"));
   const chat = el("section", "fr-chat");
   chat.hidden = true;
@@ -3649,11 +3642,6 @@ function renderFriend() {
   const m = wrap.querySelector(".fr-model");
   m.textContent = d.busy ? d.doing || "Thinking…" : v.speaking ? "Speaking…" : d.ready ? d.model : "Not set up";
   m.classList.toggle("busy", d.busy || !!v.speaking);
-  const w = d.work || {}, agent = wrap.querySelector(".fr-agent");
-  agent.hidden = !w.heard;
-  agent.textContent = w.heard ? "Your coding agent: " + w.title.toLowerCase() + (w.sub ? " " + w.sub : "") : "";
-  agent.classList.toggle("busy", ["typing", "reading", "thinking", "talking"].includes(w.pose));
-  agent.classList.toggle("warn", ["attention", "error"].includes(w.pose));
   const aloud = wrap.querySelector(".fr-aloud");
   aloud.hidden = !v.id;
   aloud.textContent = v.speaking ? "Stop talking" : "Say it out loud";
@@ -3955,7 +3943,6 @@ async function friendDo(what) {
   try {
     await pi("friend", { do: what });
     if (what === "open") toast("Your bot is on the Pi's screen");
-    if (what === "work") toast("Your bot is at work on the Pi's screen");
     if (what === "today") toast("Your day is on the Pi's screen");
   } catch (e) { toast(e.message); }
   FR.sig = "";

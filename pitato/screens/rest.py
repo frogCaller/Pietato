@@ -4,7 +4,7 @@ drawn, the page on it stops asking the network for news (Home, Pi-hole, Finance,
 main loop looks around once a second, and Wi-Fi saves its power too. Music and radio keep playing. Any button wakes
 it (that press does nothing else), as does the web page (the screen's picture watched there, or anything done there)
 or the bot hearing its wake phrase. Never while there's something to watch: a video, a game, a program, the camera,
-the Bot at work, a sim, a slideshow, lofi art with a song playing, the keyboard, or the web page looking at the
+a sim, a slideshow, lofi art with a song playing, the keyboard, or the web page looking at the
 screen. A Pietato with no screen (media.py's no_screen) rests whatever the battery saver says, as soon as nobody's
 at its web page: the menus are drawn for the page alone, so there's nothing to draw them for."""
 import threading
@@ -92,7 +92,7 @@ class RestScreen:
         return bool(
             self.proc_owns_screen() or self.game is not None or self.prog is not None or self.chromium_shown()
             or self.view in ("keys", "sketch", "game", "gamemenu", "chromenu", "chromehow")
-            or (self.view == "list" and (self.on_camera_page() or self.on_coder_page() or self.on_sim_page()))
+            or (self.view == "list" and (self.on_camera_page() or self.on_sim_page()))
             or (self.view == "photo" and self.v.get("slideshow")) or (self.now_art() and not self.paused))
 
     def rest_tick(self, now):

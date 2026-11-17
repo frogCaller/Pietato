@@ -22,12 +22,11 @@ from ..handheld import is_handheld
 from ..bot import (
     Friend, FRIEND_BUBBLE, FRIEND_CHATTER, FRIEND_HEAD, FRIEND_HELLO_AFTER, FRIEND_KEEP, FRIEND_PAGES,
     FRIEND_PIC_ROOM, FRIEND_SIGHT, FRIEND_STYLES, FRIEND_TOPICS)
-from ..coder import CODER_BUSY, CODER_TITLES
 from ..face import draw_face, face_colours, face_shape, face_wait, FACE_BACKS, FACE_COLOURS, MOODS, \
     SHAPE_DEFAULTS, shape_step
 
-BOT_MODES = ("today", "chat", "work")   # the Bot's pages, left to right: your day, chatting, your coding agent at work
-BOT_MODE_NAMES = {"today": "Today", "chat": "Chat", "work": "Work"}
+BOT_MODES = ("today", "chat")           # the Bot's pages, left to right: your day, chatting
+BOT_MODE_NAMES = {"today": "Today", "chat": "Chat"}
 FACE_MOOD_SECS = 90             # the face shows how it felt about what it said for this long, then its everyday look
 HOLD_AFTER = 1.0                # Pauses music: seconds after the bot's done (listening, thinking, talking) it plays on
 FACE_SIZE = 96                  # the face, across (on its chat page: in its panel, its background's colour)
@@ -56,7 +55,7 @@ class BotScreen:
     """The Bot tab: chatting, its pictures and its voice, and Settings > Bot."""
 
     def on_bot_page(self):
-        """The Bot is on screen (chatting or at work: not its settings)."""
+        """The Bot is on screen (chatting, or with your day: not its settings)."""
         return self.active and self.view == "list" and self.tab_type() == "friend" and not self.bot_settings
 
     def on_bot_settings(self):
@@ -73,29 +72,27 @@ class BotScreen:
             self.dirty = True
 
     def bot_mode(self):
-        """The Bot's page: your day ("today": your list, timers, reminders and notes), chatting ("chat"), or acting
-        out your coding agent ("work"). Left and right go from one to the next."""
+        """The Bot's page: your day ("today": your list, timers, reminders and notes) or chatting ("chat"). Left and
+        right go from one to the other."""
         mode = self.setting("bot_mode")
         return mode if mode in BOT_MODES else "chat"
 
-    def bot_label(self, d, pill=None):
-        """Top left on the Bot: its pages, the one it's on lit (left and right go from one to the next). pill: what
-        the lit one's on (its card's darker shade)."""
+    def bot_label(self, d, mid):
+        """At the top of the Bot's card (mid: its middle): its pages, the one it's on lit (left and right go from one
+        to the other), the two of them in the middle of it. Each keeps its place, lit or not."""
         F = self.fonts
         cur = self.bot_mode()
-        x, y = 24, self.LIST_TOP + 16
-        for mode in BOT_MODES:
-            word = BOT_MODE_NAMES[mode]
-            tw = d.textlength(word, font=F["small"])
-            if mode == cur:
-                d.rounded_rectangle((x, y, x + tw + 26, y + 26), radius=13,
-                                    fill=pill or (ROW if cur == "work" else BG))
+        words = [BOT_MODE_NAMES[mode] for mode in BOT_MODES]
+        widths = [round(d.textlength(word, font=F["small"])) for word in words]
+        x, y = round(mid - (sum(widths) + 26 * len(words) + 4 * (len(words) - 1)) / 2), self.LIST_TOP + 16
+        for mode, word, tw in zip(BOT_MODES, words, widths):
+            if mode == cur:                            # (a dot before its name, on the page's own colour)
+                d.rounded_rectangle((x, y, x + tw + 26, y + 26), radius=13, fill=BG)
                 d.ellipse((x + 9, y + 10, x + 15, y + 16), fill=ACCENT)
                 d.text((x + 19, y + 13), word, font=F["small"], fill=TEXT, anchor="lm")
-                x += tw + 30
             else:
-                d.text((x + 3, y + 13), word, font=F["small"], fill=MUTED, anchor="lm")
-                x += tw + 12
+                d.text((x + 13, y + 13), word, font=F["small"], fill=MUTED, anchor="lm")
+            x += tw + 30
 
     # -- the bot ---------------------------------------------------------------
     def friend_files(self):
@@ -229,8 +226,6 @@ class BotScreen:
                 self.soon(lambda: self.say_aloud(text))   # (the music's stopped on media mode's own thread)
                 return True, ""
             self.hold_music(talk=True)
-        if self.coder.talking():
-            return False, "Not while your coding agent is talking"
         if text is None:
             last = next((x for x in reversed(self.friend.log)
                          if x["who"] == "friend" and x.get("kind") != "error"), None)
@@ -287,8 +282,7 @@ class BotScreen:
         h = self.music_held
         if h is None:
             return
-        if (self.ears.state == "listening" or self.voice.speaking or self.friend.busy or self.coder.talking()
-                or self.soon_jobs):
+        if self.ears.state == "listening" or self.voice.speaking or self.friend.busy or self.soon_jobs:
             h["at"] = now
             return
         if now - h.get("at", now) < HOLD_AFTER:
@@ -487,12 +481,11 @@ class BotScreen:
             self.toast(f"Say \"{self.bot_wake()}\" to talk to your bot", 4)
 
     def ears_busy(self):
-        """Not now: the bot (or your coding agent) is speaking, a game or a program has the screen (it would hear that
+        """Not now: the bot is speaking, a game or a program has the screen (it would hear that
         instead), or a video's playing on a slower Pi (a Zero, 1, 2 or 3: listening too, it would stutter). Music, the
         radio, anything paused, and a video on a Pi 4 or 5: it listens, and what's playing goes quieter while you talk
         to it. (From the ears' thread.)"""
         return (not self.active or self.voice.speaking or self.game is not None or self.prog is not None
-                or self.coder.talking()
                 or (self.proc is not None and not self.paused and self.kind not in LISTEN_KINDS and self.pi_slow))
 
     def ears_noisy(self):
@@ -897,9 +890,9 @@ class BotScreen:
         return None
 
     def press_bot(self, name, repeat):
-        """The Bot: left and right go from one of its pages to the next (Today, Chat, Work; not while its menu or a
-        card is open; on just its face, they change its background); the rest is up to the one on screen. Its
-        settings, while they're open on it: theirs."""
+        """The Bot: left and right go from one of its pages to the other (Today, Chat; not while its menu is open; on
+        just its face, they change its background); the rest is up to the one on screen. Its settings, while they're
+        open on it: theirs."""
         if self.bot_settings:
             return self.press_settings(name, repeat)
         mode = self.bot_mode()
@@ -907,18 +900,16 @@ class BotScreen:
             if not repeat:
                 self.bot_back_step(-1 if name == "left" else 1)
             return None
-        if name in ("left", "right") and self.friend_more is None and not self.coder_help:
+        if name in ("left", "right") and self.friend_more is None:
             i = BOT_MODES.index(mode) + (1 if name == "right" else -1)
             if not repeat and 0 <= i < len(BOT_MODES):
                 self.bot_set_mode(BOT_MODES[i])
             return None
-        if mode == "work":
-            return self.press_coder(name, repeat)
         return self.press_today(name, repeat) if mode == "today" else self.press_friend(name, repeat)
 
     def bot_set_mode(self, mode):
-        """Today, chat or work, kept for next time."""
-        self.friend_more, self.coder_help = None, False
+        """Today or chat, kept for next time."""
+        self.friend_more = None
         self.confirm = (None, 0.0)
         self.set_setting("bot_mode", mode)
         if mode == "chat" and self.on_friend_page():
@@ -926,26 +917,11 @@ class BotScreen:
         self.dirty = True
 
     def bot_open(self, mode):
-        """The Bot on the screen, chatting or at work (the web page): its settings closed, if they were open on it."""
+        """The Bot on the screen, chatting or with your day (the web page): its settings closed, if they were open on
+        it."""
         self.set_setting("bot_mode", mode)
         self.bot_settings_close()
         self.web_tab("Bot")
-
-    def bot_work_line(self):
-        """While it chats: a word on what your coding agent is up to, (words, colour), or None."""
-        s = self.coder.snapshot(time.monotonic())
-        a = s["anim"]
-        if not s["heard"] or s["asleep"]:
-            return None
-        if a in CODER_BUSY:
-            return f"Your agent is {CODER_TITLES[a].lower()}", ACCENT
-        if a == "attention":
-            return "Your agent needs you", WARN
-        if a == "error":
-            return CODER_TITLES[a], WARN
-        if s["done"] and time.time() - s["done"][0] < 600:
-            return "Your agent is done", MUTED
-        return None
 
     def friend_send(self, text, picture=None):
         if picture is None and self.assist_heard(text):  # (something it does: done at once)
@@ -1218,8 +1194,7 @@ class BotScreen:
         d.rounded_rectangle((cx0, top, cx1, bottom), radius=18, fill=ROW)
         side, below, round_ = FACE_PANEL
         py0 = top + below
-        py1 = min(py0 + (cx1 - cx0) - 2 * side, bottom - 74)   # (square. Room under it for its model or the day, and
-                                                                # what your coding agent's doing)
+        py1 = min(py0 + (cx1 - cx0) - 2 * side, bottom - 74)   # (square. Room under it for its model or the day)
         d.rounded_rectangle((cx0 + side, py0, cx1 - side, py1), radius=round_, fill=back)
         face_at = ((cx0 + cx1) / 2, (py0 + py1) / 2 + FACE_SIZE * 0.06, FACE_SIZE)   # (its eyes and mouth in the
                                                                                      # middle of it)
@@ -1233,11 +1208,7 @@ class BotScreen:
             self.fit(d, fr.model, F["small"], cx1 - cx0 - 24) if fr.ready() else "Not set up"
         lit = fr.busy or speaking or hearing
         d.text(((cx0 + cx1) / 2, py1 + 22), status, font=F["small"], fill=ACCENT if lit else MUTED, anchor="mm")
-        self.bot_label(d)
-        work = self.friend_work_shown = self.bot_work_line()
-        if work:                                      # (your coding agent: left or right shows it)
-            d.text(((cx0 + cx1) / 2, bottom - 24), self.fit(d, work[0], F["small"], cx1 - cx0 - 20), font=F["small"],
-                   fill=work[1], anchor="mm")
+        self.bot_label(d, (cx0 + cx1) / 2)
 
         # the conversation on the right, the newest at the bottom (above a notice while one is up); or your day
         x0, x1 = cx1 + 14, W - 16

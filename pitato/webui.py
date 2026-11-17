@@ -31,16 +31,6 @@ Optional, static/webui.txt:
                                address always work; other names are turned away, so a web
                                site can't reach the page by pointing a name of its own at it)
 
-The Bot hears from your coding agent here too, and acts it out at work: Claude Code's hooks
-(coder_hooks.py sets them up, and is handed out at /coder_hooks.py), POST /coder?pose=typing from
-anything else, and a WAV to POST /coder/say to have it said out loud. Prompts typed on the Pi go the
-other way: coder_hooks.py --channel, which Claude Code runs, asks for them at POST /coder/prompts. It
-passes on Claude Code's permission prompts too (POST /coder/ask), and your answers on the Pi go back with
-the prompts. With a password, these send it as a token (Authorization: Bearer ...).
-An agent that answers in words (OpenClaw, Hermes) is connected by agent_link.py (handed out at
-/agent_link.py): run on its computer, it asks for your prompts the same way, hands them to the agent,
-and sends what it answers back (POST /coder/reply) for the Bot at work to show. It also gives the agent
-a skill that works this Pietato through the page's own requests.
 """
 import base64
 import hashlib
@@ -118,19 +108,6 @@ PI_ARGS = ("what", "genre", "q", "name", "size", "addr", "id", "after", "wait", 
 FRAME_WAIT = 20                                 # seconds the page's request for the screen's next picture waits, at most
 PI_BODY_MOST = 1 << 20                          # bytes a request for media mode can be, at most (all it takes itself)
 SCRIPTABLE = {"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml", "text/xsl"}
-CODER = ("rest", "typing", "reading", "thinking", "talking", "done", "hello", "attention", "error",
-         "shrug", "wake", "sleep")                     # the Bot's poses at work
-CODER_SAY_AS = ("talking", "typing", "reading", "thinking", "rest")   # the poses it says a clip in
-CLIP_MAX = 8 << 20                                      # bytes of a clip to say
-CLIP_TURN = threading.Lock()                            # clips take turns (the next waits, unread)
-HOOK_MAX = 32 << 20                                     # bytes of a hook's report read (a big edit's is big)
-ASK_MAX = 64 << 10                                      # bytes of your agent's request to use a tool
-REPLY_BYTES = 64 << 10                                  # ...and of what it answers to a prompt
-HANDED_OUT = ("/coder_hooks.py", "/agent_link.py")      # the scripts for your agent's computer: nothing private in them
-HOOK_SETTLES = {"PostToolBatch", "PostToolUseFailure", "PermissionDenied", "Stop", "StopFailure", "UserPromptSubmit",
-                "SessionStart", "SessionEnd", "PreCompact"}   # (after these, its requests from before are answered)
-HOOK_READS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "NotebookRead"}   # Claude Code's tools that read
-HOOK_HELPERS = {"Task", "Agent"}                        # ...and that hand work to a helper
 THUMBS = os.path.join(HOME, ".cache", "pitato", "thumbs")   # small copies of your pictures
 DRAWINGS = "Drawings"                                   # the Draw tab's drawings: a folder in Pictures
 DRAWING_MAX = 8 << 20                                   # bytes of one (a PNG of a 1080p screen is far less)
@@ -325,15 +302,10 @@ PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "comp
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party",     # Pietatos ask these
-              "/api/band", "/api/cookie", "/api/covers", "/api/covers/file")
+              "/api/band", "/api/covers", "/api/covers/file")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
-
-
-def coder_path():
-    """Where your coding agent talks to the Bot at work."""
-    return request.path == "/coder" or request.path.startswith("/coder/")
 
 
 def loopback(addr):
@@ -380,17 +352,11 @@ def check_password():
     if request.path in APP_FILES:                      # (the page as an app on a phone's home screen: its name and
         return None                                    #  icon, nothing private, asked for before any password is)
     pw = settings().get("password")
-    if not pw or request.path in HANDED_OUT:           # (those scripts have nothing private in them)
+    if not pw:
         return None
-    if coder_path():                                   # your agent: the password, as a token
-        scheme, _, token = (request.headers.get("Authorization") or "").strip().partition(" ")
-        if scheme.lower() == "bearer" and hmac.compare_digest(token.strip().encode(), pw.encode()):
-            return None
     auth = request.authorization
     if auth and auth.password is not None and hmac.compare_digest(auth.password.encode(), pw.encode()):
         return None
-    if coder_path():
-        return jsonify(ok=False, error="The web page's password is needed"), 401
     return Response("Password needed", 401, {"WWW-Authenticate": 'Basic realm="Pietato"'})
 
 
@@ -1282,19 +1248,6 @@ def covers_file():
     return pi_reply(ask_pi("GET", "/coverfile?" + q, timeout=20))
 
 
-# ---- the cookie between your Pietatos (pitato/cookie.py, screens/cookie.py) -------------------------------------------
-@app.post("/api/cookie")
-def cookie_try():
-    """Another of your Pietatos tries for the cookie: its throw of rock paper scissors, answered with this one's and
-    how it went (someone at this one's page for it is given a few seconds to throw, so the answer can take that long).
-    Pietato answers only one of yours (one it's heard lately, at this address)."""
-    body = request.get_json(silent=True)
-    if not isinstance(body, dict):
-        return jsonify(ok=False, error="What's that?"), 400
-    cmd = {k: body.get(k) for k in ("id", "name", "n", "throw", "you", "wins")}
-    return pi_reply(ask_pi("POST", "/cookie", dict(cmd, **{"from": request.remote_addr}), timeout=10))
-
-
 # ---- another of your Pietatos controlling this one with its buttons (pitato/pilot.py) --------------------------------
 @app.post("/api/pilot")
 def pilot():
@@ -1818,177 +1771,6 @@ def soundboard_do():
         return jsonify(error=f"It couldn't be done ({ex.strerror or ex})"), 500
     sound_told()
     return jsonify(sound_state(B, banks, off, files, **more))
-
-
-# ---- the Bot at work: your coding agent, acted out --------------------------------------
-def coder_reply(got):
-    """Media mode's answer, passed on."""
-    if got is None or got[0] == 401:
-        return jsonify(ok=False, error="Pietato isn't answering"), 503
-    status, data, _ = got
-    return Response(data, status, content_type="application/json")
-
-
-@app.route("/coder", methods=["GET", "POST"])
-def coder():
-    """What the Bot is doing at work (GET), or what it does now (POST ?pose=typing)."""
-    if request.method == "GET":
-        return coder_reply(ask_pi("GET", "/coder", timeout=5))
-    pose = request.args.get("pose")
-    if pose not in CODER:
-        return jsonify(ok=False, error="pose is one of: " + ", ".join(CODER)), 400
-    return coder_reply(ask_pi("POST", "/coder", {"pose": pose}, timeout=5))
-
-
-@app.post("/coder/say")
-def coder_say():
-    """A WAV for the Bot to say at work (16-bit PCM), in a pose (?pose=thinking; talking if not
-    given): answered once it has been said."""
-    pose = request.args.get("pose") or "talking"
-    if pose not in CODER_SAY_AS:
-        return jsonify(ok=False, error="a clip is said " + ", ".join(CODER_SAY_AS)), 400
-    if (request.content_length or 0) > CLIP_MAX:
-        return jsonify(ok=False, error="clip too big (8 MB at most)"), 413
-    if not CLIP_TURN.acquire(timeout=600):
-        return jsonify(ok=False, error="still saying the clips before this one"), 503
-    try:
-        parts, got = [], 0
-        while got <= CLIP_MAX:
-            part = request.stream.read(min(CHUNK, CLIP_MAX + 1 - got))
-            if not part:
-                break
-            parts.append(part)
-            got += len(part)
-        if got > CLIP_MAX:
-            return jsonify(ok=False, error="clip too big (8 MB at most)"), 413
-        data = b"".join(parts)
-        # (a clip says how long it is; this is long enough for the slowest one there could be)
-        return coder_reply(ask_pi("POST", "/coder/say?pose=" + pose, data, timeout=len(data) / 16000 + 30,
-                                  ctype="audio/wav"))
-    finally:
-        CLIP_TURN.release()
-
-
-def hook_report(raw, size):
-    """What a Claude Code hook reported: all of it when it's small, or the few things needed, picked
-    out of the start of a big one (a large file being written)."""
-    if size <= 1 << 20:
-        try:
-            event = json.loads(raw)
-            return event if isinstance(event, dict) else {}
-        except ValueError:
-            return {}
-    event = {}
-    for key in ("hook_event_name", "tool_name"):
-        m = re.search(rb'"' + key.encode() + rb'"\s*:\s*"([A-Za-z0-9_.:-]{1,100})"', raw[:65536])
-        if m:
-            event[key] = m.group(1).decode()
-    return event
-
-
-def hook_pose(event):
-    """The pose for what Claude Code says it's doing (None: nothing to show)."""
-    what, tool = event.get("hook_event_name"), str(event.get("tool_name") or "")
-    if what == "SessionStart":
-        return "hello" if event.get("source") == "startup" else "wake"
-    if what == "SessionEnd":
-        return None if event.get("reason") in ("clear", "resume") else "sleep"   # (a new one starts at once)
-    if what in ("UserPromptSubmit", "PostToolBatch", "PreCompact"):
-        return "thinking"
-    if what == "PreToolUse":
-        return "reading" if tool in HOOK_READS else "thinking" if tool in HOOK_HELPERS else "typing"
-    if what in ("PermissionRequest", "Notification"):
-        return "attention"
-    if what == "PermissionDenied":
-        return "shrug"
-    if what in ("PostToolUseFailure", "StopFailure"):
-        return "error"
-    if what == "Stop":
-        return "done"
-    return None
-
-
-@app.post("/coder/hook")
-def coder_hook():
-    """Claude Code's hooks (coder_hooks.py sets them up): the report each one sends, turned into a
-    pose. Answered with nothing at all, so Claude Code has nothing to read."""
-    keep, size = [], 0
-    while size <= HOOK_MAX:
-        part = request.stream.read(CHUNK)
-        if not part:
-            break
-        size += len(part)
-        if size <= 1 << 20 or not keep:
-            keep.append(part)
-    event = hook_report(b"".join(keep), size)
-    pose, settle = hook_pose(event), event.get("hook_event_name") in HOOK_SETTLES
-    if pose or settle:
-        got = ask_pi("POST", "/coder", dict({"pose": pose}, **({"settle": True} if settle else {})), timeout=5)
-        if got is None or got[0] != 200:
-            return Response(status=503)
-    return Response(status=204)
-
-
-@app.post("/coder/ask")
-def coder_ask():
-    """Your coding agent asks to use a tool: Claude Code's permission prompt, which coder_hooks.py's channel passes
-    on (request_id, tool_name, description, input_preview). The Bot at work shows it: A allows it, B denies it, and
-    the answer goes back with the prompts (POST /coder/prompts)."""
-    if (request.content_length or 0) > ASK_MAX:
-        return jsonify(ok=False, error="too big"), 413
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify(ok=False, error="JSON, please"), 400
-    body = {k: data.get(k) for k in ("request_id", "tool_name", "description", "input_preview")}
-    return coder_reply(ask_pi("POST", "/coder/ask", body, timeout=5))
-
-
-@app.post("/coder/prompts")
-def coder_prompts():
-    """Prompts typed on the Pi for your coding agent: coder_hooks.py --channel asks for them, and this
-    waits a while for one (?wait=20, in seconds). ?got= is the last one it got, from ?run= (the Pi's
-    run it came from), so one handed out that never got there goes out again."""
-    try:
-        wait, got = float(request.args.get("wait") or 0), int(request.args.get("got") or 0)
-    except ValueError:
-        return jsonify(ok=False, error="wait is seconds, got is a prompt's number"), 400
-    wait = min(max(wait, 0.0), 20.0) if math.isfinite(wait) else 0.0
-    run = re.sub(r"[^0-9a-f]", "", request.args.get("run") or "")[:16]
-    query = urllib.parse.urlencode({"wait": wait, "got": got, "run": run})
-    return coder_reply(ask_pi("POST", "/coder/prompts?" + query, b"", timeout=wait + 10))
-
-
-@app.post("/coder/reply")
-def coder_reply_said():
-    """What your agent answered to a prompt you sent from the Pi (agent_link.py passes it on from OpenClaw or
-    Hermes): {"text": its words, "agent": its name, "failed": it couldn't answer}. The Bot at work shows it."""
-    if (request.content_length or 0) > REPLY_BYTES:
-        return jsonify(ok=False, error="too big"), 413
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify(ok=False, error="JSON, please"), 400
-    body = {k: data.get(k) for k in ("text", "agent", "failed")}
-    return coder_reply(ask_pi("POST", "/coder/reply", body, timeout=5))
-
-
-def handed_out(name):
-    """A script for your agent's computer (setup.sh puts them next to this one)."""
-    path = os.path.join(HERE, name)
-    if not os.path.isfile(path):
-        return Response(f"{name} isn't here: run sudo bash setup.sh again", 404, content_type="text/plain")
-    return send_file(path, mimetype="text/x-python", as_attachment=True, download_name=name)
-
-
-@app.get("/coder_hooks.py")
-def coder_hooks():
-    """The script that connects Claude Code to the Bot at work, for the computer it runs on."""
-    return handed_out("coder_hooks.py")
-
-
-@app.get("/agent_link.py")
-def agent_link():
-    """...and the one that connects OpenClaw or Hermes, both ways."""
-    return handed_out("agent_link.py")
 
 
 # ---- small pictures for the list ------------------------------------------------------

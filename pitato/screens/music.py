@@ -331,8 +331,9 @@ class MusicScreen:
             x0, x1, up, dn = ax + 2, ax + 30, y - 7, y + 7
             if self.repeat:                            # the one song, again and again: a loop, a 1 in it
                 d.rounded_rectangle((x0, up - 2, x1 + 2, dn + 2), radius=9, outline=lit, width=2)
-                d.polygon([(x1 - 9, up - 7), (x1 - 9, up + 3), (x1 - 2, up - 2)], fill=lit)
-                d.text((x0 + 12, y), "1", font=F["badge"], fill=lit, anchor="mm")
+                d.polygon([(x1 - 8, up - 6), (x1 - 8, up + 2), (x1 - 2, up - 2)], fill=lit)
+                l, t, r, b = d.textbbox((0, 0), "1", font=F["badge"])   # (the figure itself in the loop's middle,
+                d.text(((x0 + x1 + 2 - l - r) // 2, y - (t + b) // 2), "1", font=F["badge"], fill=lit)   # not its line)
             else:                                      # shuffle: two lines that cross, an arrowhead on each
                 ink = lit if self.shuffle else soft
                 for a, b in ((dn, up), (up, dn)):

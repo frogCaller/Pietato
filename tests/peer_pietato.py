@@ -21,12 +21,9 @@ long: a message that never gets there), set KEY VALUE (a setting), pilots (the c
 it with, as JSON), group say TEXT / log / quiet on|off / answer Yes|No (the group chat: what's said in it, as JSON,
 for log), hear BEACON (another's
 beacon, as JSON, heard as if it came from this machine's own address; hearfrom ADDRESS BEACON: from that address),
-cookie (the cookie as it's known here, as JSON)
-/ cookie look (its look at what your others say of it, as if it had been up a while) / cookie try r|p|s (your throw
-for it), quit. Its emulator,
+quit. Its emulator,
 asked to open its game (nethost, watchhost), says it has (at 5442 and 5444), and the ask goes in the log.
-PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone. PITATO_COOKIE_BOT: what its
-Bot throws for the cookie (r, p or s), every time; PITATO_COOKIE_GAP: seconds between one Pietato's tries for it.
+PITATO_PILOT_GONE: seconds of nothing before one controlling it is taken to have gone.
 PITATO_OWN_MUSIC: its songs are the ones in its own home's Music (not this machine's). PITATO_CLOCK_AHEAD: seconds its
 clock (time.monotonic) is ahead of this machine's, as another Pi's is that's been up longer. PITATO_PING_SLOW: seconds
 longer its look at a party leader's clock takes (its WiFi dozing). PITATO_PARTY_QUICK: leading a party, its looks at
@@ -102,8 +99,6 @@ if SLOW:
     g.slow_pi = lambda: True
 if os.environ.get("PITATO_PILOT_GONE"):
     g.PILOT_GONE = float(os.environ["PITATO_PILOT_GONE"])
-if os.environ.get("PITATO_COOKIE_GAP"):
-    g.COOKIE_GAP = float(os.environ["PITATO_COOKIE_GAP"])
 if os.environ.get("PITATO_OWN_MUSIC"):
     next(t for t in g.LIBRARY if t["name"] == "Music")["dirs"] = [HOME + "/Music"]
 import pitato.screens.party as party_screen  # noqa: E402
@@ -200,8 +195,6 @@ class FB:
 g.Framebuffer = FB
 m = g.Media()
 m.enter()
-if os.environ.get("PITATO_COOKIE_BOT"):          # (its Bot's throw for the cookie: this, every time)
-    m.cookie_bot = lambda: os.environ["PITATO_COOKIE_BOT"]
 was_toast = m.toast
 m.toast = lambda text, secs=4: (log(toast=text), was_toast(text, secs))[1]
 if PRESSES:                                      # (what's pressed in media mode, and by which controller)
@@ -353,28 +346,6 @@ try:
             addr, said = words[1].split(None, 1)
             m.pie.hear(addr, json.loads(said))
             print("ok", file=SAY, flush=True)
-        elif words[0] == "cookie":                      # the cookie: as it's known here; look; try r|p|s
-            rest = (words[1] if len(words) > 1 else "").split()
-            got, done_it = [], threading.Event()
-
-            def job(rest=rest):
-                try:
-                    if rest[:1] == ["look"]:
-                        m.cookie_up = time.monotonic() - 1000
-                        m.cookie_try_at = time.monotonic() + 1e6   # (its Bot's own tries: not in this)
-                        m.cookie_look(time.monotonic())
-                    elif rest[:1] == ["try"]:
-                        m.cookie_wait = 0.0
-                        got.append(json.dumps({"ok": bool(m.cookie_try(rest[1]))}))
-                    if not got:
-                        got.append(json.dumps(dict(m.state["cookie"], here=m.cookie_here(), trying=m.cookie_trying,
-                                                   news=(m.cookie_news or {}).get("head"))))
-                finally:
-                    done_it.set()
-            m.soon_jobs.append(job)
-            m.wake()
-            done_it.wait(10)
-            print(got[0] if got else "{}", file=SAY, flush=True)
         elif words[0] == "beacon":                      # what it tells your others (straight to each), its web page's
             got, done_it = [], threading.Event()        # port as it really is
 

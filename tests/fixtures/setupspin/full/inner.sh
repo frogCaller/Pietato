@@ -5,7 +5,8 @@
 # SETUP_ARGS: its options (--no-gpi); SETUP_STDIN: what it reads instead of the terminal (an update's /dev/null);
 # SETUP_GIT: the pitato folder a git clone; GPI_BLOCK: config.txt has the GPi Case's settings from before;
 # CONFIG_INIT: a config.txt to start from; PITATO_MODEL_FILE: the Pi's model, as /proc/device-tree/model says it.
-# PC_MODE: a PC (Ubuntu, Intel or AMD): no config.txt or cmdline.txt; DESKTOP_DM: with a desktop (display-manager.service).
+# PC_MODE: a PC (Ubuntu, Intel or AMD), or (with a model and an arm64 dpkg) a board of another make: no config.txt or
+# cmdline.txt; DESKTOP_DM: a system with a desktop (display-manager.service), on any of them.
 # OS_RELEASE: an os-release of the test's own (Debian's, on a PC); APT_DIR: an /etc/apt of its own (its sources);
 # AS_SU: run with su, as on Debian without sudo: no SUDO_USER, a PATH without sbin, the Pietato folder yours.
 # Without PC_MODE, Raspberry Pi OS's os-release (Debian's) instead of this machine's (Ubuntu's).
@@ -20,7 +21,8 @@ W="${PIETATO_TEST_WORK:?}"
 F="$W/setupspin/full"
 mount --make-rprivate /
 exec 9< "$W"            # (the test's own folder: still here after what's covered next, should it be in one of them)
-for d in /usr/local /etc/systemd/system /var/tmp /home /boot /var/lib/pitato /etc/wireplumber; do
+for d in /usr/local /etc/systemd/system /var/tmp /home /boot /var/lib/pitato /etc/wireplumber \
+         /usr/share/polkit-1/actions; do
   mkdir -p "$d"
   mount -t tmpfs -o mode=755 tmpfs "$d"
 done
@@ -32,8 +34,11 @@ mkdir -p /usr/local/bin /usr/local/lib /usr/local/share /usr/local/sbin /boot/ov
 chmod 1777 /var/tmp
 cp /etc/modules "$F/modules" && mount --bind "$F/modules" /etc/modules
 rm -rf "$F/pam.d" && cp -a /etc/pam.d "$F/pam.d" && mount --bind "$F/pam.d" /etc/pam.d   # (Chromium's PAM service)
-if [ -n "$PC_MODE" ]; then            # (a PC: no config.txt, no cmdline.txt; maybe a desktop)
-  if [ -n "$DESKTOP_DM" ]; then printf "[Unit]\nDescription=GNOME Display Manager (pretend)\n" > /etc/systemd/system/display-manager.service; fi
+if [ -n "$DESKTOP_DM" ]; then         # (a system with a desktop: a PC's, a board's own, Raspberry Pi OS with desktop)
+  printf "[Unit]\nDescription=GNOME Display Manager (pretend)\n" > /etc/systemd/system/display-manager.service
+fi
+if [ -n "$PC_MODE" ]; then            # (a PC, or a board of another make: no config.txt, no cmdline.txt)
+  :
 elif [ -n "$HANDHELD_MODE" ]; then    # (an RK3326 handheld on dArkOS: no config.txt, no cmdline.txt)
   :
 elif [ -n "$CONFIG_INIT" ]; then        # (a config.txt of the test's own: Bookworm's, say)
@@ -103,6 +108,12 @@ echo "CHROMIUM PAM: [$(tr '\n' '|' < /etc/pam.d/pietato-chromium 2> /dev/null)]"
 if [ -n "$EXTRA_BIN" ]; then echo "PCSX: [$(cat /usr/local/lib/libretro/pcsx_rearmed_libretro.so 2> /dev/null | tr '\n' ' ')]"; fi
 echo "CONFIG: [$(tr '\n' '|' < /boot/config.txt 2> /dev/null)]"
 echo "WIREPLUMBER: [$(cd /etc/wireplumber 2> /dev/null && find . -type f | sort | tr '\n' ' ')]"
+MENU_FILES="/usr/local/bin/pietato-back /usr/local/share/applications/pietato.desktop"
+MENU_FILES="$MENU_FILES /usr/share/polkit-1/actions/org.pietato.back.policy"   # (Pietato in a desktop's menu)
+echo "MENU: [$(ls $MENU_FILES 2> /dev/null | tr '\n' ' ')]"
+echo "MENU ENTRY: [$(tr '\n' '|' < /usr/local/share/applications/pietato.desktop 2> /dev/null)]"
+echo "MENU DOES: [$(grep -v '^#' /usr/local/bin/pietato-back 2> /dev/null | tr '\n' '|')]"
+echo "MENU MAY: [$(tr '\n' '|' < /usr/share/polkit-1/actions/org.pietato.back.policy 2> /dev/null)]"
 echo "WP LUA: [$(tr '\n' '|' < /etc/wireplumber/main.lua.d/51-pietato-loopback.lua 2> /dev/null)]"
 for o in gpicase-dpi gpicase2-dpi gpicase2-3d gpicase2-tv; do
   if [ -f "/boot/overlays/$o.dtbo" ]; then echo "DTS $o: [$(dtc -q -I dtb -O dts "/boot/overlays/$o.dtbo" | tr '\n' '|')]"; fi
@@ -127,5 +138,6 @@ if [ -n "$AFTER" ]; then
     echo "ETC AFTER: [$(ls /etc/modprobe.d/pietato-loopback.conf /etc/modules-load.d/pietato-loopback.conf /etc/alsa/conf.d/60-pietato-web.conf /etc/pam.d/pietato-chromium 2> /dev/null | tr '\n' ' ')] [$(cd /etc/wireplumber 2> /dev/null && find . -type f | sort | tr '\n' ' ')]"
     echo "RCLOCAL AFTER: [$(tr '\n' '|' < /etc/rc.local 2> /dev/null)]"
     echo "CONFIG AFTER: [$(grep -c 'gpi-case setup' /boot/config.txt 2> /dev/null)]"
+    echo "MENU AFTER: [$(ls $MENU_FILES 2> /dev/null | tr '\n' ' ')]"
   done
 fi

@@ -34,14 +34,13 @@ from .listen import Ears, LISTEN_TRIES
 from .term import Terminal
 from .bot import Friend
 from .assist import Assist
-from .coder import AgentPrompts, Coder, CODER_FPS
 from .crypto import Crypto
 from .stocks import Stocks
 from .homeassistant import HomeAssistant, HomeLights
 from .pihole import Pihole
 from .plex import Plex, PLEX_TIMELINE_SECS
 from .jellyfin import Jellyfin
-from .sims import SIM_FPS, SIM_FPS_BIG, SIM_KEEN, SIM_SETTLE, SIM_SMOOTH
+from .sims import SIM_FPS, SIM_FPS_BIG
 from .snake import SnakeBrain
 from .shrink import Shrinker
 from .update import Updater
@@ -70,7 +69,6 @@ from .screens.camera import CameraScreen
 from .screens.bot import BotScreen
 from .screens.character import CharacterScreen
 from .screens.assist import AssistScreen
-from .screens.coder import CoderScreen
 from .screens.sims import SimScreen
 from .screens.snake import SnakeScreen
 from .screens.games import GameScreen
@@ -95,7 +93,6 @@ from .screens.together import TogetherScreen
 from .screens.konami import KonamiScreen
 from .screens.pilot import PilotScreen
 from .screens.group import GroupScreen
-from .screens.cookie import CookieScreen
 from .screens.fishtank import FishScreen
 from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
@@ -113,11 +110,11 @@ SCREEN_LOOK = 5.0              # seconds between looks for a screen, where there
 
 class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, JellyfinScreen,
             PhotoScreen, ReadingScreen, ChannelScreen, RadioScreen, FinanceScreen, CharacterScreen,
-            RemoteScreen, LightsScreen, CameraScreen, BotScreen, AssistScreen, CoderScreen, SimScreen,
+            RemoteScreen, LightsScreen, CameraScreen, BotScreen, AssistScreen, SimScreen,
             SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
-            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, CookieScreen, FishScreen,
+            KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen,
             LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BandScreen, MusicScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
@@ -237,26 +234,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.screen_off = False      # ...the screen's picture turned off while it rests
         self.screen_look = 0.0       # no screen (no_screen): when one's next looked for
         self.rest_wifi = None        # ...Wi-Fi's own power saving, turned on while it rests (its name: to turn off after)
-        self.coder = Coder()         # the Bot at work: your coding agent, acted out
-        self.coder.on_change = self.coder_changed
-        self.coder.on_news = self.coder_news
-        self.coder.sound_ok = self.coder_may_sound
-        self.coder_help = False      # its card on connecting an agent (START)
-        self.coder_help_page = 0     # ...which one: Claude Code's (0), or OpenClaw's and Hermes's (1)
-        self.coder_where = None      # ...and what that says: the web page's addresses, whether it has a password
-        self.coder_reply = None      # what your agent last answered (agent_link.py sends it): {"n", "text", "agent",
-                                     # "failed", "open": its card is up, "top": the first line shown, "most": the
-                                     # last that can be, "lines": (how wide, its words as lines), "covers": its
-                                     # card is over the Bot}
-        self.coder_reply_n = 0       # ...how many there have been
-        self.coder_reply_aloud = False   # ...and it's being read out loud (X)
-        self.coder_base = (None, None, None)        # the tab without the coder: (what it shows, it, behind the coder)
-        self.coder_shown = (None, None, 0.0, 0.0)   # the last frame: (that, the screen's count, when, when whole)
-        self.coder_next = 0.0        # when its next frame is due
-        self.prompts = AgentPrompts()  # prompts for your coding agent, typed here (A on the Bot at work)
-        self.prompts.on_taken = self.prompt_taken
-        self.prompts.on_ask = self.prompt_asked     # ...and its requests to use a tool, for you to answer here
-        self.prompt_draft = ""       # ...one you haven't sent yet
         self.sims = {}               # Apps' sims, by key (each made the first time it's opened)
         self.board = None            # the Soundboard, once it's been opened (screens/soundboard.py)
         self.gig = None              # the Band, while its page is up (screens/band.py)
@@ -294,10 +271,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lofi_next = 0.0         # ...when its next frame's due
         self.sim_next = 0.0          # when its next frame is due
         self.sim_due = None          # ...for which sim, with which options (another, or them changed: one now)
-        self.sim_cost = None         # ...seconds a frame of it takes this machine, of late (None: not known yet)
-        self.sim_cost_of = None      # ...which sim that is, on how much of the screen
-        self.sim_rate = None         # ...frames a second it's drawn now, one that moves smoothly (sim_fps)
-        self.sim_rate_at = 0.0       # ...since when
         self.sim_base = (None, None, None)       # what doesn't move: (what it shows, it, the box's corners)
         self.sim_panel = (None, None, 0.0)       # the numbers beside the box: (what they show, them, when)
         self.sim_card = (None, None)             # a card over the box: (what it says, it)
@@ -313,7 +286,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.friend_more = None      # the Bot page's X menu, when open: {"sel": n}
         self.bot_settings = False    # the Bot's settings, on the Bot itself (X > Settings): Settings > Bot's pages
         self.friend_pics = {}        # a picture's id -> (it, its rounded corners) as the Bot page shows it
-        self.friend_work_shown = None    # what the chat said about your coding agent, last it was drawn
         self.assist = Assist()       # what you ask the bot to do: your list, reminders, timers (screens/assist.py)
         self.assist_next = 0.0       # ...when it next looks for one come due
         self.assist_shown = 0        # ...the second the Today page's timers were last drawn for
@@ -369,7 +341,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.dock_since = 0.0        # ...watched since then (monotonic)
         self.dock_off = False        # ...not followed any more (it kept changing), till media mode starts again
         self.dock_busy = (0.0, None)  # ...(when, what) the Pi was last found busy, not to be restarted
-        self.pi_slow = slow_pi()     # a Pi Zero, 1, 2 or 3: on a TV, Apps' worlds and the Bot at work go slower
+        self.pi_slow = slow_pi()     # a Pi Zero, 1, 2 or 3: on a TV, Apps' worlds go slower
         self.hush_proc = None        # ...aplay, playing it
         self.hush_wait = 0.0         # ...not tried again before then, if it wouldn't play
         self.queue_random = False    # the queue playing is the start-up's random songs (shuffled again each round)
@@ -488,7 +460,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lock = threading.Lock()
         self.state = {"pos": {}, "dur": {}, "settings": {}, "radio": {}, "cam_turn": {}, "cam_flip": {},
                       "cam_flip_v": {}, "www": {}, "pilot": {},   # (pilot: another's web page password, by its address)
-                      "cookie": {},                               # (cookie: The Cookie, as it's known here)
                       "glow": {}}                                 # (glow: lights on your network that had this one's
                                                                   #  beats, the last time it ran: screens/glow.py)
         self.fonts = None
@@ -496,8 +467,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.camera.turns = self.state["cam_turn"]   # (a camera's picture turned: kept with the rest)
         self.camera.flips = self.state["cam_flip"]   # (...one steered with left and right swapped, too)
         self.camera.flips_v = self.state["cam_flip_v"]   # (...or up and down)
-        self.boot_media = self.setting("start") in ("Home screen", "Game")
+        self.boot_media = self.setting("start") in ("Home screen", "Game", "Desktop")
         self.boot_game = self.setting("start") == "Game"   # (and the game you played last, from where you were)
+        self.boot_desktop = self.setting("start") == "Desktop"   # (its desktop, as the machine starts: desktop_boot;
+                                                                 #  Pietato started again after that: the home screen)
         self.res_boot()                                # (just restarted at a new resolution: it asks if you'll keep it)
         self.boot_song = (time.monotonic() + BOOT_SONG_WAIT if self.setting("start_song") == "On" and not self.boot_game
                           else 0.0)                    # (a game to start: it has the speaker)
@@ -511,7 +484,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                                lambda: "C" if self.setting("units") == "°C" else "F", pie=self.pie)
         self.weather.on_change = self.weather_drawn
         self.group_setup()                             # (Apps > Group chat: your Pietatos talking: screens/group.py)
-        self.cookie_setup()                            # (Apps > The Cookie: one between them: screens/cookie.py)
         self.fish_setup()                              # (Apps > Fish Tank: its fish lives on: screens/fishtank.py)
         self.camera.on_fish = self.fish_heard          # (...and hears your others' where theirs are)
 
@@ -522,6 +494,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return "Full screen" if v == "Fill" else "Fit"          # "Fill" is its old name
         if key == "home_style" and v in HOME_STYLE_WAS:
             return HOME_STYLE_WAS[v]                                # (what the styles were called at first)
+        if key == "start" and v == "Desktop" and not has_desktop():
+            return SETTINGS_DEFAULT.get(key)                        # (its desktop's gone since: the home screen)
         return SETTINGS_DEFAULT.get(key) if v is None else v
 
     def set_setting(self, key, value):
@@ -661,7 +635,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return max(0.0, min(0.25 if self.sim_paced() is not None else 0.05, self.sim_next - time.monotonic()))
         if self.on_face_page() or self.on_char_page():   # (the bot's face: as it next changes)
             return max(0.0, min(0.25, self.face_next - time.monotonic()))
-        return 0.1 if self.on_camera_page() or self.on_coder_page() else 0.25
+        return 0.1 if self.on_camera_page() else 0.25
 
     def load_tab(self, i):
         tab = LIBRARY[i]
@@ -687,8 +661,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 boards = name == "LED backlight" and not self.glow_can()   # (an LED grid: only a Pi with the pins free
                 if boards and not self.lamps_on():                         #  for one. Any other: while ESP32 boards
                     continue                                               #  are on your network, their page)
-                if name == "The Cookie" and not self.cookie_listed():      # (only with another of yours on)
-                    continue
                 ci = next(k for k, t in enumerate(LIBRARY) if t["name"] == name)
                 rows.append(dict(item("grp:" + name, name, "child", str(ci),
                                       sub="Your ESP32 boards' LEDs" if boards else LIBRARY[ci].get("about", "")),
@@ -824,7 +796,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.confirm = (None, 0.0)
         self.picking = None                            # (picking a picture: not any more)
         self.friend_more = None
-        self.coder_help = False
         self.bot_settings_close()
         self.games_q = None                            # (finding a game: not any more)
         self.sim_close()
@@ -964,37 +935,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             set_drawing_scale(s)
             self.forget_kept()
 
-    def sim_fps(self, s, now):
-        """Frames a second for the sim on the screen: SIM_FPS, as ever (a Pi Zero on a TV: SIM_FPS_BIG, each of them
-        scaled up). One that moves smoothly (Rock Paper Scissors) is drawn more often where this machine has the
-        time: the most of SIM_SMOOTH's rates that a frame, as long as they've taken of late (sim_frame_took), takes
-        no more than its share of the time between. A rate is kept a couple of seconds before another's tried."""
-        base = SIM_FPS if self.fb is None or getattr(self.fb, "same", True) or not self.pi_slow else SIM_FPS_BIG
-        if not getattr(s, "smooth", False):
-            return base
-        rate = self.sim_rate or base
-        if self.sim_cost is None or now - self.sim_rate_at < SIM_SETTLE:
-            return rate
-        best = base
-        for fps, share in SIM_SMOOTH:
-            if fps <= base:
-                continue
-            if self.sim_cost > share / fps * SIM_KEEN[1 if rate >= fps else 0]:
-                break
-            best = fps
-        if best != rate:
-            self.sim_rate, self.sim_rate_at = best, now
-        return best
-
-    def sim_frame_took(self, s, secs, now):
-        """A frame of the sim on the screen took this long (its world moved on, drawn, and on the screen): how long
-        they take, of late. Another sim, or another size of it (the whole screen, a box): worked out anew, at the
-        usual rate till it's known."""
-        of = (s.key, self.sim_full(), self.fb.w if self.fb else 0, self.fb.h if self.fb else 0)
-        if of != self.sim_cost_of:
-            self.sim_cost_of, self.sim_cost, self.sim_rate, self.sim_rate_at = of, None, None, now
-            return                                     # (its first: with its pictures to make, not like the rest)
-        self.sim_cost = secs if self.sim_cost is None else self.sim_cost * 0.9 + secs * 0.1
+    def sim_fps(self):
+        """Frames a second for the sim on the screen: SIM_FPS (a Pi Zero on a TV: SIM_FPS_BIG, each of them scaled
+        up)."""
+        return SIM_FPS if self.fb is None or getattr(self.fb, "same", True) or not self.pi_slow else SIM_FPS_BIG
 
     def forget_kept(self):
         """Every picture kept to draw quicker, forgotten: they were drawn at another scale, or in the other look."""
@@ -1479,7 +1423,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.toast("Press A again to update. The Pi restarts when it's done" if self.updater.available()
                            else "Press A again to get the newest version. If there is one, the Pi restarts", 4)
             elif act == "desktop":
-                self.toast("Press A again for the desktop. Restarting the computer comes back to Pietato", 4)
+                self.toast("Press A again for the desktop. " + self.desktop_back(), 4)
             elif act == "es":
                 self.toast("Press A again for EmulationStation. Restarting the handheld comes back to Pietato", 4)
             self.dirty = True
@@ -1526,15 +1470,16 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         subprocess.Popen(cmd)
 
     def desktop_start(self):
-        """System > Desktop (a PC with a desktop, Ubuntu's or Debian's): Pietato stops and the desktop starts, till the
-        computer restarts (it starts in Pietato, setup.sh's way). Never both at once: they'd fight over the controller,
-        the sound and the screen. A job of its own does it (systemd-run), as stopping Pietato stops this."""
+        """System > Desktop (a system with a desktop: a PC's, or any that setup.sh set to start in Pietato instead):
+        Pietato stops and the desktop starts, till it restarts (it starts in Pietato, setup.sh's way). Never both at
+        once: they'd fight over the controller, the sound and the screen. A job of its own does it (systemd-run), as
+        stopping Pietato stops this."""
         if not has_desktop():
             self.toast("There's no desktop on this computer", 3)
             return
         self.halting = time.monotonic() + HALT_WAIT       # nothing draws over it
         self.halt_note = "The desktop didn't start"
-        self.render_wait("Starting the desktop", "Restart the computer to come back to Pietato")
+        self.render_wait("Starting the desktop", self.desktop_back())
         self.save_state()
         self.stop()                                    # (nothing goes on playing under it)
         try:
@@ -1543,6 +1488,31 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         except OSError as ex:
             self.halting = 0.0
             self.toast(f"The desktop didn't start ({ex.strerror or ex})", 5)
+
+    def desktop_back(self):
+        """How to come back from the desktop, in words: restarting does, unless it starts in the desktop (Settings >
+        At start-up): then Pietato's own entry in the desktop's menu (setup.sh puts it there)."""
+        if self.setting("start") == "Desktop":
+            return "Pietato in the desktop's menu comes back here"
+        return "Restarting the computer comes back to Pietato"
+
+    def desktop_boot(self):
+        """Settings > At start-up > Desktop, as the machine starts: Pietato stops and the desktop starts in its place,
+        by a job of its own, as System > Desktop does. The desktop not starting: Pietato again, so it's never neither
+        (and the console's sign-in, which a display manager can stop as it starts: the terminal's). False: it couldn't
+        be asked for (Pietato, then, as ever)."""
+        if not has_desktop():
+            return False
+        try:
+            subprocess.Popen(["systemd-run", "--no-block", "--collect", "--unit=pietato-desktop", "sh", "-c",
+                              "systemctl stop pitato; systemctl start display-manager "
+                              "|| { systemctl start getty@tty1; systemctl start pitato; }"])
+        except OSError as ex:
+            print(f"start-up: the desktop didn't start ({ex.strerror or ex}): Pietato instead", flush=True)
+            return False
+        print("start-up: the desktop (Settings > At start-up)", flush=True)
+        self.boot_song = 0.0                           # (no song as it goes)
+        return True
 
     def es_start(self):
         """System > EmulationStation (an RK3326 handheld on dArkOS): Pietato stops and dArkOS's own EmulationStation
@@ -1671,8 +1641,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
         colour (Settings > Appearance > Accent colour: a dot in it beside its name on your other Pietatos, to tell
         apart two of the same name). full: the one told straight to each of yours (not to everyone on the network),
-        for the group chat too: what it's doing, what it's made of, and how long ago you were last noticed here; the
-        game it's playing, for their home screens' lobby (screens/lobby.py); and the cookie (screens/cookie.py)."""
+        for the group chat too: what it's doing, what it's made of, and how long ago you were last noticed here; and
+        the game it's playing, for their home screens' lobby (screens/lobby.py)."""
         beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
         if full:
             beacon.update(doing=self.group_doing(), hw=self.group_hardware())
@@ -1693,10 +1663,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 beacon["oled"] = oled
             if self.party_leading():                   # (a party: your lights follow it, not one that's not in it)
                 beacon["party"] = 1
-            try:
-                beacon["cookie"] = self.cookie_beacon()   # (the cookie, as it's known here: screens/cookie.py)
-            except Exception:
-                pass
         return beacon
 
     def web_shared(self):
@@ -1766,7 +1732,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.pilot_on() or (self.view == "list" and self.tab_type() == "pilot"):
             self.pilot_tick(now)                       # (Home > Control another Pietato)
         self.group_tick(now)                           # (Apps > Group chat: your Pietatos talking, and its pop-ups)
-        self.cookie_tick(now)                          # (Apps > The Cookie: who has it; its Bot's try for it)
         self.fish_tick(now)                            # (Apps > Fish Tank: this one's fish swims on, with your others')
         if self.party is not None:
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
@@ -1857,8 +1822,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.msg and now > self.msg_until:
             self.msg = None
             self.dirty = True
-        if self.prompts.queue:                         # (prompts nobody took: yours again)
-            self.prompt_expired()
         if self.confirm[0] and now > self.confirm[1]:
             self.confirm = (None, 0.0)
             self.dirty = True
@@ -1913,17 +1876,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 self.dirty = True                     # time to take the little picture away
             if self.camera.action and 3 <= now - self.cam_said[1] < 7:
                 self.dirty = True                     # and a message that has had its turn
-        if self.coder_reply_aloud and not self.voice.speaking:
-            self.coder_reply_aloud = False             # (its answer's been read out: X reads it again)
-            self.dirty = True
-        still = (self.coder_reply_shown() or {}).get("covers") and self.coder_ask_shown() is None   # (a long answer's
-        if self.on_coder_page() and not self.coder_help and not still and now >= self.coder_next:  # card is over the
-            co = self.coder                                                                        # Bot: nothing moves)
-            fps = 4 if co.asleep else CODER_FPS.get(co.anim, 6)
-            if self.fb is not None and not getattr(self.fb, "same", True) and self.pi_slow:
-                fps = min(fps, 5)                      # (a Pi Zero on a TV: each frame scaled up costs it more)
-            self.coder_next = now + 1.0 / fps
-            self.dirty = True
         if self.on_sim_page() and self.sim_opts is None:
             s = self.sims.get(LIBRARY[self.tab].get("sim"))
             due = (self.tab, tuple(sorted(s.values.items())) if s is not None else ())
@@ -1934,7 +1886,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             if paced is not None:                      # (the Clock: as each second begins, and not in between)
                 self.sim_next = now + paced.frame_in(time.time())
             else:
-                fps = self.sim_fps(s, now)
+                fps = self.sim_fps()
                 nxt = self.sim_next + 1.0 / fps          # (a steady beat; behind, it starts again)
                 self.sim_next = nxt if nxt > now else now + 1.0 / fps
             self.dirty = True
@@ -1942,8 +1894,6 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.lofi_next = now + 1.0 / self.lofi_fps()
             self.dirty = True
         self.music_tick(now)                           # (...and its cover's glow, following the beat)
-        if self.coder.heard and not self.setting("coder_seen"):
-            self.set_setting("coder_seen", "yes")     # (an agent has found it: no more "how to connect")
         if (self.fin_auto and self.active and not self.resting and self.view == "list"
                 and self.tab_type() == "finance" and now >= self.fin_next):
             self.press_finance("right", False)

@@ -258,6 +258,18 @@ check(f"...A again: Pietato stops and the desktop starts, by a job of its own ({
       started == [["systemd-run", "--no-block", "--collect", "--unit=pietato-desktop", "sh", "-c",
                    "systemctl stop pitato; systemctl start display-manager"]])
 MM.subprocess.Popen = real_popen
+real_is_pc, real_desktop = SY.is_pc, SY.DESKTOP
+SY.is_pc = lambda: False                               # (not a PC: a board of another make, say, with its own desktop)
+SY.WAS_DESKTOP = S + "/was-graphical"
+check("not a PC, with a desktop it still starts in (setup.sh left no note of turning that off): no Desktop row",
+      not SY.has_desktop())
+put(SY.WAS_DESKTOP, "")
+check("...one setup.sh set to start in Pietato instead (its note's there): a Desktop row, as a PC's",
+      SY.has_desktop())
+SY.DESKTOP = S + "/no-display-manager.service"
+check("...the note there but no desktop any more: no row", not SY.has_desktop())
+SY.is_pc, SY.DESKTOP = real_is_pc, real_desktop
+os.remove(SY.WAS_DESKTOP)                              # (no note of setup.sh's from here on, as before)
 
 # ---- Settings > Screen > Resolution on a PC: a moment's wait while GRUB takes it, then the PC restarts at that size
 open(S + "/grub.log", "w").close()

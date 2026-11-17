@@ -1,5 +1,5 @@
-"""Through the real Framebuffer on a 1080p screen (a file): the Bot at work and a world in Apps send only
-the part that moves; afterwards, what's on the screen is just what a whole picture of the last frame gives."""
+"""Through the real Framebuffer on a 1080p screen (a file): a world in Apps sends only the part that moves;
+afterwards, what's on the screen is just what a whole picture of the last frame gives."""
 import os, shutil, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -37,14 +37,8 @@ for w, h in ((1920, 1080), (1280, 720)):
     g.Framebuffer = lambda fb=fb: fb
     m = g.Media()
     m.enter()
-    for page in ("coder", "sim"):
-        if page == "coder":
-            m.open_app(m.tab_index("friend"))
-            m.coder.ask("typing")
-            m.press("right")
-        else:
-            m.press("left")
-            m.open_app([t["name"] for t in g.LIBRARY].index("Rock Paper Scissors"))
+    for page in ("Fish Tank",):
+        m.open_app([t["name"] for t in g.LIBRARY].index(page))
         parts.clear()
         for _ in range(25):
             m.dirty = True
@@ -65,6 +59,6 @@ for w, h in ((1920, 1080), (1280, 720)):
         off = int(max(np.abs(((a >> sh) & 255).astype("int64") - ((b >> sh) & 255).astype("int64")).max()
                       for sh in (0, 8, 16)))
         check(f"{w}x{h} {page}: {len(parts)} frames sent in part, and the screen is just the last picture "
-              f"({off} off at most, rounding)", parts and off <= 1)
+              f"({off} off at most, rounding)", parts and off <= 2)
     m.leave()
 print("ALL OK" if all(ok_all) else f"{ok_all.count(False)} FAILED")

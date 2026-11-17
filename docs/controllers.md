@@ -37,6 +37,5 @@ you press. To have your buttons back, hold Home (or Select and Start together) f
   web page has a password, you type it once, the first time.
 - If the WiFi drops for a moment, what you're holding is let go of over there, and it carries on when the WiFi's
   back.
-- Like the web page's remote, it can't use the other one's terminal (Home brings its menus back) or answer your
-  coding agent.
+- Like the web page's remote, it can't use the other one's terminal (Home brings its menus back).
 - Up to four can control the same one at once, each a player of its own in a game.

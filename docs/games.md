@@ -24,7 +24,8 @@ have the Pi start in the game you played last, right where you were, set Setting
 
 - N64: the right stick is the C buttons, and L2 is Z.
 - DS (with the 64-bit Raspberry Pi OS): both screens side by side, and the right stick moves a pointer
-  on the touch screen, with R2 to touch it.
+  on the touch screen, with R2 to touch it. Screens in the game's menu puts one above the other, makes one of
+  them big, or shows just one of them.
 - PlayStation: `.cue` and `.bin`, `.chd`, `.pbp` or `.m3u` files. Change discs in the game's menu.
 - Dreamcast: `.gdi` (keep each game's tracks in a folder of its own), `.chd`, `.cdi` or `.cue` files. L
   and R are its triggers, as are L2 and R2.
