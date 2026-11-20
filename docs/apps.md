@@ -159,8 +159,13 @@ Any number of boards can do it at once, on any Pietato, with or without LEDs of 
 packet to each board, and a game's colours go to a couple of them at a time, in turn, so they don't slow the Pi
 down. Apps > LED backlight shows how many it's found, and Pulse to music there is for the boards as well, for
 music played on that Pietato. On a Pietato with no LEDs of its own, the page is there while a board is on, and
-shows the boards instead: an LED for each, in its own colour. The sketch can light a strip of LEDs on one of the
-board's pins instead (with the FastLED library).
+shows the boards instead: an LED for each, in its own colour.
+
+The sketch can light a strip of WS2812B LEDs on one of the board's pins instead (with the FastLED library): set
+`LED_COUNT` and `STRIP_PIN` at the top of it. Set `ONBOARD_PIN` to the pin of the board's own LED as well (48 on
+most ESP32-S3 boards) and that lights with the strip. A long strip needs a 5 V supply of its own. However bright
+you set it, it never takes more power than a white at the sketch's `BRIGHTNESS` does: allow about 2 A for every
+100 LEDs at 90, and 6 A at 255. Raise `BRIGHTNESS` only as far as your supply and its wires can give.
 
 With two or more boards, each can follow a different beat instead of all pulsing to the kick drum. Set ESP32
 boards to Different beats: under START on the LED backlight's page, with X on that page on a Pietato with no LEDs
@@ -172,7 +177,9 @@ set on each Pietato, for the music that one plays, and the boards' sketch stays 
 The web page's Library > LED backlight lists the boards it has found. Tap a colour for one and it's lit in that
 instead of the colours of what's playing, still pulsing to the beat. Auto goes back to what's playing. The board
 keeps its colour itself, so it's the same from every Pietato and after a power cut. Which one? lights a board
-for a moment, to tell them apart. A board that had the sketch before this needs it uploaded again first.
+for a moment, to tell them apart. Each board has a Brightness slider too: it lights for a moment as you drag, so
+you can see, and keeps where you leave it the same way. It starts at `BRIGHTNESS` in the sketch. A board that
+had the sketch before this needs it uploaded again first.
 
 For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
 library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.

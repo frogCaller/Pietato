@@ -13,7 +13,8 @@
   The LED glows a dim amber while it looks for your WiFi, then green for a couple of seconds once it's on it,
   and goes dark till something plays on a Pietato (music, or a game). A Pietato's web page lists the boards
   it's found (Library > LED backlight), and you can give each a colour of its own there: the board keeps it,
-  and pulses in it whatever's playing. Which one? there lights a board for a moment.
+  and pulses in it whatever's playing. How bright it is is set there too (it starts at BRIGHTNESS below), and
+  kept the same way. Which one? there lights a board for a moment.
 
   If it doesn't do that, the Serial Monitor says what it's doing, every ten seconds (Tools > Serial Monitor, at
   115200). Amber and no further: it can't get on your WiFi (its name or password, or it's too far away).
@@ -28,7 +29,10 @@
   set to Enabled before you upload.
 
   A strip or a ring of WS2812B LEDs instead of the board's own: set LED_COUNT to how many it has and STRIP_PIN
-  to the pin its DIN is on, and install the FastLED library. All of its LEDs show the same colour.
+  to the pin its DIN is on, and install the FastLED library. All of its LEDs show the same colour. For the
+  board's own LED lit with them, give ONBOARD_PIN its pin too. A long strip needs a power supply of its own:
+  however bright it's set, it never takes more from it than a white at BRIGHTNESS does (allow 2 A for every
+  100 LEDs at 90, and 6 A at 255), so raise BRIGHTNESS only as far as your supply and its wires can give.
 */
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -52,9 +56,11 @@ const char *WIFI_PASSWORD = "its password";
 #pragma pop_macro("LED_COUNT")
 #endif
 
-#define ONBOARD_PIN -1       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some)
+#define ONBOARD_PIN -1       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some).
+                             // With a strip: lit as well, if its pin's given here (-1: just the strip)
 #define STRIP_PIN 5          // a strip's DIN
-#define BRIGHTNESS 90        // how bright it gets at most, 0 to 255
+#define BRIGHTNESS 90        // how bright it is, 0 to 255, to start with (a Pietato's web page can change it). A
+                             // strip never takes more power than a white at this, however bright it's set
 #define MATRIX_BRIGHTNESS 40 // ...a Waveshare matrix: low, or the board gets hot
 #define MATRIX_ORDER RGB     // ...and the order its LEDs take their colours in (GRB, if red comes out green)
 const uint8_t IDLE_COLOUR[3] = {0, 0, 0};   // its colour while nothing's playing (0, 0, 0: dark)
@@ -69,11 +75,17 @@ const uint8_t IDLE_COLOUR[3] = {0, 0, 0};   // its colour while nothing's playin
 #define BRIGHTNESS MATRIX_BRIGHTNESS
 #define STRIP_ORDER MATRIX_ORDER
 #define MOST_MILLIAMPS 300
-#else
+#else                               // (a strip: never more than a white at BRIGHTNESS takes, however bright it's set)
 #define STRIP_ORDER GRB
+#define MOST_MILLIAMPS (BOARD_MA + (long)DARK_MA * LED_COUNT \
+                        + (long)BRIGHTNESS * (RED_MA + GREEN_MA + BLUE_MA) * LED_COUNT / 255)
 #endif
 #if LED_COUNT > 1
 CRGB leds[LED_COUNT];
+#endif
+#if LED_COUNT > 1 && !WAVESHARE_MATRIX && ONBOARD_PIN >= 0 && ONBOARD_PIN != STRIP_PIN
+#define BOARD_LED_TOO 1             // (a strip, and the board's own LED given its pin: lit with it, the same colour)
+CRGB boardLed[1];
 #endif
 
 const uint16_t GLOW_PORT = 5448;    // a Pietato's colours and beats come here (UDP)
@@ -106,6 +118,7 @@ const double KEEP_AFTER = 1.0;      // seconds its colour has stood before it's 
 const float SHOW_PLAIN[3] = {160, 160, 160};   // ...a board with no colour of its own: white
 
 enum { BEAT = 1, HIT = 2, CHEEVO = 3 };
+enum { KEEP_COLOUR = 1, KEEP_BRIGHT = 2 };          // (what's still to be kept: either, or both)
 struct LampEvent { double at; uint8_t kind; float strength; };
 
 WiFiUDP udp;
@@ -127,8 +140,9 @@ double drawnAt = 0;
 uint8_t lit[3] = {1, 1, 1};         // (what the LED was last sent: sent again only when it changes)
 bool ownOn = false;                 // a colour of its own (a Pietato's web page sets it): lit in that, whatever's
 uint8_t own[3] = {0, 0, 0};         // playing. Kept through a power cut
-double showUntil = -1e9;            // ...and shown till then, when it's just been set
-bool toKeep = false;                // ...and still to be kept, at keepAt
+uint8_t ownBright = BRIGHTNESS;     // ...and how bright it is, 0 to 255: set there too, and kept the same way
+double showUntil = -1e9;            // its colour's shown till then, when either's just been set
+uint8_t toKeep = 0;                 // ...and what's still to be kept (KEEP_COLOUR, KEEP_BRIGHT), at keepAt
 double keepAt = 0;
 Preferences store;
 double joinedAt = -1e9;             // when it got on your WiFi
@@ -161,12 +175,20 @@ void keepColour() {                                 // (its own colour, kept: wr
   store.end();
 }
 
-void keptColour() {                                 // (...and as it was kept)
+void keepBright() {                                 // (...and its brightness, with the BRIGHTNESS it was set from)
   store.begin("pietato", false);
+  store.putUInt("bright", 0x01000000u | ((uint32_t)(uint8_t)BRIGHTNESS << 8) | ownBright);
+  store.end();
+}
+
+void readKept() {                                   // (...and as they were kept. Its brightness, if BRIGHTNESS has been
+  store.begin("pietato", false);                    //  changed in the sketch since: the sketch's, then)
   const uint32_t v = store.getUInt("colour", 0);
+  const uint32_t b = store.getUInt("bright", 0);
   store.end();
   ownOn = (v >> 24) == 1;
   own[0] = (v >> 16) & 0xFF; own[1] = (v >> 8) & 0xFF; own[2] = v & 0xFF;
+  if ((b >> 24) == 1 && ((b >> 8) & 0xFF) == (uint32_t)(uint8_t)BRIGHTNESS) ownBright = b & 0xFF;
 }
 
 int boardName(char *name, size_t room) {            // ("ESP32 A1B2C3": the end of its address, as a Pietato lists it)
@@ -179,9 +201,12 @@ int boardName(char *name, size_t room) {            // ("ESP32 A1B2C3": the end 
 // Pietato's lighting it. Said every ten seconds, and when that changes; never waited for.
 void sayHowItIs(double now) {
   if (!Serial) return;
-  char what[64], line[320];
+  char what[96], line[384];
 #if WAVESHARE_MATRIX
   snprintf(what, sizeof what, "a Waveshare matrix, %d LEDs on pin %d", LED_COUNT, STRIP_PIN);
+#elif defined(BOARD_LED_TOO)
+  snprintf(what, sizeof what, "a strip, %d LEDs on pin %d, and the board's own LED on pin %d", LED_COUNT, STRIP_PIN,
+           ONBOARD_PIN);
 #elif LED_COUNT > 1
   snprintf(what, sizeof what, "a strip, %d LEDs on pin %d", LED_COUNT, STRIP_PIN);
 #elif ONBOARD_PIN >= 0
@@ -195,7 +220,7 @@ void sayHowItIs(double now) {
              status == WL_NO_SSID_AVAIL ? ". There's none of that name here (an ESP32 only sees 2.4 GHz ones)"
              : status == WL_CONNECT_FAILED ? ". It's there, but the password wasn't taken" : "");
   } else {
-    char name[24], colour[48] = "", by[64] = "dark till something plays on a Pietato";
+    char name[24], colour[48] = "", dim[48] = "", by[64] = "dark till something plays on a Pietato";
     boardName(name, sizeof name);
     const IPAddress ip = WiFi.localIP();
     const bool byOne = now - litAt < SOURCE_HOLD;
@@ -204,8 +229,11 @@ void sayHowItIs(double now) {
     }
     if (ownOn && byOne) snprintf(colour, sizeof colour, ", in its own colour (#%02x%02x%02x)", own[0], own[1], own[2]);
     else if (ownOn) snprintf(colour, sizeof colour, " (then in its own colour, #%02x%02x%02x)", own[0], own[1], own[2]);
-    snprintf(line, sizeof line, "Pietato LED (%s): on your WiFi as %d.%d.%d.%d, \"%s\" to your Pietatos; %s%s", what,
-             ip[0], ip[1], ip[2], ip[3], name, by, colour);
+    if (ownBright != (uint8_t)BRIGHTNESS) {         // (set on a Pietato's web page: said, as 0 is why it's dark)
+      snprintf(dim, sizeof dim, "; its brightness set to %d of 255", ownBright);
+    }
+    snprintf(line, sizeof line, "Pietato LED (%s): on your WiFi as %d.%d.%d.%d, \"%s\" to your Pietatos; %s%s%s", what,
+             ip[0], ip[1], ip[2], ip[3], name, by, colour, dim);
   }
   Serial.println(line);
 }
@@ -218,8 +246,9 @@ void light(uint8_t r, uint8_t g, uint8_t b) {       // (the LED, or every LED of
   {                                                 //  to fit: a white, mostly)
     const long takes = ((long)r * RED_MA + (long)g * GREEN_MA + (long)b * BLUE_MA) * LED_COUNT / 255;
     const long room = MOST_MILLIAMPS - BOARD_MA - (long)DARK_MA * LED_COUNT;
-    if (room > 0 && takes > room) {
-      r = (uint8_t)(r * room / takes); g = (uint8_t)(g * room / takes); b = (uint8_t)(b * room / takes);
+    if (takes > 0 && takes > room) {
+      const long fits = room > 0 ? room : 0;
+      r = (uint8_t)(r * fits / takes); g = (uint8_t)(g * fits / takes); b = (uint8_t)(b * fits / takes);
     }
   }
 #endif
@@ -227,6 +256,9 @@ void light(uint8_t r, uint8_t g, uint8_t b) {       // (the LED, or every LED of
   toldAt = now;
   lit[0] = r; lit[1] = g; lit[2] = b;
   for (int i = 0; i < LED_COUNT; i++) leds[i] = CRGB(r, g, b);
+#ifdef BOARD_LED_TOO
+  boardLed[0] = CRGB(r, g, b);
+#endif
   FastLED.show();
 #else
   if (r == lit[0] && g == lit[1] && b == lit[2]) return;
@@ -253,13 +285,25 @@ void litBy(double now) {                            // (a packet of a Pietato's 
 }
 
 // A packet from a Pietato: "PG", a version, what it is (F: a picture's colours; E: something happening; M: music's
-// colour; C: this board's own colour), when it was sent by that one's clock, then the rest.
+// colour; C: this board's own colour; B: how bright it's to be), when it was sent by that one's clock, then the rest.
 void take(const uint8_t *data, int n, IPAddress from, double now) {
   if (n < 12 || data[0] != 'P' || data[1] != 'G' || data[2] != 1) return;
   const char kind = (char)data[3];
-  if (kind != 'F' && kind != 'E' && kind != 'M' && kind != 'C') return;
+  if (kind != 'F' && kind != 'E' && kind != 'M' && kind != 'C' && kind != 'B') return;
   const double sent = beDouble(data + 4);
   if (!aNumber(sent)) return;
+  if (kind == 'B') {                                // (how bright it's to be, 0 to 255. From any of your Pietatos, as
+    if (n != 13) return;                            // its colour is: that's shown a moment so you can see, it's said
+    if (data[12] != ownBright) {                    // back, and kept once it's stood a second)
+      ownBright = data[12];
+      toKeep |= KEEP_BRIGHT;
+      keepAt = now + KEEP_AFTER;
+    }
+    showUntil = now + SHOW_SECS;
+    owed = true;
+    toSay = true;
+    return;
+  }
   if (kind == 'C') {                                // (its own colour: 1 and the colour, or 0 for none. From any
     if (n != 16 || data[12] > 1) return;            // of your Pietatos, whichever it's following: shown a moment,
     const bool on = data[12] == 1;                  // said back, and kept once it's stood a second)
@@ -268,7 +312,7 @@ void take(const uint8_t *data, int n, IPAddress from, double now) {
     if (on != ownOn || memcmp(own, rgb, 3)) {
       ownOn = on;
       memcpy(own, rgb, 3);
-      toKeep = true;
+      toKeep |= KEEP_COLOUR;
       keepAt = now + KEEP_AFTER;
     }
     showUntil = now + SHOW_SECS;
@@ -383,14 +427,15 @@ void draw(double now) {
   uint8_t rgb[3];
   for (int k = 0; k < 3; k++) {
     float v = out[k] < 0 ? 0 : out[k] > 255 ? 255 : out[k];
-    v = (float)pow(v / 255.0, LED_GAMMA) * BRIGHTNESS;   // (as it's seen: an LED's half is far brighter than half)
+    v = (float)pow(v / 255.0, LED_GAMMA) * ownBright;   // (as it's seen: an LED's half is far brighter than half)
     rgb[k] = (uint8_t)(v + 0.5f);
   }
   light(rgb[0], rgb[1], rgb[2]);
 }
 
 // "I'm here", to every Pietato on your network: "PG", the version, L, this one's clock, its LEDs, its name. Then
-// how it is (S): 1 (it keeps a colour of its own), whether it has one (1 or 0), and the colour.
+// how bright it is (B: 0 to 255), and how it is (S): 3 (it keeps a colour of its own, 1, and a brightness, 2),
+// whether it has a colour (1 or 0), and the colour.
 void hello(double now) {
   uint8_t msg[12 + 2 + 24];
   msg[0] = 'P'; msg[1] = 'G'; msg[2] = 1; msg[3] = 'L';
@@ -405,8 +450,13 @@ void hello(double now) {
   udp.beginPacket(everyone, LAMP_PORT);
   udp.write(msg, 14 + len);
   udp.endPacket();
+  msg[3] = 'B';
+  msg[12] = ownBright;
+  udp.beginPacket(everyone, LAMP_PORT);
+  udp.write(msg, 13);
+  udp.endPacket();
   msg[3] = 'S';
-  msg[12] = 1; msg[13] = ownOn ? 1 : 0;
+  msg[12] = 3; msg[13] = ownOn ? 1 : 0;
   memcpy(msg + 14, own, 3);
   udp.beginPacket(everyone, LAMP_PORT);
   udp.write(msg, 17);
@@ -419,8 +469,11 @@ void setup() {
   FastLED.addLeds<WS2812, STRIP_PIN, STRIP_ORDER>(leds, LED_COUNT);   // goes out as light() gives it, dimmed there:
   FastLED.setBrightness(255);                       //  FastLED isn't to dim it, or to make it flicker between two
   FastLED.setDither(0);                             //  levels, which it does to a colour sent often)
+#ifdef BOARD_LED_TOO                                // (the board's own LED, with a strip: green first, as such are)
+  FastLED.addLeds<WS2812, ONBOARD_PIN, GRB>(boardLed, 1);
 #endif
-  keptColour();
+#endif
+  readKept();
   light(0, 0, 0);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);                             // (awake: a beat comes when it's sent, not a moment after)
@@ -457,7 +510,11 @@ void loop() {
     toSay = true;
   }
   if (now - helloAt >= HELLO_EVERY || (owed && now - helloAt >= SAY_BACK)) { helloAt = now; owed = false; hello(now); }
-  if (toKeep && now >= keepAt) { toKeep = false; keepColour(); }
+  if (toKeep && now >= keepAt) {
+    if (toKeep & KEEP_COLOUR) keepColour();
+    if (toKeep & KEEP_BRIGHT) keepBright();
+    toKeep = 0;
+  }
   static uint8_t data[1500];
   for (int tries = 0; tries < 16; tries++) {        // (what's come since the last look)
     const int size = udp.parsePacket();

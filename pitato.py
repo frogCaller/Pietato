@@ -202,8 +202,9 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 over WiFi, on any Pietato
                 (esp32/pietato_led: it says it's there, and is lit as a grid is; one with no LEDs of its
                 own has this page for them while a board's on, an LED drawn for each: A is their pulse to
-                music; the web page's Library lists the boards, and gives each a colour of its own, which
-                the board keeps). With more than one, ESP32 boards: Different beats has each follow its
+                music; the web page's Library lists the boards, and gives each a colour of its own and
+                sets how bright it is, which the board keeps). With more than one, ESP32 boards:
+                Different beats has each follow its
                 own: the kick, the snare, the hi-hats, in turn by their names (the music's bass, its
                 middle and its top, each listened to for a beat; X on the boards' page, START on a grid's).
                 The song at start-up begins before a board's heard: it's moved to the

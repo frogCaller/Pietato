@@ -68,7 +68,8 @@ press Arrange and drag the tanks into a grid, and set the space between your scr
 **LED backlight**, in Library on a Pi with LEDs behind the TV, shows them as they're lit, as a grid or a
 strip round the TV. Tap a colour for them, or change how bright they are, which Pietato they follow, the
 strip's LEDs and the rest. It lists the ESP32 boards on the network too, on any Pietato that has found one,
-with a colour to tap for each, and whether they all pulse to the same beat or each to its own. See
+with a colour to tap and a brightness slider for each, and whether they all pulse to the same beat or each to
+its own. See
 [LED backlight](apps.md#led-backlight).
 
 **Soundboard**, in Library, has the Pi's [Soundboard](apps.md#soundboard): its banks' buttons, laid out as on

@@ -443,26 +443,37 @@ class GlowScreen:
 
     def web_lamps(self):
         """The ESP32 boards there now, for the web page: each one's name, its LEDs, and its own colour ("#rrggbb"; ""
-        for none: it takes what's playing; None for a board with the older sketch, which can't keep one). With each
-        following a beat of its own: which ("beat": "Kick"...)."""
+        for none: it takes what's playing; None for a board with the older sketch, which can't keep one). One whose
+        brightness is its own (a newer sketch still): that too ("bright": 0 to 255; None till it's said it). With
+        each following a beat of its own: which ("beat": "Kick"...)."""
         lamps = self.glow_lamps
         each = {ip: {"beat": name} for ip, _, name in self.glow_each_of()}   # (each following a beat of its own:
         return [dict({"ip": b["ip"], "name": b["name"], "leds": b["leds"],   #  which, said with it)
                       "colour": None if not b["keeps"] else "#%02x%02x%02x" % b["colour"] if b["colour"] else ""},
-                     **each.get(b["ip"], {}))
+                     **({"bright": b["bright"]} if b["dims"] else {}), **each.get(b["ip"], {}))
                 for b in (lamps.boards() if lamps is not None else [])]
 
     def web_set_glow_lamp(self, value, cmd):
         """(The web page.) One of the ESP32 boards there now (its address), given a colour of its own ("#rrggbb"; "":
-        none, so it takes what's playing); or just lit a moment, so you can tell which one it is (find)."""
+        none, so it takes what's playing), or told how bright to be (bright: 0 to 255); or just lit a moment, so you
+        can tell which one it is (find)."""
         lamps = self.glow_lamps
         ip = value.get("ip") if isinstance(value, dict) else None
         board = next((b for b in (lamps.boards() if lamps is not None else []) if b["ip"] == ip), None)
         if board is None:
             return {"error": "That board isn't on now"}
+        port = getattr(self, "lamp_port", GLOW_PORT)   # (where a board takes its colours: the tests' own)
+        if "bright" in value:
+            level = value["bright"]
+            if not board["dims"]:
+                return {"error": "It needs the newer sketch first (esp32/pietato_led)"}
+            if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 255:
+                return {"error": "That isn't a brightness"}
+            if not lamps.set_bright(ip, level, port):
+                return {"error": "It couldn't be told"}
+            return {"ok": True}
         if not board["keeps"]:
             return {"error": "It needs the newer sketch first (esp32/pietato_led)"}
-        port = getattr(self, "lamp_port", GLOW_PORT)   # (where a board takes its colours: the tests' own)
         if value.get("find") is True:                  # (the colour it has, told it again: it shows it a moment)
             if not lamps.set_colour(ip, board["colour"], port):
                 return {"error": "It couldn't be told"}

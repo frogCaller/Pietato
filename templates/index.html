@@ -755,6 +755,12 @@
   .swatch.any input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
   .swatch.any:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
   .gl-find { font-size: 13px; white-space: nowrap; }
+  /* ...and how bright each is: a slider under its colours, as wide as they are (a line of its own, which adds
+     nothing to how wide their column is: no gap beside it either) */
+  .range.gl-bright { flex: 0 0 auto; width: 0; min-width: 100%; }
+  .set-c:has(> .gl-bright) { column-gap: 0; }
+  .gl-bright-l { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+  .gl-bright .range-v { min-width: 4ch; }
   .content-h .src.bad { color: var(--bad); }
   @media (max-width: 760px) { .gl { grid-template-columns: minmax(0, 1fr); } .gl-board { max-width: 340px; width: 100%; justify-self: center; } }
 
@@ -5212,15 +5218,17 @@ function glDraw() {
   for (const r of rows) if (SET_DRAW[r.kind]) GL.list.append(SET_DRAW[r.kind](r));
 }
 // the ESP32 boards on your network, found by themselves: each one's colour (what's playing, or one of its own, which
-// the board keeps), and a way to tell which is which
+// the board keeps), how bright it is (the board keeps that too), and a way to tell which is which
 function glLamps(d) {
   const boards = d.boards || [], rows = d.can ? [] : d.rows || [];
   GL.lamps.hidden = !boards.length && d.can;
   if (GL.lamps.hidden) { GL.lampSig = ""; return; }
-  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null, b.beat || ""]), d.colours, rows]);
-  const picking = GL.lamps.contains(document.activeElement) && document.activeElement.matches("input[type=color]");
+  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null, glDims(b), b.beat || ""]),
+    d.colours, rows]);
+  const picking = GL.lamps.contains(document.activeElement)
+    && document.activeElement.matches("input[type=color], input[type=range]");
   if (sig !== GL.lampSig && !picking) {        // (other boards than before: drawn again, though not under the
-    GL.lampSig = sig;                          //  browser's picker while a colour's being picked in it)
+    GL.lampSig = sig;                          //  browser's picker while a colour's being picked in it, or a slider)
     GL.lampRows = {};
     GL.lamps.textContent = "";
     if (!boards.length) {
@@ -5233,8 +5241,11 @@ function glLamps(d) {
     for (const b of boards) GL.lamps.append(glLamp(b, d.colours || []));
     for (const r of rows) if (SET_DRAW[r.kind]) GL.lamps.append(SET_DRAW[r.kind](r));
   }
-  for (const b of boards) if (GL.lampRows[b.ip]) GL.lampRows[b.ip](b.colour);   // (each one's colour, as it is now)
-}
+  for (const b of boards) if (GL.lampRows[b.ip]) GL.lampRows[b.ip](b.colour, b.bright);   // (each one's colour, and
+}                                                                                         //  how bright, as now)
+// (how bright a board is: its own to set, "yes"; or will be once it's said how bright, "soon"; or not, on a sketch from
+// before that, "no")
+const glDims = (b) => typeof b.bright === "number" ? "yes" : b.bright === null ? "soon" : "no";
 function glLamp(b, colours) {
   const [row, c, l] = setRow({ key: "lamp:" + b.ip, label: b.name });
   const meta = el("span", "set-note gl-meta");
@@ -5290,7 +5301,11 @@ function glLamp(b, colours) {
   };
   inp.oninput = follow;
   inp.onchange = () => { follow(); inp.blur(); };
-  GL.lampRows[b.ip] = (colour) => { if (!going && Date.now() - held > 1500) { sent = ""; show(colour); } };
+  let dim = null;                              // (how bright it is, shown on its slider: below)
+  GL.lampRows[b.ip] = (colour, level) => {
+    if (!going && Date.now() - held > 1500) { sent = ""; show(colour); }
+    if (dim) dim(level);
+  };
   show(b.colour);
   const find = button("linkbtn gl-find", "Which one?");
   find.title = "Lights it for a moment, so you can tell";
@@ -5301,6 +5316,53 @@ function glLamp(b, colours) {
   };
   meta.append(find);
   c.append(sw);
+  if (glDims(b) === "no") l.append(el("span", "set-note", "Put the newer sketch on it to set how bright it is"));
+  if (glDims(b) !== "yes") return row;
+  // how bright it is: 0 to 255 to the board, a share of that here. Dragged, the board shows it as you go, one told at
+  // a time, and keeps the one you leave it at
+  const box = el("div", "range gl-bright"), slide = el("input"), out = el("span", "range-v");
+  slide.type = "range"; slide.min = "0"; slide.max = "100"; slide.step = "1";
+  slide.setAttribute("aria-label", b.name + ": brightness");
+  let told = -1, telling = false, moved = 0, byHand = false;
+  const put = (level) => {
+    told = Math.round(level * 100 / 255);
+    slide.value = String(told);
+    out.textContent = told + "%";
+  };
+  const slid = async () => {
+    moved = Date.now();
+    out.textContent = slide.value + "%";
+    if (telling) return;
+    telling = true;
+    while (told !== Number(slide.value)) {
+      const share = Number(slide.value);
+      try {
+        await pi("settings", { key: "glow_lamp", value: { ip: b.ip, bright: Math.round(share * 255 / 100) } });
+        told = share;
+      } catch (e) {                            // (not taken: said, and as the Pi has it, again)
+        toast(e.message);
+        moved = 0;
+        glKick();
+        break;
+      }
+    }
+    telling = false;
+    if (moved) moved = Date.now();
+  };
+  slide.oninput = slid;
+  slide.onpointerdown = () => { byHand = true; };
+  slide.onchange = () => {                     // (let go of: the list can be drawn again. With the keyboard's arrows
+    slid();                                    //  it's still yours, for the next press)
+    if (byHand) unfocus(box);
+    byHand = false;
+  };
+  dim = (level) => {                           // (as the board says it is: not under your finger, nor just after)
+    if (typeof level !== "number" || telling || Date.now() - moved < 1500 || document.activeElement === slide) return;
+    put(level);
+  };
+  put(b.bright);
+  box.append(el("span", "gl-bright-l", "Brightness"), slide, out);
+  c.append(box);
   return row;
 }
 async function glLampSet(b, colour) {          // (colour null: just lit a moment, so you can tell which it is)

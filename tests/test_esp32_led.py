@@ -17,7 +17,11 @@ and then keeps its colour between them. A colour of its own: told it by a Pietat
 shows it a moment, says it back at once, keeps it through a power cut (written only when it changes), and is lit in
 it whatever's playing (music's beats on it, a hit's red over it); told none, it takes what's playing again; a Pietato
 reads what it says of itself, lists the boards by name with their colours, and tells only one that's there and keeps
-one. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red first, set up the way such a board is known to work
+one. How bright it is, the same way: told it (a slider on the web page, for each board), it shows its colour a moment
+at that, says it back, keeps it (a BRIGHTNESS changed in the sketch since is taken instead), and is lit at that
+whatever's playing; a strip takes no more power than a white at the sketch's BRIGHTNESS however bright it's set, and
+lights the board's own LED too if that's given its pin. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red
+first, set up the way such a board is known to work
 (FastLED's WS2812, and nothing asked of FastLED but to send each colour as it is), dim, and never more than 300 mA
 (the sketch's own sum: a white's dimmed to fit). FastLED read before the sketch's own settings (it has a BRIGHTNESS
 of its own), and a strip told again every half second. On your WiFi it's green for a second and a half, and the
@@ -124,8 +128,8 @@ inline void neopixelWrite(uint8_t pin, uint8_t r, uint8_t g, uint8_t b) { printf
 ''')
 for name in ("WiFi.h", "WiFiUdp.h", "esp_timer.h"):
     open(f"{S}/board/{name}", "w").write('#include "Arduino.h"\n')
-# what the board keeps through a power cut: a file here (KEPT says which), so the next run of it has it; each time
-# it's written is noted
+# what the board keeps through a power cut: a file here (KEPT says which; what's kept by another name than its colour's,
+# a file beside it), so the next run of it has it; each time it's written is noted
 open(S + "/board/Preferences.h", "w").write(r'''
 #pragma once
 #include "Arduino.h"
@@ -133,9 +137,14 @@ open(S + "/board/Preferences.h", "w").write(r'''
 struct Preferences {
   bool begin(const char *name, bool readOnly = false) { return true; }
   void end() {}
-  uint32_t getUInt(const char *key, uint32_t fallback = 0) {
+  static std::string file(const char *key) {       // (its colour: the file itself; anything else: one beside it)
     const char *path = getenv("KEPT");
-    FILE *f = path ? fopen(path, "r") : nullptr;
+    if (!path) return "";
+    return strcmp(key, "colour") ? std::string(path) + "." + key : std::string(path);
+  }
+  uint32_t getUInt(const char *key, uint32_t fallback = 0) {
+    const std::string path = file(key);
+    FILE *f = path.empty() ? nullptr : fopen(path.c_str(), "r");
     if (!f) return fallback;
     unsigned v = fallback;
     if (fscanf(f, "%u", &v) != 1) v = fallback;
@@ -143,9 +152,10 @@ struct Preferences {
     return v;
   }
   size_t putUInt(const char *key, uint32_t v) {
-    printf("K %.4f %u\n", NOW, (unsigned)v);
-    const char *path = getenv("KEPT");
-    FILE *f = path ? fopen(path, "w") : nullptr;
+    if (strcmp(key, "colour")) printf("U %.4f %s %u\n", NOW, key, (unsigned)v);
+    else printf("K %.4f %u\n", NOW, (unsigned)v);
+    const std::string path = file(key);
+    FILE *f = path.empty() ? nullptr : fopen(path.c_str(), "w");
     if (f) { fprintf(f, "%u", (unsigned)v); fclose(f); }
     return 4;
   }
@@ -168,8 +178,14 @@ enum class ClearFlags : uint32_t { NONE = 0, CHANNELS = 1 << 0, POWER_SETTINGS =
 struct WS2812 { static const char *name() { return "WS2812"; } };
 struct WS2812B { static const char *name() { return "WS2812B"; } };
 extern CRGB *STRIP; extern int STRIP_N, STRIP_AT;
+extern CRGB *OWN; extern int OWN_AT;               // (a second lot of them: the board's own LED, beside a strip)
 struct CFastLED {
   template <typename CHIP, int PIN, int ORDER> void addLeds(CRGB *leds, int n) {
+    if (STRIP) {
+      OWN = leds; OWN_AT = PIN;
+      printf("O %d %d %s %s\n", PIN, n, ORDER == RGB ? "RGB" : "GRB", CHIP::name());
+      return;
+    }
     STRIP = leds; STRIP_N = n; STRIP_AT = PIN;
     printf("A %d %d %s %s\n", PIN, n, ORDER == RGB ? "RGB" : "GRB", CHIP::name());
   }
@@ -180,6 +196,7 @@ struct CFastLED {
     printf("F %.4f %d", NOW, STRIP_AT);
     for (int i = 0; i < STRIP_N; i++) printf(" %d,%d,%d", STRIP[i].r, STRIP[i].g, STRIP[i].b);
     printf("\n");
+    if (OWN) printf("G %.4f %d %d,%d,%d\n", NOW, OWN_AT, OWN[0].r, OWN[0].g, OWN[0].b);
   }
 };
 extern CFastLED FastLED;
@@ -192,7 +209,7 @@ open(S + "/main.cpp", "w").write(r'''
 double NOW = 0; bool ON_WIFI = false; int WHY_NOT = 6; WiFiClass WiFi; std::deque<Packet> INBOX; SerialClass Serial;
 #include "sketch.cpp"
 #ifdef WITH_STRIP                  // (FastLED's own things: after the sketch, which reads FastLED.h where it must)
-CRGB *STRIP = nullptr; int STRIP_N = 0, STRIP_AT = 0; CFastLED FastLED;
+CRGB *STRIP = nullptr; int STRIP_N = 0, STRIP_AT = 0; CRGB *OWN = nullptr; int OWN_AT = 0; CFastLED FastLED;
 #endif
 int main() {
   setup();
@@ -219,11 +236,16 @@ else:
     BOARD = True
 
 
-def build(name, strip=0, core="3,3,12", matrix=False):
+def build(name, strip=0, core="3,3,12", matrix=False, onboard=None, bright=None):
     """The sketch, built for the stand-in board (a strip of that many LEDs, if any; matrix: a Waveshare
-    ESP32-S3-Matrix; core: the version of the board's software): the program, or None. (A warning's an error:
-    nothing the board's software says not to use.)"""
+    ESP32-S3-Matrix; core: the version of the board's software; onboard: the pin of its own LED, given in the sketch;
+    bright: the sketch's BRIGHTNESS, changed to that): the program, or None. (A warning's an error: nothing the
+    board's software says not to use.)"""
     src = open(SKETCH).read()
+    for was, now in ((("#define ONBOARD_PIN -1 ", f"#define ONBOARD_PIN {onboard} "),) if onboard is not None else ()) \
+            + ((("#define BRIGHTNESS 90 ", f"#define BRIGHTNESS {bright} "),) if bright is not None else ()):
+        assert src.count(was) == 1
+        src = src.replace(was, now)
     if strip:
         assert "#define LED_COUNT 1 " in src
         src = src.replace("#define LED_COUNT 1 ", f"#define LED_COUNT {strip} ")
@@ -248,9 +270,12 @@ def run(prog, script, kept=None):
     """Its loop, run through what the test says: what its LED was sent [(when, pin, r, g, b)] (a strip: [(when, pin,
     [its LEDs])]), what it sent [(when, to, port, bytes)], and when it began listening [(when, port)]. (ASKED: when
     it asked for the WiFi. kept: the file it keeps things in through a power cut, if it's to: KEPT has when each
-    was written, and what; SET_UP how a strip was set up: its pin, its LEDs, their order and kind (and a limit asked
-    of FastLED, if one was); BRIGHT and DITHER what FastLED was told of its brightness and its dithering; SAID
-    what it told the Serial Monitor [(when, the line)], and MONITOR the speed it began that at.)"""
+    was written, and what (KEPT_B: what's kept by another name than its colour's [(when, the name, what)]); SET_UP
+    how a strip was set up: its pin, its LEDs, their order and kind (and a limit asked of FastLED, if one was);
+    OWN_SET the board's own LED beside a strip, set up the same way, and OWN_LED what that was sent [(when, pin,
+    (r, g, b))]: once with each telling of the strip; BRIGHT and DITHER what FastLED was told of its brightness and
+    its dithering; SAID what it told the Serial Monitor [(when, the line)], and MONITOR the speed it began that
+    at.)"""
     env = dict(os.environ)
     env.pop("KEPT", None)
     if kept:
@@ -264,6 +289,11 @@ def run(prog, script, kept=None):
     BRIGHT[:] = [int(w[1]) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "R"]
     SAID[:] = [(float(x.split()[1]), x.split(None, 2)[2]) for x in r.stdout.splitlines() if x.startswith("# ")]
     MONITOR[:] = [int(x.split()[1]) for x in r.stdout.splitlines() if x.startswith("SB ")]
+    KEPT_B[:] = [(float(w[1]), w[2], int(w[3]))
+                 for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "U"]
+    OWN_SET[:] = [w[1:] for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "O"]
+    OWN_LED[:] = [(float(w[1]), int(w[2]), tuple(int(v) for v in w[3].split(",")))
+                  for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "G"]
     for line in r.stdout.splitlines():
         w = line.split()
         if w[0] == "L":
@@ -278,6 +308,7 @@ def run(prog, script, kept=None):
 
 
 ASKED, KEPT, SET_UP, DITHER, BRIGHT, SAID, MONITOR = [], [], [], [], [], [], []
+KEPT_B, OWN_SET, OWN_LED = [], [], []
 
 
 def at(leds, t):
@@ -488,16 +519,46 @@ if BOARD and prog:
               and last[1] == 5 and SET_UP == [["5", "8", "GRB", "WS2812"]] and BRIGHT == [255] and DITHER == [0])
         check(f"...and the Serial Monitor's told it's a strip ({SAID[0][1][:44] if SAID else None})", SAID
               and SAID[0][1].startswith("Pietato LED (a strip, 8 LEDs on pin 5): "))
+        check(f"...the board's own LED left alone, its pin not given in the sketch ({OWN_SET}, {OWN_LED})",
+              OWN_SET == [] and OWN_LED == [])
         _, _, _, shows = run(strip, ["wifi 1", "t 3.0", packet(PI, G.colour_packet((255, 255, 255), 3.0 + AHEAD)),
                                      "t 4.5"])
         check(f"...a white: as bright as the sketch's set to ({shows[-1][2][:1]}): a strip has its own supply",
               shows[-1][2][0] == (90, 90, 90))
+        _, _, _, shows = run(strip, ["wifi 1", "t 3.0", packet(PI, G.bright_packet(255, 3.0 + AHEAD)),
+                                     packet(PI, G.colour_packet((255, 255, 255), 3.0 + AHEAD)), "t 4.5",
+                                     packet(PI, G.colour_packet((255, 0, 0), 4.5 + AHEAD)), "t 6.0"])
+        white, red = [x[2][0] for x in shows if x[0] < 4.5][-1], shows[-1][2][0]
+        check(f"...turned up as far as it goes (a slider on the web page): a white takes no more power than at the "
+              f"sketch's BRIGHTNESS ({white}: its supply and wires are for that), a red's brighter ({red})",
+              white in ((89, 89, 89), (90, 90, 90)) and 225 <= red[0] <= 240 and red[1:] == (0, 0))
         _, _, _, shows = run(strip, ["wifi 1", "t 9.0"])
         dark = [x[0] for x in shows if x[0] > 4.0 and set(x[2]) == {(0, 0, 0)}]
         gaps = [round(b - a, 2) for a, b in zip(dark, dark[1:])]
         check(f"...told again every half second, changed or not (a telling can go astray, with the WiFi busy): "
               f"{len(dark)} times in five seconds of dark ({sorted(set(gaps))})", 9 <= len(dark) <= 11
               and all(0.5 <= g <= 0.52 for g in gaps))
+
+    # ---- a strip, and the board's own LED with it (ONBOARD_PIN given in the sketch) ----------------------------------
+    both = build("strip_own", strip=8, onboard=48)
+    check("the sketch builds for a strip with the board's own LED too (its pin given)", both is not None)
+    if both:
+        _, _, _, shows = run(both, ["t 1.0", "wifi 1", "t 2.0", packet(PI, G.music_packet(BLUE, 2.0 + AHEAD)), "t 2.4",
+                                    packet(PI, G.music_packet(BLUE, 2.4 + AHEAD)), "t 3.2"])
+        check(f"...the board's own LED set up beside the strip, on its pin, green first ({OWN_SET}; the strip as ever: "
+              f"{SET_UP}), and sent the strip's colour with each telling of it ({len(OWN_LED)} of {len(shows)}): amber "
+              f"looking for the WiFi ({OWN_LED[1][2] if len(OWN_LED) > 1 else None}), then music's "
+              f"({OWN_LED[-1][2] if OWN_LED else None}, for {base})",
+              OWN_SET == [["48", "1", "GRB", "WS2812"]] and SET_UP == [["5", "8", "GRB", "WS2812"]]
+              and len(OWN_LED) == len(shows) > 3 and all(o[1] == 48 and o[2] == f[2][0] for o, f in zip(OWN_LED, shows))
+              and OWN_LED[1][2] == (10, 5, 0) and near(OWN_LED[-1][2], base))
+        check(f"...and the Serial Monitor's told of both ({SAID[0][1][:74] if SAID else None})", SAID
+              and SAID[0][1].startswith("Pietato LED (a strip, 8 LEDs on pin 5, and the board's own LED on pin 48): "))
+    same = build("strip_same", strip=8, onboard=5)
+    if same:
+        run(same, ["wifi 1", "t 1.0"])
+    check(f"...its pin given as the strip's own: just the strip, set up once ({SET_UP}, {OWN_SET})", same is not None
+          and SET_UP == [["5", "8", "GRB", "WS2812"]] and OWN_SET == [])
 
     # ---- a Waveshare ESP32-S3-Matrix: 64 LEDs on pin 14, red first, dim, and no more than 300 mA -------------------------
     matrix = build("matrix", matrix=True)
@@ -536,6 +597,13 @@ if BOARD and prog:
               f"{amber[1][2][:1] if len(amber) > 1 else None}), and told again every half second "
               f"({len(amber)} tellings in the first second)", len(amber) >= 3 and set(amber[0][2]) == {(0, 0, 0)}
               and amber[1][0] <= 0.01 and set(amber[1][2]) == {(10, 5, 0)} and 3 <= len(amber) <= 4)
+        script = ["t 1.0", "wifi 1", "t 4.0", packet(PI, G.bright_packet(255, 4.0 + AHEAD))]
+        for k, rgb in enumerate(((255, 255, 255), (255, 0, 0))):
+            script += [packet(PI, G.colour_packet(rgb, 4.0 + AHEAD)), f"t {6.0 + k * 3:.1f}"]
+        _, _, _, shows = run(matrix, script, S + "/keptm")
+        most, red = max(takes(x[2]) for x in shows), [x[2][0] for x in shows if x[0] < 7.9][-1]
+        check(f"...turned up as far as it goes: still never more than 300 mA ({most:.0f} mA at the most), a red a "
+              f"little brighter for it ({red})", 290 <= most <= 300 and 45 <= red[0] <= 60 and red[1:] == (0, 0))
 
     # ---- a colour of its own: told it, shown a moment, kept, and what it's lit in whatever's playing ----------------------
     def states(sent):
@@ -546,12 +614,13 @@ if BOARD and prog:
     leds, sent, _, _ = run(prog, ["wifi 1", "t 3.0", packet(PI, G.colour_packet(RED, 3.0 + AHEAD)), "t 9.0"], NVS)
     said = states(sent)
     check(f"how it is, said with each hello: it keeps a colour of its own, and has none yet ({said[:1]})",
-          len(said) >= 2 and said[0][1] == {"keeps": True, "colour": None})
+          len(said) >= 2 and said[0][1] == {"keeps": True, "colour": None, "dims": True})
     check(f"told a colour of its own, with nothing playing: it shows it a moment ({at(leds, 3.6)}, for "
           f"{seen(RED)}), then goes dark again ({at(leds, 8.9)})", near(at(leds, 3.6), seen(RED))
           and at(leds, 8.9) == (0, 0, 0))
     back = [x for x in said if 3.0 <= x[0] <= 3.1]
-    check(f"...says it back at once ({back[:1]})", len(back) == 1 and back[0][1] == {"keeps": True, "colour": RED})
+    check(f"...says it back at once ({back[:1]})", len(back) == 1 and back[0][1] == {"keeps": True, "colour": RED,
+                                                                                     "dims": True})
     check(f"...and keeps it, once it's stood a second: written once ({KEPT})", len(KEPT) == 1
           and 4.0 <= KEPT[0][0] <= 4.1 and KEPT[0][1] == 0x01FF0000)
     script = ["wifi 1", "t 1.0"]                       # (after a power cut: the same board, started again)
@@ -565,7 +634,8 @@ if BOARD and prog:
     script.append("t 9.5")
     leds, sent, _, _ = run(prog, script, NVS)
     said, own = states(sent), seen([v * 0.4 for v in RED])
-    check(f"after a power cut: it still has it ({said[:1]})", said and said[0][1] == {"keeps": True, "colour": RED})
+    check(f"after a power cut: it still has it ({said[:1]})", said and said[0][1] == {"keeps": True, "colour": RED,
+                                                                                    "dims": True})
     check(f"...music playing: lit in its own colour, not music's ({at(leds, 2.9)}, for {own})", near(at(leds, 2.9), own))
     peak = at(leds, 3.31)
     check(f"...a beat: brighter, in its colour ({peak})", peak is not None and sum(peak) > sum(own) * 1.8
@@ -619,7 +689,74 @@ if BOARD and prog:
     wrote = list(KEPT)
     _, sent, _, _ = run(prog, ["wifi 1", "t 1.0"], S + "/kept5")
     check(f"the power cut before it's stood a second: not kept ({wrote}), and it comes back with none "
-          f"({states(sent)[:1]})", wrote == [] and states(sent)[0][1] == {"keeps": True, "colour": None})
+          f"({states(sent)[:1]})", wrote == [] and states(sent)[0][1] == {"keeps": True, "colour": None, "dims": True})
+
+    # ---- how bright it is: told it, shown a moment, said back, kept; lit at that whatever's playing -----------------
+    def brights(sent):
+        return [(x[0], G.read_bright(x[3])) for x in sent if x[2] == G.LAMP_PORT and x[3][3:4] == b"B"]
+
+    NVB, AS_KEPT = S + "/keptb", ("bright", 0x01000000 | 90 << 8 | 200)   # (kept with the BRIGHTNESS it was set from)
+    leds, sent, _, _ = run(prog, ["wifi 1", "t 3.0", packet(PI, G.bright_packet(200, 3.0 + AHEAD)), "t 9.0"], NVB)
+    said, how, white = brights(sent), states(sent), seen((160, 160, 160), 200)
+    check(f"how bright it is, said with each hello: as the sketch has it, to begin with ({said[:1]}), and that it's "
+          f"its own to set ({how[:1]})", len(said) >= 2 and said[0][1] == 90
+          and how[0][1] == {"keeps": True, "colour": None, "dims": True})
+    back = [x for x in said if 3.0 <= x[0] <= 3.1]
+    check(f"told how bright to be (200 of 255), with nothing playing: white a moment at that, so you can see "
+          f"({at(leds, 3.6)}, for {white}), then dark again ({at(leds, 8.9)}); said back at once ({back[:1]})",
+          near(at(leds, 3.6), white) and at(leds, 8.9) == (0, 0, 0) and len(back) == 1 and back[0][1] == 200)
+    check(f"...and kept, once it's stood a second: written once ({KEPT_B}), its colour not written again ({KEPT})",
+          len(KEPT_B) == 1 and 4.0 <= KEPT_B[0][0] <= 4.1 and KEPT_B[0][1:] == AS_KEPT and KEPT == [])
+    script = ["wifi 1", "t 1.0"]                       # (after a power cut: the same board, started again)
+    for k in range(8):
+        t = 1.0 + k * 0.5
+        script += [f"t {t}", packet(PI, G.music_packet(BLUE, t + AHEAD))]
+    leds, sent, _, _ = run(prog, script + ["t 4.6"], NVB)
+    said, music = brights(sent), seen([v * 0.4 for v in BLUE], 200)
+    check(f"after a power cut: it's still that bright ({said[:1]}), music's lit at that ({at(leds, 4.4)}, for "
+          f"{music}), nothing's written ({KEPT_B}), and the Serial Monitor's told "
+          f"({SAID[0][1][-36:] if SAID else None!r})",
+          said and said[0][1] == 200 and near(at(leds, 4.4), music) and KEPT_B == []
+          and SAID and all(x[1].endswith("; its brightness set to 200 of 255") for x in SAID))
+    other = build("led_b120", bright=120)              # (the same board, a new BRIGHTNESS in its sketch, uploaded)
+    sent = run(other, ["wifi 1", "t 1.0"], NVB)[1] if other else []
+    check(f"BRIGHTNESS changed in the sketch since (to 120): the sketch's again, not what it kept "
+          f"({brights(sent)[:1]})", other is not None and brights(sent) and brights(sent)[0][1] == 120 and KEPT_B == [])
+    dark = ["wifi 1", "t 1.0", packet(PI, G.bright_packet(0, 1.0 + AHEAD))]
+    for k in range(8):
+        t = 2.0 + k * 0.5
+        dark += [f"t {t}", packet(PI, G.music_packet(BLUE, t + AHEAD))]
+        if k == 4:
+            dark.append(packet(PI, G.event_packet("beat", 1.0, t + AHEAD, t + AHEAD)))
+    leds, sent, _, _ = run(prog, dark + ["t 6.5"], S + "/keptb0")
+    lit = [x for x in leds if x[0] > 1.6 and x[2:] != (0, 0, 0)]
+    told = [x[1] for x in SAID if "brightness" in x[1]]
+    check(f"told to be dark (0): nothing lights it, music or a beat ({len(lit)} colours sent after), it says so "
+          f"({brights(sent)[-1:]}), and the Serial Monitor has why ({told[-1][-34:] if told else None!r})",
+          not lit and brights(sent)[-1][1] == 0 and told and told[-1].endswith("; its brightness set to 0 of 255"))
+    good = G.bright_packet(10, 1.0 + AHEAD)
+    junk = [good[:-1], good + b"x", G.HEAD.pack(G.MAGIC, G.VERSION, b"B", float("nan")) + good[12:]]
+    leds, sent, _, _ = run(prog, ["wifi 1", "t 3.0"] + [packet(PI, j) for j in junk] + ["t 6.0"], S + "/keptb2")
+    check(f"how bright, not said right: nothing ({at(leds, 4.9)}, {KEPT_B}, {brights(sent)[-1:]})",
+          at(leds, 4.9) == (0, 0, 0) and KEPT_B == [] and all(x[1] == 90 for x in brights(sent)))
+    flood = ["wifi 1", "t 3.0"]                        # (a slider dragged: forty steps, in a second)
+    for k in range(1, 41):
+        flood += [f"t {3.0 + k * 0.025:.3f}", packet(PI, G.bright_packet(k * 5, 3.0 + AHEAD))]
+    leds, sent, _, _ = run(prog, flood + ["t 7.0"], S + "/keptb3")
+    back = [x for x in brights(sent) if 3.0 <= x[0] < 4.5]
+    gaps = [round(b[0] - a[0], 2) for a, b in zip(back, back[1:])]
+    check(f"a slider dragged, forty steps in a second: said back four times a second at most ({gaps}), the last of "
+          f"them where it's left ({back[-1][1] if back else None}); followed as it goes ({at(leds, 3.5)}, then "
+          f"{at(leds, 4.4)}); and kept once, as it was left ({KEPT_B})", 3 <= len(back) <= 6 and min(gaps) >= 0.25
+          and back[-1][1] == 200 and 0 < sum(at(leds, 3.5)) < sum(at(leds, 4.4)) and near(at(leds, 4.4), white)
+          and len(KEPT_B) == 1 and 5.0 <= KEPT_B[0][0] <= 5.1 and KEPT_B[0][1:] == AS_KEPT)
+    both_set = ["wifi 1", "t 3.0", packet(PI, G.colour_packet(RED, 3.0 + AHEAD)), "t 3.5",
+                packet(PI2, G.bright_packet(128, 9.0)), "t 9.0"]
+    leds, sent, _, _ = run(prog, both_set, S + "/keptb4")
+    check(f"its colour and how bright, both set (from two of yours): each kept, once ({KEPT}, {KEPT_B}), and it's lit "
+          f"in the one at the other ({at(leds, 4.6)}, for {seen(RED, 128)})", [k[1] for k in KEPT] == [0x01FF0000]
+          and [k[1:] for k in KEPT_B] == [("bright", 0x01000000 | 90 << 8 | 128)]
+          and near(at(leds, 4.6), seen(RED, 128)))
 
 # ---- the Pi's side: a light listened for, found, kept while it says it's there ----------------------------------------
 check("what a light says: taken as it is, and nothing else is",
@@ -658,9 +795,10 @@ lamps.close()
 
 # ---- a light's own colour, on the Pi's side: what it says of itself read, and one told it ---------------------------
 check("how a light says it is: read as it is, and nothing else is",
-      G.read_state(G.state_packet((1, 2, 3), 5.0)) == {"keeps": True, "colour": (1, 2, 3)}
-      and G.read_state(G.state_packet(None, 5.0)) == {"keeps": True, "colour": None}
-      and G.read_state(G.state_packet(None, 5.0, can=0)) == {"keeps": False, "colour": None}
+      G.read_state(G.state_packet((1, 2, 3), 5.0)) == {"keeps": True, "colour": (1, 2, 3), "dims": False}
+      and G.read_state(G.state_packet(None, 5.0)) == {"keeps": True, "colour": None, "dims": False}
+      and G.read_state(G.state_packet(None, 5.0, can=0)) == {"keeps": False, "colour": None, "dims": False}
+      and G.read_state(G.state_packet(None, 5.0, can=G.KEEPS | G.DIMS)) == {"keeps": True, "colour": None, "dims": True}
       and G.read_state(G.lamp_packet("x", 1, 5.0)) is None and G.read_state(G.state_packet(None, 5.0) + b"x") is None
       and G.read_state(b"") is None and G.read_state(G.state_packet(None, float("nan"))) is None
       and G.read_lamp(G.state_packet(None, 5.0)) is None)
@@ -693,8 +831,10 @@ lamps.take(G.lamp_packet("ESP32 B", 64, 1.0), "127.0.0.1", T[0])
 lamps.take(G.lamp_packet("ESP32 a", 1, 1.0), "10.0.0.80", T[0])
 check(f"the boards, by name; ones that haven't said how they are (the older sketch) keep no colour, and aren't told "
       f"one ({lamps.boards()})", lamps.boards() == [
-          {"ip": "10.0.0.80", "name": "ESP32 a", "leds": 1, "keeps": False, "colour": None},
-          {"ip": "127.0.0.1", "name": "ESP32 B", "leds": 64, "keeps": False, "colour": None}]
+          {"ip": "10.0.0.80", "name": "ESP32 a", "leds": 1, "keeps": False, "colour": None, "dims": False,
+           "bright": None},
+          {"ip": "127.0.0.1", "name": "ESP32 B", "leds": 64, "keeps": False, "colour": None, "dims": False,
+           "bright": None}]
       and not lamps.set_colour("127.0.0.1", (1, 2, 3), BPORT) and told() == [] and lamps.ever)
 check("...one says how it is: it keeps one", lamps.take(G.state_packet(None, 1.0), "127.0.0.1", T[0])
       and lamps.boards()[1]["keeps"] and lamps.boards()[1]["colour"] is None and not lamps.boards()[0]["keeps"])
@@ -705,11 +845,35 @@ lamps.take(G.state_packet((9, 9, 9), 1.0), "127.0.0.1", T[0])
 check("...what it says back is what's shown", lamps.boards()[1]["colour"] == (9, 9, 9))
 ok, got = lamps.set_colour("127.0.0.1", None, BPORT), told()
 check("...told to have none", ok and got == [G.colour_packet(None, T[0])] * 2 and lamps.boards()[1]["colour"] is None)
+check("how bright a light is: read as it is (kept to 0 to 255), and nothing else is",
+      G.read_bright(G.bright_packet(200, 5.0)) == 200 and G.read_bright(G.bright_packet(300, 5.0)) == 255
+      and G.read_bright(G.bright_packet(-4, 5.0)) == 0 and G.read_bright(G.state_packet(None, 5.0)) is None
+      and G.read_bright(G.bright_packet(9, 5.0) + b"x") is None and G.read_bright(b"") is None
+      and G.read_bright(G.bright_packet(9, float("nan"))) is None and G.read_state(G.bright_packet(9, 5.0)) is None
+      and G.read_lamp(G.bright_packet(9, 5.0)) is None and G.read_packet(G.bright_packet(9, 5.0)) is None)
+check("...one whose brightness isn't its own (the sketch before that): none listed, and it isn't told one",
+      not lamps.boards()[1]["dims"] and lamps.boards()[1]["bright"] is None
+      and not lamps.set_bright("127.0.0.1", 50, BPORT) and told() == [])
+took = (lamps.take(G.bright_packet(90, 1.0), "127.0.0.1", T[0]),
+        lamps.take(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS), "127.0.0.1", T[0]))
+check(f"...the newer sketch still: it is, and how bright is listed ({lamps.boards()[1]})", took == (True, True)
+      and lamps.boards()[1]["dims"] and lamps.boards()[1]["bright"] == 90 and lamps.boards()[1]["keeps"]
+      and not lamps.boards()[0]["dims"])
+ok, got = lamps.set_bright("127.0.0.1", 200, BPORT), told()
+check(f"...told how bright to be: said twice (a packet can go astray), where it listens ({len(got)}); shown as that "
+      f"at once", ok and got == [G.bright_packet(200, T[0])] * 2 and lamps.boards()[1]["bright"] == 200)
+lamps.take(G.bright_packet(180, 1.0), "127.0.0.1", T[0])
+check("...what it says back is what's shown", lamps.boards()[1]["bright"] == 180)
+check("...how bright one is that hasn't said it's there, or one elsewhere: not taken; one that isn't there: not told",
+      not lamps.take(G.bright_packet(5, 1.0), "10.0.0.99", T[0])
+      and not lamps.take(G.bright_packet(5, 1.0), "8.8.8.8", T[0]) and lamps.boards()[1]["bright"] == 180
+      and not lamps.set_bright("10.0.0.99", 5, BPORT) and told() == [])
 check("...one that isn't there, or how one elsewhere is: not told, not taken",
       not lamps.set_colour("10.0.0.99", (1, 2, 3), BPORT) and not lamps.take(G.state_packet(None, 1.0), "8.8.8.8", T[0])
       and told() == [])
 T[0] += 9.0
-check("...gone quiet: off the list, and how it was forgotten", lamps.boards() == [] and lamps.states == {})
+check("...gone quiet: off the list, and how it was forgotten", lamps.boards() == [] and lamps.states == {}
+      and lamps.brights == {})
 lamps.close()
 
 # ---- a lot of them: a game's pictures to a couple at a time, in turn; a beat to every one at once --------------------
@@ -836,6 +1000,27 @@ r = m.web_settings_do({"key": "glow_lamp", "value": {"ip": "127.0.0.1", "colour"
 got = told()
 check(f"...what's playing again ({r})", r == {"ok": True} and got[0][12:] == bytes(4)
       and m.web_lamps()[0]["colour"] == "")
+r = m.web_settings_do({"key": "glow_lamp", "value": {"ip": "127.0.0.1", "bright": 128}})
+check(f"...how bright it is, on a board that doesn't keep that itself (the sketch before that): none to give it, and "
+      f"said ({r}); it's listed without one ({sorted(m.web_lamps()[0])})", "newer sketch" in r.get("error", "")
+      and told() == [] and "bright" not in m.web_lamps()[0])
+s.sendto(G.bright_packet(90, 1.0), ("127.0.0.1", m.glow_lamps.port))
+s.sendto(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS), ("127.0.0.1", m.glow_lamps.port))
+for _ in range(50):
+    if m.web_lamps()[0].get("bright") == 90:
+        break
+    time.sleep(0.05)
+check(f"...the newer sketch still: how bright it is, listed ({m.web_lamps()[0]})", m.web_lamps()[0].get("bright") == 90)
+r = m.web_settings_do({"key": "glow_lamp", "value": {"ip": "127.0.0.1", "bright": 200}})
+got = told()
+check(f"...set on the web page: the board's told ({len(got)} packets: {r}); shown as that "
+      f"({m.web_lamps()[0]['bright']})", r == {"ok": True} and len(got) == 2 and got[0][3:4] == b"B"
+      and got[0][12:] == bytes((200,)) and m.web_lamps()[0]["bright"] == 200 and m.web_lamps()[0]["colour"] == "")
+bad = [m.web_settings_do({"key": "glow_lamp", "value": {"ip": "127.0.0.1", "bright": v}})
+       for v in (256, -1, "200", 12.5, True, None)]
+check(f"...what isn't a brightness: said, and nothing sent ({sorted({b.get('error') for b in bad})})",
+      all(b.get("error") == "That isn't a brightness" for b in bad) and told() == []
+      and m.web_lamps()[0]["bright"] == 200)
 bad = [m.web_settings_do({"key": "glow_lamp", "value": v}) for v in (
     {"ip": "10.9.9.9", "colour": "#ff0000"}, {"ip": "127.0.0.1", "colour": "red"}, {"ip": "127.0.0.1", "colour": "#12345"},
     {"ip": "127.0.0.1", "colour": 5}, {"ip": "127.0.0.1"}, "127.0.0.1", None, {"colour": "#ff0000"})]
@@ -1255,11 +1440,14 @@ m.glow_lamps.take(G.lamp_packet("another", 1, 1.0), "10.0.0.81", m.glow_lamps.cl
 class Board(threading.Thread):
     """A stand-in board at an address of this machine's own (127.0.0.x), doing as the sketch does: it says it's there
     and how it is every second, keeps the colour it's told (told: each one, in turn; a Pietato says each twice, and
-    that's once here) and says it back. (old: the older sketch, which says only that it's there.)"""
+    that's once here) and says it back; and how bright it's told to be, the same way (dimmed: each, in turn). (old:
+    the older sketch, which says only that it's there; bright None: the one after it, which keeps a colour but not
+    how bright it is.)"""
 
-    def __init__(self, ip, port, name, leds, to, old=False, colour=None):
+    def __init__(self, ip, port, name, leds, to, old=False, colour=None, bright=90):
         super().__init__(daemon=True)
         self.name_, self.leds, self.to, self.old, self.colour = name, leds, to, old, colour
+        self.bright, self.dimmed = bright, []
         self.told, self.done, self.last = [], False, None
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((ip, port))
@@ -1268,8 +1456,13 @@ class Board(threading.Thread):
 
     def say(self):
         self.sock.sendto(G.lamp_packet(self.name_, self.leds, time.monotonic()), self.to)
-        if not self.old:
-            self.sock.sendto(G.state_packet(self.colour, time.monotonic()), self.to)
+        if self.old:
+            return
+        bright = self.bright
+        if bright is not None:
+            self.sock.sendto(G.bright_packet(bright, time.monotonic()), self.to)
+        self.sock.sendto(G.state_packet(self.colour, time.monotonic(),
+                                        can=G.KEEPS | (G.DIMS if bright is not None else 0)), self.to)
 
     def run(self):
         said = 0.0
@@ -1287,6 +1480,12 @@ class Board(threading.Thread):
                 self.colour = tuple(data[13:16]) if data[12] else None
                 if data != self.last:                  # (each is said twice: the same packet again)
                     self.told.append(self.colour)
+                self.last = None if data == self.last else data
+                self.say()
+            if len(data) == 13 and data[:4] == b"PG\x01B" and self.bright is not None and not self.old:
+                self.bright = data[12]
+                if data != self.last:
+                    self.dimmed.append(self.bright)
                 self.last = None if data == self.last else data
                 self.say()
         self.sock.close()
@@ -1412,11 +1611,12 @@ with m.glow_lamps.lock:                                # (a Pietato that's found
     m.glow_lamps.ever = False
 to = ("127.0.0.1", m.glow_lamps.port)
 one = Board("127.0.0.2", 0, "ESP32 0A11CE", 1, to)
-two = Board("127.0.0.3", one.port, "ESP32 B0B0B0", 64, to, colour=dict(G.COLOURS)["Purple"])
+two = Board("127.0.0.3", one.port, "ESP32 B0B0B0", 64, to, colour=dict(G.COLOURS)["Purple"], bright=None)
 old = Board("127.0.0.4", one.port, "ESP32 C0FFEE", 1, to, old=True)
 m.lamp_port = one.port
 from playwright.async_api import async_playwright
 ROW = ".set-row[data-key='lamp:127.0.0.2']"
+SLIDER = 'document.querySelector("%s .gl-bright input")' % ROW
 LOOK = """(() => {
   const rows = [...document.querySelectorAll('.gl-lamps .set-row[data-key^="lamp:"]')];
   const shown = (x) => !!x && getComputedStyle(x).display !== 'none';
@@ -1432,6 +1632,19 @@ LOOK = """(() => {
           set: [...document.querySelectorAll('.gl-set .set-row')].filter(shown).map((r) => r.dataset.key),
           more: [...document.querySelectorAll('.gl-lamps .set-row:not([data-key^="lamp:"])')].map((r) => r.dataset.key),
           beats: rows.map((r) => [...r.querySelectorAll('.gl-meta span')].slice(1).map((x) => x.textContent).join(' ')),
+          dim: rows.map((r) => {                 // (each board's slider: where it is, and what it says)
+            const x = r.querySelector('.gl-bright input');
+            return x ? [x.value, r.querySelector('.gl-bright .range-v').textContent] : null;
+          }),
+          notes: rows.map((r) => [...r.querySelectorAll('.set-l > .set-note:not(.gl-meta)')].map((x) => x.textContent)),
+          fits: (() => {                         // (a slider: under its board's colours, no wider than they are; and
+            const box = document.querySelector('.gl-bright');           //  each row's controls, how wide)
+            if (!box) return null;
+            const a = box.getBoundingClientRect();
+            const s = box.parentElement.querySelector('.swatches').getBoundingClientRect();
+            return [a.top >= s.bottom, a.left >= s.left - 1 && a.right <= s.right + 1,
+                    rows.map((r) => Math.round(r.querySelector('.set-c').getBoundingClientRect().width))];
+          })(),
           under: (() => {                        // (the boards' list: under the picture of the LEDs, beside the settings)
             const a = document.querySelector('.gl-board').getBoundingClientRect();
             const c = document.querySelector('.gl-lamps').getBoundingClientRect();
@@ -1512,6 +1725,51 @@ async def browse():
         await pg.click(f"{ROW} .swatch.auto")
         took = await asyncio.to_thread(until, lambda: one.told[-1] is None, 5)
         check(f"Auto: told to have none, so it takes what's playing again ({one.told[-1:]})", took)
+        got = await pg.evaluate(LOOK)
+        check(f"how bright each is: a slider under the colours of a board that keeps that itself, at what it says "
+              f"({got['dim']}), in its row and no wider than its colours ({got['fits']}); one with the sketch before "
+              f"that has none, and it's said why ({got['notes']})", got["dim"] == [["35", "35%"], None, None]
+              and got["fits"][:2] == [True, True] and got["fits"][2][0] == got["fits"][2][1]
+              and got["notes"] == [[], ["Put the newer sketch on it to set how bright it is"], []])
+        await pg.evaluate("""(row) => {                // (the slider, dragged through a few steps and let go)
+          const inp = document.querySelector(row + ' .gl-bright input');
+          for (const v of ['20', '50', '80']) {
+            inp.value = v;
+            inp.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+          inp.dispatchEvent(new Event('change', {bubbles: true}));
+        }""", ROW)
+        took = await asyncio.to_thread(until, lambda: one.dimmed[-1:] == [204], 5)
+        await asyncio.sleep(0.5)
+        got = await pg.evaluate(LOOK)
+        check(f"dragged: the board follows as it goes, one told at a time, and is left where you let go "
+              f"({one.dimmed}); said here as you go ({got['dim'][0]}); no other board's told ({two.dimmed}, "
+              f"{old.dimmed})", took and 1 <= len(one.dimmed) <= 3 and one.dimmed[0] == 51
+              and got["dim"][0] == ["80", "80%"] and two.dimmed == [] and old.dimmed == [])
+        await asyncio.sleep(4.0)                       # (the page asks again, and the board's said how it is)
+        got = await pg.evaluate(LOOK)
+        check(f"...and it stays, as the board says it is ({got['dim'][0]}; {m.web_lamps()[0].get('bright')})",
+              got["dim"][0] == ["80", "80%"] and m.web_lamps()[0].get("bright") == 204)
+        one.bright = 26                                # (set from another of your Pietatos: the board says so)
+        await pg.wait_for_function(SLIDER + ".value === '10'", timeout=8000)
+        got = await pg.evaluate(LOOK)
+        check(f"set from another of your Pietatos: the slider here goes to it ({got['dim'][0]})",
+              got["dim"][0] == ["10", "10%"] and one.dimmed[-1:] == [204])
+        await pg.focus(f"{ROW} .gl-bright input")
+        await pg.keyboard.press("ArrowRight")
+        took = await asyncio.to_thread(until, lambda: one.dimmed[-1:] == [28], 5)
+        kept = await pg.evaluate(SLIDER + " === document.activeElement")
+        check(f"the keyboard's arrows: a step at a time ({one.dimmed[-1:]}), and the slider's still yours for the "
+              f"next ({kept})", took and kept)
+        await pg.evaluate("document.activeElement.blur()")
+        await pg.locator(f"{ROW} .gl-bright input").scroll_into_view_if_needed()
+        box = await pg.evaluate("(() => { const r = %s.getBoundingClientRect(); return [r.left, r.top, r.width, "
+                                "r.height]; })()" % SLIDER)
+        await pg.mouse.click(box[0] + box[2] * 0.75, box[1] + box[3] / 2)
+        took = await asyncio.to_thread(until, lambda: 170 <= (one.dimmed[-1:] or [0])[0] <= 215, 5)
+        left = not await pg.evaluate(SLIDER + " === document.activeElement")
+        check(f"clicked three quarters of the way along: told about that ({one.dimmed[-1:]}), and let go of, so its "
+              f"list can change again ({left})", took and left)
         await pg.click(".gl-lamps .set-row[data-key='glow_beat'] .seg button:has-text('Off')")
         took = await asyncio.to_thread(until, lambda: m.setting("glow_beat") == "Off", 5)
         check("their pulse to music, off from here", took and not m.glow_beats_wanted())
@@ -1545,6 +1803,8 @@ async def browse():
               and got["set"][:2] == ["glow_on", "glow_colour"] and "glow_beat" in got["set"]
               and "glow_each" in got["set"] and got["more"] == []
               and len(got["rows"]) == 3 and got["under"] and got["sub"].endswith("3 ESP32 boards found"))
+        check(f"...and a board's slider under its colours there too ({got['fits']}; {got['dim']})",
+              got["fits"] is not None and got["fits"][:2] == [True, True] and got["dim"][0] is not None)
         await pg.screenshot(path=S + "/boards_web_pi.png", full_page=True)
         for x in (one, two, old):                      # (the boards unplugged)
             x.done = True
