@@ -47,7 +47,7 @@ const char *WIFI_NAME = "your WiFi's name";
 const char *WIFI_PASSWORD = "its password";
 
 #define WAVESHARE_MATRIX 0   // 1: a Waveshare ESP32-S3-Matrix, its 8x8 LEDs (needs the FastLED library)
-#define LED_COUNT 1          // 1: the board's own LED. More: a strip of WS2812B LEDs on STRIP_PIN (needs FastLED)
+#define LED_COUNT 300        // 1: the board's own LED. More: a strip of WS2812B LEDs on STRIP_PIN (needs FastLED)
 
 #if WAVESHARE_MATRIX || LED_COUNT > 1   // (FastLED, read here, before the names below: it has a BRIGHTNESS of its
 #pragma push_macro("LED_COUNT")         //  own, and may come to have more of them)
@@ -56,7 +56,7 @@ const char *WIFI_PASSWORD = "its password";
 #pragma pop_macro("LED_COUNT")
 #endif
 
-#define ONBOARD_PIN -1       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some).
+#define ONBOARD_PIN 48       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some).
                              // With a strip: lit as well, if its pin's given here (-1: just the strip)
 #define STRIP_PIN 5          // a strip's DIN
 #define BRIGHTNESS 90        // how bright it is, 0 to 255, to start with (a Pietato's web page can change it). A
@@ -467,11 +467,11 @@ void setup() {
   Serial.begin(115200);
 #if LED_COUNT > 1                                   // (set up as a board with them is known to take it. Each colour
   FastLED.addLeds<WS2812, STRIP_PIN, STRIP_ORDER>(leds, LED_COUNT);   // goes out as light() gives it, dimmed there:
-  FastLED.setBrightness(255);                       //  FastLED isn't to dim it, or to make it flicker between two
-  FastLED.setDither(0);                             //  levels, which it does to a colour sent often)
-#ifdef BOARD_LED_TOO                                // (the board's own LED, with a strip: green first, as such are)
-  FastLED.addLeds<WS2812, ONBOARD_PIN, GRB>(boardLed, 1);
-#endif
+#ifdef BOARD_LED_TOO                                //  FastLED isn't to dim it, or to make it flicker between two
+  FastLED.addLeds<WS2812, ONBOARD_PIN, GRB>(boardLed, 1);   // levels, which it does to a colour sent often. The board's
+#endif                                              //  own LED, with a strip: green first, as such are, and set up
+  FastLED.setBrightness(255);                       //  before FastLED's told not to, which it says only to the
+  FastLED.setDither(0);                             //  LEDs it has by then)
 #endif
   readKept();
   light(0, 0, 0);
