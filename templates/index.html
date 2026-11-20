@@ -759,8 +759,10 @@
      nothing to how wide their column is: no gap beside it either) */
   .range.gl-bright { flex: 0 0 auto; width: 0; min-width: 100%; }
   .set-c:has(> .gl-bright) { column-gap: 0; }
-  .gl-bright-l { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+  .gl-bright-l, .gl-fx-l { min-width: 72px; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
   .gl-bright .range-v { min-width: 4ch; }
+  /* ...and what a beat does on its strip: under that, the same way */
+  .gl-fx { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; width: 0; min-width: 100%; }
   .content-h .src.bad { color: var(--bad); }
   @media (max-width: 760px) { .gl { grid-template-columns: minmax(0, 1fr); } .gl-board { max-width: 340px; width: 100%; justify-self: center; } }
 
@@ -5218,13 +5220,14 @@ function glDraw() {
   for (const r of rows) if (SET_DRAW[r.kind]) GL.list.append(SET_DRAW[r.kind](r));
 }
 // the ESP32 boards on your network, found by themselves: each one's colour (what's playing, or one of its own, which
-// the board keeps), how bright it is (the board keeps that too), and a way to tell which is which
+// the board keeps; or, with music, a new one each beat or one that changes slowly), how bright it is, what a beat
+// does on its strip (the board keeps those too), and a way to tell which is which
 function glLamps(d) {
   const boards = d.boards || [], rows = d.can ? [] : d.rows || [];
   GL.lamps.hidden = !boards.length && d.can;
   if (GL.lamps.hidden) { GL.lampSig = ""; return; }
-  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null, glDims(b), b.beat || ""]),
-    d.colours, rows]);
+  const sig = JSON.stringify([boards.map((b) => [b.ip, b.name, b.leds, b.colour === null, glDims(b), glFx(b),
+    !!b.its_own, b.beat || ""]), d.colours, rows]);
   const picking = GL.lamps.contains(document.activeElement)
     && document.activeElement.matches("input[type=color], input[type=range]");
   if (sig !== GL.lampSig && !picking) {        // (other boards than before: drawn again, though not under the
@@ -5241,19 +5244,24 @@ function glLamps(d) {
     for (const b of boards) GL.lamps.append(glLamp(b, d.colours || []));
     for (const r of rows) if (SET_DRAW[r.kind]) GL.lamps.append(SET_DRAW[r.kind](r));
   }
-  for (const b of boards) if (GL.lampRows[b.ip]) GL.lampRows[b.ip](b.colour, b.bright);   // (each one's colour, and
-}                                                                                         //  how bright, as now)
+  for (const b of boards) if (GL.lampRows[b.ip]) GL.lampRows[b.ip](b.colour, b.bright, b.effect);   // (each as it
+}                                                                                                   //  is now)
 // (how bright a board is: its own to set, "yes"; or will be once it's said how bright, "soon"; or not, on a sketch from
-// before that, "no")
+// before that, "no". And how it shows music, the same)
 const glDims = (b) => typeof b.bright === "number" ? "yes" : b.bright === null ? "soon" : "no";
+const glFx = (b) => b.effect ? "yes" : b.effect === null ? "soon" : "no";
+// (the one of a board's colours that's lit: music's a new one each beat, "beat", or one that changes slowly, "slow";
+// or its own colour, or "": what's playing)
+const glPicked = (colour, fx) => fx && fx.colours ? fx.colours : colour;
 function glLamp(b, colours) {
   const [row, c, l] = setRow({ key: "lamp:" + b.ip, label: b.name });
   const meta = el("span", "set-note gl-meta");
   meta.append(el("span", "", b.leds === 1 ? "1 LED" : b.leds + " LEDs"));
   if (b.beat) meta.append(el("span", "", "Follows the " + b.beat.toLowerCase()));   // (each has a beat of its own)
   l.append(meta);
-  if (b.colour === null) {                     // (the older sketch: it can't keep one)
-    c.append(el("span", "set-note", "Put the newer sketch on it to give it a colour"));
+  if (b.colour === null) {                     // (the older sketch: it can't keep one. A board with a sketch of its
+    const why = "Put the newer sketch on it to give it a colour";   // own, as a Waveshare matrix has: there's no
+    if (!b.its_own) c.append(el("span", "set-note", why));          // newer one for it, and nothing's said)
     return row;
   }
   const sw = el("div", "swatches"), keys = [];
@@ -5266,17 +5274,17 @@ function glLamp(b, colours) {
     for (const [k, hex] of keys) { named = named || hex === colour; k.setAttribute("aria-pressed", String(hex === colour)); }
     any.classList.toggle("on", !named);
     if (named) any.style.removeProperty("--c"); else any.style.setProperty("--c", colour);
-    if (document.activeElement !== inp) inp.value = colour || "#ffffff";   // (the picker opens at the colour it has)
-  };
+    if (document.activeElement !== inp) inp.value = /^#/.test(colour) ? colour : "#ffffff";   // (the picker opens at
+  };                                                                                         //  the colour it has)
   const tell = async (colour) => {             // (the board told; what's shown here stands a moment, whatever an
     held = Date.now();                         //  answer that was already on its way says)
-    if (await glLampSet(b, colour)) return;
+    if (await glLampSet(b, /^#|^$/.test(colour) ? { colour } : { colours: colour })) return;
     held = 0;                                  // (not taken: as the Pi has it, again)
     glKick();
   };
   const add = (cls, name, hex, word) => {
     const k = button(cls, word || "");
-    if (hex) k.style.setProperty("--c", hex);
+    if (/^#/.test(hex)) k.style.setProperty("--c", hex);
     k.title = name;
     if (!word) k.setAttribute("aria-label", name);
     k.onclick = () => { if (k.getAttribute("aria-pressed") !== "true") { show(hex); tell(hex); } };
@@ -5284,6 +5292,10 @@ function glLamp(b, colours) {
     sw.append(k);
   };
   add("swatch auto", "The colours of what's playing", "", "Auto");
+  if (glFx(b) === "yes") {                     // (the newest sketch: with music, colours of its own making)
+    add("swatch auto", "With music, a new colour on each beat", "beat", "Per beat");
+    add("swatch auto", "With music, colours that change slowly", "slow", "Slow");
+  }
   for (const [name, hex] of colours) add("swatch", name, hex);
   const any = el("label", "swatch any"), inp = el("input");     // (any other colour: the browser's own picker)
   any.title = "Another colour";
@@ -5301,12 +5313,12 @@ function glLamp(b, colours) {
   };
   inp.oninput = follow;
   inp.onchange = () => { follow(); inp.blur(); };
-  let dim = null;                              // (how bright it is, shown on its slider: below)
-  GL.lampRows[b.ip] = (colour, level) => {
-    if (!going && Date.now() - held > 1500) { sent = ""; show(colour); }
+  let dim = null, move = null;                 // (how bright it is, on its slider, and what a beat does: below)
+  GL.lampRows[b.ip] = (colour, level, fx) => {
+    if (!going && Date.now() - held > 1500) { sent = ""; show(glPicked(colour, fx)); if (move) move(fx); }
     if (dim) dim(level);
   };
-  show(b.colour);
+  show(glPicked(b.colour, b.effect));
   const find = button("linkbtn gl-find", "Which one?");
   find.title = "Lights it for a moment, so you can tell";
   find.onclick = async () => {
@@ -5316,7 +5328,9 @@ function glLamp(b, colours) {
   };
   meta.append(find);
   c.append(sw);
-  if (glDims(b) === "no") l.append(el("span", "set-note", "Put the newer sketch on it to set how bright it is"));
+  const lacks = (glDims(b) === "no" ? ["to set how bright it is"] : []).concat(glFx(b) === "no" ? ["for effects"] : []);
+  const newer = "Put the newer sketch on it " + lacks.join(", and ");   // (not said of one with a sketch of its own)
+  if (lacks.length && !b.its_own) l.append(el("span", "set-note", newer));
   if (glDims(b) !== "yes") return row;
   // how bright it is: 0 to 255 to the board, a share of that here. Dragged, the board shows it as you go, one told at
   // a time, and keeps the one you leave it at
@@ -5363,11 +5377,38 @@ function glLamp(b, colours) {
   put(b.bright);
   box.append(el("span", "gl-bright-l", "Brightness"), slide, out);
   c.append(box);
+  if (glFx(b) !== "yes" || b.leds < 2) return row;
+  // what a beat does on its strip: all of it pulses, or the beat's shot down it
+  const fxBox = el("div", "gl-fx"), seg = el("div", "seg");
+  seg.setAttribute("role", "group"); seg.setAttribute("aria-label", b.name + ": what a beat does");
+  const ways = [[false, "Pulse", "On a beat, the whole strip pulses"],
+    [true, "Shoot", "Each beat shoots down the strip"]].map(([shoot, word, says]) => {
+      const k = button("", word);
+      k.title = says;
+      k.onclick = async () => {
+        if (k.getAttribute("aria-pressed") === "true") return;
+        move({ shoot });
+        held = Date.now();
+        if (await glLampSet(b, { shoot })) return;
+        held = 0;                              // (not taken: as the Pi has it, again)
+        glKick();
+      };
+      seg.append(k);
+      return [k, shoot];
+    });
+  move = (fx) => {
+    if (fx) for (const [k, shoot] of ways) k.setAttribute("aria-pressed", String(shoot === !!fx.shoot));
+  };
+  move(b.effect);
+  fxBox.append(el("span", "gl-fx-l", "Effect"), seg);
+  c.append(fxBox);
   return row;
 }
-async function glLampSet(b, colour) {          // (colour null: just lit a moment, so you can tell which it is)
+// A board told something: its colour, or how it shows music (what: {colour}, {colours} or {shoot}); or, what null,
+// just lit a moment, so you can tell which it is.
+async function glLampSet(b, what) {
   try {
-    const r = await pi("settings", { key: "glow_lamp", value: colour === null ? { ip: b.ip, find: true } : { ip: b.ip, colour } });
+    const r = await pi("settings", { key: "glow_lamp", value: Object.assign({ ip: b.ip }, what || { find: true }) });
     if (r && r.said) toast(r.said);
     return true;
   } catch (e) {

@@ -7,9 +7,11 @@ controller), an achievement, and music's beats as they're heard (Beats: party.py
 The one with the grid (Grid) takes them from your Pietatos only, follows one of them (or whichever's playing), smooths
 the colours, flashes red or gold or with the beat, and lights the LEDs through the Pi's SPI (Strip: GPIO 10, its MOSI,
 so nothing needs installing). With nothing lighting it, it shows a colour of your own (or a rainbow), or goes dark.
-A light of your own on the network (an ESP32 board's LED: esp32/pietato_led) is sent the same packets: it says it's
-there (Lamps), and keeps time itself. It can have a colour of its own, which it keeps itself and says with the rest
-(so each of your Pietatos shows the same): told to it from the web page's LED backlight, as how bright it is is.
+A light of your own on the network (an ESP32 board's LED or a strip on it: esp32/pietato_led; a Waveshare matrix
+board's 8x8: esp32/pietato_matrix) is sent the same packets: it says it's there (Lamps), and keeps time itself. It
+can have a colour of its own, which it keeps itself and says with the rest
+(so each of your Pietatos shows the same): told to it from the web page's LED backlight, as how bright it is and
+how it shows music are (a beat shot down a strip; its colour a new one each beat, or one that changes slowly).
 screens/glow.py has its page in Apps (backlight.py draws it), and says where a game's colours go."""
 import collections
 import errno
@@ -46,6 +48,12 @@ STATE = struct.Struct(">BB3s")   # ...and how it is (kind S, after each L): what
 KEEPS = 1                    # own, kept by it), whether it has one, and the colour. Told one: kind C, 1 and the colour
 DIMS = 2                     # ...and, a newer sketch still, DIMS: how bright it is, 0 to 255, is its own too (kept by
 BRIGHT = struct.Struct(">B")     # it, and said before each S: kind B). Told how bright to be: kind B as well
+EFFECTS = 4                  # ...and, newer again, EFFECTS: so is how it shows music (kind X, said and told the same
+EFFECT = struct.Struct(">B")     # way). That's these, added up: SHOOT, a beat shot down a strip, where the whole of
+SHOOT, HUES_BEAT, HUES_SLOW = 1, 2, 4   # it pulsed; and music's colour a new one each beat (HUES_BEAT), or one that
+HUES = {"": 0, "beat": HUES_BEAT, "slow": HUES_SLOW}   # changes slowly (HUES_SLOW): as the web page names those
+ITS_OWN = 8                  # ...and ITS_OWN: it runs a sketch of its own (esp32/pietato_matrix), so what it doesn't
+                             # do isn't for want of a newer one, and the web page doesn't say it is
 EVENTS = ("hit", "cheevo", "beat")
 HIT_GAP = 0.4                # seconds: one hit at a time (a game shaking the controller does it again and again)
 RUMBLE_HIT = 0x3000          # how hard a game shakes player 1's controller before it's a hit
@@ -308,14 +316,16 @@ def state_packet(colour, sent, can=KEEPS):
 
 def read_state(data):
     """A light's word of how it is ({"keeps": it keeps a colour of its own, "colour": that colour, or None, "dims":
-    how bright it is is its own too}), or None: not one, or not right."""
+    how bright it is is its own too, "effects": and how it shows music, "its_own": it runs a sketch of its own}), or
+    None: not one, or not right."""
     if len(data) != HEAD.size + STATE.size:
         return None
     magic, version, kind, sent = HEAD.unpack_from(data)
     can, has, rgb = STATE.unpack_from(data, HEAD.size)
     if magic != MAGIC or version != VERSION or kind != b"S" or has > 1 or not math.isfinite(sent):
         return None
-    return {"keeps": bool(can & KEEPS), "colour": tuple(rgb) if has else None, "dims": bool(can & DIMS)}
+    return {"keeps": bool(can & KEEPS), "colour": tuple(rgb) if has else None, "dims": bool(can & DIMS),
+            "effects": bool(can & EFFECTS), "its_own": bool(can & ITS_OWN)}
 
 
 def bright_packet(level, sent):
@@ -343,13 +353,45 @@ def on_your_network(ip):
     return a.is_private or a.is_link_local or a.is_loopback
 
 
+def an_effect(effect, leds=2):
+    """How a light can show music: SHOOT, HUES_BEAT or HUES_SLOW added up, never both of the two its colour can be;
+    and on a light with the one LED, nothing shot."""
+    return (isinstance(effect, int) and not isinstance(effect, bool) and 0 <= effect <= 5
+            and (leds > 1 or not effect & SHOOT))
+
+
+def effect_packet(effect, sent):
+    """How a light shows music: what it says of itself, and what it's told (it keeps it and says back how it is; with
+    nothing playing, it shows it with a few beats of its own)."""
+    return HEAD.pack(MAGIC, VERSION, b"X", sent) + EFFECT.pack(int(effect) & 0xFF)
+
+
+def read_effect(data):
+    """A light's word of how it shows music (an_effect's), or None: not one, or not right."""
+    if len(data) != HEAD.size + EFFECT.size:
+        return None
+    magic, version, kind, sent = HEAD.unpack_from(data)
+    effect = EFFECT.unpack_from(data, HEAD.size)[0]
+    if magic != MAGIC or version != VERSION or kind != b"X" or not math.isfinite(sent) or not an_effect(effect):
+        return None
+    return effect
+
+
+def effect_parts(effect):
+    """An effect, as the web page has it: {"shoot": a beat's shot down the strip, "colours": music's colour then: ""
+    (what's playing, or the light's own), "beat" or "slow"}."""
+    return {"shoot": bool(effect & SHOOT),
+            "colours": "beat" if effect & HUES_BEAT else "slow" if effect & HUES_SLOW else ""}
+
+
 class Lamps:
-    """Lights of your own on the network (an ESP32's own LED, or a strip on one: esp32/pietato_led), found by
+    """Lights of your own on the network (an ESP32's own LED, or a strip on one: esp32/pietato_led; a Waveshare
+    matrix board: esp32/pietato_matrix), found by
     themselves: each says it's there every couple of seconds (UDP, to everyone on your network), and is lit as your
     grids are for as long as it does: music's beats, a game's colours, a hit, an achievement. Each takes those at
     GLOW_PORT, as a grid does, and keeps time itself: a beat is one small packet to each. Only ones on your network.
     One with the newer sketch says how it is too: whether it has a colour of its own (boards() has that; set_colour()
-    tells it one), and how bright it is (set_bright() tells it that)."""
+    tells it one), how bright it is (set_bright() tells it that), and how it shows music (set_effect())."""
 
     def __init__(self, port=LAMP_PORT, clock=time.monotonic):
         self.clock = clock
@@ -357,6 +399,7 @@ class Lamps:
         self.heard = {}                                # address -> (when it last said it's there, its name, its LEDs)
         self.states = {}                               # address -> how it's said it is (read_state's)
         self.brights = {}                              # address -> how bright it's said it is (0 to 255)
+        self.effects = {}                              # address -> how it's said it shows music (an_effect's)
         self.ever = False                              # one's been found, since this began
         self.closed = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -389,13 +432,16 @@ class Lamps:
         if p is None:
             st = read_state(data)
             level = read_bright(data) if st is None else None
+            effect = read_effect(data) if st is None and level is None else None
             with self.lock:
-                if (st is None and level is None) or ip not in self.heard:
+                if (st is None and level is None and effect is None) or ip not in self.heard:
                     return False
                 if st is not None:
                     self.states[ip] = st
-                else:
+                elif level is not None:
                     self.brights[ip] = level
+                else:
+                    self.effects[ip] = effect
             return True
         with self.lock:
             if ip not in self.heard and len(self.heard) >= LAMPS_MOST:
@@ -413,33 +459,40 @@ class Lamps:
             self.heard = {k: v for k, v in self.heard.items() if now - v[0] <= LAMP_HEARD}
             self.states = {k: v for k, v in self.states.items() if k in self.heard}
             self.brights = {k: v for k, v in self.brights.items() if k in self.heard}
+            self.effects = {k: v for k, v in self.effects.items() if k in self.heard}
             return [(ip, v[1], v[2]) for ip, v in sorted(self.heard.items())]
 
     def boards(self, now=None):
         """The lights there now, and how each is: [{"ip", "name", "leds", "keeps" (it keeps a colour of its own: the
         newer sketch), "colour" (that colour, an RGB; None: it has none, and takes what's playing), "dims" (how
         bright it is is its own too: a newer sketch still), "bright" (that, 0 to 255; None: it doesn't, or hasn't
-        said yet)}], by name."""
+        said yet), "effects" (how it shows music is its own as well: newer again), "effect" (that, an_effect's; None:
+        it doesn't, or hasn't said yet), "its_own" (it runs a sketch of its own: a Waveshare matrix)}], by name."""
         on = self.on(now)
         with self.lock:
-            states, brights = dict(self.states), dict(self.brights)
+            states, brights, effects = dict(self.states), dict(self.brights), dict(self.effects)
         out = []
         for ip, name, count in on:
             st = states.get(ip) or {}
-            dims = bool(st.get("dims"))
+            dims, does = bool(st.get("dims")), bool(st.get("effects"))
             out.append({"ip": ip, "name": name, "leds": count, "keeps": bool(st.get("keeps")),
-                        "colour": st.get("colour"), "dims": dims, "bright": brights.get(ip) if dims else None})
+                        "colour": st.get("colour"), "dims": dims, "bright": brights.get(ip) if dims else None,
+                        "effects": does, "effect": effects.get(ip) if does else None,
+                        "its_own": bool(st.get("its_own"))})
         return sorted(out, key=lambda b: (b["name"].lower(), b["ip"]))
 
     def set_colour(self, ip, rgb, port=GLOW_PORT):
         """A light that's there told its own colour (an RGB; None: none, so what's playing): it shows it a moment
         (the same one again: just that, so you can tell which light it is), and says back how it is. Said twice (a
-        packet can go astray). False: it's not there, or it doesn't keep one (the older sketch)."""
+        packet can go astray). False: it's not there, or it doesn't keep one (the older sketch). Given a colour, it
+        lets go of music's being a new one each beat, or one that changes slowly: it has the one or the other."""
         with self.lock:
             st = self.states.get(ip)
             if ip not in self.heard or not st or not st["keeps"]:
                 return False
             self.states[ip] = dict(st, colour=None if rgb is None else tuple(int(v) for v in rgb[:3]))
+            if rgb is not None and ip in self.effects:
+                self.effects[ip] &= SHOOT
         data = colour_packet(rgb, self.clock())
         for _ in range(2):
             try:
@@ -459,6 +512,26 @@ class Lamps:
                 return False
             self.brights[ip] = level
         data = bright_packet(level, self.clock())
+        for _ in range(2):
+            try:
+                self.sock.sendto(data, (ip, port))
+            except OSError:
+                return False
+        return True
+
+    def set_effect(self, ip, effect, port=GLOW_PORT):
+        """A light that's there told how to show music (an_effect's): it says back how it is, and with nothing playing
+        shows it with a few beats of its own. Said twice (a packet can go astray). False: it's not there, that isn't
+        its own (an older sketch), or it's not one it can have. Music's colour a new one each beat, or one that
+        changes slowly: it lets go of a colour of its own, as it has the one or the other."""
+        with self.lock:
+            st = self.states.get(ip)
+            if ip not in self.heard or not st or not st.get("effects") or not an_effect(effect, self.heard[ip][2]):
+                return False
+            self.effects[ip] = effect
+            if effect & (HUES_BEAT | HUES_SLOW):
+                self.states[ip] = dict(st, colour=None)
+        data = effect_packet(effect, self.clock())
         for _ in range(2):
             try:
                 self.sock.sendto(data, (ip, port))

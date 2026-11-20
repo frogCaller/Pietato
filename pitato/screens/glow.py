@@ -20,8 +20,8 @@ import time
 import urllib.parse
 
 from ..config import SETTINGS_DEFAULT
-from ..glow import (ANY, BEAT_NAMES, colour_of, COLOURS, CONFIG_TXT, GLOW_PORT, GlowOut, Grid, LAMP_PORT, Lamps, NOBODY,
-                    PI_MODEL,
+from ..glow import (ANY, BEAT_NAMES, colour_of, COLOURS, CONFIG_TXT, effect_parts, GLOW_PORT, GlowOut, Grid, HUES,
+                    HUES_BEAT, HUES_SLOW, LAMP_PORT, Lamps, NOBODY, PI_MODEL, SHOOT,
                     spi_lines, SPI_DEV, STARTS, Strip, STRIP_LEAST, STRIP_MOST, strip_points, target_words,
                     THIS_ONE, turn_spi_on)
 from ..handheld import is_handheld
@@ -444,19 +444,27 @@ class GlowScreen:
     def web_lamps(self):
         """The ESP32 boards there now, for the web page: each one's name, its LEDs, and its own colour ("#rrggbb"; ""
         for none: it takes what's playing; None for a board with the older sketch, which can't keep one). One whose
-        brightness is its own (a newer sketch still): that too ("bright": 0 to 255; None till it's said it). With
-        each following a beat of its own: which ("beat": "Kick"...)."""
+        brightness is its own (a newer sketch still): that too ("bright": 0 to 255; None till it's said it). One that
+        shows music its own way as well (newer again): how ("effect": {"shoot": a beat's shot down its strip,
+        "colours": music's colour then, "" as ever, "beat" a new one each beat, or "slow" one that changes slowly};
+        None till it's said). One that runs a sketch of its own (a Waveshare matrix: esp32/pietato_matrix), so there's
+        no newer one to put on it: "its_own". With each following a beat of its own: which ("beat": "Kick"...)."""
         lamps = self.glow_lamps
         each = {ip: {"beat": name} for ip, _, name in self.glow_each_of()}   # (each following a beat of its own:
         return [dict({"ip": b["ip"], "name": b["name"], "leds": b["leds"],   #  which, said with it)
                       "colour": None if not b["keeps"] else "#%02x%02x%02x" % b["colour"] if b["colour"] else ""},
-                     **({"bright": b["bright"]} if b["dims"] else {}), **each.get(b["ip"], {}))
+                     **({"bright": b["bright"]} if b["dims"] else {}),
+                     **({"effect": None if b["effect"] is None else effect_parts(b["effect"])} if b["effects"] else {}),
+                     **({"its_own": True} if b["its_own"] else {}), **each.get(b["ip"], {}))
                 for b in (lamps.boards() if lamps is not None else [])]
 
     def web_set_glow_lamp(self, value, cmd):
         """(The web page.) One of the ESP32 boards there now (its address), given a colour of its own ("#rrggbb"; "":
-        none, so it takes what's playing), or told how bright to be (bright: 0 to 255); or just lit a moment, so you
-        can tell which one it is (find)."""
+        none, so it takes what's playing), told how bright to be (bright: 0 to 255), or how to show music (shoot:
+        each beat shot down its strip, or not; colours: "beat", a new colour each beat, "slow", one that changes
+        slowly, or "": as ever. The part that's not said stays as it is); or just lit a moment, so you can tell which
+        one it is (find). Its colour is one thing: what's playing, a new colour each beat, one that changes slowly,
+        or a colour of its own (the board lets go of the others itself)."""
         lamps = self.glow_lamps
         ip = value.get("ip") if isinstance(value, dict) else None
         board = next((b for b in (lamps.boards() if lamps is not None else []) if b["ip"] == ip), None)
@@ -472,6 +480,20 @@ class GlowScreen:
             if not lamps.set_bright(ip, level, port):
                 return {"error": "It couldn't be told"}
             return {"ok": True}
+        if "shoot" in value or "colours" in value:
+            if not board["effects"]:
+                return {"error": "It needs the newer sketch first (esp32/pietato_led)"}
+            if board["effect"] is None:
+                return {"error": "It hasn't said how it is yet. Try again in a moment"}
+            was = effect_parts(board["effect"])
+            shoot, colours = value.get("shoot", was["shoot"]), value.get("colours", was["colours"])
+            if not isinstance(shoot, bool) or not isinstance(colours, str) or colours not in HUES:
+                return {"error": "That isn't an effect"}
+            if shoot and board["leds"] < 2:
+                return {"error": "It has one LED: there's nothing to shoot along"}
+            if not lamps.set_effect(ip, (SHOOT if shoot else 0) | HUES[colours], port):
+                return {"error": "It couldn't be told"}
+            return {"ok": True}
         if not board["keeps"]:
             return {"error": "It needs the newer sketch first (esp32/pietato_led)"}
         if value.get("find") is True:                  # (the colour it has, told it again: it shows it a moment)
@@ -484,6 +506,8 @@ class GlowScreen:
         rgb = tuple(int(colour[k:k + 2], 16) for k in (1, 3, 5)) if colour else None
         if not lamps.set_colour(ip, rgb, port):
             return {"error": "It couldn't be told"}
+        if rgb is None and (board["effect"] or 0) & (HUES_BEAT | HUES_SLOW):   # (what's playing again: music's
+            lamps.set_effect(ip, board["effect"] & SHOOT, port)                #  colour too, not one of its making)
         return {"ok": True}
 
     def glow_start(self):

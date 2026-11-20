@@ -20,16 +20,22 @@ reads what it says of itself, lists the boards by name with their colours, and t
 one. How bright it is, the same way: told it (a slider on the web page, for each board), it shows its colour a moment
 at that, says it back, keeps it (a BRIGHTNESS changed in the sketch since is taken instead), and is lit at that
 whatever's playing; a strip takes no more power than a white at the sketch's BRIGHTNESS however bright it's set, and
-lights the board's own LED too if that's given its pin. A Waveshare ESP32-S3-Matrix: its 64 LEDs on pin 14, red
-first, set up the way such a board is known to work
-(FastLED's WS2812, and nothing asked of FastLED but to send each colour as it is), dim, and never more than 300 mA
-(the sketch's own sum: a white's dimmed to fit). FastLED read before the sketch's own settings (it has a BRIGHTNESS
+lights the board's own LED too if that's given its pin. How it shows music, the same way again (told, said back,
+kept): its colour a new one each beat (from when the beat is by the Pietato's clock, so every board turns the same;
+never one close to the last), or one that changes slowly, in place of a colour of its own (it has the one or the
+other); and on a strip each beat shot down it, a few LEDs on their way from the first to the last, leaving the
+strip in its colour with a colour each beat; told with nothing playing, it shows you with a few beats of its own.
+The web page has those beside each board's colours, and Effect for one with a strip. A Waveshare ESP32-S3-Matrix
+has a sketch of its own (esp32/pietato_matrix), and this one has nothing of it: that one says it's a sketch of its
+own, and the web page lists its board with its colour and how bright it is, and never says a newer sketch would do
+more. A strip's set up the way such LEDs are known to work (FastLED's WS2812, and nothing asked of FastLED but to
+send each colour as it is). FastLED read before the sketch's own settings (it has a BRIGHTNESS
 of its own), and a strip told again every half second. On your WiFi it's green for a second and a half, and the
 Serial Monitor is told how it is every ten seconds and when that changes (what it lights, whether it's on your
 WiFi and why not, which Pietato is lighting it, its own colour): a line a second at most, none with no one
 listening. Its page in Apps on a Pietato with no LEDs of its own: your boards drawn in its box, an LED each, and
 never full screen (it would be a black one)."""
-import asyncio, json, logging, os, shutil, socket, subprocess, sys, threading, time
+import asyncio, json, logging, math, os, shutil, socket, subprocess, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 import numpy as np
@@ -168,7 +174,7 @@ open(S + "/board/FastLED.h", "w").write(r'''
 #if defined(BRIGHTNESS) || defined(LED_COUNT) || defined(STRIP_PIN) || defined(ONBOARD_PIN) || defined(MOST_MILLIAMPS)
 #error "FastLED.h is to be read before the sketch's own settings: it has names of its own like theirs"
 #endif
-#if defined(MATRIX_BRIGHTNESS) || defined(MATRIX_ORDER) || defined(STRIP_ORDER)
+#if defined(STRIP_ORDER)
 #error "FastLED.h is to be read before the sketch's own settings: it has names of its own like theirs"
 #endif
 #include "Arduino.h"
@@ -236,11 +242,10 @@ else:
     BOARD = True
 
 
-def build(name, strip=0, core="3,3,12", matrix=False, onboard=None, bright=None):
-    """The sketch, built for the stand-in board (a strip of that many LEDs, if any; matrix: a Waveshare
-    ESP32-S3-Matrix; core: the version of the board's software; onboard: the pin of its own LED, given in the sketch;
-    bright: the sketch's BRIGHTNESS, changed to that): the program, or None. (A warning's an error: nothing the
-    board's software says not to use.)"""
+def build(name, strip=0, core="3,3,12", onboard=None, bright=None):
+    """The sketch, built for the stand-in board (a strip of that many LEDs, if any; core: the version of the board's
+    software; onboard: the pin of its own LED, given in the sketch; bright: the sketch's BRIGHTNESS, changed to
+    that): the program, or None. (A warning's an error: nothing the board's software says not to use.)"""
     src = open(SKETCH).read()
     for was, now in ((("#define ONBOARD_PIN -1 ", f"#define ONBOARD_PIN {onboard} "),) if onboard is not None else ()) \
             + ((("#define BRIGHTNESS 90 ", f"#define BRIGHTNESS {bright} "),) if bright is not None else ()):
@@ -249,10 +254,6 @@ def build(name, strip=0, core="3,3,12", matrix=False, onboard=None, bright=None)
     if strip:
         assert "#define LED_COUNT 1 " in src
         src = src.replace("#define LED_COUNT 1 ", f"#define LED_COUNT {strip} ")
-    if matrix:
-        assert "#define WAVESHARE_MATRIX 0 " in src
-        src = src.replace("#define WAVESHARE_MATRIX 0 ", "#define WAVESHARE_MATRIX 1 ")
-        strip = 64
     open(S + "/sketch.cpp", "w").write(src)
     out = f"{S}/{name}"
     major, minor, patch = core.split(",")
@@ -272,7 +273,8 @@ def run(prog, script, kept=None):
     it asked for the WiFi. kept: the file it keeps things in through a power cut, if it's to: KEPT has when each
     was written, and what (KEPT_B: what's kept by another name than its colour's [(when, the name, what)]); SET_UP
     how a strip was set up: its pin, its LEDs, their order and kind (and a limit asked of FastLED, if one was);
-    OWN_SET the board's own LED beside a strip, set up the same way, and OWN_LED what that was sent [(when, pin,
+    OWN_SET the board's own LED beside a strip, set up the same way (OWN_SET_FIRST: before FastLED was told of its
+    dithering, which it says only to the LEDs it has by then), and OWN_LED what that was sent [(when, pin,
     (r, g, b))]: once with each telling of the strip; BRIGHT and DITHER what FastLED was told of its brightness and
     its dithering; SAID what it told the Serial Monitor [(when, the line)], and MONITOR the speed it began that
     at.)"""
@@ -292,6 +294,8 @@ def run(prog, script, kept=None):
     KEPT_B[:] = [(float(w[1]), w[2], int(w[3]))
                  for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "U"]
     OWN_SET[:] = [w[1:] for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "O"]
+    first = [x[:1] for x in r.stdout.splitlines() if x[:2] in ("O ", "D ")][:1]
+    OWN_SET_FIRST[:] = [first == ["O"]]                # (...and set up before FastLED's told not to dither)
     OWN_LED[:] = [(float(w[1]), int(w[2]), tuple(int(v) for v in w[3].split(",")))
                   for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "G"]
     for line in r.stdout.splitlines():
@@ -308,7 +312,7 @@ def run(prog, script, kept=None):
 
 
 ASKED, KEPT, SET_UP, DITHER, BRIGHT, SAID, MONITOR = [], [], [], [], [], [], []
-KEPT_B, OWN_SET, OWN_LED = [], [], []
+KEPT_B, OWN_SET, OWN_LED, OWN_SET_FIRST = [], [], [], []
 
 
 def at(leds, t):
@@ -334,6 +338,14 @@ def packet(ip, data):
     return f"p {ip} {data.hex()}"
 
 
+GRID = ROOT + "/esp32/pietato_matrix/pietato_matrix.ino"
+grid_src = open(GRID, encoding="utf-8").read() if os.path.exists(GRID) else ""
+check("a sketch each: this one for a board's own LED or a strip, with nothing of a Waveshare matrix's in it; and "
+      "the matrix's own (esp32/pietato_matrix), which says it's there at the same ports, and that it's a sketch of "
+      "its own with what it keeps (its colour and how bright, 3; its own, 8)",
+      "MATRIX" not in open(SKETCH).read().replace("ESP32-S3-Matrix", "") and "msg[12] = 3 | 8;" in grid_src
+      and "GLOW_PORT = 5448" in grid_src and "LAMP_PORT = 5449" in grid_src and "\r" not in grid_src
+      and (G.KEEPS | G.DIMS, G.ITS_OWN, G.GLOW_PORT, G.LAMP_PORT) == (3, 8, 5448, 5449))
 if BOARD:
     prog = build("led")
     check("the sketch builds for a board (its own LED)", prog is not None)
@@ -554,73 +566,33 @@ if BOARD and prog:
               and OWN_LED[1][2] == (10, 5, 0) and near(OWN_LED[-1][2], base))
         check(f"...and the Serial Monitor's told of both ({SAID[0][1][:74] if SAID else None})", SAID
               and SAID[0][1].startswith("Pietato LED (a strip, 8 LEDs on pin 5, and the board's own LED on pin 48): "))
+        check(f"...the board's own LED isn't to flicker between two levels either: it's set up before FastLED's told "
+              f"not to dither, which is said only to the LEDs it has by then ({OWN_SET_FIRST}, {DITHER})",
+              OWN_SET_FIRST == [True] and DITHER == [0] and BRIGHT == [255])
     same = build("strip_same", strip=8, onboard=5)
     if same:
         run(same, ["wifi 1", "t 1.0"])
     check(f"...its pin given as the strip's own: just the strip, set up once ({SET_UP}, {OWN_SET})", same is not None
           and SET_UP == [["5", "8", "GRB", "WS2812"]] and OWN_SET == [])
 
-    # ---- a Waveshare ESP32-S3-Matrix: 64 LEDs on pin 14, red first, dim, and no more than 300 mA -------------------------
-    matrix = build("matrix", matrix=True)
-    check("the sketch builds for a Waveshare ESP32-S3-Matrix (FastLED)", matrix is not None)
-    if matrix:
-        _, sent, _, shows = run(matrix, ["wifi 1", "t 1.0", packet(PI, G.music_packet(BLUE, 1.0 + AHEAD)), "t 1.4",
-                                         packet(PI, G.music_packet(BLUE, 1.4 + AHEAD)), "t 2.2"])
-        last = shows[-1] if shows else (0, 0, [(0, 0, 0)])
-        dim = seen([v * 0.4 for v in BLUE], 40)
-        said = next((G.read_lamp(x[3]) for x in sent if x[3][3:4] == b"L"), None)
-        check(f"...its 64 LEDs on pin 14, red first, set up as a board of them is known to work ({SET_UP}, FastLED's "
-              f"own brightness {BRIGHT}, its dithering {DITHER}); all of them music's colour, dim ({last[2][:1]}, for "
-              f"{dim}: the board gets hot otherwise); and it says it has 64 ({said})",
-              SET_UP == [["14", "64", "RGB", "WS2812"]] and BRIGHT == [255] and DITHER == [0] and len(last[2]) == 64
-              and len(set(last[2])) == 1 and near(last[2][0], dim, 1) and last[1] == 14
-              and said == {"name": "ESP32 A1B2C3", "count": 64})
-        check(f"...and the Serial Monitor's told it's the matrix ({SAID[0][1][:58] if SAID else None})", SAID
-              and SAID[0][1].startswith("Pietato LED (a Waveshare matrix, 64 LEDs on pin 14): "))
-
-        def takes(leds):                               # (mA, as FastLED reckons a WS2812 at 5 V: the board 25, a dark
-            return 25 + sum(1 + (16 * r + 11 * g + 15 * b) / 255 for r, g, b in leds)   # LED 1, and each colour)
-
-        script = ["t 1.0", "wifi 1", "t 4.0"]
-        for k, rgb in enumerate(((255, 255, 255), (255, 0, 0), (255, 255, 0), (0, 0, 255))):
-            script += [packet(PI, G.colour_packet(rgb, 4.0 + AHEAD)), f"t {6.0 + k * 3:.1f}"]   # (shown a moment)
-        _, _, _, shows = run(matrix, script)
-        most = max(takes(x[2]) for x in shows)
-        white, red, yellow, blue = ([x[2][0] for x in shows if x[0] < t][-1] for t in (5.9, 7.9, 10.9, 13.9))
-        check(f"...never more than 300 mA between them, whatever it's asked for ({most:.0f} mA at the most, in "
-              f"{len(shows)} tellings): a white's dimmed to fit ({white}), and a yellow ({yellow}); a red and a "
-              f"blue aren't ({red}, {blue})", 290 <= most <= 300 and white in ((19, 19, 19), (20, 20, 20))
-              and red == (40, 0, 0) and blue == (0, 0, 40) and yellow[0] == yellow[1] and 28 <= yellow[0] <= 32
-              and yellow[2] == 0 and all(len(set(x[2])) == 1 for x in shows))
-        amber = [x for x in shows if x[0] < 1.0]
-        check(f"...looking for the WiFi: all 64 a dim amber, at once ({amber[1][0] if len(amber) > 1 else None} s: "
-              f"{amber[1][2][:1] if len(amber) > 1 else None}), and told again every half second "
-              f"({len(amber)} tellings in the first second)", len(amber) >= 3 and set(amber[0][2]) == {(0, 0, 0)}
-              and amber[1][0] <= 0.01 and set(amber[1][2]) == {(10, 5, 0)} and 3 <= len(amber) <= 4)
-        script = ["t 1.0", "wifi 1", "t 4.0", packet(PI, G.bright_packet(255, 4.0 + AHEAD))]
-        for k, rgb in enumerate(((255, 255, 255), (255, 0, 0))):
-            script += [packet(PI, G.colour_packet(rgb, 4.0 + AHEAD)), f"t {6.0 + k * 3:.1f}"]
-        _, _, _, shows = run(matrix, script, S + "/keptm")
-        most, red = max(takes(x[2]) for x in shows), [x[2][0] for x in shows if x[0] < 7.9][-1]
-        check(f"...turned up as far as it goes: still never more than 300 mA ({most:.0f} mA at the most), a red a "
-              f"little brighter for it ({red})", 290 <= most <= 300 and 45 <= red[0] <= 60 and red[1:] == (0, 0))
-
     # ---- a colour of its own: told it, shown a moment, kept, and what it's lit in whatever's playing ----------------------
     def states(sent):
         return [(x[0], G.read_state(x[3])) for x in sent if x[2] == G.LAMP_PORT and x[3][3:4] == b"S"]
+
+    KEEPS_ALL = {"keeps": True, "dims": True, "effects": True, "its_own": False}   # (what's the board's own to
+                                                       #  keep, as it says it; its sketch isn't one of its own)
 
     NVS = S + "/kept"
     RED, GREEN = (255, 0, 0), (0, 200, 60)
     leds, sent, _, _ = run(prog, ["wifi 1", "t 3.0", packet(PI, G.colour_packet(RED, 3.0 + AHEAD)), "t 9.0"], NVS)
     said = states(sent)
     check(f"how it is, said with each hello: it keeps a colour of its own, and has none yet ({said[:1]})",
-          len(said) >= 2 and said[0][1] == {"keeps": True, "colour": None, "dims": True})
+          len(said) >= 2 and said[0][1] == dict(KEEPS_ALL, colour=None))
     check(f"told a colour of its own, with nothing playing: it shows it a moment ({at(leds, 3.6)}, for "
           f"{seen(RED)}), then goes dark again ({at(leds, 8.9)})", near(at(leds, 3.6), seen(RED))
           and at(leds, 8.9) == (0, 0, 0))
     back = [x for x in said if 3.0 <= x[0] <= 3.1]
-    check(f"...says it back at once ({back[:1]})", len(back) == 1 and back[0][1] == {"keeps": True, "colour": RED,
-                                                                                     "dims": True})
+    check(f"...says it back at once ({back[:1]})", len(back) == 1 and back[0][1] == dict(KEEPS_ALL, colour=RED))
     check(f"...and keeps it, once it's stood a second: written once ({KEPT})", len(KEPT) == 1
           and 4.0 <= KEPT[0][0] <= 4.1 and KEPT[0][1] == 0x01FF0000)
     script = ["wifi 1", "t 1.0"]                       # (after a power cut: the same board, started again)
@@ -634,8 +606,7 @@ if BOARD and prog:
     script.append("t 9.5")
     leds, sent, _, _ = run(prog, script, NVS)
     said, own = states(sent), seen([v * 0.4 for v in RED])
-    check(f"after a power cut: it still has it ({said[:1]})", said and said[0][1] == {"keeps": True, "colour": RED,
-                                                                                    "dims": True})
+    check(f"after a power cut: it still has it ({said[:1]})", said and said[0][1] == dict(KEEPS_ALL, colour=RED))
     check(f"...music playing: lit in its own colour, not music's ({at(leds, 2.9)}, for {own})", near(at(leds, 2.9), own))
     peak = at(leds, 3.31)
     check(f"...a beat: brighter, in its colour ({peak})", peak is not None and sum(peak) > sum(own) * 1.8
@@ -689,7 +660,7 @@ if BOARD and prog:
     wrote = list(KEPT)
     _, sent, _, _ = run(prog, ["wifi 1", "t 1.0"], S + "/kept5")
     check(f"the power cut before it's stood a second: not kept ({wrote}), and it comes back with none "
-          f"({states(sent)[:1]})", wrote == [] and states(sent)[0][1] == {"keeps": True, "colour": None, "dims": True})
+          f"({states(sent)[:1]})", wrote == [] and states(sent)[0][1] == dict(KEEPS_ALL, colour=None))
 
     # ---- how bright it is: told it, shown a moment, said back, kept; lit at that whatever's playing -----------------
     def brights(sent):
@@ -700,7 +671,7 @@ if BOARD and prog:
     said, how, white = brights(sent), states(sent), seen((160, 160, 160), 200)
     check(f"how bright it is, said with each hello: as the sketch has it, to begin with ({said[:1]}), and that it's "
           f"its own to set ({how[:1]})", len(said) >= 2 and said[0][1] == 90
-          and how[0][1] == {"keeps": True, "colour": None, "dims": True})
+          and how[0][1] == dict(KEEPS_ALL, colour=None))
     back = [x for x in said if 3.0 <= x[0] <= 3.1]
     check(f"told how bright to be (200 of 255), with nothing playing: white a moment at that, so you can see "
           f"({at(leds, 3.6)}, for {white}), then dark again ({at(leds, 8.9)}); said back at once ({back[:1]})",
@@ -758,6 +729,269 @@ if BOARD and prog:
           and [k[1:] for k in KEPT_B] == [("bright", 0x01000000 | 90 << 8 | 128)]
           and near(at(leds, 4.6), seen(RED, 128)))
 
+    # ---- how it shows music: its colour a new one each beat, or one that changes slowly ------------------------------
+    def effects(sent):
+        return [(x[0], G.read_effect(x[3])) for x in sent if x[2] == G.LAMP_PORT and x[3][3:4] == b"X"]
+
+    def kept_as(name):
+        """Each time that was written, to be kept through a power cut: [(when, what)]."""
+        return [(k[0], k[2]) for k in KEPT_B if k[1] == name]
+
+    def hue_rgb(angle):
+        """An angle round the colours (0 to 360) as a colour at its fullest: as the sketch makes one."""
+        h = angle / 60.0
+        up = (h - int(h)) * 255.0
+        return ((255, up, 0), (255 - up, 255, 0), (0, 255, up), (0, 255 - up, 255), (up, 0, 255),
+                (255, 0, 255 - up))[int(h) % 6]
+
+    def beat_hues(times, before):
+        """The colour of each of those beats (an angle), from when it is by the Pietato's clock, and never one close
+        to the beat's before (before: the colour the music began in): as the sketch has it, so every board that
+        hears them turns the same colours."""
+        out = []
+        for t in times:
+            h = math.floor(t * 20.0) * 137.508 % 360.0
+            if min(abs(h - before), 360.0 - abs(h - before)) < 60.0:
+                h = (h + 150.0) % 360.0
+            out.append(h)
+            before = h
+        return out
+
+    def dimmer(angle, bright=255):
+        """Music's colour between beats, when it's that angle round the colours: as the LED's sent it."""
+        return seen([v * 0.4 for v in hue_rgb(angle)], bright)
+
+    def likeness(a, b):
+        """How alike two colours are, however bright each is (1: the same colour)."""
+        norm = math.sqrt(sum(x * x for x in a) * sum(x * x for x in b))
+        return sum(x * y for x, y in zip(a, b)) / norm if norm else 0.0
+
+    def music_from(t0, t1):
+        """A script's lines: music's colour said every half second between those times, as media mode does."""
+        return [x for k in range(int((t1 - t0) * 2) + 1)
+                for x in (f"t {t0 + k * 0.5:.3f}", packet(PI, G.music_packet(BLUE, t0 + k * 0.5 + AHEAD)))]
+
+    def rises(leds, t0, t1, by=40):
+        """When its LED grew much brighter all at once, between those times: each beat it showed."""
+        got, before = [], None
+        for x in leds:
+            if before is not None and t0 <= x[0] <= t1 and sum(x[2:]) - before > by:
+                got.append(round(x[0], 2))
+            before = sum(x[2:])
+        return got
+
+    BEATS = [4.0, 4.8, 5.6, 6.4, 7.2, 8.0]
+    BEGAN = (1.0 + AHEAD) * 6.0 % 360.0                # (the colour music begins in, a colour each beat: from when it
+                                                       #  began by the Pietato's clock, a second in in these)
+
+    def with_music(effect, shift=0.0, beats=BEATS, upto=9.0, more=(), bright=255):
+        """A script: music from a second in (its colour said every half second); the board told how bright to be (if
+        it's to be) and how to show music, just as it begins; and a beat at each of those times, said 0.3 s ahead as
+        media mode does. shift: the board's own clock that much further on, the Pietato's as it was. more: other
+        packets [(when, which)]."""
+        events = [(1.0 + k * 0.5, G.music_packet(BLUE, 1.0 + k * 0.5 + AHEAD))
+                  for k in range(int((upto - 1.0) * 2) + 1)]
+        events += [(1.0, G.bright_packet(bright, 1.0 + AHEAD))] if bright is not None else []
+        events += [(1.0, G.effect_packet(effect, 1.0 + AHEAD))]
+        events += [(b - 0.3, G.event_packet("beat", 1.0, b + AHEAD, b - 0.3 + AHEAD)) for b in beats]
+        script = ["wifi 1"]
+        for t, data in sorted(events + list(more), key=lambda x: x[0]):
+            script += [f"t {t + shift:.3f}", packet(PI, data)]
+        return script + [f"t {upto + 1.4 + shift:.3f}"]
+
+    NVX = S + "/keptx"
+    _, sent, _, _ = run(prog, ["wifi 1", "t 5.0"], NVX)
+    check(f"how it shows music, said with each hello: it pulses, to begin with ({effects(sent)[:2]})",
+          len(effects(sent)) >= 2 and all(x[1] == 0 for x in effects(sent)) and KEPT_B == [])
+    leds, sent, _, _ = run(prog, with_music(G.HUES_BEAT), NVX)
+    hues = beat_hues([b + AHEAD for b in BEATS], BEGAN)
+    back = [x for x in effects(sent) if 1.0 <= x[0] <= 1.1]
+    check(f"told to make its colour a new one each beat: says it back at once ({back[:1]}), and keeps it once it's "
+          f"stood a second ({kept_as('effect')}); its own colour isn't written ({KEPT})", len(back) == 1
+          and back[0][1] == G.HUES_BEAT and len(kept_as("effect")) == 1 and 2.0 <= kept_as("effect")[0][0] <= 2.1
+          and kept_as("effect")[0][1] == 0x01000000 | G.HUES_BEAT and KEPT == [])
+    between = [at(leds, b + 0.7) for b in BEATS]
+    check(f"...music playing: after each beat that beat's colour, dimmer, till the next ({between[:3]}, for "
+          f"{[dimmer(h) for h in hues[:3]]})", all(near(c, dimmer(h)) for c, h in zip(between, hues)))
+    turns = [min(abs(a - b), 360 - abs(a - b)) for a, b in zip([BEGAN] + hues, hues)]
+    check(f"...never one close to the beat's before ({[round(x) for x in turns]} degrees round the colours, each from "
+          f"the last)", min(turns) >= 60 and not any(near(a, b, 4) for a, b in zip(between, between[1:])))
+    early = [at(leds, b - 0.03) for b in BEATS]
+    check(f"...not before the beat's due ({early[:3]}: the colour before, still; before the first, the one the music "
+          f"began in, {dimmer(BEGAN)})", all(near(c, dimmer(h)) for c, h in zip(early, [BEGAN] + hues)))
+    onbeat = [at(leds, b + 0.03) for b in BEATS]
+    check(f"...and on the beat: its colour at once, and brighter ({onbeat[:3]})",
+          all(sum(c) > sum(dimmer(h)) * 1.8 and likeness(c, dimmer(h)) > likeness(c, dimmer(was)) + 0.05
+              for c, h, was in zip(onbeat, hues, [BEGAN] + hues)))
+    other, _, _, _ = run(prog, with_music(G.HUES_BEAT, shift=3.7))
+    theirs = [at(other, b + 3.7 + 0.7) for b in BEATS]
+    check(f"...a board whose own clock is 3.7 s further on: the same colours, beat for beat ({theirs[:3]}): each is "
+          f"from when its beat is by the Pietato's clock, so all your boards turn together",
+          all(near(a, b, 1) for a, b in zip(theirs, between)))
+    _, sent, _, _ = run(prog, ["wifi 1", "t 1.0"], NVX)
+    check(f"after a power cut: it still does ({effects(sent)[:1]}), nothing's written ({KEPT_B}), and the Serial "
+          f"Monitor's told ({SAID[-1][1][-48:] if SAID else None!r})", effects(sent)
+          and effects(sent)[0][1] == G.HUES_BEAT and KEPT_B == [] and SAID
+          and SAID[-1][1].endswith("; with music, it pulses in a new colour each beat"))
+    red = seen([v * 0.4 for v in RED], 255)
+    script = ["wifi 1", "t 3.0", packet(PI, G.colour_packet(RED, 3.0 + AHEAD))] + music_from(5.5, 8.0) + ["t 8.2"]
+    leds, sent, _, _ = run(prog, script, NVX)
+    back = ([x[1] for x in effects(sent) if 3.0 <= x[0] <= 3.1],
+            [x[1]["colour"] for x in states(sent) if 3.0 <= x[0] <= 3.1])
+    check(f"given a colour of its own while it does that: it has the colour now, in place of colours of its own "
+          f"making. Said back ({back}), both kept ({KEPT}, {kept_as('effect')}), and music's lit in it "
+          f"({at(leds, 7.9)}, for {red})", back == ([0], [RED]) and [k[1] for k in KEPT] == [0x01FF0000]
+          and [k[1] for k in kept_as("effect")] == [0x01000000] and near(at(leds, 7.9), red))
+    script = (["wifi 1", "t 3.0", packet(PI, G.effect_packet(G.HUES_SLOW, 3.0 + AHEAD))] + music_from(5.5, 8.0)
+              + ["t 8.2"])
+    leds, sent, _, _ = run(prog, script, NVX)
+    back = ([x[1] for x in effects(sent) if 3.0 <= x[0] <= 3.1],
+            [x[1]["colour"] for x in states(sent) if 3.0 <= x[0] <= 3.1])
+    slow = dimmer((7.9 + AHEAD) * 6.0 % 360.0)
+    check(f"told to make its colour one that changes slowly, while it has a colour of its own: that, in place of "
+          f"the colour. Said back ({back}), both kept ({KEPT}, {kept_as('effect')}), and music's lit in where the "
+          f"colours have got to by the Pietato's clock ({at(leds, 7.9)}, for {slow}; not {red})",
+          back == ([G.HUES_SLOW], [None]) and [k[1] for k in KEPT] == [0]
+          and [k[1] for k in kept_as("effect")] == [0x01000000 | G.HUES_SLOW] and near(at(leds, 7.9), slow)
+          and not near(slow, red, 4))
+    leds, sent, _, _ = run(prog, with_music(G.HUES_SLOW), NVX)
+    a, b = (dimmer((t + AHEAD) * 6.0 % 360.0) for t in (3.5, 8.7))
+    check(f"...round all the colours in a minute: {at(leds, 3.5)} a few seconds in (for {a}), {at(leds, 8.7)} five "
+          f"seconds on (for {b}); a beat brightens it as ever ({at(leds, 4.03)}); nothing more's written ({KEPT_B})",
+          near(at(leds, 3.5), a) and near(at(leds, 8.7), b) and not near(a, b, 4)
+          and sum(at(leds, 4.03)) > sum(a) * 1.8 and KEPT_B == [] and KEPT == [])
+    _, sent, _, _ = run(prog, ["wifi 1", "t 3.0", packet(PI, G.colour_packet(None, 3.0 + AHEAD)), "t 5.0"], NVX)
+    check(f"Which one? asked of it then (told again to have no colour of its own): it goes on making its own "
+          f"({effects(sent)[-1:]}), and nothing's written ({KEPT}, {KEPT_B})",
+          effects(sent) and effects(sent)[-1][1] == G.HUES_SLOW and KEPT == [] and KEPT_B == [])
+    good = G.effect_packet(G.HUES_BEAT, 1.0 + AHEAD)
+    junk = [good[:-1], good + b"x", good[:12] + bytes((6,)), good[:12] + bytes((7,)), good[:12] + bytes((255,)),
+            G.HEAD.pack(G.MAGIC, G.VERSION, b"X", float("nan")) + good[12:]]
+    shot = [G.effect_packet(v, 1.0 + AHEAD) for v in (G.SHOOT, G.SHOOT | G.HUES_BEAT, G.SHOOT | G.HUES_SLOW)]
+    leds, sent, _, _ = run(prog, ["wifi 1", "t 4.0"] + [packet(PI, j) for j in junk + shot] + ["t 7.0"], S + "/keptx2")
+    lit = [x for x in leds if x[0] > 3.5 and x[2:] != (0, 0, 0)]
+    check(f"how to show music, not said right, or a beat to be shot along a board with the one LED: nothing "
+          f"({len(lit)} colours sent after, {KEPT_B}, {effects(sent)[-1:]})", not lit and KEPT_B == []
+          and effects(sent) and all(x[1] == 0 for x in effects(sent)))
+    got = []
+    for wrong in (0x01000000 | G.SHOOT, 0x01000006, 0x02000000 | G.HUES_BEAT, 0x01000100 | G.HUES_BEAT):
+        open(S + "/keptx3.effect", "w").write(str(wrong))
+        got.append(effects(run(prog, ["wifi 1", "t 1.0"], S + "/keptx3")[1])[:1])
+    check(f"what's kept isn't one it can have (a beat shot along its one LED, say): it pulses, as to begin with "
+          f"({got})", all(x and x[0][1] == 0 for x in got))
+    twice = packet(PI, G.effect_packet(G.HUES_BEAT, 3.0 + AHEAD))   # (a Pietato says each thing twice)
+    leds, _, _, _ = run(prog, ["wifi 1", "t 3.0", twice, "t 3.005", twice, "t 8.0"], S + "/keptx4")
+    beats = rises(leds, 3.0, 8.0)
+    lit = [at(leds, t + 0.03) for t in beats]
+    check(f"told how with nothing playing: it shows you, with four beats of its own ({beats}: said twice, as a "
+          f"Pietato says each thing, and still four), each a new colour ({lit}), then goes dark again "
+          f"({at(leds, 7.9)})", len(beats) == 4 and 3.05 <= beats[0] <= 3.2
+          and all(0.55 <= b - a <= 0.65 for a, b in zip(beats, beats[1:]))
+          and not any(likeness(a, b) > 0.9 for a, b in zip(lit, lit[1:])) and at(leds, 7.9) == (0, 0, 0))
+    leds, _, _, _ = run(prog, ["wifi 1", "t 3.0", twice, "t 3.4", packet(PI, G.effect_packet(G.HUES_SLOW, 3.4 + AHEAD)),
+                               "t 8.0"], S + "/keptx5")
+    beats = rises(leds, 3.0, 8.0)
+    check(f"...told another way while it's showing you: that one from the start, the rest of the first let go "
+          f"({beats})", len(beats) == 5 and 3.05 <= beats[0] <= 3.2 and 3.45 <= beats[1] <= 3.6
+          and all(0.55 <= b - a <= 0.65 for a, b in zip(beats[1:], beats[2:])))
+    script = (["wifi 1"] + music_from(1.0, 3.0) + [packet(PI, G.effect_packet(G.HUES_BEAT, 3.0 + AHEAD))]
+              + music_from(3.5, 7.0) + ["t 7.2"])
+    leds, _, _, _ = run(prog, script, S + "/keptx6")
+    check(f"...told while music's playing: no beats of its own, the music has them ({rises(leds, 2.0, 7.2)}); its "
+          f"colour the one made for it, from then ({at(leds, 6.9)})", rises(leds, 2.0, 7.2) == []
+          and near(at(leds, 6.9), dimmer(BEGAN, 90)))
+
+    # ---- on a strip: each beat shot down it, a few LEDs on their way from the first to the last ----------------------
+    def ma(leds):                                      # (mA, as FastLED reckons a WS2812 at 5 V: the board 25, a dark
+        return 25 + sum(1 + (16 * r + 11 * g + 15 * b) / 255 for r, g, b in leds)   # LED 1, and each colour)
+
+    def bright_ones(leds, dim):
+        """Which of a strip's LEDs are brighter than that colour: their places along it."""
+        return [i for i, c in enumerate(leds) if sum(c) > sum(dim) + 5]
+
+    def told_at(shows, t):
+        """A strip's LEDs at t: as they were last told by then."""
+        return [x[2] for x in shows if x[0] <= t + 1e-9][-1]
+
+    strip60 = build("strip60", strip=60, onboard=48)
+    check("the sketch builds for a strip of 60 LEDs, the board's own LED with it", strip60 is not None)
+    if strip60:
+        NVS60 = S + "/kepts"
+        _, sent, _, shows = run(strip60, with_music(G.SHOOT, beats=[4.0, 6.0, 6.5], bright=None), NVS60)
+        back, own_led = [x for x in effects(sent) if 1.0 <= x[0] <= 1.1], list(OWN_LED)
+        check(f"a strip told to shoot its beats down it: says it back ({back[:1]}), keeps it ({kept_as('effect')}), "
+              f"and the Serial Monitor's told ({SAID[-1][1][-34:] if SAID else None!r})", len(back) == 1
+              and back[0][1] == G.SHOOT and [k[1] for k in kept_as("effect")] == [0x01000000 | G.SHOOT]
+              and SAID and SAID[-1][1].endswith("; with music, beats shoot down it"))
+        flight = [(x[0], bright_ones(x[2], base), x[2]) for x in shows if 4.0 < x[0] < 4.98]
+        off = [abs(max(b) - 60 * (t - 4.0)) for t, b, _ in flight if b]
+        check(f"...a beat: a few LEDs brighter ({sorted({len(b) for _, b, _ in flight})} of them, side by side), "
+              f"from the first LED ({flight[0][1] if flight else None}) on their way to the last, a second for the "
+              f"60 ({len(flight)} tellings: {[b[-1] for _, b, _ in flight[::40] if b]}; never more than "
+              f"{max(off):.1f} LEDs from where they're due)", len(flight) > 100
+              and all(1 <= len(b) <= 5 and b == list(range(b[0], b[-1] + 1)) for _, b, _ in flight)
+              and flight[0][1][0] == 0 and max(off) <= 2.0
+              and all(b[1][-1] >= a[1][-1] for a, b in zip(flight, flight[1:]))
+              and any(59 in bright_ones(x[2], base) for x in shows if 4.9 < x[0] < 5.1))
+        rest = min(sum(1 for c in leds_ if near(c, base, 1)) for _, _, leds_ in flight)
+        own_now = [o[2] for o in own_led if o[0] <= 4.03][-1]
+        check(f"...the rest of the strip as it was, music's colour: it doesn't all pulse ({rest} of 60 at the least); "
+              f"the board's own LED pulses as ever ({own_now}, for {base} between beats)", rest >= 54
+              and sum(own_now) > sum(base) * 1.8)
+        after = [x for x in shows if 5.15 < x[0] < 5.95]
+        check(f"...the beat gone by: all of it music's colour again, told every half second and no oftener "
+              f"({len(after)} tellings in 0.8 s)", 1 <= len(after) <= 2
+              and all(len(set(x[2])) == 1 and near(x[2][0], base, 1) for x in after))
+        two = bright_ones(told_at(shows, 6.75), base)
+        check(f"...two beats half a second apart: both on the strip at once, half of it between them ({two})",
+              2 <= len(two) <= 10 and {i // 20 for i in two} == {0, 2})
+        _, sent, _, _ = run(strip60, ["wifi 1", "t 1.0"], NVS60)
+        check(f"...and after a power cut it still does ({effects(sent)[:1]})", effects(sent)
+              and effects(sent)[0][1] == G.SHOOT and KEPT_B == [])
+        hit = G.event_packet("hit", 1.0, 4.3 + AHEAD, 4.3 + AHEAD)
+        _, _, _, shows = run(strip60, with_music(G.SHOOT, beats=[4.0], bright=None, more=[(4.3, hit)]), NVS60)
+        red_all = told_at(shows, 4.33)
+        check(f"...a hit while a beat's on its way: red over all of it ({sorted(set(red_all))[:2]})",
+              all(c[0] > 60 and c[1] <= 3 and c[2] <= 3 for c in red_all))
+        _, _, _, shows = run(strip60, with_music(G.SHOOT | G.HUES_BEAT, beats=[4.1, 4.6]), S + "/keptse")
+        hues = beat_hues([4.1 + AHEAD, 4.6 + AHEAD], BEGAN)
+        before, mid, after = told_at(shows, 3.9), told_at(shows, 4.9), told_at(shows, 6.0)
+        own_now = [o[2] for o in OWN_LED if o[0] <= 4.63][-1]
+        check(f"shot down it, and a new colour each beat: before any beat it's lit, all the colour the music began in "
+              f"({sorted(set(before))}); then each shot leaves the LEDs it has passed in its beat's colour. With two "
+              f"on their way: behind the second, its colour ({mid[5]}, for {dimmer(hues[1])}); between them, the "
+              f"first's ({mid[30]}, for {dimmer(hues[0])}); ahead of both, as it was ({mid[56]}); both gone by, all "
+              f"of it the second's ({sorted(set(after))}). The board's own LED pulses in each beat's ({own_now})",
+              all(near(c, dimmer(BEGAN), 1) for c in before)
+              and all(near(mid[p], dimmer(hues[1]), 1) for p in (2, 5, 10, 14))
+              and all(near(mid[p], dimmer(hues[0]), 1) for p in (22, 30, 38, 43))
+              and all(near(mid[p], dimmer(BEGAN), 1) for p in (51, 56, 59))
+              and len({dimmer(BEGAN), dimmer(hues[0]), dimmer(hues[1])}) == 3
+              and all(near(c, dimmer(hues[1]), 1) for c in after)
+              and sum(own_now) > sum(dimmer(hues[1])) * 1.8 and likeness(own_now, dimmer(hues[1])) > 0.9)
+        twice = packet(PI, G.effect_packet(G.SHOOT, 3.0 + AHEAD))
+        _, _, _, shows = run(strip60, ["wifi 1", "t 3.0", twice, "t 3.005", twice, "t 8.5"], S + "/keptst")
+        starts = rises([(x[0], x[1]) + x[2][0] for x in shows], 3.0, 8.5)
+        white = max((c for x in shows if 3.0 < x[0] < 6.0 for c in x[2]), key=sum)
+        ends = [max(sum(x[2][59]) for x in shows if t + 0.9 < x[0] < t + 1.2) for t in starts]
+        check(f"told to with nothing playing: it shows you, four shots of its own down the strip ({starts}), white "
+              f"on a board with no colour ({white}), each as bright at the last LED as the first ({ends}: it's not "
+              f"over till the last has got there), and it's dark again after ({sorted(set(told_at(shows, 8.4)))})",
+              len(starts) == 4 and all(0.55 <= b - a <= 0.65 for a, b in zip(starts, starts[1:]))
+              and max(white) - min(white) <= 2 and white[0] > 50 and min(ends) > 150
+              and set(told_at(shows, 8.4)) == {(0, 0, 0)})
+    low = build("strip60_b20", strip=60, onboard=48, bright=20) if strip60 else None
+    if low:                                            # (a small supply: BRIGHTNESS 20 in the sketch, then turned
+        white_own = [(1.0, G.colour_packet((255, 255, 255), 1.0 + AHEAD))]   # right up on the web page, and white)
+        _, _, _, shows = run(low, with_music(G.SHOOT, beats=[4.0, 4.3, 4.6], more=white_own))
+        most, room = max(ma(x[2]) for x in shows), 25 + 60 + 20 * (16 + 11 + 15) * 60 / 255
+        flying = [x for x in shows if 4.0 < x[0] < 5.5 and len(set(x[2])) > 1]
+        check(f"...and never more power than a white at the sketch's BRIGHTNESS takes, with beats on their way too "
+              f"({most:.0f} mA at the most, in {len(shows)} tellings; {room:.0f} is a white at 20, and turned right "
+              f"up it would be {ma([(255, 255, 255)] * 60):.0f}): all of it dimmed to fit "
+              f"({min(ma(x[2]) for x in flying):.0f} mA at the least with shots on it)" if flying else "no shots",
+              flying and most <= room + 0.5 and min(ma(x[2]) for x in flying) > room - 25)
+
 # ---- the Pi's side: a light listened for, found, kept while it says it's there ----------------------------------------
 check("what a light says: taken as it is, and nothing else is",
       G.read_lamp(G.lamp_packet("ESP32 A1B2C3", 1, 5.0)) == {"name": "ESP32 A1B2C3", "count": 1}
@@ -794,11 +1028,17 @@ check(f"...heard over the network itself ({lamps.on()})", lamps.on() == [("127.0
 lamps.close()
 
 # ---- a light's own colour, on the Pi's side: what it says of itself read, and one told it ---------------------------
+HOW = {"keeps": False, "colour": None, "dims": False, "effects": False, "its_own": False}   # (one that says nothing's
+                                                       #  its own to keep, and has the sketch every such board has)
 check("how a light says it is: read as it is, and nothing else is",
-      G.read_state(G.state_packet((1, 2, 3), 5.0)) == {"keeps": True, "colour": (1, 2, 3), "dims": False}
-      and G.read_state(G.state_packet(None, 5.0)) == {"keeps": True, "colour": None, "dims": False}
-      and G.read_state(G.state_packet(None, 5.0, can=0)) == {"keeps": False, "colour": None, "dims": False}
-      and G.read_state(G.state_packet(None, 5.0, can=G.KEEPS | G.DIMS)) == {"keeps": True, "colour": None, "dims": True}
+      G.read_state(G.state_packet((1, 2, 3), 5.0)) == dict(HOW, keeps=True, colour=(1, 2, 3))
+      and G.read_state(G.state_packet(None, 5.0)) == dict(HOW, keeps=True)
+      and G.read_state(G.state_packet(None, 5.0, can=0)) == HOW
+      and G.read_state(G.state_packet(None, 5.0, can=G.KEEPS | G.DIMS)) == dict(HOW, keeps=True, dims=True)
+      and G.read_state(G.state_packet(None, 5.0, can=G.KEEPS | G.DIMS | G.EFFECTS))
+      == {"keeps": True, "colour": None, "dims": True, "effects": True, "its_own": False}
+      and G.read_state(G.state_packet((9, 8, 7), 5.0, can=G.KEEPS | G.DIMS | G.ITS_OWN))
+      == {"keeps": True, "colour": (9, 8, 7), "dims": True, "effects": False, "its_own": True}
       and G.read_state(G.lamp_packet("x", 1, 5.0)) is None and G.read_state(G.state_packet(None, 5.0) + b"x") is None
       and G.read_state(b"") is None and G.read_state(G.state_packet(None, float("nan"))) is None
       and G.read_lamp(G.state_packet(None, 5.0)) is None)
@@ -831,10 +1071,8 @@ lamps.take(G.lamp_packet("ESP32 B", 64, 1.0), "127.0.0.1", T[0])
 lamps.take(G.lamp_packet("ESP32 a", 1, 1.0), "10.0.0.80", T[0])
 check(f"the boards, by name; ones that haven't said how they are (the older sketch) keep no colour, and aren't told "
       f"one ({lamps.boards()})", lamps.boards() == [
-          {"ip": "10.0.0.80", "name": "ESP32 a", "leds": 1, "keeps": False, "colour": None, "dims": False,
-           "bright": None},
-          {"ip": "127.0.0.1", "name": "ESP32 B", "leds": 64, "keeps": False, "colour": None, "dims": False,
-           "bright": None}]
+          dict(HOW, ip="10.0.0.80", name="ESP32 a", leds=1, bright=None, effect=None),
+          dict(HOW, ip="127.0.0.1", name="ESP32 B", leds=64, bright=None, effect=None)]
       and not lamps.set_colour("127.0.0.1", (1, 2, 3), BPORT) and told() == [] and lamps.ever)
 check("...one says how it is: it keeps one", lamps.take(G.state_packet(None, 1.0), "127.0.0.1", T[0])
       and lamps.boards()[1]["keeps"] and lamps.boards()[1]["colour"] is None and not lamps.boards()[0]["keeps"])
@@ -868,12 +1106,69 @@ check("...how bright one is that hasn't said it's there, or one elsewhere: not t
       not lamps.take(G.bright_packet(5, 1.0), "10.0.0.99", T[0])
       and not lamps.take(G.bright_packet(5, 1.0), "8.8.8.8", T[0]) and lamps.boards()[1]["bright"] == 180
       and not lamps.set_bright("10.0.0.99", 5, BPORT) and told() == [])
+check("how a light shows music: read as it is (a beat shot down it, 1; its colour a new one each beat, 2, or one that "
+      "changes slowly, 4: added up, but never both of those two), and nothing else is",
+      [G.read_effect(G.effect_packet(v, 5.0)) for v in range(8)] == [0, 1, 2, 3, 4, 5, None, None]
+      and (G.SHOOT, G.HUES_BEAT, G.HUES_SLOW) == (1, 2, 4) and G.read_effect(G.effect_packet(2, 5.0) + b"x") is None
+      and G.read_effect(b"") is None and G.read_effect(G.effect_packet(2, float("nan"))) is None
+      and G.read_effect(G.bright_packet(2, 5.0)) is None and G.read_bright(G.effect_packet(2, 5.0)) is None
+      and G.read_state(G.effect_packet(2, 5.0)) is None and G.read_lamp(G.effect_packet(2, 5.0)) is None
+      and G.read_packet(G.effect_packet(2, 5.0)) is None)
+check("...which of those a light can have: any, but nothing shot along one with the one LED; and as the web page has "
+      "each", [v for v in (-1, 0, 1, 2, 3, 4, 5, 6, 7, True, 1.0, "1", None) if G.an_effect(v)] == [0, 1, 2, 3, 4, 5]
+      and [v for v in range(8) if G.an_effect(v, 1)] == [0, 2, 4]
+      and [G.effect_parts(v) for v in (0, 1, 2, 5)] == [
+          {"shoot": False, "colours": ""}, {"shoot": True, "colours": ""}, {"shoot": False, "colours": "beat"},
+          {"shoot": True, "colours": "slow"}])
+check("...one whose way with music isn't its own (the sketch before that): none listed, and it isn't told one; nor "
+      "is what it says of it taken to be, till it says it's its own",
+      not lamps.boards()[1]["effects"] and lamps.boards()[1]["effect"] is None
+      and not lamps.set_effect("127.0.0.1", G.SHOOT, BPORT) and told() == []
+      and lamps.take(G.effect_packet(0, 1.0), "127.0.0.1", T[0]) and lamps.boards()[1]["effect"] is None)
+ALL = G.KEEPS | G.DIMS | G.EFFECTS
+lamps.take(G.state_packet(None, 1.0, can=ALL), "127.0.0.1", T[0])
+lamps.take(G.state_packet(None, 1.0, can=ALL), "10.0.0.80", T[0])
+check(f"...the newest sketch: it is, and how it shows music is listed ({lamps.boards()[1]})",
+      lamps.boards()[1]["effects"] and lamps.boards()[1]["effect"] == 0 and lamps.boards()[1]["bright"] == 180
+      and lamps.boards()[0]["effects"] and lamps.boards()[0]["effect"] is None)
+ok, got = lamps.set_effect("127.0.0.1", G.SHOOT | G.HUES_BEAT, BPORT), told()
+check(f"...told how: said twice (a packet can go astray), where it listens ({len(got)}); shown as that at once",
+      ok and got == [G.effect_packet(G.SHOOT | G.HUES_BEAT, T[0])] * 2
+      and lamps.boards()[1]["effect"] == G.SHOOT | G.HUES_BEAT)
+lamps.take(G.effect_packet(G.SHOOT, 1.0), "127.0.0.1", T[0])
+check("...what it says back is what's shown", lamps.boards()[1]["effect"] == G.SHOOT)
+lamps.set_effect("127.0.0.1", G.SHOOT | G.HUES_SLOW, BPORT)
+ok, got = lamps.set_colour("127.0.0.1", (1, 2, 3), BPORT), told()[2:]
+check(f"...its colour is one or the other. Given a colour of its own while it makes its own: shown at once as "
+      f"having the colour, and not making them ({lamps.boards()[1]['effect']}); the board lets go of that itself, "
+      f"so it's told just the colour ({len(got)} packets)", ok and got == [G.colour_packet((1, 2, 3), T[0])] * 2
+      and lamps.boards()[1]["effect"] == G.SHOOT and lamps.boards()[1]["colour"] == (1, 2, 3))
+ok, got = lamps.set_effect("127.0.0.1", G.HUES_BEAT, BPORT), told()
+check(f"...and told to make its own while it has one: shown at once as having none ({lamps.boards()[1]['colour']}), "
+      f"and told just that ({len(got)} packets)", ok and got == [G.effect_packet(G.HUES_BEAT, T[0])] * 2
+      and lamps.boards()[1]["colour"] is None and lamps.boards()[1]["effect"] == G.HUES_BEAT)
+ok, got = lamps.set_effect("127.0.0.1", 0, BPORT), told()
+check("...told to pulse as ever: its colour's left as it is", ok and len(got) == 2
+      and lamps.set_colour("127.0.0.1", (4, 5, 6), BPORT) and lamps.set_effect("127.0.0.1", G.SHOOT, BPORT)
+      and lamps.boards()[1]["colour"] == (4, 5, 6) and len(told()) == 4)
+check("...what isn't a way it can have, a beat shot along a board with the one LED, a board that isn't there: not told",
+      not lamps.set_effect("127.0.0.1", 6, BPORT) and not lamps.set_effect("127.0.0.1", True, BPORT)
+      and not lamps.set_effect("127.0.0.1", "1", BPORT) and not lamps.set_effect("10.0.0.80", G.SHOOT, BPORT)
+      and not lamps.set_effect("10.0.0.99", 0, BPORT) and told() == [] and lamps.boards()[1]["effect"] == G.SHOOT
+      and not lamps.take(G.effect_packet(2, 1.0), "10.0.0.99", T[0])
+      and not lamps.take(G.effect_packet(2, 1.0), "8.8.8.8", T[0]))
 check("...one that isn't there, or how one elsewhere is: not told, not taken",
       not lamps.set_colour("10.0.0.99", (1, 2, 3), BPORT) and not lamps.take(G.state_packet(None, 1.0), "8.8.8.8", T[0])
       and told() == [])
+lamps.take(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS | G.ITS_OWN), "10.0.0.80", T[0])
+check(f"...one that says it runs a sketch of its own (a Waveshare matrix: esp32/pietato_matrix): listed as that, "
+      f"with what it keeps, and no way with music to tell it ({lamps.boards()[0]})", lamps.boards()[0]["its_own"]
+      and not lamps.boards()[1]["its_own"] and lamps.boards()[0]["keeps"] and lamps.boards()[0]["dims"]
+      and not lamps.boards()[0]["effects"] and lamps.boards()[0]["effect"] is None
+      and not lamps.set_effect("10.0.0.80", G.HUES_BEAT, BPORT) and told() == [])
 T[0] += 9.0
 check("...gone quiet: off the list, and how it was forgotten", lamps.boards() == [] and lamps.states == {}
-      and lamps.brights == {})
+      and lamps.brights == {} and lamps.effects == {})
 lamps.close()
 
 # ---- a lot of them: a game's pictures to a couple at a time, in turn; a beat to every one at once --------------------
@@ -1021,6 +1316,85 @@ bad = [m.web_settings_do({"key": "glow_lamp", "value": {"ip": "127.0.0.1", "brig
 check(f"...what isn't a brightness: said, and nothing sent ({sorted({b.get('error') for b in bad})})",
       all(b.get("error") == "That isn't a brightness" for b in bad) and told() == []
       and m.web_lamps()[0]["bright"] == 200)
+
+def lamp_do(**what):
+    """(The web page.) The board here told something: what the page is told back."""
+    return m.web_settings_do({"key": "glow_lamp", "value": dict({"ip": "127.0.0.1"}, **what)})
+
+
+def it_says(data, till):
+    """The stand-in board says something of itself, and this waits till the Pietato has it (till: of its listing)."""
+    s.sendto(data, ("127.0.0.1", m.glow_lamps.port))
+    for _ in range(50):
+        if till(m.web_lamps()[0]):
+            break
+        time.sleep(0.05)
+
+
+r = lamp_do(colours="beat")
+check(f"...how it shows music, on a board whose way with it isn't its own (the sketch before the newest): none to "
+      f"give it, and said ({r}); it's listed without one ({sorted(m.web_lamps()[0])})",
+      "newer sketch" in r.get("error", "") and told() == [] and "effect" not in m.web_lamps()[0])
+it_says(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS | G.EFFECTS), lambda b: "effect" in b)
+r = lamp_do(colours="beat")
+check(f"...the newest sketch, which hasn't yet said how it shows music: listed as not known "
+      f"({m.web_lamps()[0]['effect']}), and not told till it has ({r})", m.web_lamps()[0]["effect"] is None
+      and "hasn't said" in r.get("error", "") and told() == [])
+it_says(G.effect_packet(0, 1.0), lambda b: b["effect"] is not None)
+check(f"...it has: it pulses, in the colours of what's playing ({m.web_lamps()[0]['effect']})",
+      m.web_lamps()[0]["effect"] == {"shoot": False, "colours": ""})
+r, got = lamp_do(colours="beat"), told()
+check(f"...a new colour each beat, picked on the web page: the board's told ({len(got)} packets: {r}); shown as that "
+      f"({m.web_lamps()[0]['effect']})", r == {"ok": True} and len(got) == 2 and got[0][3:4] == b"X"
+      and got[0][12:] == bytes((G.HUES_BEAT,)) and m.web_lamps()[0]["effect"] == {"shoot": False, "colours": "beat"})
+r, got = lamp_do(find=True), told()
+check(f"...Which one? then: lit a moment, and it goes on making its colours ({r}; {len(got)} packets)",
+      r.get("ok") and len(got) == 2 and got[0][3:4] == b"C" and got[0][12:] == bytes(4)
+      and m.web_lamps()[0]["effect"]["colours"] == "beat")
+r, got = lamp_do(colour="#00ff00"), told()
+check(f"...a colour picked instead: just the colour's told ({[x[3:4] for x in got]}: the board lets go of making "
+      f"its own itself), and it's shown so at once ({m.web_lamps()[0]})", r == {"ok": True}
+      and [x[3:4] for x in got] == [b"C", b"C"] and m.web_lamps()[0]["colour"] == "#00ff00"
+      and m.web_lamps()[0]["effect"] == {"shoot": False, "colours": ""})
+r, got = lamp_do(colours="slow"), told()
+check(f"...one that changes slowly, picked: told that ({[x[12] for x in got]}), and shown with no colour of its own "
+      f"at once ({m.web_lamps()[0]})", r == {"ok": True} and [x[3:4] for x in got] == [b"X", b"X"]
+      and got[0][12] == G.HUES_SLOW and m.web_lamps()[0]["colour"] == ""
+      and m.web_lamps()[0]["effect"] == {"shoot": False, "colours": "slow"})
+r, got = lamp_do(colour=""), told()
+check(f"...Auto, picked: what's playing again, its colour too ({[x[3:4] + x[12:13] for x in got]})",
+      r == {"ok": True} and [x[3:4] for x in got] == [b"C", b"C", b"X", b"X"] and got[0][12:] == bytes(4)
+      and got[2][12] == 0 and m.web_lamps()[0]["effect"] == {"shoot": False, "colours": ""})
+r = lamp_do(shoot=True)
+check(f"...a beat shot along it, on a board with the one LED: there's nothing to shoot along, and said ({r})",
+      "one LED" in r.get("error", "") and told() == [])
+bad = [lamp_do(**v) for v in ({"colours": "fast"}, {"colours": 2}, {"colours": None}, {"shoot": "yes"}, {"shoot": 1},
+                              {"shoot": None}, {"shoot": False, "colours": "both"})]
+check(f"...what isn't a way to show music: said, and nothing sent ({sorted({b.get('error') for b in bad})})",
+      all(b.get("error") == "That isn't an effect" for b in bad) and told() == [])
+it_says(G.lamp_packet("ESP32 A1B2C3", 60, 1.0), lambda b: b["leds"] == 60)   # (a strip on it now: 60 LEDs)
+r, got = (lamp_do(shoot=True), lamp_do(colours="beat")), told()
+check(f"...on one with a strip: told, and its colour picked after leaves that as it is ({[x[12] for x in got]}: "
+      f"{m.web_lamps()[0]['effect']})", r == ({"ok": True}, {"ok": True})
+      and [x[12] for x in got] == [G.SHOOT] * 2 + [G.SHOOT | G.HUES_BEAT] * 2
+      and m.web_lamps()[0]["effect"] == {"shoot": True, "colours": "beat"})
+r, got = lamp_do(shoot=False), told()
+check(f"...and the whole of it pulsing again, its colour still a new one each beat ({[x[12] for x in got]})",
+      r == {"ok": True} and [x[12] for x in got] == [G.HUES_BEAT] * 2)
+lamp_do(colour="")                                     # (as it was: what's playing, and the one LED)
+told()
+it_says(G.lamp_packet("ESP32 A1B2C3", 1, 1.0), lambda b: b["leds"] == 1)
+it_says(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS | G.ITS_OWN), lambda b: b.get("its_own"))
+r, got = (lamp_do(colours="beat"), lamp_do(colour="#0000ff"), lamp_do(bright=77)), told()
+check(f"...a board that says it runs a sketch of its own (a Waveshare matrix): the web page's told so "
+      f"({sorted(m.web_lamps()[0])}); it has no way with music to be told ({r[0]}), and its colour and how bright "
+      f"it is are told it as any board's are ({[x[3:4] for x in got]})", m.web_lamps()[0].get("its_own") is True
+      and "effect" not in m.web_lamps()[0] and "error" in r[0] and r[1:] == ({"ok": True}, {"ok": True})
+      and [x[3:4] for x in got] == [b"C", b"C", b"B", b"B"])
+lamp_do(colour="")
+told()
+s.sendto(G.bright_packet(200, 1.0), ("127.0.0.1", m.glow_lamps.port))
+it_says(G.state_packet(None, 1.0, can=G.KEEPS | G.DIMS | G.EFFECTS), lambda b: "its_own" not in b and b["colour"] == "")
 bad = [m.web_settings_do({"key": "glow_lamp", "value": v}) for v in (
     {"ip": "10.9.9.9", "colour": "#ff0000"}, {"ip": "127.0.0.1", "colour": "red"}, {"ip": "127.0.0.1", "colour": "#12345"},
     {"ip": "127.0.0.1", "colour": 5}, {"ip": "127.0.0.1"}, "127.0.0.1", None, {"colour": "#ff0000"})]
@@ -1440,14 +1814,19 @@ m.glow_lamps.take(G.lamp_packet("another", 1, 1.0), "10.0.0.81", m.glow_lamps.cl
 class Board(threading.Thread):
     """A stand-in board at an address of this machine's own (127.0.0.x), doing as the sketch does: it says it's there
     and how it is every second, keeps the colour it's told (told: each one, in turn; a Pietato says each twice, and
-    that's once here) and says it back; and how bright it's told to be, the same way (dimmed: each, in turn). (old:
-    the older sketch, which says only that it's there; bright None: the one after it, which keeps a colour but not
-    how bright it is.)"""
+    that's once here) and says it back; and how bright it's told to be, the same way (dimmed: each, in turn); and how
+    it's told to show music (moved: each, in turn), its colour one thing or the other: given a colour of its own it
+    lets go of making its own, and told to make its own, of its colour. (old: the older sketch, which says only that
+    it's there; bright None: the one after it, which keeps a colour but not how bright it is; effect None: the one
+    after that, which keeps both, but shows music the one way. its_own: a board with a sketch of its own, a Waveshare
+    matrix's, which says so.)"""
 
-    def __init__(self, ip, port, name, leds, to, old=False, colour=None, bright=90):
+    def __init__(self, ip, port, name, leds, to, old=False, colour=None, bright=90, effect=0, its_own=False):
         super().__init__(daemon=True)
         self.name_, self.leds, self.to, self.old, self.colour = name, leds, to, old, colour
+        self.its_own = its_own
         self.bright, self.dimmed = bright, []
+        self.effect, self.moved = effect, []
         self.told, self.done, self.last = [], False, None
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((ip, port))
@@ -1458,11 +1837,14 @@ class Board(threading.Thread):
         self.sock.sendto(G.lamp_packet(self.name_, self.leds, time.monotonic()), self.to)
         if self.old:
             return
-        bright = self.bright
+        bright, effect = self.bright, self.effect
         if bright is not None:
             self.sock.sendto(G.bright_packet(bright, time.monotonic()), self.to)
-        self.sock.sendto(G.state_packet(self.colour, time.monotonic(),
-                                        can=G.KEEPS | (G.DIMS if bright is not None else 0)), self.to)
+        if effect is not None:
+            self.sock.sendto(G.effect_packet(effect, time.monotonic()), self.to)
+        can = G.KEEPS | (G.DIMS if bright is not None else 0) | (G.EFFECTS if effect is not None else 0)
+        can |= G.ITS_OWN if self.its_own else 0
+        self.sock.sendto(G.state_packet(self.colour, time.monotonic(), can=can), self.to)
 
     def run(self):
         said = 0.0
@@ -1478,6 +1860,8 @@ class Board(threading.Thread):
                 break
             if len(data) == 16 and data[:4] == b"PG\x01C" and data[12] <= 1 and not self.old:
                 self.colour = tuple(data[13:16]) if data[12] else None
+                if self.colour and self.effect:        # (a colour of its own: not colours of its own making too)
+                    self.effect &= G.SHOOT
                 if data != self.last:                  # (each is said twice: the same packet again)
                     self.told.append(self.colour)
                 self.last = None if data == self.last else data
@@ -1486,6 +1870,14 @@ class Board(threading.Thread):
                 self.bright = data[12]
                 if data != self.last:
                     self.dimmed.append(self.bright)
+                self.last = None if data == self.last else data
+                self.say()
+            if len(data) == 13 and data[:4] == b"PG\x01X" and self.effect is not None and not self.old:
+                self.effect = data[12]
+                if self.effect & (G.HUES_BEAT | G.HUES_SLOW):
+                    self.colour = None
+                if data != self.last:
+                    self.moved.append(self.effect)
                 self.last = None if data == self.last else data
                 self.say()
         self.sock.close()
@@ -1611,11 +2003,11 @@ with m.glow_lamps.lock:                                # (a Pietato that's found
     m.glow_lamps.ever = False
 to = ("127.0.0.1", m.glow_lamps.port)
 one = Board("127.0.0.2", 0, "ESP32 0A11CE", 1, to)
-two = Board("127.0.0.3", one.port, "ESP32 B0B0B0", 64, to, colour=dict(G.COLOURS)["Purple"], bright=None)
+two = Board("127.0.0.3", one.port, "ESP32 B0B0B0", 64, to, colour=dict(G.COLOURS)["Purple"], bright=None, effect=None)
 old = Board("127.0.0.4", one.port, "ESP32 C0FFEE", 1, to, old=True)
 m.lamp_port = one.port
 from playwright.async_api import async_playwright
-ROW = ".set-row[data-key='lamp:127.0.0.2']"
+ROW, ROW2 = ".set-row[data-key='lamp:127.0.0.2']", ".set-row[data-key='lamp:127.0.0.3']"
 SLIDER = 'document.querySelector("%s .gl-bright input")' % ROW
 LOOK = """(() => {
   const rows = [...document.querySelectorAll('.gl-lamps .set-row[data-key^="lamp:"]')];
@@ -1637,13 +2029,29 @@ LOOK = """(() => {
             return x ? [x.value, r.querySelector('.gl-bright .range-v').textContent] : null;
           }),
           notes: rows.map((r) => [...r.querySelectorAll('.set-l > .set-note:not(.gl-meta)')].map((x) => x.textContent)),
-          fits: (() => {                         // (a slider: under its board's colours, no wider than they are; and
-            const box = document.querySelector('.gl-bright');           //  each row's controls, how wide)
+          fx: rows.map((r) => {                  // (what a beat does on each board's strip: its two ways, and which)
+            const x = r.querySelector('.gl-fx');
+            const ways = x ? [...x.querySelectorAll('.seg button')] : null;
+            return ways && ways.map((k) => [k.textContent, k.getAttribute('aria-pressed')]);
+          }),
+          fxfits: (() => {                       // (...under its board's slider, in its row, the two lined up)
+            const box = document.querySelector('.gl-fx');
             if (!box) return null;
+            const a = box.getBoundingClientRect(), dim = box.parentElement.querySelector('.gl-bright');
+            const b = dim.getBoundingClientRect();
+            const s = box.parentElement.querySelector('.swatches').getBoundingClientRect();
+            const left = (x) => Math.round(x.getBoundingClientRect().left);
+            return [a.top >= b.bottom, a.left >= s.left - 1 && a.right <= s.right + 1,
+                    left(box.querySelector('.gl-fx-l')) === left(dim.querySelector('.gl-bright-l')),
+                    left(box.querySelector('.seg')) === left(dim.querySelector('input'))];
+          })(),
+          fits: (() => {                         // (a slider: under its board's colours, no wider than they are; and
+            const box = document.querySelector('.gl-bright');           //  how wide its row's controls are, and
+            if (!box) return null;                                      //  the colours alone)
             const a = box.getBoundingClientRect();
             const s = box.parentElement.querySelector('.swatches').getBoundingClientRect();
             return [a.top >= s.bottom, a.left >= s.left - 1 && a.right <= s.right + 1,
-                    rows.map((r) => Math.round(r.querySelector('.set-c').getBoundingClientRect().width))];
+                    [Math.round(box.parentElement.getBoundingClientRect().width), Math.round(s.width)]];
           })(),
           under: (() => {                        // (the boards' list: under the picture of the LEDs, beside the settings)
             const a = document.querySelector('.gl-board').getBoundingClientRect();
@@ -1680,10 +2088,12 @@ async def browse():
                                                ["ESP32 C0FFEE", "1 LED"]]
               and not got["board"] and got["head"] == "ESP32 boards" and "No LEDs here" not in got["text"]
               and got["sub"] == "3 ESP32 boards found")
-        check(f"...a colour for each: what's playing (Auto), the colours by name, or any other ({got['names']}); and "
-              f"a way to tell which is which", got["names"] == ["The colours of what's playing"]
-              + [n for n, c in G.COLOURS if isinstance(c, tuple)] + ["Another colour"]
-              and got["rows"][0][2:4] == [12, 1] and got["rows"][1][2:4] == [12, 1])
+        check(f"...a colour for each: what's playing (Auto), the colours by name, or any other; on a board with the "
+              f"newest sketch, two more after Auto, for colours of its own making with music ({got['names']}); and a "
+              f"way to tell which is which", got["names"] == [
+                  "The colours of what's playing", "With music, a new colour on each beat",
+                  "With music, colours that change slowly"] + [n for n, c in G.COLOURS if isinstance(c, tuple)]
+              + ["Another colour"] and got["rows"][0][2:4] == [14, 1] and got["rows"][1][2:4] == [12, 1])
         check(f"...as each is: one taking what's playing ({got['rows'][0][4]}), one with a colour of its own "
               f"({got['rows'][1][4]}); one with the older sketch has none to give, and it's said why "
               f"({got['rows'][2][6]!r})", got["rows"][0][4] == ["Auto"] and got["rows"][1][4] == ["Purple"]
@@ -1722,15 +2132,16 @@ async def browse():
               f"and is left at the last ({one.told[2:]}); the picker's swatch lit in it ({got['rows'][0][5]}), no "
               f"other pressed", took and 2 <= len(one.told[2:]) <= 4 and one.told[2] == (0x10, 0x10, 0x10)
               and got["rows"][0][5] == "#12abef" and got["rows"][0][4] == [])
-        await pg.click(f"{ROW} .swatch.auto")
+        await pg.click(f"{ROW} .swatch:text-is('Auto')")
         took = await asyncio.to_thread(until, lambda: one.told[-1] is None, 5)
         check(f"Auto: told to have none, so it takes what's playing again ({one.told[-1:]})", took)
         got = await pg.evaluate(LOOK)
         check(f"how bright each is: a slider under the colours of a board that keeps that itself, at what it says "
-              f"({got['dim']}), in its row and no wider than its colours ({got['fits']}); one with the sketch before "
-              f"that has none, and it's said why ({got['notes']})", got["dim"] == [["35", "35%"], None, None]
+              f"({got['dim']}), in its row and no wider than its colours, nor making the row any wider "
+              f"({got['fits']}); one with the sketch before that has none, and it's said why ({got['notes']})",
+              got["dim"] == [["35", "35%"], None, None]
               and got["fits"][:2] == [True, True] and got["fits"][2][0] == got["fits"][2][1]
-              and got["notes"] == [[], ["Put the newer sketch on it to set how bright it is"], []])
+              and got["notes"] == [[], ["Put the newer sketch on it to set how bright it is, and for effects"], []])
         await pg.evaluate("""(row) => {                // (the slider, dragged through a few steps and let go)
           const inp = document.querySelector(row + ' .gl-bright input');
           for (const v of ['20', '50', '80']) {
@@ -1770,21 +2181,96 @@ async def browse():
         left = not await pg.evaluate(SLIDER + " === document.activeElement")
         check(f"clicked three quarters of the way along: told about that ({one.dimmed[-1:]}), and let go of, so its "
               f"list can change again ({left})", took and left)
-        await pg.click(".gl-lamps .set-row[data-key='glow_beat'] .seg button:has-text('Off')")
-        took = await asyncio.to_thread(until, lambda: m.setting("glow_beat") == "Off", 5)
+
+        async def pressed(row, where=".swatch"):
+            return await pg.eval_on_selector_all(f"{row} {where}[aria-pressed='true']",
+                                                 "xs => xs.map((x) => x.getAttribute('aria-label') || x.textContent)")
+
+        got = await pg.evaluate(LOOK)
+        check(f"how each shows music: what a beat does is asked only of a board with a strip, and the newest sketch "
+              f"({got['fx']}: none of these yet)", got["fx"] == [None, None, None] and one.moved == [])
+        await pg.click(f"{ROW} .swatch:text-is('Per beat')")
+        lit = await pressed(ROW)
+        took = await asyncio.to_thread(until, lambda: one.moved == [G.HUES_BEAT], 5)
+        check(f"Per beat tapped: pressed at once, alone ({lit}), and that board's told to make its colour a new one "
+              f"each beat, no other ({one.moved}, {two.moved})", lit == ["Per beat"] and took and two.moved == []
+              and old.moved == [])
+        await asyncio.sleep(4.0)                       # (the page asks again, and the board's said how it is)
+        check(f"...and it stays, as the board says it is ({await pressed(ROW)}; {m.web_lamps()[0]['effect']})",
+              await pressed(ROW) == ["Per beat"] and m.web_lamps()[0]["effect"] == {"shoot": False, "colours": "beat"})
+        await pg.click(f"{ROW} .swatch[aria-label='Green']")
+        took = await asyncio.to_thread(until, lambda: one.told[-1] == dict(G.COLOURS)["Green"] and one.effect == 0, 5)
+        await asyncio.sleep(4.0)
+        check(f"a colour tapped then: it has that, in place of colours of its own making ({await pressed(ROW)}; the "
+              f"board's told just the colour: {one.moved})", took and await pressed(ROW) == ["Green"]
+              and one.moved == [G.HUES_BEAT])
+        await pg.click(f"{ROW} .swatch:text-is('Slow')")
+        lit = await pressed(ROW)
+        took = await asyncio.to_thread(until, lambda: one.moved[-1] == G.HUES_SLOW and one.colour is None, 5)
+        await asyncio.sleep(4.0)
+        check(f"Slow tapped: pressed at once ({lit}), the board's told ({one.moved}), and it stays, its own colour let "
+              f"go of ({await pressed(ROW)})", lit == ["Slow"] and took and await pressed(ROW) == ["Slow"])
+        await pg.click(f"{ROW} .swatch:text-is('Auto')")
+        took = await asyncio.to_thread(until, lambda: one.told[-1] is None and one.moved[-1] == 0, 5)
+        await asyncio.sleep(4.0)
+        check(f"Auto tapped: what's playing again, its colours too ({one.moved}; {await pressed(ROW)})", took
+              and await pressed(ROW) == ["Auto"] and one.moved == [G.HUES_BEAT, G.HUES_SLOW, 0])
+        two.bright = 90                                # (the sketch after its own put on the board with 64 LEDs)
+        await pg.wait_for_function('document.querySelectorAll(".gl-lamps .gl-bright").length === 2', timeout=8000)
+        got = await pg.evaluate(LOOK)
+        check(f"a board with the sketch before the newest: its slider, and what the newest would add is said "
+              f"({got['notes'][1]}); nothing more about music ({got['rows'][1][2]} colours, {got['fx'][1]})",
+              got["notes"][1] == ["Put the newer sketch on it for effects"] and got["rows"][1][2] == 12
+              and got["fx"] == [None, None, None])
+        two.effect = 0                                 # (...and the newest)
+        await pg.wait_for_function('document.querySelectorAll(".gl-lamps .gl-fx").length === 1', timeout=8000)
+        got = await pg.evaluate(LOOK)
+        check(f"the newest sketch on a board with a strip: Effect, under its slider, the two lined up "
+              f"({got['fxfits']}): Pulse, as it is, or Shoot ({got['fx']}); and nothing left to say of its sketch "
+              f"({got['notes'][1]})", got["fx"] == [None, [["Pulse", "true"], ["Shoot", "false"]], None]
+              and got["fxfits"] == [True, True, True, True] and got["notes"][1] == [] and got["rows"][1][2] == 14)
+        await pg.screenshot(path=S + "/boards_web_fx.png")
+        await pg.click(f"{ROW2} .gl-fx button:has-text('Shoot')")
+        lit = await pressed(ROW2, ".gl-fx button")
+        took = await asyncio.to_thread(until, lambda: two.moved == [G.SHOOT], 5)
+        check(f"Shoot tapped: pressed at once ({lit}), and that board's told to shoot its beats down its strip, no "
+              f"other ({two.moved}, {one.moved[-1:]})", lit == ["Shoot"] and took and one.moved[-1] == 0)
+        await pg.click(f"{ROW2} .swatch:text-is('Per beat')")
+        took = await asyncio.to_thread(until, lambda: two.moved[-1] == G.SHOOT | G.HUES_BEAT, 5)
+        await asyncio.sleep(4.0)
+        got = await pg.evaluate(LOOK)
+        check(f"...and Per beat with it: both ({two.moved}), as the board says it is ({got['rows'][1][4]}, "
+              f"{got['fx'][1]}), the colour it had let go of ({two.colour}; it wasn't told one: {two.told})", took
+              and got["rows"][1][4] == ["Per beat"] and got["fx"][1] == [["Pulse", "false"], ["Shoot", "true"]]
+              and two.colour is None and two.told == [])
+        two.effect, two.colour = 0, dict(G.COLOURS)["Purple"]   # (set from another of your Pietatos: the board says so)
+        await pg.wait_for_function(f'document.querySelector("{ROW2} .gl-fx button").getAttribute("aria-pressed") '
+                                   '=== "true"', timeout=8000)
+        got = await pg.evaluate(LOOK)
+        check(f"set from another of your Pietatos: shown here too ({got['fx'][1]}, {got['rows'][1][4]})",
+              got["fx"][1] == [["Pulse", "true"], ["Shoot", "false"]] and got["rows"][1][4] == ["Purple"])
+
+        async def tap(key, word, value):
+            """One of the boards' switches tapped, and seen to take. The list's drawn again when what it shows has
+            changed, which is just after the tap before: a tap that lands as it is (down on the button that was, up
+            on the one that is) is nobody's, here as under a finger. So it's tapped once more if it didn't take."""
+            for _ in range(2):
+                await pg.click(f".gl-lamps .set-row[data-key='{key}'] .seg button:has-text('{word}')")
+                if await asyncio.to_thread(until, lambda: m.setting(key) == value, 2.5):
+                    return True
+            return False
+
+        took = await tap("glow_beat", "Off", "Off")
         check("their pulse to music, off from here", took and not m.glow_beats_wanted())
-        await pg.click(".gl-lamps .set-row[data-key='glow_beat'] .seg button:has-text('On')")
-        await asyncio.to_thread(until, lambda: m.setting("glow_beat") == "On", 5)
-        await pg.click(".gl-lamps .set-row[data-key='glow_each'] .seg button:has-text('Different')")
-        took = await asyncio.to_thread(until, lambda: m.setting("glow_each") == "Different beats", 5)
+        await tap("glow_beat", "On", "On")
+        took = await tap("glow_each", "Different", "Different beats")
         await pg.wait_for_function("document.querySelectorAll('.gl-lamps .gl-meta span').length === 6", timeout=8000)
         got = await pg.evaluate(LOOK)
         check(f"each a beat of its own, picked here: which, said with each board ({got['beats']})", took
               and got["beats"] == ["Follows the kick", "Follows the snare", "Follows the hi-hats"]
               and len(got["rows"]) == 3)
         await pg.screenshot(path=S + "/boards_web_beats.png")
-        await pg.click(".gl-lamps .set-row[data-key='glow_each'] .seg button:has-text('The same beat')")
-        took = await asyncio.to_thread(until, lambda: m.setting("glow_each") == "The same beat", 5)
+        took = await tap("glow_each", "The same beat", "The same beat")
         await pg.wait_for_function("document.querySelectorAll('.gl-lamps .gl-meta span').length === 3", timeout=8000)
         check("...and the same beat for all of them again", took)
         await pg.set_viewport_size({"width": 390, "height": 844})
@@ -1806,7 +2292,23 @@ async def browse():
         check(f"...and a board's slider under its colours there too ({got['fits']}; {got['dim']})",
               got["fits"] is not None and got["fits"][:2] == [True, True] and got["dim"][0] is not None)
         await pg.screenshot(path=S + "/boards_web_pi.png", full_page=True)
-        for x in (one, two, old):                      # (the boards unplugged)
+        grid = Board("127.0.0.5", one.port, "ESP32 Matrix 00D1CE", 64, to, bright=51, effect=None, its_own=True)
+        grid.start()                                   # (a Waveshare matrix, with the sketch of its own)
+        await pg.wait_for_function("document.querySelectorAll('.gl-lamps .gl-bright').length === 3", timeout=8000)
+        got = await pg.evaluate(LOOK)
+        k = [r[0] for r in got["rows"]].index("ESP32 Matrix 00D1CE") if len(got["rows"]) == 4 else 0
+        check(f"a Waveshare matrix, which has a sketch of its own (esp32/pietato_matrix): listed with the rest "
+              f"({got['rows'][k][:2]}), its colour and how bright it is set here as theirs are ({got['rows'][k][2]} "
+              f"colours, {got['dim'][k]}); nothing about music's effects, which aren't its ({got['fx'][k]}), and "
+              f"nothing about a newer sketch ({got['notes'][k]})", len(got["rows"]) == 4
+              and got["rows"][k][:3] == ["ESP32 Matrix 00D1CE", "64 LEDs", 12] and got["dim"][k] == ["20", "20%"]
+              and got["fx"][k] is None and got["notes"][k] == [])
+        await pg.click(".set-row[data-key='lamp:127.0.0.5'] .swatch[aria-label='Red']")
+        took = await asyncio.to_thread(until, lambda: grid.told == [(255, 0, 0)], 5)
+        check(f"...Red tapped on it: that board's told, as any is ({grid.told}; {one.told[-1:]})", took
+              and one.told[-1] is None)
+        await pg.screenshot(path=S + "/boards_web_grid.png", full_page=True)
+        for x in (one, two, old, grid):                # (the boards unplugged)
             x.done = True
         with m.glow_lamps.lock:
             m.glow_lamps.heard.clear()

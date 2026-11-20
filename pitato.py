@@ -200,10 +200,13 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 colour; Shape: a grid, or a strip: how many LEDs, where it starts, which way it goes, along
                 the bottom or not); the web page's Library has it too. An ESP32 board's own LED joins in
                 over WiFi, on any Pietato
-                (esp32/pietato_led: it says it's there, and is lit as a grid is; one with no LEDs of its
+                (esp32/pietato_led; a Waveshare matrix board has esp32/pietato_matrix: it says it's
+                there, and is lit as a grid is; one with no LEDs of its
                 own has this page for them while a board's on, an LED drawn for each: A is their pulse to
-                music; the web page's Library lists the boards, and gives each a colour of its own and
-                sets how bright it is, which the board keeps). With more than one, ESP32 boards:
+                music; the web page's Library lists the boards, and gives each a colour of its own, sets
+                how bright it is, and how it shows music: its colour a new one each beat or one that
+                changes slowly, and on a strip each beat shot down it; the board keeps them). With more
+                than one, ESP32 boards:
                 Different beats has each follow its
                 own: the kick, the snare, the hi-hats, in turn by their names (the music's bass, its
                 middle and its top, each listened to for a beat; X on the boards' page, START on a grid's).

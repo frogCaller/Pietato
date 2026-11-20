@@ -178,12 +178,28 @@ The web page's Library > LED backlight lists the boards it has found. Tap a colo
 instead of the colours of what's playing, still pulsing to the beat. Auto goes back to what's playing. The board
 keeps its colour itself, so it's the same from every Pietato and after a power cut. Which one? lights a board
 for a moment, to tell them apart. Each board has a Brightness slider too: it lights for a moment as you drag, so
-you can see, and keeps where you leave it the same way. It starts at `BRIGHTNESS` in the sketch. A board that
-had the sketch before this needs it uploaded again first.
+you can see, and keeps where you leave it the same way. It starts at `BRIGHTNESS` in the sketch.
 
-For a Waveshare ESP32-S3-Matrix, set `WAVESHARE_MATRIX` to 1 at the top of the sketch and install the FastLED
-library. Its 64 LEDs all show the same colour. They're kept dim, since that board gets hot when they're bright.
-For its Serial Monitor, set Tools > USB CDC On Boot to Enabled before you upload.
+With music, a board can make its colours itself. Beside Auto, Per beat is a new colour on every beat, and Slow
+goes round all the colours in about a minute. A board with a strip has Effect too: Pulse brightens the whole
+strip on each beat, and Shoot sends each beat down the strip as a few bright LEDs. With Shoot and Per beat
+together, each beat leaves the strip in its colour as it passes. Pick one with nothing playing and the board
+shows you with a few beats of its own. The board does all of this itself from the beats it's already sent, so
+it's no more work for the Pi, and it keeps what you pick. Boards on Per beat turn the same colours together. A
+board that had the sketch before this needs it uploaded again first.
+
+A Waveshare ESP32-S3-Matrix (an 8x8 square of LEDs on the board) has a sketch of its own instead:
+`esp32/pietato_matrix/pietato_matrix.ino`. In the Arduino IDE, pick ESP32S3 Dev Module, set Tools > USB CDC On
+Boot to Enabled, install the FastLED library, and upload it. The board makes a WiFi hotspot of its own, called
+Pietato Matrix (its name and password are at the top of the sketch). Join that and open
+`http://10.20.30.40:8000` for the board's page. Under Connection there, Join Wi-Fi puts the board on your WiFi
+too. Your Pietatos then find it like any other board, and its page is at `http://matrix.local:8000` as well.
+
+Its page picks what it shows: a liquid that pours as you tilt the board, fire, scrolling text, a picture you
+paint, a few animations, and Music, which sends a ring out from the middle on each beat and shows a game's
+colours while one's on. With Beat on, the other modes move with the music too. The BOOT button steps through
+them. A Pietato's web page lists the board with the rest: its colour there is its Music colour, and its
+Brightness slider is the board's own. Keep it dim, since that board gets hot when its LEDs are bright.
 
 ## OLED screen
 
