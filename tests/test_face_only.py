@@ -58,6 +58,8 @@ class FB:
 
 
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
+m.face_now = lambda: 4000.5                        # (its clock, still: it stays where it is, in the middle. Its looking
+                                                   #  round the room, and its glow: tests/test_face_room.py)
 BG = g.BG if hasattr(g, "BG") else B.BG
 
 
@@ -121,7 +123,8 @@ check(f"...in the middle of the screen (its alert look spans {bb2}: its middle a
       and bb2[1] > 16 and bb2[3] < 464)
 check(f"...its box on the screen ({box})", box[0] >= 0 and box[1] >= 0 and box[2] <= 640 and box[3] <= 480)
 fr_taps = [t for t in m.taps if t[1] == ("keys", "a")]
-check(f"...a tap on it, on the web page's copy: A ({fr_taps[:1]})", fr_taps and fr_taps[0][0] == tuple(box))
+check(f"...a tap on the web page's copy, anywhere (it goes about): A ({fr_taps[:1]})",
+      fr_taps and fr_taps[0][0] == (0, 0, 640, 480))
 
 # its next frames: just its face
 m.face_step = True

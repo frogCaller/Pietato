@@ -3,7 +3,10 @@ and show what it's doing (listening, thinking, talking) and how it feels (happy,
 the colour you pick, on the background you pick, its eyes and mouth the shape you make them, with eyelashes if you
 like (the Bot's Character).
 face_state() says how it looks at a moment; draw_face() draws it; face_wait() says when it next changes, so the
-screen is only drawn again when it does (a blink, a glance), not all the time."""
+screen is only drawn again when it does (a blink, a glance), not all the time.
+Just its face, on the whole screen (screens/bot.py): it looks round the room, going from one place on the screen to
+another now and then, its eyes first (roam_at, Roam); and while music plays it has a glow, as a cover has on Now
+playing (glow_mask)."""
 import math
 
 from .theme import BG
@@ -28,6 +31,16 @@ LASHES = ((38, 0.06), (60, 0.065), (82, 0.06))   # three on each eye's top outer
 SHAPE_DEFAULTS = {"eye_size": 5, "eye_height": 5, "eye_corners": 10, "eye_gap": 3, "mouth_size": 5}
 LISTEN_MOST = 0.58         # listening: its sound's arcs start no further out than this (of its size), eyes far apart
 SHAPE_MOST = 10
+ROAM_SLOT = 9.0            # looking round the room: every so many seconds it may go somewhere else on the screen...
+ROAM_SECS = 1.1            # ...taking this long to get there...
+ROAM_LEAD = 0.25           # ...its eyes turning that way this long before it sets off...
+ROAM_HOME = 0.4            # ...and this long back to the middle, when it has something to do (listening, thinking)
+ROAM_LOOKS = ("idle", "happy", "sad", "cool", "curious")   # the looks it goes about with (the rest: in the middle)
+ROAMS = ((0, 0), (0, 0), (0, 0), (0, 0), (-1, 0), (1, 0), (-0.8, -1), (0.8, -1), (-0.9, 0.9), (0.9, 0.9), (0, -1))
+GLOW_REACH = 0.1           # its glow, while music plays: this far (of its size) past its eyes and mouth...
+GLOW_SMALL = 4             # ...made this many times smaller than it's shown, and enlarged (it's soft: quick so)
+GLOW_EDGE = [min(255, max(0, v * 2 - 8)) for v in range(256)]   # (its eyes' edges, blurred, are half lit: all of it
+                           # there; and the last faint bit of it, far out, is nothing: no edge to see where it ends)
 
 # Its colours (the Bot's Character: Face, Background), each picked on its own: on just its face, up and down go from
 # one face colour to the next, left and right from one background to the next
@@ -91,12 +104,54 @@ def _gaze(t, look):
     return here
 
 
-def face_state(look, t):
+def roam_at(k):
+    """Where the face rests in the k-th ROAM_SLOT seconds, of how far it can go from the screen's middle ((-1..1,
+    -1..1): left to right, up to down): more often in the middle than anywhere else."""
+    return ROAMS[int(_hash(k + 4099) * len(ROAMS))]
+
+
+def _ease(e):
+    e = max(0.0, min(1.0, e))
+    return e * e * (3 - 2 * e)
+
+
+class Roam:
+    """Its way from one place on the screen to another (each of how far it can go: roam_at's), setting off at t0 and
+    there secs later. led: its eyes turn that way first, ROAM_LEAD before it sets off, and look about again as it
+    gets there."""
+
+    def __init__(self, was, to, t0, secs, led=False):
+        self.was, self.to, self.t0, self.secs, self.led = tuple(was), tuple(to), t0, secs, led
+
+    def at(self, t):
+        """Where it is at t."""
+        e = 1.0 if self.secs <= 0 else _ease((t - self.t0) / self.secs)
+        return tuple(a + (b - a) * e for a, b in zip(self.was, self.to))
+
+    def moving(self, t):
+        """It's on its way at t (or its eyes are, before it)."""
+        return self.was != self.to and (self.t0 - ROAM_LEAD if self.led else self.t0) <= t < self.t0 + self.secs
+
+    def lead(self, t):
+        """Where its eyes are led at t, and how much (dx, dy, 0..1): None when they aren't (it isn't on its way)."""
+        if not self.led or not self.moving(t):
+            return None
+        dx, dy = self.to[0] - self.was[0], self.to[1] - self.was[1]
+        m = max(abs(dx), abs(dy)) or 1.0
+        there = self.t0 + self.secs
+        k = min(_ease((t - (self.t0 - ROAM_LEAD)) / GLANCE), 1.0 - _ease((t - (there - self.secs * 0.45))
+                                                                         / (self.secs * 0.45)))
+        return dx / m, dy / m, k
+
+
+def face_state(look, t, lead=None):
     """How the face is at time t: (how open the eyes are, where they look (dx, dy), how open the mouth is,
-    how much bigger the eyes are)."""
+    how much bigger the eyes are). lead: where its eyes are led instead, and how much (Roam's)."""
     look = look if look in LOOKS else "idle"
     opened = _openness(t, look)
     dx, dy = _gaze(t, look)
+    if lead:
+        dx, dy = dx + (lead[0] - dx) * lead[2], dy + (lead[1] - dy) * lead[2]
     mouth = 0.0
     if look == "talking":                              # (a beat to its words: never quite the same twice)
         mouth = max(0.0, 0.55 + 0.45 * math.sin(t * 13.0) * math.sin(t * 4.1 + 1.0))
@@ -206,13 +261,13 @@ def _slant_lashes(d, ax, ay, bx, by, side, size, colour):
         _lash(d, ax + dx * t, ay + dy * t, side * math.sin(b), -math.cos(b), size * long, wide, colour)
 
 
-def draw_face(d, cx, cy, size, look, t, colour, back, font=None, lashes=False, shape=None):
+def draw_face(d, cx, cy, size, look, t, colour, back, font=None, lashes=False, shape=None, lead=None):
     """The face, size across, its middle at cx, cy, in colour on back (what's behind it: its eyes' shapes are cut
     with it). font: for a sleepy face's z's. lashes: eyelashes on its eyes (on its glasses, when it wears them).
-    shape: its eyes' and mouth's (face_shape's; None: as it's always looked)."""
+    shape: its eyes' and mouth's (face_shape's; None: as it's always looked). lead: where its eyes are led (Roam's)."""
     look = look if look in LOOKS else "idle"
     sh = shape or face_shape()
-    opened, (gx, gy), mouth, grow = face_state(look, t)
+    opened, (gx, gy), mouth, grow = face_state(look, t, lead)
     ew, eh = size * 0.25 * grow * sh["size"], size * 0.36 * grow * sh["size"] * sh["tall"]   # an eye
     gap = size * max(sh["gap"], 0.25 * grow * sh["size"] * 1.06)   # between their middles (never touching)
     lash = size * sh["size"]                                        # (its lashes: as big as its eyes)
@@ -313,3 +368,52 @@ def draw_face(d, cx, cy, size, look, t, colour, back, font=None, lashes=False, s
         d.rounded_rectangle((cx - size * 0.022, cy - size * 0.62, cx + size * 0.022, cy - size * 0.44),
                             radius=size * 0.02, fill=colour)
         d.ellipse((cx - size * 0.024, cy - size * 0.41, cx + size * 0.024, cy - size * 0.36), fill=colour)
+
+
+_REACH = {}
+
+
+def face_reach(shape=None, lashes=False):
+    """How far the face reaches from its middle while it goes about (ROAM_LOOKS, wherever its eyes look, wide open),
+    of its size: (left, up, right, down). Found by drawing it, small, once for each shape."""
+    sh = shape or face_shape()
+    key = (tuple(sorted(sh.items())), bool(lashes))
+    if key not in _REACH:
+        from PIL import Image, ImageDraw
+        n = 160
+        x0 = y0 = x1 = y1 = n
+        for look in ROAM_LOOKS:
+            for lead in ((-1, -1, 1), (1, -1, 1), (-1, 1, 1), (1, 1, 1)):
+                im = Image.new("RGB", (2 * n, 2 * n), (0, 0, 0))
+                draw_face(ImageDraw.Draw(im), n, n, n, look, 0.05, (255, 255, 255), (0, 0, 0), lashes=lashes, shape=sh,
+                          lead=lead)                   # (0.05: its eyes are open then, whatever the look)
+                b = im.getbbox()
+                if b:
+                    x0, y0, x1, y1 = min(x0, b[0]), min(y0, b[1]), max(x1, b[2]), max(y1, b[3])
+        if len(_REACH) > 32:
+            _REACH.clear()
+        _REACH[key] = ((n - x0 + 1) / n, (n - y0 + 1) / n, (x1 - n + 1) / n, (y1 - n + 1) / n)
+    return _REACH[key]
+
+
+def glow_mask(Image, ImageDraw, size, box, face):
+    """Its glow, over box (x0, y0, x1, y1 on the screen): (how much of it shows: an L picture, where it shows at all:
+    its own box on the screen), or None. All of it right at its eyes and mouth, fading out to nothing GLOW_REACH of
+    its size past them. face(d, k): draws it on d, white on black, k times smaller, box's corner at d's. Image,
+    ImageDraw: the ones the screen's drawn with (fine.py's, or PIL's)."""
+    from PIL import ImageFilter
+    w, h = int(box[2] - box[0]), int(box[3] - box[1])
+    k = GLOW_SMALL if size >= 16 * GLOW_SMALL else 1
+    small = Image.new("RGB", (max(1, -(-w // k)), max(1, -(-h // k))), (0, 0, 0))
+    face(ImageDraw.Draw(small), k)
+    soft = small.convert("L").filter(ImageFilter.GaussianBlur(size * GLOW_REACH * 0.42 / k)).point(GLOW_EDGE)
+    lit = soft.getbbox()                               # (just where it shows: enlarged, that's quicker)
+    if lit is None:
+        return None
+    lit = (max(0, lit[0] - 1), max(0, lit[1] - 1), min(soft.width, lit[2] + 1), min(soft.height, lit[3] + 1))
+    soft = soft.crop(lit)                              # (...and a little past it: it fades to nothing, enlarged)
+    x0, y0, x1, y1 = lit[0] * k, lit[1] * k, min(w, lit[2] * k), min(h, lit[3] * k)
+    if k > 1:
+        soft = soft.resize(((lit[2] - lit[0]) * k, (lit[3] - lit[1]) * k), Image.BILINEAR)
+        soft = soft.crop((0, 0, x1 - x0, y1 - y0))
+    return soft, (int(box[0]) + x0, int(box[1]) + y0, int(box[0]) + x1, int(box[1]) + y1)

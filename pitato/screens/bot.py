@@ -1,5 +1,6 @@
 """The Bot tab: chatting, its pictures and its voice, and Settings > Bot."""
 import io
+import math
 import random
 import re
 import shutil
@@ -22,8 +23,9 @@ from ..handheld import is_handheld
 from ..bot import (
     Friend, FRIEND_BUBBLE, FRIEND_CHATTER, FRIEND_HEAD, FRIEND_HELLO_AFTER, FRIEND_KEEP, FRIEND_PAGES,
     FRIEND_PIC_ROOM, FRIEND_SIGHT, FRIEND_STYLES, FRIEND_TOPICS)
-from ..face import draw_face, face_colours, face_shape, face_wait, FACE_BACKS, FACE_COLOURS, MOODS, \
-    SHAPE_DEFAULTS, shape_step
+from ..cover import glow_strength, GLOW_STEPS
+from ..face import draw_face, face_colours, face_reach, face_shape, face_wait, FACE_BACKS, FACE_COLOURS, glow_mask, \
+    GLOW_REACH, MOODS, Roam, roam_at, ROAM_HOME, ROAM_LEAD, ROAM_LOOKS, ROAM_SECS, ROAM_SLOT, SHAPE_DEFAULTS, shape_step
 
 BOT_MODES = ("today", "chat")           # the Bot's pages, left to right: your day, chatting
 BOT_MODE_NAMES = {"today": "Today", "chat": "Chat"}
@@ -34,6 +36,13 @@ FACE_PANEL = (10, 48, 30)       # ...that panel, a square: in from its card's si
                                 # its pages' names), how round its corners. Its model or the day, under it
 FACE_ONLY_SIZE = (0.52, 0.66)   # Just its face: as wide as this much of the screen's width, or this much of its height
 FACE_ONLY_FPS = 8               # ...and on a Pi Zero, at most this many frames a second while it's busy (a big face)
+FACE_ONLY_ROAM = (0.36, 0.16)   # ...looking round the room, it goes this far from the screen's middle at most (of its
+                                # size: to either side; up or down)...
+FACE_ONLY_EDGE = 14             # ...and comes no nearer the screen's edges than this (the menus' pixels), its glow too
+FACE_GLOW_MOST = 0.62           # ...its glow, while music plays: how much of its colour shows at its strongest (on a
+                                # beat), right at its eyes
+FACE_GLOW_LIT = [[int(v * glow_strength(step) * FACE_GLOW_MOST) for v in range(256)] for step in range(GLOW_STEPS)]
+FACE_NOT_DRAWN = [255] + [0] * 255   # (...and where it goes: where its face isn't drawn)
 FRIEND_MENU = (320, 44)         # the Bot page's X menu: its width, and each of its rows' height
 FACE_CAN_DO = ("You can do things for them. When they ask you to play one of their games, their music or the radio, "
                "put something on to watch (a channel, cartoons, an old film), open an app, show their photos, or set a "
@@ -111,13 +120,17 @@ class BotScreen:
         return self.on_bot_page() and self.bot_mode() in ("chat", "today")
 
     def bot_face_only(self):
-        """Settings > Bot > Just its face: its chat page is only its face, big, in the middle of the screen, with no
-        words. It talks and listens all the same."""
+        """Settings > Bot > Just its face: its chat page is only its face, big, on the whole screen, with no words:
+        looking round the room, and with a glow while music plays. It talks and listens all the same."""
         return (self.friend.conf.get("face_only") or "off").strip().lower() in ("on", "yes", "1", "true")
 
     def on_face_only(self):
         """The Bot's chat page is on screen as just its face."""
         return self.on_friend_page() and self.bot_face_only()
+
+    def face_alone(self):
+        """...with nothing over it (its X menu): it looks round the room, and has a glow while music plays."""
+        return self.on_face_only() and self.friend_more is None
 
     def bot_colour(self):
         """Its Character's face colour, by name (up and down, on just its face, go from one to the next)."""
@@ -1159,34 +1172,160 @@ class BotScreen:
             d.text((mx0 + 22, ry + (rh - 4) / 2), self.fit(d, label, F["row"], mw - 44), font=F["row"],
                    fill=colour, anchor="lm")
 
-    def face_only_at(self):
-        """Just its face: where its middle goes (the screen's), and how big it is (as big as the screen lets it be,
-        what goes with it included: a thought's dots above it, the sound coming in beside it)."""
+    face_roam = None             # just its face, looking round the room: its way to where it's going (face.py's Roam)
+    face_stay = None             # ...and the stretch of time (which ROAM_SLOT) it stays in the middle for
+    face_lit = None              # just its face, as last drawn with its glow: what the glow's next frames are made of
+    face_glowing = False         # ...and whether it was meant to have one then
+
+    def face_now(self):
+        """The time its face goes by (a blink, a glance, where it's got to)."""
+        return time.monotonic()
+
+    def face_room(self):
+        """Just its face: how far it can go from the screen's middle (the menus' pixels: left, up, right, down) with
+        all of it still on the screen, its glow too, and a little in from the edge."""
         W, H = self.fb.w, self.fb.h
-        return W / 2, H / 2, min(W * FACE_ONLY_SIZE[0], H * FACE_ONLY_SIZE[1])
+        size = min(W * FACE_ONLY_SIZE[0], H * FACE_ONLY_SIZE[1])
+        pad = size * GLOW_REACH + FACE_ONLY_EDGE
+        most = (size * FACE_ONLY_ROAM[0], size * FACE_ONLY_ROAM[1]) * 2
+        reach = face_reach(self.bot_shape(), self.bot_lashes())
+        return tuple(max(0.0, min(m, half - r * size - pad)) for m, half, r in zip(most, (W / 2, H / 2) * 2, reach))
+
+    def face_way(self, now=None):
+        """Just its face, looking round the room: its way (face.py's Roam) to where it's going now. Somewhere else on
+        the screen every so often (roam_at), while it has nothing to do: its eyes first, then the rest of it. Back to
+        the middle, and quickly, when it has (listening, thinking, talking, something to tell you) or its menu's over
+        it: and there till the next time it'd go somewhere. None: its face isn't on the screen alone."""
+        if not self.on_face_only():
+            self.face_roam = self.face_stay = None
+            return None
+        now = self.face_now() if now is None else now
+        k = math.floor(now / ROAM_SLOT)
+        way = self.face_roam
+        if way is None:                                # (it starts in the middle)
+            way = self.face_roam = Roam((0, 0), (0, 0), now, 0)
+            self.face_stay = k
+        free = self.friend_more is None and self.face_look() in ROAM_LOOKS
+        if not free:
+            self.face_stay = k
+        to = roam_at(k) if free and self.face_stay != k else (0, 0)
+        if to != way.to:
+            at = way.at(now)
+            far = max(abs(to[0] - at[0]), abs(to[1] - at[1]))   # (further: a little longer on its way)
+            way = self.face_roam = Roam(at, to, now + (ROAM_LEAD if free else 0),
+                                        ROAM_SECS * (0.5 + 0.5 * far) if free else ROAM_HOME, led=free)
+        return way
+
+    def face_only_at(self, now=None):
+        """Just its face: where its middle is (the screen's, or wherever it's got to, looking round the room), and how
+        big it is (as big as the screen lets it be, what goes with it included: a thought's dots above it, the sound
+        coming in beside it)."""
+        W, H = self.fb.w, self.fb.h
+        size = min(W * FACE_ONLY_SIZE[0], H * FACE_ONLY_SIZE[1])
+        way = self.face_way(now)
+        if way is None:
+            return W / 2, H / 2, size
+        hx, hy = way.at(self.face_now() if now is None else now)
+        left, up, right, down = self.face_room()
+        return W / 2 + hx * (right if hx > 0 else left), H / 2 + hy * (down if hy > 0 else up), size
+
+    def face_glows(self):
+        """Just its face has a glow: while music or the radio plays (not paused)."""
+        return bool(self.face_alone() and self.proc is not None and not self.paused and self.kind in LISTEN_KINDS)
+
+    def face_glow(self):
+        """...and how lit it is. None: it has none. Else which of a glow's steps (cover.py's): 0 while music or the
+        radio plays, and up to its strongest on a beat when Now playing's glow would follow the beat too (music.py's
+        pulse_wanted: a song of yours, the battery saver off)."""
+        return self.pulse_step() if self.face_glows() else None
+
+    def face_only_box(self, face_at, glow=False):
+        """Just its face: the box it's drawn in (its glow's too, with one), no bigger than the screen."""
+        x0, y0, x1, y1 = self.face_box(face_at)
+        g = math.ceil(face_at[2] * GLOW_REACH * 1.3) if glow else 0
+        return max(0, x0 - g), max(0, y0 - g), min(self.fb.w, x1 + g), min(self.fb.h, y1 + g)
+
+    def face_glow_put(self, img, lit, step, back):
+        """Its glow, lit as step says, put on img (back: the screen's colour) round its face as it's drawn there: its
+        face itself is left just as it is."""
+        from ..fine import Image
+        b = lit["box"]
+        part = lit["parts"].get(step)                  # (made once for each step, while its face stays as it is)
+        if part is None:
+            part = lit["parts"][step] = Image.new("RGB", (b[2] - b[0], b[3] - b[1]), back)
+            part.paste(self.bot_palette()[0], (0, 0), lit["mask"].point(FACE_GLOW_LIT[step]))
+        img.paste(part, (b[0], b[1]), lit["round"])
+        lit["step"] = step
+
+    def face_only_draw(self, img, d, back, was=None):
+        """Just its face, drawn on img (the whole screen's picture; back: its colour) where it is now, with its glow
+        while music plays. was: the box it was last drawn in, wiped first. (Where its middle is and how big, the box
+        it's drawn in now)."""
+        from ..fine import Image, ImageChops, ImageDraw
+        now = self.face_now()
+        look = self.face_look()
+        face_at = self.face_only_at(now)
+        lead = self.face_roam.lead(now) if self.face_roam is not None else None
+        step = self.face_glow()
+        box = self.face_only_box(face_at, step is not None)
+        for b in (was, box) if was is not None else ():
+            d.rectangle((b[0], b[1], b[2] - 1, b[3] - 1), fill=back)
+        self.draw_bot_face(d, face_at, look=look, back=back, t=now, lead=lead)
+        self.face_lit, self.face_glowing = None, step is not None
+        if step is not None:                           # (its glow: from its eyes and mouth as they are in this frame)
+            x, y, size = face_at
+            lashes, shape = self.bot_lashes(), self.bot_shape()
+            made = glow_mask(Image, ImageDraw, size, box, lambda md, k: draw_face(
+                md, (x - box[0]) / k, (y - box[1]) / k, size / k, look, now, (255, 255, 255), (0, 0, 0),
+                lashes=lashes, shape=shape, lead=lead))
+            if made is not None:                       # (where any of it shows: its next frames are just that)
+                mask, b = made
+                drawn = ImageChops.difference(img.crop(b), Image.new("RGB", (b[2] - b[0], b[3] - b[1]), back))
+                self.face_lit = {"mask": mask, "box": b, "parts": {},   # (round: where its face isn't drawn, its
+                                 "round": drawn.convert("L").point(FACE_NOT_DRAWN)}   # glow's place)
+                self.face_glow_put(img, self.face_lit, step, back)
+        return face_at, box
+
+    def face_pulse(self):
+        """Just its face's glow, a step on (a beat's come, or gone by): only where the glow shows goes to the screen,
+        its face as it was. (Not while the page is to be drawn again anyway, or something else has been on the
+        screen since: its next frame's the whole of it.)"""
+        lit, shot, fb = self.face_lit, getattr(self, "face_shot", None), self.fb
+        if self.dirty or self.face_step or lit is None or shot is None or not hasattr(fb, "show_part") \
+                or shot[2] != getattr(fb, "frames", None):
+            return
+        step, way = self.face_glow(), self.face_roam
+        if step is None or step == lit["step"] or (way is not None and way.moving(self.face_now())):
+            return                                     # (None: the music's stopped, which face_tick sees to. On its
+                                                       #  way somewhere: its own frames come faster than these, lit)
+        img, box, shown, face_at, back = shot
+        self.face_glow_put(img, lit, step, back)
+        fb.show_part(img, lit["box"])
+        self.face_shot = (img, box, getattr(fb, "frames", None), face_at, back)
+        self.taps_kept(shown)
 
     def render_face_only(self):
-        """The Bot's chat page as just its face (Settings > Bot > Just its face): big, in the middle of the screen,
-        on its background, and nothing else, no words. It shows what it's doing as ever (listening, thinking,
-        talking) and talks and listens all the same; A talks to it (on the web page's copy of the screen, a tap on
-        its face does), up and down change its colour, left and right its background, SELECT goes back to its chat
-        page. Its X menu, while it's open, is there instead, with that menu's buttons."""
+        """The Bot's chat page as just its face (Settings > Bot > Just its face): big, on its background, and nothing
+        else, no words. It looks round the room (face_way), and has a glow while music plays (face_glow). It shows
+        what it's doing as ever (listening, thinking, talking: in the middle of the screen) and talks and listens all
+        the same; A talks to it (on the web page's copy of the screen, a tap does), up and down change its colour,
+        left and right its background, SELECT goes back to its chat page. Its X menu, while it's open, is there
+        instead, with that menu's buttons."""
         _, page = self.bot_palette()
         img, d = self.canvas(page)
-        face_at = self.face_only_at()
-        box = self.face_box(face_at)
+        W, H = self.fb.w, self.fb.h
         if self.friend.ready() and self.friend_more is not None:
-            W, H = self.fb.w, self.fb.h
             mh = 52 + len(self.friend_options()) * FRIEND_MENU[1]
             self.draw_friend_menu(d, (W - FRIEND_MENU[0]) / 2, max(16, (H - self.FOOTER - mh) / 2))
             self.footer(d, [("▲▼", "Choose"), ("A", "OK"), ("B", "Close")], pill=False, always=True)
             self.fb.show(img)
-            self.face_shot = None                      # (its face's frames: the menu's left as it is)
+            self.face_shot = self.face_lit = None      # (its face's frames: the menu's left as it is)
+            self.face_glowing = False
             return
-        self.draw_bot_face(d, face_at, back=page)
-        self.tappable(box, "keys", "a")
+        face_at, box = self.face_only_draw(img, d, page)
+        self.tappable((0, 0, W, H), "keys", "a")       # (wherever it's got to: anywhere on the screen)
         self.fb.show(img)
-        self.face_shot = (img, box, getattr(self.fb, "frames", None), face_at, page)   # (its next frames: its face)
+        self.face_shot = (img, box, getattr(self.fb, "frames", None), face_at, page)   # (next: just its face)
 
     def render_friend(self):
         from ..fine import Image, ImageDraw
@@ -1332,15 +1471,16 @@ class BotScreen:
         x, y, size = face_at
         return int(x - size * 0.78), int(y - size * 0.68), int(x + size * 0.78 + 1), int(y + size * 0.47 + 1)
 
-    def draw_bot_face(self, d, face_at, look=None, back=None):
+    def draw_bot_face(self, d, face_at, look=None, back=None, t=None, lead=None):
         """Its face, as face_at says (x, y, size), in its colour, on back (its card's colour, or the screen's: just
-        its face), with its eyelashes if it has them."""
+        its face), with its eyelashes if it has them. t: as it is then (now, unless said); lead: where its eyes are
+        led (just its face, on its way somewhere)."""
         x, y, size = face_at
         look = look or self.face_look()
         face, own = self.bot_palette()
         font = self.fonts["face"] if size >= 2 * FACE_SIZE else self.fonts["small"]   # (its z's, as big as it is)
-        draw_face(d, x, y, size, look, time.monotonic(), face, own if back is None else back, font=font,
-                  lashes=self.bot_lashes(), shape=self.bot_shape())
+        draw_face(d, x, y, size, look, self.face_now() if t is None else t, face, own if back is None else back,
+                  font=font, lashes=self.bot_lashes(), shape=self.bot_shape(), lead=lead)
 
     def render_face(self):
         """Just its face, a frame on (a blink, a glance, its mouth as it talks): the rest as the page was drawn. The
@@ -1352,6 +1492,11 @@ class BotScreen:
             return
         img, box, _, face_at, back = shot
         d = ImageDraw.Draw(img)
+        if self.on_face_only():                        # (just its face: wherever it's got to, with its glow)
+            face_at, new = self.face_only_draw(img, d, back, was=box)
+            fb.show_part(img, (min(box[0], new[0]), min(box[1], new[1]), max(box[2], new[2]), max(box[3], new[3])))
+            self.face_shot = (img, new, getattr(fb, "frames", None), face_at, back)
+            return
         d.rectangle((box[0], box[1], box[2] - 1, box[3] - 1), fill=back)
         self.draw_bot_face(d, face_at, look=self.char_preview_look() if self.on_char_page() else None, back=back)
         fb.show_part(img, box)
@@ -1361,14 +1506,32 @@ class BotScreen:
         """The main loop: its face's next frame, when it's due (as it changes, not all the time): on the Bot, or on
         its Character page."""
         char = self.on_char_page()
-        if not (self.on_face_page() or char) or self.resting or now < self.face_next:
+        only = self.on_face_only()
+        if not only:                                   # (just its face: in the middle again, the next time it's there)
+            self.face_roam = self.face_lit = None
+            self.face_glowing = False
+        if not (self.on_face_page() or char) or self.resting:
             return
-        if self.friend_more is not None and self.on_face_only():   # (just its face, with its menu there instead)
+        if only and self.friend_more is not None:      # (just its face, with its menu there instead: nothing to draw,
+            self.face_next = max(self.face_next, now + 0.25)   # and the main loop waits as it does for any menu)
+            return
+        slow = 0.0
+        if self.pi_slow and self.fb is not None and not getattr(self.fb, "same", True):
+            slow = 0.2                                 # (a Pi Zero on a TV: each frame scaled up costs it more)
+        elif self.pi_slow and only:
+            slow = 1.0 / FACE_ONLY_FPS                 # (...or with just its face, big: more of it to draw)
+        way = None
+        if only:                                       # (just its face: it's set off for somewhere else on the screen,
+            was, t = self.face_roam, self.face_now()   #  or its glow's come or gone: drawn now, not at its next blink)
+            way = self.face_way(t)
+            if way is not was or self.face_glows() != self.face_glowing \
+                    or (way.moving(t) and self.face_next > now + max(0.05, slow)):
+                self.face_next = now
+        if now < self.face_next:
             return
         wait = face_wait(self.char_preview_look() if char else self.face_look(), now)
-        if self.pi_slow and self.fb is not None and not getattr(self.fb, "same", True):
-            wait = max(wait, 0.2)                      # (a Pi Zero on a TV: each frame scaled up costs it more)
-        elif self.pi_slow and self.on_face_only():
-            wait = max(wait, 1.0 / FACE_ONLY_FPS)      # (...or with just its face, big: more of it to draw)
-        self.face_next = now + wait
+        if way is not None:                            # (on its way: a frame every twentieth of a second; else, by
+            wait = min(wait, 0.05 if way.moving(t) else   # the next time it might set off)
+                       (math.floor(t / ROAM_SLOT) + 1) * ROAM_SLOT - t + 0.001)
+        self.face_next = now + max(wait, slow)
         self.face_step = True

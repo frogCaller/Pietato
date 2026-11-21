@@ -48,6 +48,9 @@ def on_pty(name, body, cols=80, keys=(), sig=None, timeout=60, env=None):
     script = harness(name, body)
     pid, fd = pty.fork()
     if pid == 0:
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)  # (as a terminal's shell has it. Python has it ignored, and so
+        # would bash, started from here: then, when the moving line's stopped partway through a $( ), bash says so on
+        # the screen: "printf: write error: Broken pipe". Not on a real terminal, where it just stops)
         fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, cols, 0, 0))
         os.execvpe("bash", ["bash", script], env_for(name, env))
     t0, out, keys, status = time.monotonic(), b"", list(keys), None

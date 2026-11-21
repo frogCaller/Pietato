@@ -259,9 +259,9 @@ class WebSettingsScreen:
         rows += [{"key": "f_face", "label": "Just its face", "kind": "choice",
                   "value": "on" if self.bot_face_only() else "off", "choices": ["on", "off"],
                   "names": {"on": "Yes", "off": "No"},
-                  "note": "Its chat page shows only its face, big, in the middle of the screen. It still talks and "
-                          "listens. SELECT on the Bot switches it on or off, and on its face up and down change its "
-                          "colour, left and right its background."}]
+                  "note": "Its chat page shows only its face, big, on the whole screen: it looks around the room, and "
+                          "glows while music plays. It still talks and listens. SELECT on the Bot switches it on or "
+                          "off, and on its face up and down change its colour, left and right its background."}]
         sec("bot", "Bot", rows, "It talks through Ollama on another computer on your network.")
 
         # the Bot's character: who it is, its look and its voice (on the Pi: X > Edit Character on the Bot)
