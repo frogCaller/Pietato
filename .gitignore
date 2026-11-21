@@ -1,5 +1,8 @@
 __pycache__/
 *.pyc
+# an editor's own files, while one of these is open in it (they can hold your user name and your computer's)
+*.swp
+*.swo
 # your settings files, made on the Pi: they stay out of git
 static/*
 !static/fonts/

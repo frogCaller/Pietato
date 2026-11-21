@@ -54,7 +54,7 @@ const char *WIFI_PASSWORD = "its password";
 #pragma pop_macro("LED_COUNT")
 #endif
 
-#define ONBOARD_PIN 48       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some).
+#define ONBOARD_PIN -1       // the board's own LED: -1 for where the board says it is, or its pin (48, or 38 on some).
                              // With a strip: lit as well, if its pin's given here (-1: just the strip)
 #define STRIP_PIN 5          // a strip's DIN
 #define BRIGHTNESS 90        // how bright it is, 0 to 255, to start with (a Pietato's web page can change it). A

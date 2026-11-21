@@ -1,7 +1,8 @@
 """The bot as an assistant, in media mode. What you ask it to do (pitato/assist.py says what that is) is done here at
-once: its answer kept in the conversation, said out loud when it has a voice (not over music), and shown as a notice
-when its page isn't up. Timers, the focus timer and reminders speak up as they come due, wherever you are, and the
-next one to end shows in the status bar. The Bot's Today page: your list, reminders, timers and notes."""
+once: its answer kept in the conversation, said out loud when it has a voice (not over music that's playing), and
+shown as a notice when its page isn't up. Timers, the focus timer and reminders speak up as they come due, wherever
+you are, and the next one to end shows in the status bar. The Bot's Today page: your list, reminders, timers and
+notes."""
 import difflib
 import os
 import random
@@ -14,7 +15,7 @@ from ..assist import best_match, BREAK_MINS, FOCUS_MINS, LAUNCH, normal, parse, 
     words_of
 from ..util import item
 from ..net import cam_key
-from ..library import LIBRARY, LISTEN_KINDS, read_streams, SLIDESHOW_SECS
+from ..library import LIBRARY, read_streams, SLIDESHOW_SECS
 from ..radio import RADIO_GENRES, rb_stations
 from ..weather import wx_words
 from ..games import bios_missing, built_for_other_pi, find_core, find_games, neogeo_unknown, plain_title, system
@@ -242,7 +243,7 @@ class AssistScreen:
         if not self.on_friend_page() and self.active and text:
             self.toast(text, secs)
         if speak and text and self.bot_voice() and self.bot_speaks():
-            self.say_aloud(text)                       # (not over something playing, unless it pauses music)
+            self.say_aloud(text)                       # (not over something playing: bot_can_talk)
 
     def ack(self):
         """A word of its style before what it did ("Okay.", "Aye!", "Very good.")."""
@@ -765,8 +766,13 @@ class AssistScreen:
 
     def assist_media(self, ask):
         k, a = ask.kind, ask.args
+        h = self.music_held
+        aside = h is not None and h.get("proc") is None and self.proc is None   # (a song put by while it talks)
         if k in ("pause", "resume"):
-            self.music_held = None                     # (you said: so it stays, not played on after the bot's done)
+            if aside:
+                h["paused"] = k == "pause"             # (back once it's done: paused, or playing, as you say now)
+            else:
+                self.music_held = None                 # (you said: so it stays, not played on after the bot's done)
         if k == "pause":
             if self.voice.speaking:
                 self.voice.stop()
@@ -776,12 +782,14 @@ class AssistScreen:
                 self.dirty = True
                 return ""
             if not self.proc:
-                return "Nothing's playing."
+                return "Paused." if aside else "Nothing's playing."
             if not self.paused:
                 self.cmd("pause")
                 self.paused = True
             return "Paused."
         if k == "resume":
+            if aside:
+                return "Playing again."
             if self.proc and self.paused:
                 self.cmd("pause")
                 self.paused = False
@@ -1006,9 +1014,8 @@ class AssistScreen:
             self.osd(text, ANNOUNCE_SECS * 1000)       # (a video: over it)
         elif self.active:
             self.toast(text, ANNOUNCE_SECS)
-        if self.bot_voice() and self.bot_speaks() and (not self.proc or (self.bot_pauses_music()
-                                                                        and self.kind in LISTEN_KINDS)):
-            self.say_aloud(text)                       # (over music, if it pauses music: on again after)
+        if self.bot_voice() and self.bot_speaks() and self.bot_can_talk():
+            self.say_aloud(text)                       # (music that's paused, or that it pauses: as it was after)
         else:
             self.voice.chime(self.chime_device(), self.volume)
 

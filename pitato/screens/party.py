@@ -554,6 +554,9 @@ class PartyScreen:
             self.queue, self.qi = [it], 0
             self.pop_now()
         self.kind, self.cur, self.pos, self.paused = kind, it, pos, False
+        if self.start_paused and self.party is None:   # (back as it was, paused: after the bot's talked, or a paused
+            player.pause_at(at)                        #  party's over. It plays on from there: party_toggle)
+            self.paused = True
         self.meta = {k: v for k, v in (("title", title), ("artist", artist), ("length", length)) if v}
         self.proc, self.started = proc, time.monotonic()
         self.next_query = time.monotonic() + 1

@@ -35,7 +35,7 @@ Serial Monitor is told how it is every ten seconds and when that changes (what i
 WiFi and why not, which Pietato is lighting it, its own colour): a line a second at most, none with no one
 listening. Its page in Apps on a Pietato with no LEDs of its own: your boards drawn in its box, an LED each, and
 never full screen (it would be a black one)."""
-import asyncio, json, logging, math, os, shutil, socket, subprocess, sys, threading, time
+import asyncio, json, logging, math, os, re, shutil, socket, subprocess, sys, threading, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 import numpy as np
@@ -346,6 +346,26 @@ check("a sketch each: this one for a board's own LED or a strip, with nothing of
       "MATRIX" not in open(SKETCH).read().replace("ESP32-S3-Matrix", "") and "msg[12] = 3 | 8;" in grid_src
       and "GLOW_PORT = 5448" in grid_src and "LAMP_PORT = 5449" in grid_src and "\r" not in grid_src
       and (G.KEEPS | G.DIMS, G.ITS_OWN, G.GLOW_PORT, G.LAMP_PORT) == (3, 8, 5448, 5449))
+README = ROOT + "/esp32/README.md"
+readme = open(README, encoding="utf-8").read() if os.path.exists(README) else ""
+links = re.findall(r"\]\(([^)#]+)(#[^)]*)?\)", readme)
+led_src = open(SKETCH).read()
+check(f"how to set a board up, beside the sketches (esp32/README.md): each sketch, and what it's for; what it "
+      f"points to is there ({[x[0] for x in links if not x[0].startswith('http')]}), the LED backlight's part of "
+      f"the docs too; and the settings it names are the sketches' own",
+      {"pietato_led/pietato_led.ino", "pietato_matrix/pietato_matrix.ino", "../docs/apps.md"}
+      <= {x[0] for x in links}
+      and all(x[0].startswith("https://") or os.path.exists(os.path.join(ROOT, "esp32", x[0])) for x in links)
+      and ("../docs/apps.md", "#led-backlight") in links
+      and "\n## LED backlight\n" in open(ROOT + "/docs/apps.md").read()
+      and all(w in readme and f"{w} " in led_src for w in ("WIFI_NAME", "WIFI_PASSWORD", "LED_COUNT", "STRIP_PIN",
+                                                            "ONBOARD_PIN", "BRIGHTNESS"))
+      and "#define STRIP_PIN 5 " in led_src and "(5, unless you change it)" in readme
+      and all(w in readme for w in ("AP_PASS", "Pietato Matrix", "http://10.20.30.40:8000", "matrix.local:8000"))
+      and 'AP_SSID   = "Pietato Matrix"' in grid_src and "AP_PASS" in grid_src
+      and "BOARD_IP(10, 20, 30, 40)" in grid_src and "WEB_PORT = 8000" in grid_src
+      and 'HOSTNAME = "matrix"' in grid_src
+      and "esp32/README.md" in open(ROOT + "/docs/apps.md").read())
 if BOARD:
     prog = build("led")
     check("the sketch builds for a board (its own LED)", prog is not None)

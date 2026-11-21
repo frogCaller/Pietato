@@ -144,7 +144,8 @@ too.
 
 An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato_led/pietato_led.ino` in the
 Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
-any ESP32 with an RGB LED). It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
+any ESP32 with an RGB LED). [esp32/README.md](../esp32/README.md) has the steps, for this and for a strip or a
+matrix board. It finds your Pietatos by itself: it pulses to the music whichever of them plays, and
 takes a game's colours, a hit's red and an achievement's gold. While one of them leads a
 [party](#party-mode), the boards pulse to the party's music: a Pietato that isn't in the party leaves them to
 it. With Settings > Random song at start-up on, the

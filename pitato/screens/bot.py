@@ -185,10 +185,16 @@ class BotScreen:
 
     def bot_warm(self):
         """Its voice loaded ahead of what it'll say (on a small Pi that takes seconds, and the player let it go when it
-        started): when it'll say it out loud, a voice and Talks out loud, over nothing playing or music it pauses."""
-        if self.bot_voice() and self.bot_speaks() and (not self.proc or (self.bot_pauses_music()
-                                                                        and self.kind in LISTEN_KINDS)):
+        started): when it'll say it out loud, a voice and Talks out loud, and nothing in the way (bot_can_talk)."""
+        if self.bot_voice() and self.bot_speaks() and self.bot_can_talk():
             self.voice.warm(self.bot_voice())
+
+    def bot_can_talk(self):
+        """Nothing's in the way of its talking out loud. A player has the sound card, even paused, so: nothing's
+        playing; or it's music or the radio that's paused, or that it pauses (Pauses music): put by while it talks
+        (hold_music), and back as it was after. Not a video, and not a party's music, which is the others' too."""
+        return not self.proc or (self.kind in LISTEN_KINDS and self.party is None
+                                 and (self.paused or self.bot_pauses_music()))
 
     def bot_speak_step(self):
         """Its Character's Talks out loud, on or off (a voice first)."""
@@ -217,10 +223,10 @@ class BotScreen:
 
     def say_aloud(self, text=None):
         """A reply said out loud: the last one when none is given (not over something playing, which
-        has the sound, and the memory: unless it's music and the bot pauses music, which then plays on after it).
-        (True, "") or (False, why not)."""
+        has the sound, and the memory: unless it's music that's paused, or that the bot pauses, which is back as it
+        was after it: bot_can_talk). (True, "") or (False, why not)."""
         if self.proc:
-            if not (self.bot_pauses_music() and self.kind in LISTEN_KINDS):
+            if not self.bot_can_talk():
                 return False, "Not while something's playing"
             if threading.current_thread() is not threading.main_thread():
                 self.soon(lambda: self.say_aloud(text))   # (the music's stopped on media mode's own thread)
@@ -238,8 +244,8 @@ class BotScreen:
         return self.voice.say(text, self.bot_voice(), aplay_device(self.setting("sound")), self.volume)
 
     def bot_replied(self, text):
-        """It answered (on its own thread): out loud too, when that's set and nothing is playing (or music is, and it
-        pauses music: not for something it says by itself, though)."""
+        """It answered (on its own thread): out loud too, when that's set and nothing is playing (or music is, paused
+        or that it pauses: not for something it says by itself, though)."""
         last = next((x for x in reversed(self.friend.log) if x.get("who") == "friend"), None)
         own = bool(last) and last.get("kind") == "remark"
         if self.bot_voice() and self.bot_speaks() and not (self.proc and own):
@@ -253,7 +259,8 @@ class BotScreen:
     def hold_music(self, talk=False):
         """Your music or the radio, paused for the bot (Pauses music on), to play on after it's done
         (music_hold_tick): paused, as you'd pause it, while you talk to it; stopped while it talks (a player, paused,
-        keeps the sound card), to start again where it was. True when it's held (or nothing's playing)."""
+        keeps the sound card), to start again where it was. Music you'd paused yourself is stopped for its talking
+        too, Pauses music on or off, and is back paused after. True when it's held (or nothing's playing)."""
         h = self.music_held
         if h is not None and (h["proc"] is not self.proc or not self.paused if h.get("proc") is not None
                               else self.proc is not None):
@@ -261,7 +268,7 @@ class BotScreen:
         if h is None:
             if self.proc is None:
                 return True
-            if self.kind not in LISTEN_KINDS or not self.bot_pauses_music():
+            if self.kind not in LISTEN_KINDS or not (self.bot_pauses_music() or (talk and self.paused)):
                 return False
             if not talk and self.paused:
                 return True                            # (paused already: as quiet as it gets)
@@ -271,7 +278,11 @@ class BotScreen:
                 self.cmd("pause")
                 self.paused = True
         if talk and h.get("proc") is not None:
-            h.update(proc=None, queue=self.queue, qi=self.qi, pos=self.pos if self.kind == "audio" else 0)
+            pos = (self.pos or 0) if self.kind == "audio" else 0
+            if pos and h.get("paused") and getattr(self.proc, "player", None) is None:
+                pos += 3                               # (mplayer starts a song a little before where it's asked to:
+                                                       #  one you'd paused is back where it was, however often it talks)
+            h.update(proc=None, queue=self.queue, qi=self.qi, pos=pos)
             self.stop()
         h["at"] = time.monotonic()
         return True

@@ -95,8 +95,10 @@ If you pick a voice in its Character (Voice), it says its replies out loud with
 [Piper](https://github.com/rhasspy/piper), which runs on the Pi. The first time, the Pi
 downloads Piper (about 25 MB) and the voice (about 60 MB). The quick voices suit a Pi Zero
 best. Press X and Say it again to hear the last reply again, or Say it out loud on the web page.
-It doesn't talk over your music, unless you turn on Pauses music in its Character (Voice): then it
-pauses your music or the radio while you talk to it and while it answers, and plays it on after.
+It doesn't talk over music that's playing, unless you turn on Pauses music in its Character (Voice): then it
+pauses your music or the radio while you talk to it and while it answers, and plays it on after. Music
+you've paused doesn't keep it quiet: it answers out loud, and the song is still paused, where it was, once
+it's done. In party mode it leaves the party's song alone, and answers on the screen while one is on.
 
 If you plug a USB microphone into the Pi (one with a free USB port: in a GPi Case, only the GPi Case 2's
 dock has one) or a PC, you can talk to it: say "hey potato" and what you want. A USB sound card with a
