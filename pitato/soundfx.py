@@ -1,13 +1,14 @@
 """The Soundboard's effects and Bounce's own sounds (soundplay.py plays them): numpy only, made for a Pi Zero 2 W, so
 every chunk costs a few dozen numpy calls and no more.
 
-    Tone   a gentle low-pass (1 = untouched, 0 = muffled)
-    Echo   a ping-pong delay, each repeat a little darker (the wet sound only)
-    Space  a reverb: sixteen delay lines fed back through a mixing matrix, at half the rate (the wet sound only)
+    Tone   a tilt: 0.5 = untouched, under it a low-pass (0 = muffled), over it a high shelf (1 = glassy)
+    Echo   a ping-pong delay: distinct repeats from side to side, each only a touch darker (the wet sound only)
+    Space  a reverb: the input smeared by four allpasses, then sixteen delay lines fed back through a mixing
+           matrix, at half the rate (the wet sound only)
     Bus    the three chained: tone(x) + echo + space(tone(x) + echo)   (DEFAULTS: settings to start from)
 
     tone(name, midi)   one note of an instrument (int16, mono): Bell, Marimba, Kalimba, Glass, Pluck, Pad
-    drone(midi)        a soft held root and fifth that loops without a seam (int16, stereo)
+    drone(midi)        a soft held pad on the root and fifth that loops without a seam (int16, stereo)
 
 The effects take and give float32 (chunk, 2) arrays on the int16 scale (the Bus: int32). What run() gives back is a
 buffer of the effect's own (or the input itself, when there's nothing to do): read it before the next run(), and
@@ -17,6 +18,7 @@ A numpy call on a few hundred frames costs more for being called than for the su
 its arrays aren't plain blocks of memory. So the layout is chosen to keep them plain: (chunk, 2) throughout, rings
 sliced along their length, and the reverb's sums left to one matrix product.
 """
+import cmath
 import math
 import random
 
@@ -24,7 +26,7 @@ import numpy as np
 
 F32 = np.float32
 QUIET = 0.05                     # a chunk whose squares add up to less than this is silence
-DEFAULTS = dict(space=0.5, echo=0.3, echo_secs=0.3, tone=0.8)       # a Bus as Bounce's sliders start (bounce.py)
+DEFAULTS = dict(space=0.4, echo=0.3, echo_secs=0.3, tone=0.5)       # a Bus as Bounce's sliders start (bounce.py)
 NAMES = ("Bell", "Marimba", "Kalimba", "Glass", "Pluck", "Pad")
 
 
@@ -58,9 +60,17 @@ class _Fx:
 
 
 class Tone(_Fx):
-    """A one-pole low-pass. The pole's recursion, y[n] = a*y[n-1] + (1-a)*x[n], is done as a running sum over the
-    chunk: y[n] = a**n * sum(x[k] * a**-k), in float64 (a**-k gets big), left and right summed at once as the two
-    halves of complex numbers."""
+    """Darker or brighter, around NEUTRAL (untouched: the input itself is given back). Under it, a low-pass of two
+    equal poles, its corner (3 dB down) falling from 5 kHz to 300 Hz at 0. Over it, a high shelf: the input plus
+    what one pole at 2 kHz doesn't pass, so the top comes up by as much as 12 dB at 1 (half of that at 1 to
+    1.5 kHz) and the bottom stays as it was. A pole's recursion, y[n] = a*y[n-1] + (1-a)*x[n], is done as a
+    running sum over the chunk: y[n] = a**n * sum(x[k] * a**-k), in float64 (a**-k gets big), left and right
+    summed at once as the two halves of complex numbers.
+
+    The shelf adds level (up to 4 times, for what's all top): whoever plays the Bus's output must clip it."""
+    NEUTRAL = 0.5
+    LOW = (300.0, 5000.0)                              # the low-pass's corner (Hz) at 0, and just under NEUTRAL
+    SHELF = (2000.0, 13.0)                             # the shelf's pole (Hz), and its boost at 1 (dB, at the very top)
 
     def __init__(self, rate=48000, chunk=384):
         self._base(rate, chunk)
@@ -69,8 +79,9 @@ class Tone(_Fx):
         self.t32 = np.zeros((chunk, 2), F32)
         self.y = np.zeros((chunk, 2), F32)
         self.y2 = np.zeros((chunk, 2), F32)
-        self.z = 0j                                    # a * the last frame out: what the next chunk starts from
-        self.amt = self.want = 1.0
+        self.z = self.z2 = 0j                          # a * the last frame out of each pole: where the next chunk
+                                                       # starts
+        self.amt = self.want = self.NEUTRAL
         self.cur = None
         self.cool = True                               # nothing left in the filter
         self.heard = False                             # the chunk before had sound in it
@@ -79,25 +90,39 @@ class Tone(_Fx):
         self.want = min(1.0, max(0.0, float(amount)))
 
     def cutoff(self, amount):
-        """Where the pole is (Hz): even steps of amount are even musical steps, 600 Hz to 13 kHz."""
-        return 600.0 * (13000.0 / 600.0) ** amount
+        """Where the low-pass is 3 dB down (Hz): even steps of amount are even musical steps."""
+        return self.LOW[0] * (self.LOW[1] / self.LOW[0]) ** (min(amount, self.NEUTRAL) / self.NEUTRAL)
+
+    def boost(self, amount):
+        """How far the shelf lifts the top (dB)."""
+        return self.SHELF[1] * max(0.0, amount - self.NEUTRAL) / (1.0 - self.NEUTRAL)
 
     def _design(self, amount):
-        if amount >= 1.0:
+        if amount == self.NEUTRAL:
             return None
-        a = math.exp(-2 * math.pi * self.cutoff(amount) / self.rate)
+        if amount < self.NEUTRAL:                      # two poles: each sits above the corner they make together
+            hz, two, wet, dry = self.cutoff(amount) / math.sqrt(math.sqrt(2.0) - 1.0), True, 1.0, 0.0
+        else:                                          # x + g * (x - lowpass(x))
+            g = 10.0 ** (self.boost(amount) / 20.0) - 1.0
+            hz, two, wet, dry = self.SHELF[0], False, -g, 1.0 + g
+        a = math.exp(-2 * math.pi * hz / self.rate)
         a = max(a, 1e-290 ** (1.0 / self.c))           # (a**-k has to fit in a float64 to the chunk's end)
         k = np.repeat(np.arange(self.c, dtype=np.float64), 2).reshape(self.c, 2)
-        dry = max(0.0, (amount - 0.5) / 0.5) ** 2      # the top half lets the dry sound back in, up to all of it
-        return dict(up=(1 - a) * a ** -k, dn=a ** k * (1 - dry), ac=a ** self.c, dry=dry)
+        return dict(up=(1 - a) * a ** -k, dn=a ** k * (wet * (1 - a) if two else wet), ac=a ** self.c,
+                    ac1=a ** self.c * (1 - a), i1=1 / (1 - a), two=two, dry=dry)
 
     def _filter(self, d, x, y):
         t, sums = self.t, self.sums
-        np.copyto(t, x)
-        t *= d["up"]
+        np.multiply(x, d["up"], out=t)
         sums[0] += self.z
         np.add.accumulate(sums, out=sums)
         self.z = sums[-1] * d["ac"]
+        if d["two"]:                                   # the second pole: the first's sums are its input, but for
+            sums[0] += self.z2 * d["i1"]               # (1-a): that's in dn, and taken off what's carried over
+            np.add.accumulate(sums, out=sums)
+            self.z2 = sums[-1] * d["ac1"]
+        else:
+            self.z2 = 0j
         t *= d["dn"]
         np.copyto(y, t, casting="same_kind")
         if d["dry"]:
@@ -109,9 +134,9 @@ class Tone(_Fx):
         if self.want != self.amt:
             old, self.cur, self.amt = self.cur, self._design(self.want), self.want
             if self.heard:                             # a new setting under a sound: the old and the new, crossfaded
-                z = self.z
+                z, z2 = self.z, self.z2
                 a = self._filter(old, x, self.y2) if old else x
-                self.z = z
+                self.z, self.z2 = z, z2
                 b = self._filter(self.cur, x, self.y) if self.cur else x
                 np.subtract(b, a, out=self.t32)
                 self.t32 *= _ramp(0.0, 1.0, self.c)
@@ -130,7 +155,7 @@ class Tone(_Fx):
         return y
 
     def resting(self):
-        return self.amt >= 1.0 and self.want >= 1.0
+        return self.amt == self.NEUTRAL and self.want == self.NEUTRAL
 
     def rest(self, x):
         self.heard = True                              # (for all it knows)
@@ -140,18 +165,19 @@ class Tone(_Fx):
         return False
 
     def clear(self):
-        self.z = 0j
+        self.z = self.z2 = 0j
         self.cool = True
 
 
 class Echo(_Fx):
     """A ping-pong delay. The ring holds what's to be heard secs later, as loud as it will be heard: each chunk
-    written is the input (left and right together, mostly to the left) plus what's heard now, its speakers
-    swapped, quieter, and smoothed over three frames (so each repeat is a little darker). So the wet sound is just
-    a slice of the ring. The swap costs nothing: the ring looked at from one number further on is frames of
-    (right, the next left)."""
+    written is the input (left and right together, nearly all to the left) plus what's heard now, its speakers
+    swapped, quieter, and smoothed a very little over three frames (so each repeat is a touch darker: 1 dB less
+    at 8 kHz, and still crisp). So the wet sound is just a slice of the ring. The swap costs nothing: the ring
+    looked at from one number further on is frames of (right, the next left)."""
     SECS = (0.08, 0.8)
-    PAN = (0.95, 0.3)                                  # the first repeat, left and right
+    PAN = (1.0, 0.2)                                   # the first repeat, left and right
+    SMOOTH = 6.0                                       # a repeat's frames: (1, SMOOTH, 1) of the one before's
 
     def __init__(self, rate=48000, chunk=384):
         self._base(rate, chunk)
@@ -177,13 +203,14 @@ class Echo(_Fx):
             self.d_want = self._frames(secs)
 
     def gains(self, amount):
-        """How much of each repeat comes back, and how loud the first is (of the input)."""
-        return 0.25 + 0.3 * amount, 0.5 * amount ** 0.6
+        """How much of each repeat comes back (0.35: a few repeats; 0.7: a long trail), and how loud the first
+        is, of the input (10 dB under it at 0.3, 4 dB under at 1)."""
+        return 0.35 + 0.35 * amount, 0.63 * amount ** 0.575
 
     def _adopt(self):
         self.amt, self.d = self.want, self.d_want
         self.fb, lvl = self.gains(self.amt)
-        self.q = self.fb * 0.25
+        self.q = self.fb / (self.SMOOTH + 2.0)
         self.mix = np.array([self.PAN, self.PAN], F32) * F32(lvl * 0.5)     # (frames, 2) @ this: the input's way in
         reps = math.log(5e-4) / math.log(self.fb)      # repeats until it's 66 dB down
         self.tail = int((reps + 1) * self.d / self.c) + 2
@@ -223,8 +250,8 @@ class Echo(_Fx):
                 src, back = src + (src2 - src) * fade, back + (back2 - back) * fade
             self.left = self.tail
         np.add(back[:-2], back[2:], out=wr)
-        wr += back[1:-1]
-        wr += back[1:-1]
+        np.multiply(back[1:-1], F32(self.SMOOTH), out=self.t2)
+        wr += self.t2
         wr *= q
         wr += self.t
         self.w = (self.w + c) % self.n
@@ -256,16 +283,23 @@ def _primes_from(lengths):
 class Space(_Fx):
     """A reverb at half the rate. N delay lines (23 to 97 ms) are the rows of one ring; all are read at the same
     column, and each is written its own delay further on. So a chunk is one matrix product: the rows as read (the
-    lines, and under them the input, now and a chunk or two ago) times a matrix that holds the decay, the mixing
-    of the lines into each other (a Hadamard matrix: nothing lost, every line into every line), the input's way
-    in and the taps out. The product comes out a row for each frame, so one sum along it (each frame plus some of
-    the frame before) does two jobs: each line's new chunk loses a little of its top (so the tail darkens), and
-    the taps get their in-between frames, for the full rate. Then the lines are written, and four columns of it
-    are the wet sound. Turned to 0, it's the smallest room with nothing going in: what's sounding dies away in
-    half a second."""
+    lines, under them the smear's delays, and the input) times a matrix that holds the decay, the mixing of the
+    lines into each other (a Hadamard matrix: nothing lost, every line into every line), the smear, the input's
+    way in and the taps out. The product comes out a row for each frame, so one sum along it (each frame plus
+    some of the frame before) does two jobs: each line's new chunk loses a little of its top (so the tail
+    darkens), and the taps get their in-between frames, for the full rate. Then the lines are written, and four
+    columns of it are the wet sound. Turned to 0, it's the smallest room with nothing going in: what's sounding
+    dies away in half a second.
+
+    The smear is what keeps a sharp attack from coming back as separate slaps: before the lines, the input (left
+    and right together) goes through allpasses one after another, which turn one click into hundreds over a
+    tenth of a second and leave the tone as it was. Each is a delay of a chunk or more (so it's more rows of the
+    same ring, and what an allpass does at once, y = v - g*x and v' = x + g*y, is more of the same matrix), and
+    the click itself, straight through them, is left out: the wash swells in rather than knocks."""
     N = 16
     MS = (23.0, 97.0)            # the shortest and longest lines
-    INS = 3                      # times the input goes in: now, and a chunk and two chunks ago
+    SMEAR = (8.3, 9.7, 11.3, 13.1)                     # the allpasses' delays (ms; no less than a chunk)
+    SMEAR_G = (0.35, 0.6)        # ...and how much each feeds back: this and the amount, and at most
     SEED = 0                     # which signs the lines get (one of the smoother of a few dozen tried)
 
     def __init__(self, rate=48000, chunk=384):
@@ -273,13 +307,18 @@ class Space(_Fx):
         self._base(rate, chunk)
         n, h, hr = self.N, chunk // 2, rate / 2.0
         self.h = h
+        self.na = na = len(self.SMEAR)
         low = max(self.MS[0] * hr / 1000, h + 2)
-        self.d = d = _primes_from(low * (self.MS[1] / self.MS[0]) ** (i / (n - 1.0)) for i in range(n))
-        self.len = ln = h * ((d[-1] + h) // h + 1)     # the ring: a whole number of chunks
-        self.ring = np.zeros((n + 4 * self.INS, ln), F32)           # the lines; the input, 4 rows each time
-        self.u = np.zeros((h + 1, n + 4), F32)         # the product: a row for each frame (the first: the last of
-        self.v = np.zeros((h + 1, n + 4), F32)         # the chunk before); and with some of the frame before added
-        self.v2 = np.zeros((h + 1, n + 4), F32)
+        both = _primes_from([max(ms * hr / 1000, h + 2) for ms in self.SMEAR]
+                            + [low * (self.MS[1] / self.MS[0]) ** (i / (n - 1.0)) for i in range(n)])
+        self.ad, self.d = ad, d = both[:na], both[na:]
+        self.len = ln = h * ((max(both) + h) // h + 1)              # the ring: a whole number of chunks
+        rows = n + na + 4                              # the ring's: the lines, the smear, the input (4)
+        self.k = k = n + 4 + na                        # the product's: the lines, the wet sound (4), the smear
+        self.ring = np.zeros((rows, ln), F32)
+        self.u = np.zeros((h + 1, k), F32)             # the product: a row for each frame (the first: the last of
+        self.v = np.zeros((h + 1, k), F32)             # the chunk before); and with some of the frame before added
+        self.v2 = np.zeros((h + 1, k), F32)
         self.out = np.zeros((chunk, 2), F32)
         self.out4 = self.out.reshape(h, 4)             # (two frames to a row: left, right, left, right)
         rnd = random.Random(self.SEED)
@@ -289,28 +328,39 @@ class Space(_Fx):
         while len(had) < n:
             had = np.block([[had, had], [had, -had]])
         self.mix = (had[rnd.sample(range(n), n)] * sign()) / math.sqrt(n)
-        self.inp = np.zeros((n, 4 * self.INS))         # left and right go in differently, and each time differently
-        for k in range(0, 4 * self.INS, 4):
-            s, t = sign(), half()
-            self.inp[:, k:k + 4] = np.stack((s * (1 + 0.6 * t), s * (1 - 0.6 * t)) * 2, axis=1)
-        self.inp /= math.sqrt(4.0 * n * self.INS)
+        ins = [(sign(), half())[0] for _ in range(3)]  # (three drawn, one used: the signs after stay as they were)
+        self.inp = ins[0] / math.sqrt(n)               # the smeared input's way into each line
         s = sign()
         self.taps = np.stack((s, s * half()))          # left and right: nothing in common
-        # where each line's chunk is written, for each place the ring can be: whole, or in two where it wraps
-        rows = [self.v[1:, i] for i in range(n)]
+        # where each row's chunk is written, for each place the ring can be: whole, or in two where it wraps
+        cols = [(i, d[i], self.v[1:, i]) for i in range(n)] + [(n + j, ad[j], self.v[1:, n + 4 + j]) for j in range(na)]
         self.writes = []
         for ph in range(ln // h):
             todo = []
-            for i in range(n):
-                q = (ph * h + d[i]) % ln
+            for row, far, col in cols:
+                q = (ph * h + far) % ln
                 if q + h <= ln:
-                    todo.append((self.ring[i, q:q + h], rows[i]))
+                    todo.append((self.ring[row, q:q + h], col))
                 else:
-                    todo += [(self.ring[i, q:], rows[i][:ln - q]), (self.ring[i, :q + h - ln], rows[i][ln - q:])]
+                    todo += [(self.ring[row, q:], col[:ln - q]), (self.ring[row, :q + h - ln], col[ln - q:])]
             self.writes.append(todo)
         self.ph = 0
         self.amt = self.want = 0.0
         self.cur = self._design(0.0)
+
+    def _smear(self, g):
+        """The allpasses as rows of the matrix: what each writes, and what the last gives the lines."""
+        n, na = self.N, self.na
+        a = np.zeros(n + na + 4)
+        a[n + na:] = 0.5                               # in: left and right, the even frames and the odd, as one
+        rows = np.zeros((na, n + na + 4))
+        for j in range(na):
+            y = -g * a
+            y[n + j] += 1.0
+            rows[j] = a + g * y
+            a = y
+        a[n + na:] = 0.0                               # (the click itself, straight through: left out)
+        return rows, a
 
     def set(self, amount):
         self.want = min(1.0, max(0.0, float(amount)))
@@ -321,25 +371,30 @@ class Space(_Fx):
 
     def _design(self, amount, wet=0.0):
         """All a setting comes to. At 0: nothing goes in, and what's left is as loud as it was (wet)."""
-        n, h, hr = self.N, self.h, self.rate / 2.0
+        n, na, h, hr = self.N, self.na, self.h, self.rate / 2.0
         d = np.array(self.d, dtype=np.float64)
         g = 10.0 ** (-3.0 * d / (self.decay(amount) * hr))          # each line: what a trip round it keeps
         b = np.minimum(0.45, (0.28 - 0.2 * amount) * d / d.mean())  # ...and how much of its top it loses
-        m = np.zeros((n + 4, n + 4 * self.INS))
+        m = np.zeros((self.k, n + na + 4))
         m[:n, :n] = (1 - b)[:, None] * self.mix * g
+        smear, fed = self._smear(min(self.SMEAR_G[1], self.SMEAR_G[0] + amount))   # (a small room: less of it,
+                                                                                    #  or it rings)
+        m[:n] += ((1 - b) * self.inp)[:, None] * fed
+        m[n + 4:] = smear
         if amount:
-            m[:n, n:] = (1 - b)[:, None] * self.inp
             wet = 10.0 ** ((-18.0 + 15.0 * amount) / 20.0) * min(1.0, amount / 0.08)
             wet *= math.sqrt(1.0 - float(np.mean(g * g)))           # (a longer tail: no louder for it)
+        else:
+            m[:, n + na:] = 0.0                        # (what's in the smear still drains into the lines)
         m[n:n + 2, :n] = self.taps * (wet * 0.5)       # the taps, for the frames between (half this and half the
-        m[n + 2:, :n] = self.taps * wet                # one before: 1 in 'before' below), and for the frames themselves
-        before = np.concatenate((b / (1 - b), [1.0, 1.0, 0.0, 0.0]))            # how much of the frame before
+        m[n + 2:n + 4, :n] = self.taps * wet           # one before: 1 in 'before' below), and for the frames themselves
+        before = np.concatenate((b / (1 - b), [1.0, 1.0, 0.0, 0.0], np.zeros(na)))  # how much of the frame before
         tail = int((self.decay(amount) * 1.15 + 0.2) * self.rate / self.c)     # chunks till it's 69 dB down
         return dict(m=np.ascontiguousarray(m.T, dtype=F32), before=np.tile(before, h).astype(F32), wet=wet, tail=tail)
 
     def _lines(self, d, src, v):
-        """The lines' next chunk and the wet sound, into v's columns."""
-        k = self.N + 4
+        """The rows' next chunk and the wet sound, into v's columns."""
+        k = self.k
         np.matmul(src, d["m"], out=self.u[1:])
         uf, vf = self.u.reshape(-1), v.reshape(-1)
         np.multiply(uf[:-k], d["before"], out=vf[k:])
@@ -358,12 +413,11 @@ class Space(_Fx):
         n, h, ring, u = self.N, self.h, self.ring, self.u
         ph = self.ph
         p = ph * h
-        self.ph = nxt = (ph + 1) % len(self.writes)
-        ring[n:n + 4, p:p + h] = x.reshape(h, 4).T                  # the input: a row each for left and right,
-        ring[n + 4:, nxt * h:nxt * h + h] = ring[n:-4, p:p + h]     # ...even frames and odd; and all again next chunk
-        src = ring[:, p:p + h].T
+        self.ph = (ph + 1) % len(self.writes)
+        ring[n + self.na:, p:p + h] = x.reshape(h, 4).T             # the input: a row each for left and right,
+        src = ring[:, p:p + h].T                                    # ...even frames and odd
         v = self._lines(cur, src, self.v)
-        if new:                                        # the old setting's lines and wet sound and the new one's,
+        if new:                                        # the old setting's rows and wet sound and the new one's,
             self.v2[:] = v                             # crossfaded
             self.amt = self.want
             self.cur = cur = self._design(self.want, cur["wet"])
@@ -374,7 +428,7 @@ class Space(_Fx):
             self.left = cur["tail"]
         for to, col in self.writes[ph]:
             to[:] = col
-        self.out4[:] = v[1:, n:]
+        self.out4[:] = v[1:, n:n + 4]
         u[0] = u[-1]
         self.left -= 1
         if self.left <= 0:
@@ -498,31 +552,55 @@ def tone(name, midi, rate=48000):
     return (x * (LOUD.get(name, 0.42) * 32767.0 / float(np.abs(x).max()))).astype(np.int16)
 
 
+DRONE_PEAK, DRONE_RMS = 0.25, 0.10                     # of full scale: steady, not peaky
+DRONE_BAND = (350.0, 1800.0)                           # where its overtones are let through (Hz), gently
+
+
 def drone(midi, secs=4.0, rate=48000):
-    """A held root and fifth, slowly moving: int16 (n, 2), to be looped. Every overtone turns a whole number of
-    times in it (so they're each within 1/secs Hz of true, which is the slow beating), and swells a whole number
-    of times too: its end runs into its start."""
+    """A held pad on the root and its fifth, slowly moving: int16 (n, 2), to be looped. midi is the key's own
+    root (55 to 66: G3 to F#4). It's made as a spectrum and turned into sound in one step: a dozen overtones of
+    the root and eight of the fifth, weighted to sit between 250 Hz and 2 kHz (a small speaker has nothing
+    under that), each as three voices a couple of cents apart, the low one mostly in the left speaker and the
+    high one mostly in the right. Every voice turns a whole number of times in the loop, so its end runs into
+    its start, and their beating against each other is the slow movement. Then the level is evened out: the
+    slow swells are ridden down (most of the way), and the peaks are rounded off (tanh, hard enough that the
+    peak is DRONE_PEAK when the RMS is DRONE_RMS). Both are the same all the way round the loop: still no seam."""
     f = 440.0 * 2.0 ** ((midi - 69) / 12.0)
     n = int(round(secs * rate))
-    t = np.arange(n, dtype=np.float64) / n             # the loop, 0 to 1
-    out = np.zeros((2, n), F32)
-    parts = ((1, 1.0), (1.5, 0.55), (2, 0.3), (3, 0.14), (4, 0.05), (0.5, 0.18))
-    for j, (ratio, amp) in enumerate(parts):
+    spec = np.zeros((2, n // 2 + 1), np.complex128)
+    parts = [(j, 1.0 / j ** 0.7) for j in range(1, 13)] + [(1.5 * j, 0.6 / j ** 0.7) for j in range(1, 9)]
+    for i, (ratio, amp) in enumerate(parts):
         fk = f * ratio
-        if fk > TOP:
+        if fk > min(4000.0, 0.4 * rate):
             continue
-        turns = fk * n / rate
-        apart = max(1, int(round(turns * 0.0012)))     # two of each, a couple of cents either side
-        amp /= 1.0 + (fk / 1500.0) ** 2                # warm: little up high
-        for side, off in enumerate((-apart, apart)):
-            ph = 2 * math.pi * (((2 * j + side) * 0.618034) % 1.0)
-            cyc = t * (round(turns) + off)
-            cyc -= np.floor(cyc)
-            s = np.sin((cyc * (2 * math.pi) + ph).astype(F32))
-            s *= (1.0 + 0.3 * np.cos(2 * math.pi * (1 + (j + side) % 3) * t + 2.4 * ph)).astype(F32) * F32(amp)
-            out[side] += s * F32(0.8)                  # mostly in one speaker, a little in the other
-            out[1 - side] += s * F32(0.45)
-    return (out.T * (0.25 * 32767.0 / float(np.abs(out).max()))).astype(np.int16)
+        amp /= math.sqrt(1.0 + (DRONE_BAND[0] / fk) ** 4) * (1.0 + (fk / DRONE_BAND[1]) ** 2)
+        turns = int(round(fk * n / rate))
+        apart = max(1, int(round(turns * 0.001)))
+        for j, (off, left, right) in enumerate(((-apart, 1.0, 0.25), (0, 0.7, 0.7), (apart, 0.25, 1.0))):
+            turn = amp * cmath.exp(2j * math.pi * (((3 * i + j) * 0.618034) % 1.0))
+            spec[0, turns + off] += left * turn
+            spec[1, turns + off] += right * turn
+    out = np.fft.irfft(spec, n, axis=1).astype(F32)
+    # the slow swells, ridden: its power over a quarter second (round the loop's end), and most of that undone
+    w = max(1, min(n // 2, int(0.125 * rate)))
+    p = out[0] * out[0] + out[1] * out[1]
+    run = np.cumsum(np.concatenate((p[-w:], p, p[:w])), dtype=np.float64)
+    env = run[2 * w:] - run[:-2 * w]
+    out *= ((env.mean() / env) ** 0.4).astype(F32)
+    # the peaks, rounded: how hard, found on every eighth frame
+    some = np.ascontiguousarray(out[:, ::8])
+    top = float(np.abs(out).max())
+    lo, hi = 0.02 / top, 20.0 / top
+    for _ in range(14):
+        k = math.sqrt(lo * hi)
+        y = np.tanh(some * F32(k))
+        if math.tanh(k * top) > DRONE_PEAK / DRONE_RMS * math.sqrt(float(np.mean(y * y))):
+            lo = k                                     # still too peaky: harder
+        else:
+            hi = k
+    out = np.tanh(out * F32(math.sqrt(lo * hi)))
+    out -= out.mean(axis=1, keepdims=True)
+    return (out.T * (DRONE_PEAK * 32767.0 / float(np.abs(out).max()))).astype(np.int16)
 
 
 if __name__ == "__main__":                             # what it costs on this computer: python3 soundfx.py
@@ -534,16 +612,34 @@ if __name__ == "__main__":                             # what it costs on this c
         x[at:at + len(note)] += note[:, None] * F32(0.3 + (at % 7) / 10)
     chunks = [np.ascontiguousarray(x[i:i + 384]).astype(np.int32) for i in range(0, len(x) - 383, 384)]
     print("python %s, numpy %s" % (sys.version.split()[0], np.__version__))
+
+    def median(make, items, runs=5):
+        """What the median chunk takes (microseconds), in the best of a few runs: this computer's other work left
+        out."""
+        best = []
+        for _ in range(runs):
+            run, took = make().run, []
+            for c in items:
+                t = time.perf_counter()
+                run(c)
+                took.append(time.perf_counter() - t)
+            best.append(sorted(took)[len(took) // 2] * 1e6)
+        return min(best)
+
     for label, sets in (("as they start", DEFAULTS), ("all the way up", dict(space=1, echo=1, echo_secs=0.8, tone=0))):
-        bus, took = Bus(), []
-        bus.set(**sets)
-        for c in chunks:
-            t = time.perf_counter()
-            bus.run(c)
-            took.append(time.perf_counter() - t)
-        us = sorted(took)[len(took) // 2] * 1e6
+        def make(sets=sets):
+            bus = Bus()
+            bus.set(**sets)
+            return bus
+        us = median(make, chunks)
         print("the effects, %s: %.0f microseconds for each 8 ms of sound (%.1f%% of a core)" % (label, us, us / 80))
+    floats = [c.astype(F32) for c in chunks]
+    print("each effect, off: " + ", ".join("%s %.1f" % (fx.__name__, median(fx, floats))
+                                           for fx in (Tone, Echo, Space)) + " microseconds")
     for name in NAMES:
         t = time.perf_counter()
         tone(name, 60)
         print("%s: made in %.0f ms" % (name, (time.perf_counter() - t) * 1000))
+    t = time.perf_counter()
+    drone(60)
+    print("the drone: made in %.0f ms" % ((time.perf_counter() - t) * 1000))

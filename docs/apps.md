@@ -226,8 +226,8 @@ then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC 
 
 Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
 once as you like, and one pressed again starts again. L and R go through the banks of eight, and holding START
-stops them all. B is a button like the others there, so HOME is the way back (START, then B, works too). START's
-card also has the bank, the volume, the loop's settings and Space, which plays the sounds in a room or a hall. The
+stops them all. B is a button like the others there, so HOME is the way back. START's
+card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
 sounds play wherever Settings > Sound sends them.
 
 SELECT records a loop. Press it, play some buttons, and press it again: what you played goes round and round,
@@ -246,18 +246,20 @@ beat, so their loops keep time together. A new tempo on one of them goes to all 
 Soundboard takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
 changes nothing for the others.
 
-START's card also has Bounce: a shape turning slowly, with balls bouncing inside it. Each wall is a note of a
-scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note and lights it up. A ball
-that hits a wall straight on plays louder than one that only grazes it, and you hear it from the side it hits. A
-adds a ball and B takes one away (up to 8), X changes the sound and Y the key, L and R change the shape (more
-sides, more notes), and SELECT changes the scale: major, minor, pentatonic or blues.
+START's card also has Bounce: a shape turning slowly, with balls bouncing inside it, both in your accent colour.
+Each wall is a note of a scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note
+and lights it up. A ball that hits a wall straight on plays louder than one that only grazes it, and you hear it
+from the side it hits. A adds a ball and B takes one away (up to 8), X changes the sound, Y sends every ball off
+another way, L and R change the shape (more sides, more notes), and SELECT changes the scale: major, minor,
+pentatonic or blues.
 
-Its sliders are on the right: ▲▼ pick one and ◀▶ move it. Spin turns the shape either way, Speed is how fast the
-balls go, Space puts the notes in a room or a big hall, Echo repeats them from side to side in time with the
-tempo, Tone makes them softer or brighter, and Drone holds a quiet note in the key under them. START pauses it,
-and its card has the sound (a bell, a marimba, a kalimba, glass, a pluck, a pad, or any sound on your Soundboard,
-played at each wall's note), the key, Snap to the tempo (each note on the loop's beat) and Leave Bounce. HOME
-leaves it too. Your LEDs, if you have them, flash in the wall's colour.
+Its sliders are on the right: ▲▼ pick one and ◀▶ move it, and the line under them says what the one picked does.
+Spin turns the shape either way, Speed is how fast the balls go, Reverb puts the notes in a room or a big hall, Echo
+plays each note again, from side to side, in time with the tempo, Tone makes them darker (◀) or brighter (▶), and
+Drone holds a soft note in the key under them. START pauses it, and its card has the sound (a bell, a marimba, a
+kalimba, glass, a pluck, a pad, or any sound on your Soundboard, played at each wall's note), the key, Snap to the
+tempo (each note on the loop's beat) and Leave Bounce. HOME leaves it too. Your LEDs, if you have them, flash in
+the same colour.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,

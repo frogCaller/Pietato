@@ -7,9 +7,9 @@ only when there's one to record with. Your LEDs (Apps > LED backlight, an ESP32 
 sounds as they are by music: a pulse in the button's colour as each is heard, and that colour while it plays.
 
 Its buttons: the d-pad's four, A, B, X and Y play what's on them; L and R go through the banks; START, tapped, has its
-card (the bank, the volume, the loop's tempo and length, snapping to the beat, the click, the notes' scale, its space,
-Record a sound), where A or START goes on and B goes back to Apps; HOME goes back to Apps from anywhere on it
-(screens/sims.py's sim_home). Recording a sound: A keeps it, B drops it; kept (its silence
+card (the bank, the volume, the loop's tempo and length, snapping to the beat, the click, the notes' scale, its reverb,
+Record a sound), where A, B or START goes on; HOME goes back to Apps from anywhere on it (screens/sims.py's
+sim_home). Recording a sound: A keeps it, B drops it; kept (its silence
 trimmed, a file in your Soundboard folder), the next button pressed is the one it goes on (L and R: in another bank;
 SELECT: hear it first; START: leave it where it is, record it again, or delete it).
 
@@ -985,7 +985,7 @@ class SoundboardScreen:
                  ("snap", "Snap to the beat", "Off" if self.setting("board_snap") == "Off" else "On"),
                  ("click", "Click while recording", "Off" if self.setting("board_click") == "Off" else "On"),
                  ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major"),
-                 ("space", "Space", str(self.board_space()) if self.board_space() else "Off"),
+                 ("space", "Reverb", str(self.board_space()) if self.board_space() else "Off"),
                  ("bounce", "Bounce", None)]
         return rows
 
@@ -994,8 +994,8 @@ class SoundboardScreen:
         self.sim_close()
 
     def press_board_card(self, s, name, repeat):
-        """START's card: ▲▼ pick a row, ◀▶ change it; A or START goes on with the Soundboard, B goes back to Apps
-        (here, where it isn't a sound). A recording's card: A does the row, B or START shuts it."""
+        """START's card: ▲▼ pick a row, ◀▶ change it; A, B or START goes on with the Soundboard (HOME goes back to
+        Apps). A recording's card: A does the row, B or START shuts it."""
         b = self.board_open()
         b.held.pop("start", None)                      # (anything pressed on the card: START wasn't being held)
         if b.card == "bounce":
@@ -1033,20 +1033,17 @@ class SoundboardScreen:
             self.board_rec_start()
         elif name == "a" and key == "bounce":
             self.bounce_start(time.monotonic())
-        elif name in ("a", "start"):
+        elif name in ("a", "b", "start"):              # (B too: HOME's the way back to Apps, not B)
             self.board_card_shut()
         elif name == "select":
             self.board_tell(do="stop")
-        elif name == "b":
-            self.board_card_shut()
-            return "pass"                              # (back to Apps, as B goes back anywhere else)
         else:
             return None
         self.dirty = True
         return None
 
     def board_space(self):
-        """START's card's Space: how much of a room its own sounds are played in, 0 (none) to 10."""
+        """START's card's Reverb: how much of a room its own sounds are played in, 0 (none) to 10."""
         try:
             return max(0, min(10, int(self.setting("board_space"))))
         except (TypeError, ValueError):
@@ -1077,8 +1074,8 @@ class SoundboardScreen:
             return self.bounce_card_hints()
         if value is None:
             return [("▲▼", "Choose"), ("A", "Record" if key == "rec" else "Open"), ("START", "Done"),
-                    ("B", "Back to Apps")]
-        return [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("B", "Back to Apps")]
+                    ("HOME", "Back to Apps")]
+        return [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("HOME", "Back to Apps")]
 
     def board_card_key(self):
         """What its card shows (drawn again when it changes)."""

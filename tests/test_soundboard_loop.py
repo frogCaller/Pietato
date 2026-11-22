@@ -578,7 +578,7 @@ if not ONLY or "app" in ONLY:
     # leaving it and coming back: the loop's still there
     had = [list(x) for x in b.layers]
     tap("start")
-    m.press("b")
+    m.sim_home()
     spin(0.5)
     left = not m.board_shown() and b.proc is None
     m.press("a")

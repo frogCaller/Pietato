@@ -7,11 +7,11 @@ at a time, each no longer than it should be; from the left or the right; its ech
 side, and none with it off; its space, dying away; its tone; its drone; the Soundboard's own sounds in a space too;
 all of it stopped at once; and next to no work with nothing playing. Then in media mode: START's card, Bounce; its
 balls moving and their notes played as they hit, each wall's its own, BOUNCE_LATE after, louder straight on, from
-the side they hit; its effects told its player; A and B; its sliders (▲▼ pick one, ◀▶ move it); X its sound, Y its
-key; L and R, SELECT; START, its card (paused: nothing moves, nothing's drawn); its sound, key and snapping there
-(snapped: each note on an eighth of the Soundboard's tempo); Leave Bounce; drawn frame by frame while it plays, and
-the page as it is; HOME, back to the Soundboard, then to Apps."""
-import json, os, random, shutil, subprocess, sys, threading, time, wave
+the side they hit; its effects told its player; A and B; its sliders (▲▼ pick one, ◀▶ move it); X its sound, Y the
+balls off another way; L and R, SELECT; START, its card (paused: nothing moves, nothing's drawn); its sound, key and
+snapping there (snapped: each note on an eighth of the Soundboard's tempo); Leave Bounce; drawn frame by frame while
+it plays, and the page as it is, all in the accent colour; HOME, back to the Soundboard, then to Apps."""
+import json, math, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 sys.path.insert(0, ROOT)
@@ -258,6 +258,8 @@ if not ONLY or "player" in ONLY:
     check(f"asked a sound's own note: its own sounds at middle C, the A above it, none in a drum ({said})",
           all(abs(said.get(s, 0) - 60) < 0.3 for s in SPL.TONES) and abs(said.get("tone", 0) - 69) < 0.1
           and said.get("kick", 1) is None)
+    time.sleep(SPL.LEAD_SECS + 0.5)                    # (working those out kept it busy, and the sound card waited:
+                                                       #  when it hears what it's sent, worked out again since)
     mark = log_at()
     t0 = time.monotonic() + 0.3
     for k in range(5):
@@ -305,7 +307,7 @@ if not ONLY or "player" in ONLY:
     check(f"a note from the left, from the right, from the middle: louder that side, as loud as ever there (left, "
           f"right: {left}, {right}, {middle})", middle[0] == middle[1] > 15000 and left[0] == middle[0]
           and right[1] == middle[1] and left[1] < 0.3 * left[0] and right[0] < 0.3 * right[1])
-    p.tell(do="fx", space=0, echo=0.6, tone=1, secs=0.3)
+    p.tell(do="fx", space=0, echo=0.6, tone=0.5, secs=0.3)
     mark = log_at()
     t1 = time.monotonic() + 0.3
     p.tell(do="note", id="kick", semis=0, gain=1.0, at=t1)
@@ -320,8 +322,8 @@ if not ONLY or "player" in ONLY:
           and all(abs(w - 300 * k) <= 3 for k, w in enumerate(when[:4]))
           and all(b < a for a, b in zip(loudest[:4], loudest[1:4]))
           and lr_at[1][0] > 2 * lr_at[1][1] and lr_at[2][1] > 2 * lr_at[2][0] and lr_at[3][0] > 2 * lr_at[3][1])
-    p.tell(do="fx", space=0, echo=0, tone=1)
-    time.sleep(2.5)
+    p.tell(do="fx", space=0, echo=0, tone=0.5)
+    time.sleep(3.5)
     mark = log_at()
     p.tell(do="note", id="kick", semis=0, gain=1.0, at=time.monotonic() + 0.3)
     time.sleep(1.0)
@@ -335,26 +337,29 @@ if not ONLY or "player" in ONLY:
         time.sleep(secs)
         return [(w - t, pk) for w, pk, _ in heard(mark)[1] if w >= t - 0.05]
 
-    p.tell(do="fx", space=0.3, echo=0, tone=1)
+    p.tell(do="fx", space=0.3, echo=0, tone=0.5)
     got = after(secs=3.5)
     tail = [round(w, 1) for w, pk in got if pk > 60]
     check(f"its space: the note goes on round it after it's gone (heard till {max(tail, default=0)} s), dying away, "
           f"then nothing at all ({got[-3:]})", 0.4 < max(tail, default=0) < 2.0 and all(pk == 0 for _, pk in got[-5:]))
-    p.tell(do="fx", space=0, echo=0, tone=0.1)
-    low, high = max(pk for _, pk in after("low", secs=0.6)), max(pk for _, pk in after("high", secs=0.6))
-    p.tell(do="fx", space=0, echo=0, tone=1)
-    low1, high1 = max(pk for _, pk in after("low", secs=0.6)), max(pk for _, pk in after("high", secs=0.6))
-    check(f"its tone, turned down: a high sound much softer ({high1} to {high}), a low one much the same ({low1} to "
-          f"{low})", high < 0.3 * high1 and low > 0.8 * low1)
+    loud = {}
+    for tone in (0.1, 0.9, 0.5):
+        p.tell(do="fx", space=0, echo=0, tone=tone)
+        loud[tone] = (max(pk for _, pk in after("low", secs=0.6)), max(pk for _, pk in after("high", secs=0.6)))
+    check(f"its tone: as the sound is at the middle ({loud[0.5]}); turned down, a high sound much softer "
+          f"({loud[0.1][1]}) and a low one much the same ({loud[0.1][0]}); turned up, the high one much louder "
+          f"({loud[0.9][1]})", all(abs(v - 9000) <= 180 for v in loud[0.5]) and loud[0.1][1] < 0.3 * 9000
+          and loud[0.1][0] > 0.8 * 9000
+          and loud[0.9][1] > 1.6 * 9000 and loud[0.9][0] < 1.3 * 9000)
     mark = log_at()
-    p.tell(do="drone", level=0.8, note=48)
+    p.tell(do="drone", level=0.8, note=60)
     time.sleep(2.0)
     on = [pk for _, pk, _ in heard(mark)[1]][-40:]
-    p.tell(do="drone", level=0, note=48)
+    p.tell(do="drone", level=0, note=60)
     time.sleep(1.8)
     off = [pk for _, pk, _ in heard(mark)[1]][-20:]
     check(f"its drone: a quiet note held, with nothing played ({min(on, default=0)} to {max(on, default=0)}), and gone "
-          f"when it's turned down ({max(off, default=0)})", on and min(on) > 150 and max(on) < 12000 and off
+          f"when it's turned down ({max(off, default=0)})", on and min(on) > 1000 and max(on) < 16000 and off
           and max(off) == 0)
     p.tell(do="space", v=0.5)
     got = after(play=True, secs=2.0)
@@ -366,7 +371,7 @@ if not ONLY or "player" in ONLY:
           f"{max((round(w, 2) for w, pk in plain if pk > 60), default=0)} s)",
           max((w for w, pk in got if pk > 60), default=0) > 0.4
           and max((w for w, pk in plain if pk > 60), default=1) < 0.1)
-    p.tell(do="fx", space=0.9, echo=0.5, tone=1, secs=0.25)
+    p.tell(do="fx", space=0.9, echo=0.5, tone=0.5, secs=0.25)
     mark = log_at()
     p.tell(do="note", id="kick", semis=0, gain=1.0)
     time.sleep(0.5)
@@ -501,16 +506,22 @@ if not ONLY or "app" in ONLY:
           f"{max(hit) * 1000:.1f} ms of its wall's hit)", len(got) >= 4 and len(lights) >= len(hit) >= 4
           and walls <= {0.0, 2.0, 4.0, 7.0, 9.0, 12.0} and all(c["id"] == "Tones/Bell" for _, c in got)
           and all(-0.001 <= x <= SBN.BOUNCE_AHEAD + 0.001 for x in ahead) and max(hit) <= 0.012)
-    check(f"...louder the straighter a ball hits ({min(gains):.2f} to {max(gains):.2f}), heard from the side it hits "
-          f"on ({min(pans):+.2f} to {max(pans):+.2f})", all(SBN.BOUNCE_GAIN * SBN.BOUNCE_SOFT - 1e-3 <= g
-                                                              <= SBN.BOUNCE_GAIN + 1e-3 for g in gains)
-          and max(gains) - min(gains) > 0.05 and all(abs(p) <= SBN.BOUNCE_PAN + 1e-3 for p in pans)
-          and min(pans) < -0.1 and max(pans) > 0.1)
+    later = time.monotonic() + 30.0                   # (two more told, of hits as they could be: heard much later)
+    m.bounce_note(0, later, None, 0.0, -1.0)
+    m.bounce_note(1, later, None, 1.0, 1.0)
+    graze, straight = notes(later - 31.0)[-2:]
+    check(f"...louder the straighter a ball hits, heard from the side it hits on: as they went ({min(gains):.2f} to "
+          f"{max(gains):.2f}, {min(pans):+.2f} to {max(pans):+.2f}), a ball grazing the left ({graze[1]['gain']}, "
+          f"{graze[1]['pan']:+}) and one straight into the right ({straight[1]['gain']}, {straight[1]['pan']:+})",
+          all(SBN.BOUNCE_GAIN * SBN.BOUNCE_SOFT - 1e-3 <= g <= SBN.BOUNCE_GAIN + 1e-3 for g in gains)
+          and all(abs(p) <= SBN.BOUNCE_PAN + 1e-3 for p in pans)
+          and graze[1]["gain"] == round(SBN.BOUNCE_GAIN * SBN.BOUNCE_SOFT, 3) and graze[1]["pan"] == -SBN.BOUNCE_PAN
+          and straight[1]["gain"] == SBN.BOUNCE_GAIN and straight[1]["pan"] == SBN.BOUNCE_PAN)
     fx = [c for _, c in told if c.get("do") in ("fx", "drone")]
-    check(f"...its player told its effects as its sliders have them (space 5, echo 3 a dotted eighth apart, tone 8) "
-          f"and no drone ({fx[:2]})", {"do": "fx", "space": 0.5, "echo": 0.3, "tone": 0.8,
-                                    "secs": round(SBN.ECHO_BEATS * 60.0 / b.clock.bpm, 4)} in fx
-          and {"do": "drone", "level": 0.0, "note": 48} in fx)
+    check(f"...its player told its effects as its sliders have them (reverb 4, echo 3 a dotted eighth apart, tone 5: "
+          f"as the sound is) and no drone ({fx[:2]})", {"do": "fx", "space": 0.4, "echo": 0.3, "tone": 0.5,
+                                                         "secs": round(SBN.ECHO_BEATS * 60.0 / b.clock.bpm, 4)} in fx
+          and {"do": "drone", "level": 0.0, "note": 60} in fx)
     lit = m.sim_game().bounce["lit"]
     check(f"...the walls hit, lit as they were ({sum(1 for x in lit if x)} of {len(lit)})",
           any(x and time.monotonic() - x < 4.5 for x in lit))
@@ -526,7 +537,7 @@ if not ONLY or "app" in ONLY:
     sl = m.sim_game().bounce["sliders"]
     check(f"its sliders, at the right of its page: {[(k, v) for k, _, v, _, _ in sl]}, Spin picked",
           [k for k, *_ in sl] == ["spin", "speed", "space", "echo", "tone", "drone"] and b.bounce_sel == 0
-          and [v for _, _, v, _, _ in sl] == [2, 4, 5, 3, 8, 0])
+          and [v for _, _, v, _, _ in sl] == [2, 4, 4, 3, 5, 0] and [x[1] for x in sl][2] == "Reverb")
     tap("left")
     tap("left", repeat=True)
     tap("left", repeat=True)
@@ -547,18 +558,25 @@ if not ONLY or "app" in ONLY:
     tap("down")
     tap("right")
     fx = [c for _, c in told if c.get("do") in ("fx", "drone")]
-    check(f"...Space, ◀: less, Drone (▼▼▼), ▶: on, each told its player at once ({fx[-2:]}), kept as it's left, not "
-          f"each step ({m.setting('bounce_space')})", b.bounce_levels == {"space": 4, "echo": 3, "tone": 8, "drone": 1}
-          and fx[-2]["space"] == 0.4 and fx[-1] == {"do": "drone", "level": 0.1, "note": 48}
-          and m.setting("bounce_space") == "5")
+    says = BN.SAYS["drone"]
+    check(f"...Reverb, ◀: less, Drone (▼▼▼), ▶: on, each told its player at once ({fx[-2:]}), kept as it's left, not "
+          f"each step ({m.setting('bounce_space')}); what the one picked does, said under them ({says!r})",
+          b.bounce_levels == {"space": 3, "echo": 3, "tone": 5, "drone": 1} and fx[-2]["space"] == 0.3
+          and fx[-1] == {"do": "drone", "level": 0.1, "note": 60} and m.setting("bounce_space") == "4"
+          and BN.SLIDERS[b.bounce_sel][0] == "drone")
     tap("down")
     check("...▼ past the last: the first again", b.bounce_sel == 0)
     tap("x")
-    tap("y")
-    fx = [c for _, c in told if c.get("do") == "drone"]
-    check(f"X: its next sound, Y: the next key, said ({toasts[-2:]}), its drone in it ({fx[-1:]})",
-          m.setting("bounce_sound") == "Tones/Marimba" and m.setting("bounce_key") == "C#"
-          and toasts[-2:] == ["Marimba", "Key of C#"] and fx[-1]["note"] == 49)
+    ways = [(round(bl[3], 6), round(bl[4], 6)) for bl in b.bounce.balls]
+    where = [(round(bl[1], 3), round(bl[2], 3)) for bl in b.bounce.balls]
+    m.press("y")
+    now_ways = [(round(bl[3], 6), round(bl[4], 6)) for bl in b.bounce.balls]
+    now_where = [(round(bl[1], 3), round(bl[2], 3)) for bl in b.bounce.balls]
+    m.release("y")
+    check(f"X: its next sound, said ({toasts[-1:]}); Y: every ball off another way, where it was, as fast as ever "
+          f"(the key as it was: {m.setting('bounce_key')})", m.setting("bounce_sound") == "Tones/Marimba"
+          and toasts[-1:] == ["Marimba"] and m.setting("bounce_key") == "C" and now_where == where
+          and all(a != b_ for a, b_ in zip(ways, now_ways)) and all(abs(math.hypot(*w_) - 1) < 1e-6 for w_ in now_ways))
     tap("r")
     one = (b.bounce.sides, m.setting("bounce_shape"))
     tap("l")
@@ -586,11 +604,11 @@ if not ONLY or "app" in ONLY:
           and [r[0] for r in m.board_rows()] == ["sound", "key", "scale", "snap", "leave"])
     tap("right")                                       # (sound: Kalimba)
     tap("down")
-    tap("right")                                       # (key: D)
+    tap("right")                                       # (key: C#)
     m.sim_opts = 3
     tap("right")                                       # (snap: On)
     rows = {k: v for k, _, v in m.board_rows()}
-    check(f"...its sound, key and snapping, changed there ({rows})", rows["sound"] == "Kalimba" and rows["key"] == "D"
+    check(f"...its sound, key and snapping, changed there ({rows})", rows["sound"] == "Kalimba" and rows["key"] == "C#"
           and rows["snap"] == "On")
     tap("start")
     m.board_tempo(120)
@@ -600,10 +618,10 @@ if not ONLY or "app" in ONLY:
     got = notes(t0)
     beats = [c.beat(x["at"]) / SBN.BOUNCE_GRID for _, x in got]
     check(f"START again: on it goes; snapped, each note on an eighth of the Soundboard's tempo ({len(got)} notes, "
-          f"{[round(x % 1, 3) for x in beats][:6]}...), on its Kalimba, D blues round the pentagon",
+          f"{[round(x % 1, 3) for x in beats][:6]}...), on its Kalimba, C# blues round the pentagon",
           b.card is None and len(got) >= 3 and all(abs(x - round(x)) < 1e-3 for x in beats)
           and all(x["id"] == "Tones/Kalimba" for _, x in got)
-          and {round(x["semis"], 3) for _, x in got} <= {2.0, 5.0, 7.0, 8.0, 9.0})
+          and {round(x["semis"], 3) for _, x in got} <= {1.0, 4.0, 6.0, 7.0, 8.0})
     end = time.monotonic() + 2.0
     n0 = FB.frames
     while time.monotonic() < end:
@@ -615,12 +633,16 @@ if not ONLY or "app" in ONLY:
     check(f"...drawn frame by frame as it plays ({drawn} in 2 s: {drawn / 2:.0f} a second)", 30 <= drawn <= 48)
     page = flush()
     s = m.sim_game()
-    cols = {tuple(col) for col in s.bounce["colours"]}
-    walls_px = sum(int((np.abs(page - np.array(col)).max(axis=2) <= 40).sum()) for col in cols)
-    dim_px = sum(int((np.abs(page - np.array(g.co_mix(g.BG, col, BN.DIM))).max(axis=2) <= 12).sum()) for col in cols)
-    balls_px = int((np.abs(page[118:430] - np.array(g.TEXT)).max(axis=2) <= 12).sum())
-    check(f"the page: its walls in their notes' colours ({dim_px} px, {walls_px} lit), its balls ({balls_px} px)",
-          dim_px + walls_px > 1500 and balls_px > 300)
+    accent = tuple(SBN.ACCENT)
+    shape = page[118:430, :420]
+    dim_px = int((np.abs(shape - np.array(g.co_mix(g.BG, accent, BN.DIM))).max(axis=2) <= 12).sum())
+    lit_px = int((np.abs(shape - np.array(accent)).max(axis=2) <= 12).sum())
+    others = int(((np.abs(shape - np.array(g.BG)).max(axis=2) > 40)
+                  & (np.abs(shape - np.array(accent)).max(axis=2) > 60)
+                  & (np.abs(shape - np.array(g.co_mix(g.BG, accent, BN.DIM))).max(axis=2) > 60)).sum())
+    check(f"the page: the shape and its balls in one colour, the accent ({accent}: its walls {dim_px} px, dim till "
+          f"they're hit; the balls and the walls just hit {lit_px} px), and nothing in any other ({others} px)",
+          s.bounce["colour"] == accent and dim_px + lit_px > 1800 and dim_px > 300 and lit_px > 300 and others < 400)
     tap("start")
     m.sim_opts = [r[0] for r in m.board_rows()].index("leave")
     hints = m.board_card_hints()
@@ -629,9 +651,10 @@ if not ONLY or "app" in ONLY:
     check(f"its card's Leave Bounce ({hints}): the Soundboard's buttons again, its effects and drone off "
           f"({[c for _, c in told[-2:]]}), its sliders kept ({m.sim_hints(s)})",
           b.bounce is None and b.card is None and s.bounce is None
-          and [c for _, c in told[-2:]] == [{"do": "fx", "space": 0, "echo": 0, "tone": 1}, {"do": "drone", "level": 0}]
+          and [c for _, c in told[-2:]] == [{"do": "fx", "space": 0, "echo": 0, "tone": 0.5},
+                                            {"do": "drone", "level": 0}]
           and m.sim_hints(s)[-2] == ("START", "More") and ("A", "Leave Bounce") in hints
-          and m.setting("bounce_spin") == f"{BN.SPIN_MOST:.2f}" and m.setting("bounce_space") == "4"
+          and m.setting("bounce_spin") == f"{BN.SPIN_MOST:.2f}" and m.setting("bounce_space") == "3"
           and m.setting("bounce_drone") == "1")
     tap("up")
     check("...and its buttons play their sounds as ever", spin(1.0, lambda: b.bank()["pads"]["up"] in b.playing))

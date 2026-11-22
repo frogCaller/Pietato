@@ -1,11 +1,12 @@
 """The Soundboard's effects and Bounce's own sounds (pitato/soundfx.py), on their own: each bypassed or off, exactly
 what went in (or nothing); never anything but numbers, and never louder and louder, at their most with the loudest
 noise; their tails ringing only as long as they should, and the next sound clean after them; the echo's repeats at
-their very frames, from one side then the other, each quieter and darker; the space longer and louder as it's turned
-up, wide, with no echo of itself, darker as it dies away; the tone softer up high the more it's turned down, and the
-same whatever the chunks; every change of setting without a click; the three in a row as the player has them;
-Bounce's instruments in tune at each note they're made at, soft at both ends, quick to make; the drone a loop with no
-seam; and other rates and chunk sizes."""
+their very frames, from one side then the other, each quieter and a touch darker, plain to hear; the reverb longer
+and louder as it's turned up, wide, with no echo of itself (a smooth wash, even for a sharp sound), darker as it dies
+away; the tone as the sound is at its middle, darker under it and brighter over it, the same whatever the chunks;
+every change of setting without a click; the three in a row as the player has them; Bounce's instruments in tune at
+each note they're made at, soft at both ends, quick to make; the drone a loop with no seam, where a small speaker can
+play it; and other rates and chunk sizes."""
 import math
 import os
 import sys
@@ -91,13 +92,19 @@ def passthrough():
     t = fx.Tone(R, C)
     first = x[:C]
     assert t.run(first) is first                       # (not even copied)
+    assert fx.Tone.NEUTRAL == 0.5 and t.resting() and t.want == t.amt == 0.5
+    back = fx.Tone(R, C)                               # ...and back at the middle after being elsewhere
+    for amount in (0.2, 0.9, 0.5):
+        back.set(amount)
+        render(back, x)
+    assert back.resting() and back.run(first) is first
     assert np.array_equal(render(t, x)[:len(x)], x) and not t.ringing()
     for unit in (fx.Echo(R, C), fx.Space(R, C)):
         assert not np.any(render(unit, x)) and not unit.ringing()
     bus = fx.Bus(R, C)
     xi = x.astype(np.int32)
     assert np.array_equal(render(bus, xi)[:len(xi)], xi) and not bus.ringing()
-    bus.set(space=0.0, echo=0.0, echo_secs=0.4, tone=1.0)
+    bus.set(space=0.0, echo=0.0, echo_secs=0.4, tone=0.5)
     assert np.array_equal(render(bus, xi)[:len(xi)], xi)
     # ...and a Bus with only its tone on gives just what Tone gives
     bus.set(tone=0.4)
@@ -120,7 +127,8 @@ def finite():
 
 def stable():
     x = noise(2.0, seed=3)                             # two seconds of full-scale noise
-    for unit, args, most in ((fx.Tone(R, C), (0.0,), 1.01), (fx.Echo(R, C), (1.0, 0.08), 1.6),
+    for unit, args, most in ((fx.Tone(R, C), (0.0,), 1.01), (fx.Tone(R, C), (1.0,), 8.0),
+                             (fx.Echo(R, C), (1.0, 0.08), 1.6),
                              (fx.Space(R, C), (1.0,), 1.6)):
         unit.set(*args)
         y = render(unit, x, 9.0)
@@ -130,7 +138,7 @@ def stable():
         assert all(b < a - 3 or b < -200 for a, b in zip(after, after[1:])), (type(unit).__name__, after)
     bus = fx.Bus(R, C)
     bus.set(space=1.0, echo=1.0, echo_secs=0.8, tone=0.0)
-    y = render(bus, x.astype(np.int32), 20.0).astype(np.float64)
+    y = render(bus, x.astype(np.int32), 30.0).astype(np.float64)
     assert np.abs(y).max() <= 3 * 32767
     after = [db(y[int(s * R):int((s + 2) * R)]) for s in (2.0, 5.0, 8.0, 11.0)]
     assert all(b < a - 3 for a, b in zip(after, after[1:])), after
@@ -190,7 +198,13 @@ def echo_timing():
     quiet.set(0.3, 0.2)
     loud.set(1.0, 0.2)
     a, b = render(quiet, click(), 2.0), render(loud, click(), 2.0)
-    assert np.abs(a).max() < np.abs(b).max() <= 0.5 * 10000
+    at = lambda y, k: 20 * math.log10(float(np.abs(y[int(0.2 * k * R) - 8:int(0.2 * k * R) + 8]).max()) / 10000)
+    assert abs(at(a, 1) + 10) < 1 and abs(at(b, 1) + 4) < 1, (at(a, 1), at(b, 1))     # the first repeat, of the
+                                                                                      # dry click
+    assert 0.3 <= quiet.gains(0.0)[0] <= 0.4 and 0.65 <= loud.gains(1.0)[0] <= 0.75 and not quiet.gains(0.0)[1]
+    # crisp: three repeats on, a click has lost little but what the feedback takes
+    assert at(b, 4) > at(b, 1) + 60 * math.log10(loud.gains(1.0)[0]) - 8, (at(b, 1), at(b, 4))
+    assert at(a, 3) > -32 and at(b, 6) > -32, (at(a, 3), at(b, 6))                    # a few repeats, and a long trail
     assert db(a[int(0.9 * R):]) < db(b[int(0.9 * R):]) - 12
 
 
@@ -228,10 +242,42 @@ def reverb():
     y = render(s, noise(1.0, amp=8000.0, seed=6, mono=True), 2.0).astype(np.float64)
     corr = float((y[:, 0] * y[:, 1]).sum() / math.sqrt((y[:, 0] ** 2).sum() * (y[:, 1] ** 2).sum()))
     assert abs(corr) < 0.3, corr
-    # nothing before the first of it (23 ms)
+    # nothing before the first of it (23 ms of line and 8 of smear)
     s.clear()
     ir = render(s, click(), 1.0)
-    assert not np.any(ir[:int(0.02 * R)]) and np.any(ir[:int(0.03 * R)])
+    assert not np.any(ir[:int(0.03 * R)]) and np.any(ir[:int(0.034 * R)])
+
+
+def discrete(ir):
+    """How much a click's reverb is separate slaps: its first 150 ms in 1 ms bins, from the first with anything
+    in it. The bins that stand 10 dB over their neighbours (the middle one of the five either side), the gaps
+    (bins 10 dB under them), the fullest bin over the mean (dB), and which bin is the fullest."""
+    e = np.square(ir[:int(0.15 * R)].astype(np.float64)).sum(axis=1).reshape(150, -1).sum(axis=1)
+    e = e[int(np.nonzero(e)[0][0]):]
+    level = 10 * np.log10(e / e.max() + 1e-12)
+    near = lambda i: np.median(np.concatenate((level[max(0, i - 5):i], level[i + 1:i + 6])))
+    out = [i for i in range(len(e)) if level[i] > near(i) + 10]
+    gaps = [i for i in range(5, len(e)) if level[i] < near(i) - 10]
+    return len(out), len(gaps), 10 * math.log10(e.max() / e.mean()), int(np.argmax(e))
+
+
+def reverb_smooth():
+    """A sharp sound in: a wash out, with no slap to be picked out of it."""
+    for amount in (0.1, 0.3, 0.5, 0.75, 1.0):
+        for at in (0, 101):                            # (a click on an even frame, and on an odd one)
+            s = fx.Space(R, C)
+            s.set(amount)
+            out, gaps, crest, top = discrete(render(s, click(at), 0.3))
+            assert out == 0 and gaps == 0 and crest < 6, (amount, at, out, gaps, crest)
+            assert top >= 10, (amount, at, top)        # it swells in: the fullest of it isn't its start
+    # ...and a marimba's knock: the wet sound's loudest 1 ms is no knock of its own, well under the note's
+    note = fx.tone('Marimba', 72).astype(np.float32)
+    note = np.stack((note, note), axis=1)
+    s = fx.Space(R, C)
+    s.set(0.5)
+    wet = render(s, note, 1.0)
+    bins = lambda y: np.square(y[:R // 2].astype(np.float64)).sum(axis=1).reshape(500, -1).sum(axis=1)
+    assert bins(wet).max() < 0.25 * bins(note).max(), bins(wet).max() / bins(note).max()
 
 
 def tone_response():
@@ -241,12 +287,17 @@ def tone_response():
         x = sine(hz, 0.4)
         y = render(t, x)[:len(x)]
         return db(y[len(x) // 2:]) - db(x[len(x) // 2:])
-    assert gain(0.3, 200) - gain(0.3, 8000) >= 12, gain(0.3, 200) - gain(0.3, 8000)
-    assert gain(0.9, 200) - gain(0.9, 8000) <= 1, gain(0.9, 200) - gain(0.9, 8000)
-    assert gain(0.0, 200) > -1.5 and gain(0.0, 4000) < -12 and gain(0.0, 1000) > -9
-    drops = [gain(a, 200) - gain(a, 6000) for a in (0.0, 0.2, 0.4, 0.6, 0.8, 0.95, 1.0)]
-    assert all(b < a for a, b in zip(drops, drops[1:])) and drops[-1] == 0, drops
-    assert 600 <= fx.Tone(R, C).cutoff(0.0) <= 900
+    assert gain(0.5, 200) == 0 and gain(0.5, 8000) == 0                       # the middle: untouched
+    assert gain(0.2, 200) - gain(0.2, 8000) >= 12, gain(0.2, 200) - gain(0.2, 8000)
+    assert gain(0.2, 200) > -1 and gain(0.2, 2000) < -6                       # muffled where a small speaker is
+    assert gain(0.0, 400) > -6 and gain(0.0, 1000) < -12 and gain(0.0, 4000) < -30
+    assert gain(0.9, 4000) - gain(0.9, 200) >= 6, gain(0.9, 4000) - gain(0.9, 200)
+    assert gain(0.8, 4000) > 5 and gain(0.8, 200) < 0.5                       # brighter there
+    assert 11 <= gain(1.0, 8000) <= 13 and gain(1.0, 200) < 1 and 4 <= gain(1.0, 1000) <= 8
+    tilts = [gain(a, 4000) - gain(a, 200) for a in (0.0, 0.1, 0.2, 0.3, 0.4, 0.49, 0.5, 0.51, 0.6, 0.7, 0.8, 0.9, 1.0)]
+    assert all(b > a for a, b in zip(tilts, tilts[1:])) and tilts[6] == 0, tilts
+    t = fx.Tone(R, C)
+    assert 250 <= t.cutoff(0.0) <= 350 and 4500 <= t.cutoff(0.4999) <= 5500 and abs(t.boost(1.0) - 12.5) <= 1
     # the same whatever the chunks: 384 frames at a time, or 128
     x = noise(0.2, amp=9000.0, seed=7)[:C * 24]
     a, small = fx.Tone(R, C), fx.Tone(R, 128)
@@ -289,10 +340,11 @@ def glides():
     # ...and a sound cut dead with an echo and reverb on it: they carry on, and die away smoothly
     bus = fx.Bus(R, C)
     bus.set(space=0.6, echo=0.5, echo_secs=0.2, tone=0.5)
-    x = sine(480.0, 0.4)[:C * 50].astype(np.int32)     # (whole turns of it: it stops as it crosses zero)
-    y = render(bus, x, 1.0).astype(np.float64)
-    step = float(np.abs(np.diff(x[:, 0])).max())
-    assert np.any(y[C * 50:]) and np.abs(np.diff(y[C * 50 - 1:], axis=0)).max() <= step * 1.5
+    x = sine(480.0, 2.0)[:C * 250].astype(np.int32)    # (whole turns of it: it stops as it crosses zero)
+    wet = render(bus, x, 1.0).astype(np.float64)
+    wet[:len(x)] -= x                                  # (the tone's in the middle: the dry sound is x)
+    most = np.abs(np.diff(wet[:len(x)], axis=0)).max() # no step in what's left bigger than the wet sound's own
+    assert np.any(wet[len(x):]) and np.abs(np.diff(wet[len(x) - 1:], axis=0)).max() <= 1.2 * most
 
 
 def bus_chain():
@@ -362,36 +414,54 @@ def instruments():
 
 
 def drone_loops():
-    for midi, secs in ((48, 4.0), (43, 4.0), (57, 2.5)):
+    for midi, secs in ((55, 4.0), (60, 4.0), (66, 2.5)):
         x = fx.drone(midi, secs, R)
         assert x.dtype == np.int16 and x.shape == (int(round(secs * R)), 2)
         f = x.astype(np.float64)
         peak = np.abs(f).max()
         assert abs(peak / 32767 - 0.25) < 0.005, peak / 32767
         assert abs(f.mean(axis=0)).max() < 1.0                                  # no DC
-        # nothing in it but what turns a whole number of times in the loop: all of it in a few dozen places of
-        # its spectrum (a seam would be spread over every one)
-        spec = np.sort(np.abs(np.fft.rfft(f[:, 0])) ** 2)
-        assert spec[:-64].sum() < 1e-6 * spec.sum(), spec[:-64].sum() / spec.sum()
-        # ...and the step from its end to its start is like any other in it, and the bend there too
+        # steady, not peaky: 0.1 of full scale RMS, in each speaker, and in every quarter second of it
+        rms = lambda seg: math.sqrt(float(np.mean(seg * seg))) / 32767
+        assert abs(rms(f) - 0.10) < 0.01 and abs(rms(f[:, 0]) - rms(f[:, 1])) < 0.01, (midi, rms(f))
+        parts = [rms(f[i:i + R // 4]) for i in range(0, len(f) - R // 4 + 1, R // 8)]
+        assert max(parts) < 1.5 * min(parts), (midi, min(parts), max(parts))
+        # where a small speaker can give it: nearly all of it from 250 Hz to 2 kHz, and half of it over 400 Hz
+        spec = (np.abs(np.fft.rfft(f, axis=0)) ** 2).sum(axis=1)
+        hz = np.fft.rfftfreq(len(f), 1.0 / R)
+        share = lambda lo, hi: float(spec[(hz >= lo) & (hz < hi)].sum() / spec.sum())
+        middle = float((spec * hz).sum() / spec.sum())
+        assert share(250, 2000) > 0.8 and share(400, R) > 0.45, (midi, share(250, 2000), share(400, R))
+        assert 450 < middle < 1100 and share(8000, R) < 1e-4, (midi, middle, share(8000, R))
+        # the step from its end to its start is like any other in it, and the bend there too
         inside = np.abs(np.diff(f, axis=0)).max()
         assert np.abs(f[0] - f[-1]).max() <= inside
         both = np.concatenate((f[-4:], f[:4]))
         assert np.abs(np.diff(both, 2, axis=0)).max() <= np.abs(np.diff(f, 2, axis=0)).max() + 2
+        # ...and so is every part of it: a seam in it would be the loudest thing above its overtones
+        rough = np.abs(np.diff(np.concatenate((f, f[:3])), 3, axis=0))
+        assert rough[-3:].max() <= rough.max() * 0.999 + 2 or int(np.argmax(rough.max(axis=1))) < len(f) - 3
         hz = 440.0 * 2 ** ((midi - 69) / 12.0)
         got = pitch_of(f[:, 0], hz)[0]
         assert abs(1200 * math.log2(got / hz)) < 15, (midi, got, hz)
         corr = float((f[:, 0] * f[:, 1]).sum() / math.sqrt((f[:, 0] ** 2).sum() * (f[:, 1] ** 2).sum()))
-        assert 0.3 < corr < 0.98, corr                                          # wide, but one sound
+        assert 0.3 < corr < 0.9, corr                                           # wide, but one sound
         fifth = pitch_of(f[:, 0], hz * 1.5)[0]
         assert abs(1200 * math.log2(fifth / (hz * 1.5))) < 15
+    assert np.array_equal(fx.drone(60), fx.drone(60))
+    took = []
+    for _ in range(3):
+        t = time.perf_counter()
+        fx.drone(60)
+        took.append(time.perf_counter() - t)
+    assert min(took) <= 0.3, min(took)                 # (here, on a busy computer: the Pi takes longer)
 
 
 def other_sizes():
     """Not only 48 kHz and 384 frames."""
     for rate, chunk in ((44100, 256), (48000, 512)):
         bus = fx.Bus(rate, chunk)
-        bus.set(space=0.6, echo=0.6, echo_secs=0.21, tone=0.5)
+        bus.set(space=0.6, echo=0.6, echo_secs=0.21, tone=0.4)
         x = np.zeros((chunk, 2), np.int32)
         x[3] = 9000
         out = [bus.run(x).copy()]
@@ -407,14 +477,16 @@ SAYS = (("bypassed or off: exactly what went in, or nothing", passthrough),
         ("never anything but numbers", finite),
         ("never louder and louder, at their most with the loudest noise", stable),
         ("their tails ring only as long as they should; the next sound clean after them", ringing_ends),
-        ("the echo: its repeats at their very frames, from one side then the other, each quieter and darker",
-         echo_timing),
-        ("the space: longer and louder turned up, wide, no echo of itself, darker as it dies away", reverb),
-        ("the tone: softer up high the more it's turned down, the same whatever the chunks", tone_response),
+        ("the echo: its repeats at their very frames, from one side then the other, each quieter and a touch darker, "
+         "plain to hear", echo_timing),
+        ("the reverb: longer and louder turned up, wide, no echo of itself, darker as it dies away", reverb),
+        ("...a sharp sound in, a smooth wash out: nothing in it that could be heard as an echo", reverb_smooth),
+        ("the tone: the sound as it is at the middle, darker under it, brighter over it, the same whatever the chunks",
+         tone_response),
         ("every change of setting without a click", glides),
         ("the three in a row, as the player has them", bus_chain),
         ("Bounce's instruments: in tune at each note, soft at both ends, quick to make", instruments),
-        ("the drone: a loop with no seam, in tune, wide", drone_loops),
+        ("the drone: a loop with no seam, in tune, wide, its sound where a small speaker can play it", drone_loops),
         ("other rates and chunk sizes", other_sizes))
 with np.errstate(over="raise", invalid="raise", divide="raise"):
     for what, run in SAYS:

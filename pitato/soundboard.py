@@ -1,7 +1,7 @@
 """Apps' Soundboard: a sound on every button. The d-pad's four and A, B, X and Y each play the sound that's on them,
 as many at once as you like (pressed again while it plays, a sound starts again); SELECT stops them all; L and R go
 through the banks of eight. START has the rest: the bank, the volume, a new sound recorded with a USB microphone and
-put on a button, and B there goes back (here, B is a button like the others: HOME goes back too).
+put on a button. HOME goes back (B is a button like the others here).
 
 The sounds: a starter pack that comes with Pietato (pitato/sounds, public domain), and your own, wav, mp3 or ogg files
 in the Soundboard folder of your home folder. A new file there is on a button a moment later (My sounds' first free
@@ -292,7 +292,8 @@ class Soundboard(Sim):
         img.paste(card, (x0 + (self.w - w) // 2, y0 + (self.h - h) // 2), card)
 
     def bounce_top(self, d, x0, y0, w):
-        """Bounce's line, over its shape (w wide): the shape between ◀ and ▶ (L and R), how many balls at the left."""
+        """Bounce's line, over its shape (w wide): the shape between ◀ and ▶ (L and R), its key and scale at the left
+        (SELECT: the next scale), how many balls at the right."""
         v = self.bounce
         mid = y0 + TOP // 2 - 2
         big = self.w >= 960
@@ -303,7 +304,8 @@ class Soundboard(Sim):
         self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
         self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
         n = v["count"]
-        d.text((x0 + EDGE + 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED, anchor="lm")
+        d.text((x0 + EDGE + 2, mid), f"{v['key']} {v['scale'].lower()}", font=small, fill=TEXT, anchor="lm")
+        d.text((x0 + w - EDGE - 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED, anchor="rm")
         self.taps.append(((x0, y0, x0 + w // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + w // 2, y0, x0 + w, y0 + TOP - 4), "r"))
 
@@ -329,6 +331,7 @@ class Soundboard(Sim):
         return {"bold": self.font(26 if big else 20, bold=True), "small": self.font(18 if big else 14),
                 "label": self.font(19 if big else 14), "label_b": self.font(19 if big else 14, bold=True),
                 "info": self.font(19 if big else 14, bold=True), "badge": self.font(15 if big else 11, bold=True),
+                "caption": self.font(17 if big else 12),
                 "info_h": 44 if big else 28, "knob": 9 if big else 6, "track": 6 if big else 4}
 
     def draw(self, img, x0, y0):

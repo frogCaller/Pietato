@@ -8,6 +8,7 @@ import time
 
 from .. import bounce as BN
 from .. import soundbank as B
+from ..theme import ACCENT
 
 BOUNCE_AHEAD = 0.12              # seconds the balls are looked ahead at, each look (more than between two of them): a
                                  # note's told its player before its ball gets there, and it's heard as it does
@@ -18,10 +19,9 @@ BOUNCE_GAIN = 0.8                # how loud its notes are, of a sound as it is: 
 BOUNCE_SOFT = 0.45               # ...one that only grazes it: this much of that
 BOUNCE_PAN = 0.7                 # how far to the side a note's heard, hit at the side of the shape (1: all the way)
 BOUNCE_STEP_MOST = 0.25          # seconds of the balls moved on at most at a look (media mode busy: they don't jump)
-BOUNCE_HOW = ("A and B add and take away balls, X and Y change the sound and the key, L and R the shape. ▲▼ pick a "
-              "slider, ◀▶ move it.")
+BOUNCE_HOW = ("A and B add and take away balls, X changes the sound, Y shakes the balls, L and R change the shape. ▲▼ "
+              "pick a slider, ◀▶ move it.")
 ECHO_BEATS = 0.75                # its echo: a dotted eighth of the tempo after each note
-DRONE_DOWN = 12                  # semitones its drone is under the key's own note
 
 
 class BounceScreen:
@@ -125,7 +125,7 @@ class BounceScreen:
         b.bounce = None
         b.card = None
         self.sim_close()
-        self.board_tell(do="fx", space=0, echo=0, tone=1)
+        self.board_tell(do="fx", space=0, echo=0, tone=0.5)     # (its tone: 0.5, the sound as it is)
         self.board_tell(do="drone", level=0)
         self.dirty = True
 
@@ -141,9 +141,9 @@ class BounceScreen:
                 self.set_setting("bounce_" + key, v)
 
     def bounce_told(self):
-        """Its player told what Bounce wants of it: its effects (its space, its echo a dotted eighth of the tempo
-        apart, its tone), its drone (the key's note, an octave down), and the sound's own note (one of the
-        Soundboard's: as near as the player can tell, asked once)."""
+        """Its player told what Bounce wants of it: its effects (its reverb, its echo a dotted eighth of the tempo
+        apart, its tone), its drone (on the key's own note), and the sound's own note (one of the Soundboard's: as
+        near as the player can tell, asked once)."""
         b = self.board
         if b.bounce is None or b.proc is None:
             return
@@ -152,7 +152,7 @@ class BounceScreen:
         lv = self.bounce_level
         self.board_tell(do="fx", space=lv("space") / 10, echo=lv("echo") / 10, tone=lv("tone") / 10,
                         secs=round(ECHO_BEATS * 60.0 / bpm, 4))
-        self.board_tell(do="drone", level=lv("drone") / 10, note=BN.root_of(self.bounce_get("key")) - DRONE_DOWN)
+        self.board_tell(do="drone", level=lv("drone") / 10, note=BN.root_of(self.bounce_get("key")))
         sid = self.bounce_sound_id()
         if sid.startswith("Tones/"):
             self.board_tell(do="tone", id=sid)         # (made ready now: it takes a moment, the first time)
@@ -161,8 +161,8 @@ class BounceScreen:
 
     # -- its buttons ---------------------------------------------------------------------------------------------------
     def press_bounce(self, name, repeat):
-        """A a ball more, B one fewer; ▲▼ pick a slider, ◀▶ move it (held: on and on); X its sound, Y its key; L and
-        R the shape; SELECT the scale; START its card (paused)."""
+        """A a ball more, B one fewer; ▲▼ pick a slider, ◀▶ move it (held: on and on); X its sound, Y shakes the
+        balls; L and R the shape; SELECT the scale; START its card (paused)."""
         b = self.board
         w = b.bounce
         if name in ("up", "down"):
@@ -181,8 +181,7 @@ class BounceScreen:
             self.bounce_sound_step(1)
             self.toast(self.bounce_sound_name(self.bounce_sound_id()), 1.5)
         elif name == "y":
-            self.bounce_choose("key", 1)
-            self.toast(f"Key of {self.bounce_get('key')}", 1.5)
+            w.shake()
         elif name in ("l", "r", "l2", "r2"):
             self.bounce_shape(-1 if name in ("l", "l2") else 1)
         elif name == "select":
@@ -205,7 +204,7 @@ class BounceScreen:
             b.bounce_lit = [0.0] * b.bounce.sides
 
     def bounce_choose(self, key, way):
-        """The next key, scale or snapping (◀▶ on its card; Y: the key, SELECT: the scale)."""
+        """The next key, scale or snapping (◀▶ on its card; SELECT: the scale)."""
         choices = {"key": BN.KEYS, "scale": tuple(BN.SCALES), "snap": ("On", "Off")}[key]
         was = self.bounce_get(key)
         self.set_setting("bounce_" + key, choices[(choices.index(was) + way) % len(choices)])
@@ -335,7 +334,7 @@ class BounceScreen:
         gain = BOUNCE_GAIN * (BOUNCE_SOFT + (1 - BOUNCE_SOFT) * max(0.0, min(1.0, hard)))
         self.board_tell(do="note", id=sid, semis=round(semis, 3), gain=round(gain, 3), at=round(at, 4),
                         pan=round(BOUNCE_PAN * max(-1.0, min(1.0, x)), 3))
-        self.glow_flash(BN.wall_colour(BN.wall_note(k, key, scale)), at)   # (your LEDs, if there are: as it's heard)
+        self.glow_flash(ACCENT, at)                    # (your LEDs, if there are: as it's heard, in the shape's colour)
 
     # -- its page ------------------------------------------------------------------------------------------------------
     def bounce_page(self, s):
@@ -346,10 +345,9 @@ class BounceScreen:
             s.bounce = None
             return
         key, scale = self.bounce_get("key"), self.bounce_get("scale")
-        notes = [BN.wall_note(k, key, scale) for k in range(w.sides)]
         lit = (b.bounce_lit + [0.0] * w.sides)[:w.sides]
         s.bounce = {"corners": w.corners(), "balls": [(x, y) for _, x, y, _, _ in w.balls], "lit": lit,
-                    "colours": [BN.wall_colour(n) for n in notes], "paused": b.card == "bounce",
+                    "colour": ACCENT, "paused": b.card == "bounce",
                     "shape": self.bounce_get("shape"), "key": key, "scale": scale, "count": len(w.balls),
                     "sound": self.bounce_sound_name(self.bounce_sound_id()), "sel": b.bounce_sel,
                     "sliders": [(k, label, self.bounce_level(k), low, high) for k, label, low, high, _ in BN.SLIDERS]}

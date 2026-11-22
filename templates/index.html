@@ -5608,7 +5608,7 @@ function sbDrawBounce() {
     el("span", "sb-loop-l", "Scale"), sbSeg("Scale", bo.scales.map((n) => [n, n]), bo.scale, (scale) => sbBounceDo({ scale })),
     el("span", "sb-loop-l", "Key"), sbBounceSelect("Key", bo.keys.map((k) => [k, k]), bo.key, (key) => sbBounceDo({ key })),
     el("span", "sb-loop-l", "Sound"), sbBounceSelect("Sound", bo.sounds.map((s) => [s.id, s.name]), bo.sound, (sound) => sbBounceDo({ sound })),
-    ...[["space", "Space"], ["echo", "Echo"], ["tone", "Tone"], ["drone", "Drone"]].flatMap(([k, n]) => [el("span", "sb-loop-l", n),
+    ...[["space", "Reverb"], ["echo", "Echo"], ["tone", "Tone"], ["drone", "Drone"]].flatMap(([k, n]) => [el("span", "sb-loop-l", n),
       sbBounceSlide(n, 0, 10, 1, bo[k], (v) => (v === 0 && k !== "tone" ? "Off" : String(v)), k)]),
     el("span", "sb-loop-l", "Snap to the tempo"), sbSeg("Snap to the tempo", [["On", "On"], ["Off", "Off"]], bo.snap, (snap) => sbBounceDo({ snap })));
   box.append(now, sets);

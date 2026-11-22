@@ -9,7 +9,7 @@ busy, and breaking up (a longer buffer: aplay says so, and is asked to in Englis
 in); an mp3, an ogg and WAVs of other kinds (through FFmpeg, once: kept); what isn't a sound; and a recording, its
 silence trimmed (arecord's a pretend one too). Then the app in media mode: in
 Apps, its page on the GPi Case's screen, every button its own sound, L and R through the banks, SELECT stopping them,
-START's card (B there goes back; HOME goes back from anywhere on it; no Record a sound without a microphone); a file
+START's card (B there shuts it; HOME goes back from anywhere on it; no Record a sound without a microphone); a file
 put in your Soundboard folder on its button without anything started again, taken out, changed; the web page's word
 that something changed; and with a USB microphone, a sound recorded and put on a button from the controller."""
 import json, os, shutil, signal, subprocess, sys, threading, time, wave
@@ -1051,7 +1051,7 @@ page = flush()
 rows = m.board_rows()
 check(f"START: its card ({[r[1] for r in rows]}): no Record a sound, with no microphone; its buttons "
       f"{m.sim_hints(m.sim_game())}", m.sim_opts == 0 and [r[0] for r in rows] == ["bank", "volume"] + LOOP_ROWS
-      and m.sim_hints(m.sim_game()) == [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("B", "Back to Apps")]
+      and m.sim_hints(m.sim_game()) == [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("HOME", "Back to Apps")]
       and not any(w == ("keys", "a") and box == boxes["a"] for box, w in m.taps_now()))
 m.press("up")
 spin(0.3)
@@ -1081,8 +1081,13 @@ check("...SELECT stops the sounds from there as well", spin(1.0, lambda: not b.p
 pid = b.proc.pid
 m.press("b")
 spin(0.3)
-check("...B there goes back to Apps, the Soundboard picked in its list",
-      m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard" and m.sim_opts is None)
+check("...B there shuts it, and it's still the Soundboard (HOME's the way back, not B)", m.board_shown()
+      and m.sim_opts is None and b.card is None and b.proc is not None and b.proc.pid == pid)
+m.press("start")
+home = m.sim_home()
+spin(0.3)
+check("...HOME there goes back to Apps, the Soundboard picked in its list", home is True and m.tab == ai
+      and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard" and m.sim_opts is None)
 gone = until(lambda: players() == [], 4)
 mark = log_lines()
 time.sleep(0.3)
@@ -1272,7 +1277,7 @@ open(A + "/cards", "w").write(HDMI + MIC)
 spin(3.5, lambda: b.mic is not None)
 m.press("down"); m.press("down")
 check(f"...its row: {m.sim_hints(m.sim_game())}", m.sim_hints(m.sim_game())
-      == [("▲▼", "Choose"), ("A", "Record"), ("START", "Done"), ("B", "Back to Apps")])
+      == [("▲▼", "Choose"), ("A", "Record"), ("START", "Done"), ("HOME", "Back to Apps")])
 stopped = []
 m.ears.stop = lambda: stopped.append("stop")
 m.ears.want = ("hey potato", "")                       # (the Bot's listening, with that microphone)

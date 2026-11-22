@@ -362,7 +362,7 @@ check(f"its Bounce, as media mode has it: off, the Soundboard open on the Pi, it
       and bo.get("scales") == ["Major", "Minor", "Pentatonic", "Blues"] and len(bo.get("keys", [])) == 12
       and [x["name"] for x in bo.get("sounds", [])][:6] == ["Bell", "Marimba", "Kalimba", "Glass", "Pluck", "Pad"]
       and len(bo.get("sounds", [])) > 20 and (bo.get("space"), bo.get("echo"), bo.get("tone"), bo.get("drone"))
-      == (5, 3, 8, 0))
+      == (4, 3, 5, 0))
 r = ask(do="bounce", on=True)
 bo = (r.get_json() or {}).get("bounce") or {}
 check(f"...started from the page: on the Pi at once ({bo.get('on')}, {bo.get('balls')} balls); the loop's said with "
@@ -399,7 +399,7 @@ check("...its sound's sliders kept as it's left", (m.setting("bounce_space"), m.
                                                       m.setting("bounce_tone"), m.setting("bounce_drone"))
       == ("8", "0", "4", "2"))
 ask(do="bounce", shape="Hexagon", scale="Pentatonic", key="C", sound="Tones/Bell", echo=3, snap="Off", spin=0.3,
-    speed=0.8, space=5, tone=8, drone=0)
+    speed=0.8, space=4, tone=5, drone=0)
 for name, f in (("Laugh.wav", 500), ("Wilhelm scream.wav", 700), ("Door bell.wav", 900), ("Drop.wav", 300), ("Onto.wav", 350)):
     open(f"{S}/up/{name}", "wb").write(wav(0.4, f=f))
 open(S + "/up/notes.txt", "w").write("not a sound\n")
@@ -746,8 +746,8 @@ async def browse():
         tri = until(lambda: b.bounce is not None and b.bounce.sides == 3, 3)
         await pg.select_option(".sb-bounce select[aria-label=Sound]", "Tones/Pluck")
         pluck = until(lambda: m.setting("bounce_sound") == "Tones/Pluck", 3)
-        await pg.fill(".sb-bounce input[aria-label=Space]", "9")
-        await pg.dispatch_event(".sb-bounce input[aria-label=Space]", "change")
+        await pg.fill(".sb-bounce input[aria-label=Reverb]", "9")
+        await pg.dispatch_event(".sb-bounce input[aria-label=Reverb]", "change")
         space = until(lambda: b.bounce is not None and b.bounce_levels.get("space") == 9, 3)
         await pg.wait_for_function("document.querySelector('.sb-bounce-say').textContent"
                                    ".startsWith('4 balls in a triangle')", timeout=6000)
@@ -758,7 +758,7 @@ async def browse():
               f"({pluck}), more space ({space}), said as it is ({say!r}), and left ({gone}); nothing went wrong "
               f"({oops})", on and more and tri and pluck and space and gone
               and say.startswith("4 balls in a triangle, C pentatonic") and not oops)
-        ask(do="bounce", shape="Hexagon", sound="Tones/Bell", space=5)
+        ask(do="bounce", shape="Hexagon", sound="Tones/Bell", space=4)
         await ctx.close()
 
         # a phone

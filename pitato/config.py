@@ -115,7 +115,7 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                                                                   #  screens/soundboard.py)
                     "bounce_sound": "Tones/Bell", "bounce_key": "C", "bounce_scale": "Pentatonic",
                     "bounce_shape": "Hexagon", "bounce_echo": "3", "bounce_snap": "Off", "bounce_spin": "0.30",
-                    "bounce_speed": "0.80", "bounce_space": "5", "bounce_tone": "8",
+                    "bounce_speed": "0.80", "bounce_space": "4", "bounce_tone": "5",
                     "bounce_drone": "0",              # (...its Bounce: screens/bounce.py)
                     "oled": "Off"}
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Screen > Rotate screen's choices

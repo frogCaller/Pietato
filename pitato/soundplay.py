@@ -30,12 +30,12 @@ Told what to do a line of JSON at a time (stdin), it says what happens the same 
                                                    right (1); a few at a time (BOUNCE_MOST), each faded in and no
                                                    longer than BOUNCE_SECS
     {"do": "tone", "id": "Tones/Bell"}             one of its own sounds made ready (it takes a moment)
-    {"do": "fx", "space": 0.5, "echo": 0.3, "tone": 0.7, "secs": 0.45}
+    {"do": "fx", "space": 0.4, "echo": 0.3, "tone": 0.5, "secs": 0.45}
                                                    Bounce's notes through its effects (soundfx.py), each 0 to 1: a
-                                                   room round them, an echo this far apart, and their tone (1: as
-                                                   they are, less: softer)
-    {"do": "drone", "level": 0.2, "note": 48}      a quiet chord held under them, on that note (level 0: none)
-    {"do": "space", "v": 0.3}                      the Soundboard's own sounds in a room too, 0 to 1
+                                                   room round them (its reverb), an echo this far apart, and their
+                                                   tone (0.5: as they are, less: darker, more: brighter)
+    {"do": "drone", "level": 0.2, "note": 60}      a soft chord held under them, on that note (level 0: none)
+    {"do": "space", "v": 0.3}                      the Soundboard's own sounds in a room too (its reverb), 0 to 1
     {"do": "pitch", "id": name}                    a sound's own note, as near as it can tell
     {"do": "stop"}                                 all of them stopped
     {"do": "volume", "v": 0 to 100}
@@ -114,7 +114,7 @@ TONE_ROOTS = (48, 60, 72)        # ...each made at these, and a note played from
 DRONE_SECS = 4.0                 # its drone: a loop this long
 DRONE_GLIDE = 1.0                # ...seconds it takes to come and go, or go from one key to another
 DRONE_SPACE = 0.6                # ...how much of it goes into the space round the notes
-DRONE_MOST = 0.6                 # ...how loud it is, all the way up (of the loop as it's made)
+DRONE_MOST = 0.8                 # ...how loud it is, all the way up (of the loop as it's made)
 PITCH_HZ = (55.0, 1500.0)        # a sound's own note is looked for between these
 PLAIN = dict(os.environ, LC_ALL="C")   # what aplay and arecord run with: what they say is read here, so in English
 
@@ -837,8 +837,7 @@ class Player:
     def fx_wanted(self):
         """The effects have something to do: they're set to (Bounce's, the Soundboard's space), or still ringing."""
         fx = self.fx
-        return (fx.tone.want < 1.0 or fx.tone.amt < 1.0 or fx.echo.want > 0 or fx.space.want > 0
-                or self.fx_ringing())
+        return not fx.tone.resting() or fx.echo.want > 0 or fx.space.want > 0 or self.fx_ringing()
 
     def mix(self):
         """The next chunk: the sounds playing, added up (silence, with none); Bounce's through its effects, and the
@@ -982,7 +981,7 @@ class Player:
     def drone_set(self, level, note):
         """Its drone (told): as loud as level (0 to 1), on note (MIDI). Another note: the one sounding goes as the new
         one comes (made first, a thread's work: drone_made)."""
-        to = DRONE_MOST * max(0.0, min(1.0, level)) ** 1.5
+        to = DRONE_MOST * max(0.0, min(1.0, level))
         self.drone_want = (to, note)
         dr = self.drone
         if dr is not None and dr["note"] != note:      # (another key: this one goes, as the new one comes)

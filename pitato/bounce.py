@@ -1,6 +1,7 @@
 """The Soundboard's Bounce (Apps > Soundboard, START's card > Bounce): a shape turning slowly in the middle of the page,
 balls bouncing about inside it, and each of its walls a note. A ball that hits a wall plays that wall's note, and the
-wall lights up a moment. The notes are a scale's, from its key up, wall after wall round the shape, so whatever's hit
+wall lights up a moment (the shape and its balls in the accent you picked). The notes are a scale's, from its key up,
+wall after wall round the shape, so whatever's hit
 sounds right with the rest: a ball that hits a wall straight on louder than one that grazes it, and heard from where
 it hits, left or right. Beside it, its sliders. (screens/bounce.py: its buttons, its notes to the player, the web
 page's say. soundplay.py and soundfx.py: the notes played, a few at a time, and its space, echo, tone and drone.
@@ -9,7 +10,6 @@ soundboard.py: its page, drawn with this.)
 The shape's corners are 1 from its middle, and everything's measured that way: the page draws it as big as it fits.
 A ball goes in a straight line at the speed it's set to, and comes off a wall as off a mirror; off one that's turning
 into it, a little sooner, but never faster than it's set to (the shape turning doesn't speed the balls up)."""
-import colorsys
 import itertools
 import math
 import random
@@ -30,8 +30,10 @@ STEP = 1 / 120                         # seconds of each step of the balls
 AGAIN = 0.06                           # seconds before a ball's heard on the same wall again (a corner: one note)
 LIT = 0.3                              # seconds a wall stays lit after a ball hits it
 DIM = 0.55                             # a wall's colour, not lit: this much of it (the rest the page's)
-SLIDERS = (("spin", "Spin", -10, 10, 2), ("speed", "Speed", 1, 12, 4), ("space", "Space", 0, 10, 5),
-           ("echo", "Echo", 0, 10, 3), ("tone", "Tone", 0, 10, 8), ("drone", "Drone", 0, 10, 0))
+SLIDERS = (("spin", "Spin", -10, 10, 2), ("speed", "Speed", 1, 12, 4), ("space", "Reverb", 0, 10, 4),
+           ("echo", "Echo", 0, 10, 3), ("tone", "Tone", 0, 10, 5), ("drone", "Drone", 0, 10, 0))
+SAYS = {"spin": "Which way it turns, how fast", "speed": "How fast the balls go", "space": "A small room to a big hall",
+        "echo": "Each note again, side to side", "tone": "◀ darker, ▶ brighter", "drone": "A soft note held under it"}
 SLIDER = {key: (low, high, usual) for key, _, low, high, usual in SLIDERS}   # its sliders: each from, to, and as it
 LEVELS = ("space", "echo", "tone", "drone")   # starts. Spin and Speed: steps of how fast; these: of its sound
 ECHO_WAS = {"On": 3, "Off": 0}         # its echo, before it had a slider: on or off
@@ -70,12 +72,6 @@ def note_name(note):
     return KEYS[note % 12]
 
 
-def wall_colour(note):
-    """A note's colour: round the colour wheel by fifths, so the walls next to each other are well apart."""
-    r, g, b = colorsys.hsv_to_rgb((note * 7 % 12) / 12.0, 0.55, 1.0)
-    return int(r * 255), int(g * 255), int(b * 255)
-
-
 class World:
     """The shape and the balls in it. step moves them on, and says which walls were hit, when."""
 
@@ -103,6 +99,12 @@ class World:
         gone = self.balls.pop()[0]
         self.last = {k: t for k, t in self.last.items() if k[0] != gone}
         return True
+
+    def shake(self):
+        """Every ball off another way, as fast as ever (Y): a flurry of new notes."""
+        for b in self.balls:
+            a = self.rng.uniform(0, 2 * math.pi)
+            b[3], b[4] = math.cos(a), math.sin(a)
 
     def reshape(self, sides):
         """Another shape: the balls stay where they are, pushed inside it if they're out."""
@@ -192,15 +194,21 @@ def slider_words(key, v):
 
 
 def draw_panel(d, box, view, fonts):
-    """Its sliders, at the right of the page: what X and Y change at the top (its sound; its key, and scale), then
-    each slider, the one ▲▼ picked lit, its value at its right (◀▶ move it)."""
+    """Its sliders, at the right of the page: X and Y at the top (its sound; Y shakes the balls), then each slider,
+    the one ▲▼ picked lit, its value at its right (◀▶ move it), and under them a few words on what it does."""
     from .theme import ACCENT, ACCENTS, BG, BODY, co_mix, MUTED, ROW, TEXT
     x0, y0, x1, y1 = box
     hues = dict(ACCENTS)
     ih = fonts["info_h"]
     r = ih * 0.32
-    for (letter, colour), words in ((("X", hues["Pink"]), view["sound"]),
-                                    (("Y", hues["Gold"]), f"{view['key']} {view['scale'].lower()}")):
+    rows = view["sliders"]
+    says = SAYS.get(rows[view["sel"] % len(rows)][0], "") if rows else ""
+    f = fonts["caption"]
+    while len(says) > 3 and f.getlength(says) > x1 - x0 - 12:
+        says = says[:-2].rstrip() + "…"
+    d.text((x0 + 12, y1 - ih * 0.4), says, font=f, fill=MUTED, anchor="lm")
+    y1 -= ih * 0.8
+    for (letter, colour), words in ((("X", hues["Pink"]), view["sound"]), (("Y", hues["Gold"]), "Shake the balls")):
         mid = y0 + ih / 2
         d.ellipse((x0 + 6, mid - r, x0 + 6 + 2 * r, mid + r), fill=colour)
         d.text((x0 + 6 + r, mid), letter, font=fonts["badge"], fill=co_mix(colour, (16, 19, 23), 0.85), anchor="mm")
@@ -211,7 +219,6 @@ def draw_panel(d, box, view, fonts):
         d.text((x0 + 2 * r + 16, mid), words, font=f, fill=TEXT, anchor="lm")
         y0 += ih
     y0 += 6
-    rows = view["sliders"]
     rh = (y1 - y0) / max(1, len(rows))
     knob, thick = fonts["knob"], fonts["track"]
     for i, (key, label, v, low, high) in enumerate(rows):
@@ -248,8 +255,8 @@ def draw_panel(d, box, view, fonts):
 
 
 def draw(d, box, view, fonts, now):
-    """The shape, its walls in their notes' colours (lit a moment when hit), and the balls, as big as fits in box (the
-    page under its top line). view: what screens/soundboard.py says of it (soundboard.py's Soundboard.bounce)."""
+    """The shape and its balls, in one colour (the accent: its walls dim, lit a moment when hit), as big as fits in box
+    (the page under its top line). view: what screens/soundboard.py says of it (soundboard.py's Soundboard.bounce)."""
     from .theme import BG, co_mix, TEXT
     x0, y0, x1, y1 = box
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
@@ -260,8 +267,8 @@ def draw(d, box, view, fonts, now):
     n = len(pts)
     lit = view["lit"]
     order = sorted(range(n), key=lambda k: lit[k])        # (the lit ones drawn last, over their corners)
+    colour = view["colour"]
     for k in order:
-        colour = view["colours"][k]
         glow = max(0.0, 1.0 - (now - lit[k]) / LIT) if lit[k] else 0.0
         width = round(thin + (thick - thin) * glow)
         fill = co_mix(co_mix(BG, colour, DIM), colour, glow)
@@ -272,7 +279,7 @@ def draw(d, box, view, fonts, now):
     br = max(4, r * RADIUS)
     for x, y in view["balls"]:
         bx, by = cx + r * x, cy - r * y
-        d.ellipse((bx - br, by - br, bx + br, by + br), fill=TEXT)
+        d.ellipse((bx - br, by - br, bx + br, by + br), fill=colour)
     if view["paused"]:
         d.text((cx, cy), "Paused", font=fonts["bold"], fill=TEXT, anchor="mm")
     elif not view["balls"]:
