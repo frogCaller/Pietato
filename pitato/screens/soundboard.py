@@ -20,6 +20,7 @@ and which beat's heard when, shared with your other Pietatos that have their Sou
 loops keep time with this one's. Notes: A, B, X or Y held, and the d-pad plays its sound up and down a scale (▲ a note
 higher, ▼ lower, ▶ the same again, ◀ back to its own), the note on its tile; recording, they go in the loop."""
 import json
+import math
 import os
 import subprocess
 import sys
@@ -38,6 +39,7 @@ from ..listen import mics
 from ..screen import aplay_device, sound_place
 from ..theme import ACCENT, BODY, co_mix, LINE, MUTED, ROW, TEXT
 from ..util import home_folder
+from .bounce import BOUNCE_HOW
 
 PLAYER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soundplay.py")
 BOARD_NICE = -8                  # its player's priority: ahead of the menus (a late sound is heard)
@@ -112,6 +114,12 @@ class Board:
         self.link = None               # the beat shared with your others (beatlink.py), while its page is open
         self.link_at = 0.0             # ...when it's tried again, if it couldn't start
         self.peers, self.peers_at = [], 0.0   # your others' addresses, and when they're looked at again
+        self.bounce = None             # Bounce (bounce.py's World: screens/bounce.py), while it's up
+        self.bounce_lit = []           # ...when each of its walls was last hit
+        self.bounce_at = 0.0           # ...when its balls were last moved on
+        self.bounce_slots = {}         # ...its notes snapped to the tempo lately: (wall, eighth) -> its beat
+        self.bounce_plan = {}          # ...its notes told ahead: (a ball, a wall) -> when it'll hit (the last few)
+        self.pitch = {}                # a sound -> its own note, as its player could tell (None: it hasn't one)
 
     def bank(self):
         return self.banks[self.at] if 0 <= self.at < len(self.banks) else None
@@ -183,6 +191,7 @@ class SoundboardScreen:
         if b.clock is not None:                        # (opened again: the beat of your others' wins, if they're
             b.clock = b.clock.fresh(now, self.board_me())   # playing already)
         self.board_loop_tell()                         # (the loop, if there is one: it goes on)
+        self.bounce_told()                             # (Bounce, if it's up: its echo, its sound's own note)
         if not self.voice.speaking:
             self.board_tell(do="warm")
 
@@ -261,10 +270,12 @@ class SoundboardScreen:
         b = getattr(self, "board", None)
         if b is None:
             return
+        self.bounce_keep()
         proc, b.proc = b.proc, None
         if b.rec is not None:
             self.board_rec_over()
         b.placing = b.card = None
+        b.pitch = {}
         b.held, b.held_done, b.select_did, b.note_pad = {}, set(), None, None
         if b.link is not None:
             b.link.close()
@@ -314,6 +325,13 @@ class SoundboardScreen:
             b.ready[sid] = said.get("secs") or 0
             b.bad.pop(sid, None)
             b.stops = 0
+            if b.bounce is not None and sid == self.bounce_sound_id() and sid not in b.pitch:
+                self.board_tell(do="pitch", id=sid)    # (Bounce's sound: its own note, to play it in tune)
+        elif what == "pitch" and isinstance(sid, str):
+            m = said.get("midi")
+            good = isinstance(m, (int, float)) and not isinstance(m, bool) and math.isfinite(m) and 20 <= m <= 110
+            b.pitch[sid] = float(m) if good else None
+            return
         elif what == "bad" and isinstance(sid, str):
             b.bad[sid] = str(said.get("why") or "")[:80]
             b.ready.pop(sid, None)
@@ -428,6 +446,11 @@ class SoundboardScreen:
                 path = B.path_of(sid, folder) if sid else None
                 if path:
                     sounds.append([sid, path])
+        extra = self.bounce_sound_id() if b.bounce is not None else "Tones/"
+        if not extra.startswith("Tones/") and extra not in {sid for sid, _ in sounds}:
+            path = B.path_of(extra, folder)            # (Bounce's sound, on no button: wanted first)
+            if path:
+                sounds.insert(0, [extra, path])
         names = {sid for sid, _ in sounds}
         b.ready = {s: v for s, v in b.ready.items() if s in names}
         b.bad = {s: v for s, v in b.bad.items() if s in names}
@@ -489,6 +512,7 @@ class SoundboardScreen:
                     if self.sim_opts is not None and b.card is not None:
                         self.board_card_shut()         # (the card it opened as it went down: gone again)
                     self.board_clear()
+        self.bounce_tick(now)                          # (Bounce, if it's up: its balls moved on, their notes played)
         if b.note_pad is None and b.placing is None and self.board_note_pad(now) is not None:
             b.note_pad = self.board_note_pad(now)      # (A, B, X or Y held a moment: its note on its tile, the d-pad's
             self.dirty = True                          #  notes its)
@@ -523,9 +547,14 @@ class SoundboardScreen:
     def board_web(self, cmd):
         """The web page's Soundboard changed something: looked at now, not at the next look. Or the loop's tempo, its
         length, snapping or the click ("loop": {"bpm", "bars", "snap", "click"}, any of them), and how the loop is."""
-        if isinstance(cmd.get("loop"), dict):
-            why = self.board_web_set(cmd["loop"])
-            return {"error": why} if why else {"ok": True, "loop": self.board_web_loop()}
+        if isinstance(cmd.get("loop"), dict) or isinstance(cmd.get("bounce"), dict):   # (its Bounce: screens/bounce.py)
+            if isinstance(cmd.get("loop"), dict):
+                why = self.board_web_set(cmd["loop"])
+            else:
+                why = self.bounce_web(cmd["bounce"])
+            if why:
+                return {"error": why}
+            return {"ok": True, "loop": self.board_web_loop(), "bounce": self.bounce_web_state()}
         b = getattr(self, "board", None)
         if b is not None:
             b.look_at = b.deep_at = 0.0
@@ -615,6 +644,8 @@ class SoundboardScreen:
         else:
             s.loop = s.clock = None
         s.held_note = (b.note_pad, self.board_note_name(b.note)) if b.note_pad is not None else None
+        s.fps = self.sim_fps()
+        self.bounce_page(s)                            # (Bounce, if it's up: its shape and balls, its buttons)
 
     def board_trouble(self):
         why = (self.board.sound_why or "").lower()
@@ -669,6 +700,8 @@ class SoundboardScreen:
         """Its buttons (not START's card: press_board_card). Every one is its own: none goes back, or on to the next
         app."""
         b = self.board_open()
+        if b.bounce is not None and b.rec is None and b.placing is None:
+            return self.press_bounce(name, repeat)     # (Bounce: its buttons, screens/bounce.py)
         if repeat:
             return None                                # (held down: once is once)
         if b.rec is not None:                          # recording: A keeps it, B drops it
@@ -930,6 +963,8 @@ class SoundboardScreen:
     def board_rows(self):
         """Its card's rows: (key, label, its value or None: A does it)."""
         b = self.board
+        if b.card == "bounce":
+            return self.bounce_rows()
         if b.card == "kept":
             at = B.where(b.banks, b.placing) if b.placing else None
             stay = f"Leave it on {PAD_SAY[at[1]]} in {b.banks[at[0]]['name']}" if at else "Leave it off the buttons"
@@ -943,7 +978,8 @@ class SoundboardScreen:
                  ("bars", "Loop", f"{bars} bar" + ("s" if bars > 1 else "")),
                  ("snap", "Snap to the beat", "Off" if self.setting("board_snap") == "Off" else "On"),
                  ("click", "Click while recording", "Off" if self.setting("board_click") == "Off" else "On"),
-                 ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major")]
+                 ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major"),
+                 ("bounce", "Bounce", None)]
         return rows
 
     def board_card_shut(self):
@@ -955,6 +991,8 @@ class SoundboardScreen:
         (here, where it isn't a sound). A recording's card: A does the row, B or START shuts it."""
         b = self.board_open()
         b.held.pop("start", None)                      # (anything pressed on the card: START wasn't being held)
+        if b.card == "bounce":
+            return self.press_bounce_card(name, repeat)
         rows = self.board_rows()
         sel = self.sim_opts % len(rows)
         key = rows[sel][0]
@@ -984,6 +1022,8 @@ class SoundboardScreen:
         elif name == "a" and key == "rec":
             self.board_card_shut()
             self.board_rec_start()
+        elif name == "a" and key == "bounce":
+            self.bounce_start(time.monotonic())
         elif name in ("a", "start"):
             self.board_card_shut()
         elif name == "select":
@@ -1011,8 +1051,11 @@ class SoundboardScreen:
         key, _, value = rows[self.sim_opts % len(rows)]
         if b.card == "kept":
             return [("▲▼", "Choose"), ("A", "OK"), ("SELECT", "Hear it"), ("B", "Not now")]
+        if b.card == "bounce":
+            return self.bounce_card_hints()
         if value is None:
-            return [("▲▼", "Choose"), ("A", "Record"), ("START", "Done"), ("B", "Back to Apps")]
+            return [("▲▼", "Choose"), ("A", "Record" if key == "rec" else "Open"), ("START", "Done"),
+                    ("B", "Back to Apps")]
         return [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("B", "Back to Apps")]
 
     def board_card_key(self):
@@ -1032,6 +1075,8 @@ class SoundboardScreen:
             title = self.fit(probe, B.title(b.placing or ""), self.fonts["head"], 360)
             secs = b.ready.get(b.placing)
             return self.rows_card(title, [f"{secs:.1f} seconds long." if secs else "Your new sound."], rows, False)
+        if b.card == "bounce":
+            return self.rows_card("Bounce", BOUNCE_HOW, rows)
         return self.rows_card(LIBRARY[self.tab].get("title") or LIBRARY[self.tab]["name"], BOARD_HOW, rows)
 
     def rows_card(self, title, lede, rows, press_a=True):

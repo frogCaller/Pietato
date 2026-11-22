@@ -245,6 +245,14 @@ beat, so their loops keep time together. A new tempo on one of them goes to all 
 Soundboard takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
 changes nothing for the others.
 
+START's card also has Bounce: a shape turning slowly in the middle of the page, with balls bouncing inside it. Each
+wall is a note of a scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note and
+lights it up. A adds a ball and B takes one away (up to 8), ◀▶ turn the shape either way, ▲▼ speed the balls up or
+down, L and R change the shape (more sides, more notes), and SELECT changes the scale: major, minor, pentatonic or
+blues. START pauses it, and its card has the rest: the sound (a bell, a pluck, a pad, or any sound on your
+Soundboard, played at each wall's note), the key, a light echo, Snap to the tempo (each note on the loop's beat) and
+Leave Bounce. Your LEDs, if you have them, flash in the wall's colour.
+
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
 turns that off too.

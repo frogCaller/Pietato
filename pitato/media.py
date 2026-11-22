@@ -97,6 +97,7 @@ from .screens.fishtank import FishScreen
 from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
 from .screens.soundboard import SoundboardScreen
+from .screens.bounce import BounceScreen
 from .screens.band import BandScreen, Brain as BandBrain
 from .screens.glow import GlowScreen
 from .screens.oled import OledScreen
@@ -115,7 +116,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen,
-            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BandScreen, MusicScreen):
+            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BounceScreen, BandScreen, MusicScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 

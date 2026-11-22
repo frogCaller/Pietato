@@ -1573,16 +1573,19 @@ def sound_told():
     ask_pi("POST", "/soundboard", {"changed": True}, timeout=2)
 
 
-def sound_loop(got):
-    """Its loop as media mode says it is (screens/soundboard.py's board_web_loop), from what it answered (ask_pi's);
-    None: it didn't."""
+def sound_loop(got, part="loop"):
+    """Its loop (or its Bounce: part) as media mode says it is (screens/soundboard.py's board_web_loop,
+    screens/bounce.py's bounce_web_state), from what it answered (ask_pi's); None: it didn't."""
     if got is None or got[0] != 200:
         return None
     try:
-        loop = json.loads(got[1]).get("loop")
+        loop = json.loads(got[1]).get(part)
     except (ValueError, AttributeError):
         return None
     return loop if isinstance(loop, dict) else None
+
+
+BOUNCE_ASKS = ("on", "paused", "balls", "spin", "speed", "shape", "key", "scale", "sound", "echo", "snap")
 
 
 def sound_trim(B, path):
@@ -1610,8 +1613,9 @@ def soundboard():
             banks, off, files = sound_banks(B, sound_folder(B))
     except OSError as ex:
         return jsonify(error=f"The Soundboard's sounds can't be read ({ex.strerror or ex})"), 500
-    loop = sound_loop(ask_pi("GET", "/soundboard", timeout=2))   # (its loop: none, if media mode isn't answering)
-    return jsonify(sound_state(B, banks, off, files, **({"loop": loop} if loop else {})))
+    got = ask_pi("GET", "/soundboard", timeout=2)     # (its loop and Bounce: none, if media mode isn't answering)
+    more = {k: v for k, v in (("loop", sound_loop(got)), ("bounce", sound_loop(got, "bounce"))) if v}
+    return jsonify(sound_state(B, banks, off, files, **more))
 
 
 @app.get("/api/soundboard/sound")
@@ -1707,18 +1711,19 @@ def soundboard_do():
     "lift" taken off its button, "rename" and "delete" for a sound of yours, "bank_add", "bank_rename",
     "bank_delete" (its sounds stay), "bank_move" ("to"), "starter" (the starter pack's sounds that are on no
     button, back on buttons). Or "loop": its loop's tempo ("bpm"), length ("bars"), "snap" and "click" ("On" or
-    "Off"), any of them, as media mode has them."""
+    "Off"), any of them, as media mode has them; or "bounce", its Bounce (BOUNCE_ASKS)."""
     if not request.is_json:                         # JSON only: another site's form can't post here
         abort(415)
     data = request.get_json(silent=True) or {}
     B = soundbank()
-    if isinstance(data, dict) and data.get("do") == "loop":
-        want = {k: data[k] for k in ("bpm", "bars", "snap", "click") if k in data}
-        got = ask_pi("POST", "/soundboard", {"loop": want}, timeout=5)
+    if isinstance(data, dict) and data.get("do") in ("loop", "bounce"):
+        part = data["do"]                           # (its loop, or its Bounce: media mode's)
+        asks = ("bpm", "bars", "snap", "click") if part == "loop" else BOUNCE_ASKS
+        got = ask_pi("POST", "/soundboard", {part: {k: data[k] for k in asks if k in data}}, timeout=5)
         if got is None or got[0] == 401:
             return jsonify(error="The Pi's screen isn't answering. Is Pietato running?"), 503
-        loop = sound_loop(got)
-        if loop is None:
+        loop, both = sound_loop(got, part), {k: sound_loop(got, k) for k in ("loop", "bounce")}   # (both, as they
+        if loop is None:                                                                      #  are now)
             try:
                 why = json.loads(got[1]).get("error")
             except (ValueError, AttributeError):
@@ -1729,7 +1734,7 @@ def soundboard_do():
                 banks, off, files = sound_banks(B, sound_folder(B))
         except OSError as ex:
             return jsonify(error=f"The Soundboard's sounds can't be read ({ex.strerror or ex})"), 500
-        return jsonify(sound_state(B, banks, off, files, loop=loop))
+        return jsonify(sound_state(B, banks, off, files, **{k: v for k, v in both.items() if v}))
     do, sid, pad, more = data.get("do"), data.get("id"), data.get("pad"), {}
     i = data["bank"] if type(data.get("bank")) is int else -1
     try:

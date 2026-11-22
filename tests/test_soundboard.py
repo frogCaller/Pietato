@@ -794,7 +794,8 @@ def flush():
     return np.asarray(FB.last.convert("RGB")).astype(int)
 
 
-LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale"]   # (START's card: the loop's, after the bank's and volume)
+LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "bounce"]   # (START's card: the loop's, after the bank's and
+                                                                    #  volume; then Bounce)
 
 
 def quiet():
@@ -1249,8 +1250,7 @@ check(f"a USB microphone plugged in: Record a sound is there ({[r[1] for r in m.
 shutil.rmtree(A + "/card1")
 open(A + "/cards", "w").write(HDMI)
 spin(3.5, lambda: b.mic is None)
-check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["bank", "volume"]
-      + ["tempo", "bars", "snap", "click", "scale"])
+check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["bank", "volume"] + LOOP_ROWS)
 os.makedirs(A + "/card1/pcm0c")
 open(A + "/card1/usbid", "w").write("0c76:161f\n")
 open(A + "/cards", "w").write(HDMI + MIC)

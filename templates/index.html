@@ -805,6 +805,12 @@
   }
   .sb-bpm input::-webkit-outer-spin-button, .sb-bpm input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .sb-bpm-u { padding: 0 6px 0 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .sb-bounce .range { width: 190px; }
+  .sb-bounce .sb-loop-now { flex-wrap: wrap; }
+  .sb-bounce .sb-loop-now > div:not(.sb-bounce-acts) { flex: 1 1 200px; min-width: 0; }
+  .sb-bounce-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  .sb-loop-sets .seg { flex-wrap: wrap; }
+  .sb-bounce select { height: 33px; padding: 0 30px 0 12px; border-radius: 11px; }
   @media (max-width: 700px) {
     .sb-loop-sets { grid-template-columns: auto minmax(0, 1fr); }
     .sb-loop-sets > :nth-child(4n + 3) { margin-left: 0; }
@@ -5487,6 +5493,9 @@ function drawSound() {
   SB.loopBox = el("section", "sb-loop");                   // (the loop: hidden till the Pi says how it is)
   SB.loopBox.hidden = true;
   SB.loopSig = "";
+  SB.bounceBox = el("section", "sb-loop sb-bounce");       // (its Bounce: the same)
+  SB.bounceBox.hidden = true;
+  SB.bounceSig = "";
   SB.tabs = el("div", "sb-banks");
   SB.tabs.setAttribute("role", "tablist");
   SB.tabs.setAttribute("aria-label", "Banks");
@@ -5499,7 +5508,7 @@ function drawSound() {
   SB.pick.onchange = () => { const files = Array.from(SB.pick.files || []); SB.pick.value = ""; sbAdd(files); };
   const main = el("div", "sb-main");
   main.append(SB.board, SB.list);
-  SB.root.append(SB.loopBox, SB.tabs, main, SB.pack, SB.pick);
+  SB.root.append(SB.loopBox, SB.bounceBox, SB.tabs, main, SB.pack, SB.pick);
   box.append(SB.root);
   SB.edit = null; SB.drag = null;
   if (SB.data) { sbLoopTake(); sbDraw(); }
@@ -5547,9 +5556,88 @@ async function sbDo(body) {      // a change, made on the Pi: what comes back is
 function sbLoopTake() {          // (drawn again when it's changed; not while its tempo's being typed)
   const sig = JSON.stringify((SB.data && SB.data.loop) || null);
   const typing = !!SB.loopBox && SB.loopBox.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
-  if (sig === SB.loopSig || typing || !SB.loopBox) return;
-  SB.loopSig = sig;
-  sbDrawLoop();
+  if (sig !== SB.loopSig && !typing && SB.loopBox) {
+    SB.loopSig = sig;
+    sbDrawLoop();
+  }
+  const bsig = JSON.stringify((SB.data && SB.data.bounce) || null);   // (Bounce: not while a slider's held)
+  const sliding = !!SB.bounceBox && SB.bounceBox.contains(document.activeElement) && document.activeElement.matches("input[type=range]");
+  if (bsig !== SB.bounceSig && !sliding && SB.bounceBox) {
+    SB.bounceSig = bsig;
+    sbDrawBounce();
+  }
+}
+// its Bounce (START's card on the Pi's Soundboard: a shape turning, balls bouncing in it, each wall a note)
+function sbDrawBounce() {
+  const box = SB.bounceBox, bo = SB.data && SB.data.bounce;
+  box.textContent = "";
+  box.hidden = !bo;
+  if (!bo) return;
+  const now = el("div", "sb-loop-now"), words = el("div");
+  const say = bo.on ? (bo.paused ? "Paused, " : "") + bo.balls + (bo.balls === 1 ? " ball" : " balls") + " in a "
+    + bo.shape.toLowerCase() + ", " + bo.key + " " + bo.scale.toLowerCase()
+    : bo.open ? "Off: a shape turning, balls bouncing in it, each wall a note" : "Open the Soundboard on the Pi to play it";
+  words.append(el("h4", "", "Bounce"), el("p", "sb-bounce-say", say));
+  now.append(el("i", "sb-loop-dot" + (bo.on && !bo.paused ? " on" : "")), words);
+  const acts = el("div", "sb-bounce-acts");
+  if (bo.on) {
+    const pause = button("btn2", bo.paused ? "Play on" : "Pause");
+    pause.onclick = () => sbBounceDo({ paused: !bo.paused });
+    const leave = button("btn2", "Leave Bounce");
+    leave.onclick = () => sbBounceDo({ on: false });
+    acts.append(pause, leave);
+  } else {
+    const go = button("btn2", "Start Bounce");
+    go.disabled = !bo.open;
+    go.onclick = () => sbBounceDo({ on: true });
+    acts.append(go);
+  }
+  now.append(acts);
+  const sets = el("div", "sb-loop-sets");
+  if (bo.on) {
+    const balls = el("div", "sb-bpm"), less = button("", "\u2212"), more = button("", "+");
+    less.setAttribute("aria-label", "A ball fewer"); more.setAttribute("aria-label", "A ball more");
+    less.disabled = bo.balls <= 0; more.disabled = bo.balls >= bo.most;
+    less.onclick = () => sbBounceDo({ balls: bo.balls - 1 }); more.onclick = () => sbBounceDo({ balls: bo.balls + 1 });
+    balls.append(less, el("span", "sb-bpm-u", String(bo.balls)), more);
+    sets.append(el("span", "sb-loop-l", "Balls"), balls);
+  }
+  sets.append(el("span", "sb-loop-l", "Spin"), sbBounceSlide("Spin", bo.spins[0], bo.spins[1], bo.spins[2], bo.spin, (v) => (v === 0 ? "Still" : (v > 0 ? "\u21ba " : "\u21bb ") + Math.abs(v).toFixed(1)), "spin"),
+    el("span", "sb-loop-l", "Speed"), sbBounceSlide("Speed", bo.speeds[0], bo.speeds[1], bo.speeds[2], bo.speed, (v) => v.toFixed(1), "speed"),
+    el("span", "sb-loop-l", "Shape"), sbSeg("Shape", bo.shapes.map((n) => [n, n]), bo.shape, (shape) => sbBounceDo({ shape })),
+    el("span", "sb-loop-l", "Scale"), sbSeg("Scale", bo.scales.map((n) => [n, n]), bo.scale, (scale) => sbBounceDo({ scale })),
+    el("span", "sb-loop-l", "Key"), sbBounceSelect("Key", bo.keys.map((k) => [k, k]), bo.key, (key) => sbBounceDo({ key })),
+    el("span", "sb-loop-l", "Sound"), sbBounceSelect("Sound", bo.sounds.map((s) => [s.id, s.name]), bo.sound, (sound) => sbBounceDo({ sound })),
+    el("span", "sb-loop-l", "Echo"), sbSeg("Echo", [["On", "On"], ["Off", "Off"]], bo.echo, (echo) => sbBounceDo({ echo })),
+    el("span", "sb-loop-l", "Snap to the tempo"), sbSeg("Snap to the tempo", [["On", "On"], ["Off", "Off"]], bo.snap, (snap) => sbBounceDo({ snap })));
+  box.append(now, sets);
+}
+function sbBounceSlide(label, lo, hi, step, value, says, key) {   // (let go of: the Pi's told)
+  const w = el("div", "range"), inp = el("input"), out = el("span", "range-v", says(value));
+  inp.type = "range"; inp.min = lo; inp.max = hi; inp.step = step; inp.value = value;
+  inp.setAttribute("aria-label", label);
+  inp.oninput = () => { out.textContent = says(Number(inp.value)); };
+  inp.onchange = () => { inp.blur(); sbBounceDo({ [key]: Number(inp.value) }); };
+  w.append(inp, out);
+  return w;
+}
+function sbBounceSelect(label, choices, value, pick) {
+  const w = el("div", "select-wrap"), sel = el("select");
+  sel.setAttribute("aria-label", label);
+  if (!choices.some(([v]) => v === value)) choices = choices.concat([[value, value.split("/").pop()]]);
+  for (const [v, word] of choices) { const o = el("option", "", word); o.value = v; o.selected = v === value; sel.append(o); }
+  sel.onchange = () => pick(sel.value);
+  w.append(sel);
+  return w;
+}
+async function sbBounceDo(want) {   // a change to its Bounce, made on the Pi: what comes back is how it is now
+  try {
+    sbTake(await post("/api/soundboard", Object.assign({ do: "bounce" }, want)));
+  } catch (e) {
+    toast(e.message);
+    SB.bounceSig = "";
+    sbLoopTake();
+  }
 }
 function sbDrawLoop() {
   const box = SB.loopBox, lp = SB.data && SB.data.loop;

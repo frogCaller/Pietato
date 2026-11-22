@@ -353,6 +353,44 @@ check(f"...a tempo or a length that isn't one, or nonsense: said ({why}), and no
 r = ask(do="loop", bpm=126, bars=2, snap="On")
 check(f"...the same tempo again: the beat's left as it is (not changed once more: {b.clock.rev} times)",
       r.status_code == 200 and b.clock.rev == was[1] and m.setting("board_bars") == "2")
+bo = c.get("/api/soundboard", headers=H).get_json().get("bounce") or {}
+check(f"its Bounce, as media mode has it: off, the Soundboard open on the Pi, its shapes, scales, keys and sounds "
+      f"({bo.get('on')}, {bo.get('open')}, {bo.get('shapes')}, {bo.get('scales')}, "
+      f"{[x['name'] for x in bo.get('sounds', [])][:5]})",
+      bo.get("on") is False and bo.get("open") is True
+      and bo.get("shapes") == ["Triangle", "Square", "Pentagon", "Hexagon"]
+      and bo.get("scales") == ["Major", "Minor", "Pentatonic", "Blues"] and len(bo.get("keys", [])) == 12
+      and [x["name"] for x in bo.get("sounds", [])][:3] == ["Bell", "Pluck", "Pad"] and len(bo.get("sounds", [])) > 20)
+r = ask(do="bounce", on=True)
+bo = (r.get_json() or {}).get("bounce") or {}
+check(f"...started from the page: on the Pi at once ({bo.get('on')}, {bo.get('balls')} balls); the loop's said with "
+      f"it, as each is with the other (so the page shows both as they are)",
+      r.status_code == 200 and bo.get("on") is True and b.bounce is not None and len(b.bounce.balls) == 3
+      and isinstance((r.get_json() or {}).get("loop"), dict)
+      and isinstance((ask(do="loop", bpm=126).get_json() or {}).get("bounce"), dict))
+r = ask(do="bounce", balls=5, shape="Square", scale="Blues", key="D", sound="Tones/Pad", echo="Off", snap="On",
+        spin=0.8, speed=1.2)
+bo = (r.get_json() or {}).get("bounce") or {}
+check(f"...its balls, shape, scale, key, sound, echo, snapping and speeds from the page: the Pi's ({bo.get('balls')}, "
+      f"{bo.get('shape')}, {bo.get('scale')}, {bo.get('key')}, {bo.get('sound')}, {bo.get('echo')}, {bo.get('snap')}, "
+      f"{bo.get('spin')}, {bo.get('speed')})", r.status_code == 200 and len(b.bounce.balls) == 5 and b.bounce.sides == 4
+      and (bo.get("scale"), bo.get("key"), bo.get("sound"), bo.get("echo"), bo.get("snap"))
+      == ("Blues", "D", "Tones/Pad", "Off", "On")
+      and b.bounce.spin == 0.8 and b.bounce.speed == 1.2 and m.setting("bounce_shape") == "Square")
+bad = [ask(do="bounce", shape="Circle"), ask(do="bounce", balls=20), ask(do="bounce", sound="Nope.wav"),
+       ask(do="bounce", spin="fast")]
+check(f"...nonsense refused, and said ({[(x.status_code, (x.get_json() or {}).get('error')) for x in bad]})",
+      [x.status_code for x in bad] == [400] * 4 and bad[1].get_json()["error"] == "Up to 8 balls"
+      and b.bounce.sides == 4)
+r1, was_card = ask(do="bounce", paused=True), b.card
+r2 = ask(do="bounce", paused=False)
+check(f"...paused and on again from the page ({was_card}, {b.card})", was_card == "bounce" and b.card is None
+      and r1.status_code == r2.status_code == 200)
+r = ask(do="bounce", on=False)
+check("...and left", r.status_code == 200 and b.bounce is None
+      and (r.get_json() or {}).get("bounce", {}).get("on") is False)
+ask(do="bounce", shape="Hexagon", scale="Pentatonic", key="C", sound="Tones/Bell", echo="On", snap="Off", spin=0.3,
+    speed=0.8)
 for name, f in (("Laugh.wav", 500), ("Wilhelm scream.wav", 700), ("Door bell.wav", 900), ("Drop.wav", 300), ("Onto.wav", 350)):
     open(f"{S}/up/{name}", "wb").write(wav(0.4, f=f))
 open(S + "/up/notes.txt", "w").write("not a sound\n")
@@ -688,6 +726,27 @@ async def browse():
               and len(b.layers) == 1)
         m.soon(lambda: m.board_clear())
         check(f"...and nothing went wrong on the page ({oops})", until(lambda: not b.layers, 2) and not oops)
+        # its Bounce, from the page
+        await pg.wait_for_selector(".sb-bounce:not([hidden]) button:has-text('Start Bounce')", timeout=6000)
+        await pg.click(".sb-bounce button:has-text('Start Bounce')")
+        on = until(lambda: b.bounce is not None, 3)
+        await pg.wait_for_selector(".sb-bounce button[aria-label='A ball more']", timeout=6000)
+        await pg.click(".sb-bounce button[aria-label='A ball more']")
+        more = until(lambda: b.bounce is not None and len(b.bounce.balls) == 4, 3)
+        await pg.click(".sb-bounce .seg[aria-label=Shape] button:has-text('Triangle')")
+        tri = until(lambda: b.bounce is not None and b.bounce.sides == 3, 3)
+        await pg.select_option(".sb-bounce select[aria-label=Sound]", "Tones/Pluck")
+        pluck = until(lambda: m.setting("bounce_sound") == "Tones/Pluck", 3)
+        await pg.wait_for_function("document.querySelector('.sb-bounce-say').textContent"
+                                   ".startsWith('4 balls in a triangle')", timeout=6000)
+        say = await pg.evaluate("document.querySelector('.sb-bounce-say').textContent")
+        await pg.click(".sb-bounce button:has-text('Leave Bounce')")
+        gone = until(lambda: b.bounce is None, 3)
+        check(f"Bounce from the page: started on the Pi ({on}), a ball more ({more}), the triangle ({tri}), the Pluck "
+              f"({pluck}), said as it is ({say!r}), and left ({gone}); nothing went wrong ({oops})",
+              on and more and tri and pluck and gone and say.startswith("4 balls in a triangle, C pentatonic")
+              and not oops)
+        ask(do="bounce", shape="Hexagon", sound="Tones/Bell")
         await ctx.close()
 
         # a phone

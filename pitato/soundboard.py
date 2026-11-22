@@ -14,6 +14,7 @@ its own. screens/soundboard.py: its buttons, and what media mode does for it.)""
 import math
 import time
 
+from . import bounce as BN
 from .sims import Sim
 from .theme import ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
 
@@ -50,6 +51,8 @@ class Soundboard(Sim):
         self.loop = None                # the loop: {"rec": recording a layer, "layers", "bar", "beat", "bpm"}, or None
         self.clock = None               # ...its beat: (tempo, beat b0, heard at t0): drawn again on each beat
         self.held_note = None           # a note being played: (the button held, the note's name)
+        self.bounce = None              # Bounce, while it's up (screens/bounce.py's bounce_page): drawn instead
+        self.fps = 20                   # ...frames a second, while its balls move
         self.taps = []                  # where its buttons are on the screen: (box, the button)
         self.fonts = {}
         self.tiles = {}
@@ -65,6 +68,8 @@ class Soundboard(Sim):
         return None
 
     def frame_in(self, wall):
+        if self.bounce is not None:                    # (Bounce: frame by frame while it plays, else when it changes)
+            return STILL if self.bounce["paused"] else 1.0 / max(1, self.fps)
         if self.clock is None:
             return STILL
         bpm, b0, t0 = self.clock                       # (the loop: drawn again as each beat's heard)
@@ -257,9 +262,33 @@ class Soundboard(Sim):
                anchor="lm")
         img.paste(card, (x0 + (self.w - w) // 2, y0 + (self.h - h) // 2), card)
 
+    def bounce_top(self, d, x0, y0):
+        """Bounce's line: its shape between ◀ and ▶ (L and R), its key and scale at the left, its balls at the right."""
+        v = self.bounce
+        mid = y0 + TOP // 2 - 2
+        f, small = self.font(18, bold=True), self.font(13)
+        cx = x0 + self.w / 2
+        d.text((cx, mid), v["shape"], font=f, fill=TEXT, anchor="mm")
+        nw = f.getlength(v["shape"])
+        self.arrow(d, "left", cx - nw / 2 - 20, mid, 5, MUTED)
+        self.arrow(d, "right", cx + nw / 2 + 20, mid, 5, MUTED)
+        d.text((x0 + EDGE + 2, mid), f"{v['key']} {v['scale'].lower()}, {v['sound']}", font=small, fill=TEXT,
+               anchor="lm")
+        n = v["count"]
+        d.text((x0 + self.w - EDGE - 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED,
+               anchor="rm")
+        self.taps.append(((x0, y0, x0 + self.w // 2, y0 + TOP - 4), "l"))
+        self.taps.append(((x0 + self.w // 2, y0, x0 + self.w, y0 + TOP - 4), "r"))
+
     def draw(self, img, x0, y0):
         from .fine import ImageDraw
         self.taps = []
+        if self.bounce is not None:                    # (Bounce: its shape and balls, bounce.py)
+            d = ImageDraw.Draw(img)
+            self.bounce_top(d, x0, y0)
+            BN.draw(d, (x0, y0 + TOP, x0 + self.w, y0 + self.h), self.bounce,
+                    {"bold": self.font(20, bold=True), "small": self.font(14)}, time.monotonic())
+            return
         self.top(ImageDraw.Draw(img), x0, y0)
         for pad, (x, y, w, h) in self.boxes().items():
             img.paste(self.tile(pad, w, h), (x0 + x, y0 + y))
