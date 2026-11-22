@@ -92,6 +92,10 @@ check("...only the page asks (its own word with each request, which another site
       and c.put("/api/soundboard/sound?name=x.wav", data=wav()).status_code == 403
       and c.post("/api/soundboard", data="do=delete&id=x.wav", content_type="application/x-www-form-urlencoded").status_code == 415
       and c.post("/api/soundboard", json={"do": "bank_add"}, headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403)
+r = ask(do="loop", bpm=120)
+check(f"...media mode not running: no loop with the rest (nothing to say how it is), and a new tempo for it can't be "
+      f"made, and that's said ({r.status_code}: {(r.get_json() or {}).get('error')})", "loop" not in d
+      and r.status_code == 503 and r.get_json()["error"] == "The Pi's screen isn't answering. Is Pietato running?")
 r = c.put("/api/soundboard/sound?name=Laugh.wav", data=wav(), headers=H)
 d = r.get_json()
 check(f"a sound added: a file in your Soundboard folder ({os.listdir(FOLDER)}), on My sounds' first free button "
@@ -325,6 +329,30 @@ opened = c.post("/api/pi/open", json={"app": "Soundboard"}, headers=H)
 check(f"media mode's Soundboard, opened ({opened.get_json()}): its player running, its sounds ready",
       until(lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) == 24, 15))
 b = m.board
+d = c.get("/api/soundboard", headers=H).get_json()
+lp = d.get("loop")
+check(f"its loop, as media mode has it, with the banks and sounds ({lp}): none yet, its tempo, length, snapping and "
+      f"click as they're set, the Soundboard open on the Pi, no others in time with it",
+      lp == {"bpm": 100, "bars": 2, "snap": "On", "click": "On", "layers": 0, "rec": False, "open": True, "with": [],
+             "bpms": [40, 240], "lengths": [1, 2, 4]} and len(d["banks"]) >= 3)
+r = ask(do="loop", bpm=126, bars=4, snap="Off")
+lp = (r.get_json() or {}).get("loop") or {}
+check(f"...a new tempo, length and snapping from the page: media mode's at once ({lp.get('bpm')}, {lp.get('bars')}, "
+      f"{lp.get('snap')}; its beat's {b.clock.bpm if b.clock else None} a minute), kept as its settings; the banks and "
+      f"sounds with it", r.status_code == 200 and (lp.get("bpm"), lp.get("bars"), lp.get("snap"), lp.get("click"))
+      == (126, 4, "Off", "On") and b.clock is not None and b.clock.bpm == 126 and m.setting("board_bpm") == "126"
+      and m.setting("board_bars") == "4" and m.setting("board_snap") == "Off" and "sounds" in r.get_json())
+was = (b.clock.bpm, b.clock.rev, m.setting("board_bars"), m.setting("board_click"))
+bad = [ask(do="loop", bpm=500), ask(do="loop", bpm=120, bars=3), ask(do="loop", bpm="120"), ask(do="loop", bpm=True),
+       ask(do="loop", bpm=120, click="Maybe")]
+why = [(x.status_code, (x.get_json() or {}).get("error")) for x in bad]
+check(f"...a tempo or a length that isn't one, or nonsense: said ({why}), and nothing changed, not even what was right "
+      f"with it", [w[0] for w in why] == [400] * 5 and why[0][1] == "A tempo's 40 to 240 BPM"
+      and why[1][1] == "A loop's 1, 2 or 4 bars" and (b.clock.bpm, b.clock.rev, m.setting("board_bars"),
+                                                        m.setting("board_click")) == was)
+r = ask(do="loop", bpm=126, bars=2, snap="On")
+check(f"...the same tempo again: the beat's left as it is (not changed once more: {b.clock.rev} times)",
+      r.status_code == 200 and b.clock.rev == was[1] and m.setting("board_bars") == "2")
 for name, f in (("Laugh.wav", 500), ("Wilhelm scream.wav", 700), ("Door bell.wav", 900), ("Drop.wav", 300), ("Onto.wav", 350)):
     open(f"{S}/up/{name}", "wb").write(wav(0.4, f=f))
 open(S + "/up/notes.txt", "w").write("not a sound\n")
@@ -354,6 +382,20 @@ LOOK = """(() => {
     toast: document.querySelector('#toast').classList.contains('show') ? document.querySelector('#toast').textContent : '',
     wide: document.documentElement.scrollWidth - window.innerWidth,
     hash: location.hash,
+  };
+})()"""
+LOOP = """(() => {
+  const s = document.querySelector('.sb-loop');
+  if (!s || s.hidden) return null;
+  const r = s.getBoundingClientRect(), t = document.querySelector('.sb-banks').getBoundingClientRect();
+  return {
+    say: s.querySelector('.sb-loop-say').textContent,
+    dot: s.querySelector('.sb-loop-dot').className,
+    bpm: s.querySelector('.sb-bpm input').value,
+    sets: Object.fromEntries([...s.querySelectorAll('.seg')].map((g) => [g.getAttribute('aria-label'),
+      (g.querySelector('[aria-pressed=true]') || {}).textContent])),
+    above: r.bottom <= t.top,
+    wide: document.documentElement.scrollWidth - window.innerWidth,
   };
 })()"""
 DROP = """async ([sel, name, bytes]) => {
@@ -585,6 +627,69 @@ async def browse():
               not (await pg.evaluate("location.hash")).startswith("#library"))
         await ctx.close()
 
+        # the loop: how it is on the Pi, and its tempo, length, snapping and click changed here
+        ctx = await br.new_context(viewport={"width": 1180, "height": 900})
+        pg = await ctx.new_page()
+        oops = []
+        pg.on("pageerror", lambda e: oops.append(str(e)))
+        await pg.goto(URL + "/#library")
+        await pg.wait_for_selector(".ltab", timeout=15000)
+        await pg.click(".ltab:has-text('Soundboard')")
+        await pg.wait_for_selector(".sb-loop:not([hidden])", timeout=10000)
+        got = await pg.evaluate(LOOP)
+        sets = {"Length": "2 bars", "Snap to the beat": "On", "Click while recording": "On"}
+        check(f"the loop, over the banks: none yet ({got['say']!r}), its tempo ({got['bpm']}), length, snapping and "
+              f"click as the Pi has them ({got['sets']})", got["above"] and got["say"] == "None yet: SELECT records one"
+              and got["bpm"] == "126" and got["sets"] == sets and "on" not in got["dot"].split())
+        rev = b.clock.rev
+        await pg.evaluate("""() => { const q = (s) => document.querySelector('.sb-bpm button[aria-label=' + s + ']');
+          q('Faster').click(); q('Faster').click(); q('Faster').click(); q('Slower').click(); }""")
+        sped = until(lambda: b.clock.bpm == 128, 3)
+        await pg.wait_for_timeout(500)
+        check(f"+ three times and - once, quickly: the Pi's tempo two faster ({b.clock.bpm:.0f}), changed once, not "
+              f"four times ({b.clock.rev - rev})", sped and b.clock.rev == rev + 1 and m.setting("board_bpm") == "128")
+        await pg.fill(".sb-bpm input", "90")
+        await pg.press(".sb-bpm input", "Enter")
+        typed = until(lambda: b.clock.bpm == 90, 3)
+        check(f"...a tempo typed: the Pi's ({b.clock.bpm:.0f})", typed)
+        await pg.fill(".sb-bpm input", "999")
+        await pg.press(".sb-bpm input", "Enter")
+        typed = until(lambda: b.clock.bpm == 240, 3)
+        await pg.wait_for_timeout(300)
+        check(f"...one too fast: the fastest there is ({b.clock.bpm:.0f})", typed
+              and await pg.evaluate("document.querySelector('.sb-bpm input').value") == "240")
+        await pg.click(".sb-loop .seg[aria-label=Length] button:has-text('4 bars')")
+        await pg.click(".sb-loop .seg[aria-label='Snap to the beat'] button:has-text('Off')")
+        await pg.click(".sb-loop .seg[aria-label='Click while recording'] button:has-text('Off')")
+        loop_set = lambda: (m.setting("board_bars"), m.setting("board_snap"), m.setting("board_click"))   # noqa: E731
+        check("...4 bars, no snapping, no click: the Pi's", until(lambda: loop_set() == ("4", "Off", "Off"), 3))
+        ask(do="loop", bpm=100, bars=2, snap="On", click="On")
+        c.post("/api/pi/press", json={"button": "select"}, headers=H)   # (SELECT on the Pi: a layer recorded)
+        try:
+            await pg.wait_for_function("document.querySelector('.sb-loop-say').textContent === 'Recording a layer'",
+                                       timeout=6000)
+            rec = await pg.evaluate(LOOP)
+        except Exception:
+            rec = await pg.evaluate(LOOP)
+        pad = next(p for p, s in b.bank()["pads"].items() if s and s in b.ready)   # (a button with a sound on it)
+        c.post("/api/pi/press", json={"button": pad}, headers=H)
+        c.post("/api/pi/press", json={"button": "select"}, headers=H)
+        try:
+            await pg.wait_for_function("document.querySelector('.sb-loop-say').textContent === 'Playing, 1 layer'",
+                                       timeout=6000)
+            play = await pg.evaluate(LOOP)
+        except Exception:
+            play = await pg.evaluate(LOOP)
+        check(f"...SELECT on the Pi: here in a moment, a layer recording ({rec['say']!r}, {rec['dot']}), then playing "
+              f"({play['say']!r}, {play['dot']}); what was changed on the Pi shows here too ({play['bpm']}, "
+              f"{play['sets']})",
+              rec["say"] == "Recording a layer" and "rec" in rec["dot"].split() and play["say"] == "Playing, 1 layer"
+              and "on" in play["dot"].split() and play["bpm"] == "100" and play["sets"]["Length"] == "2 bars"
+              and len(b.layers) == 1)
+        m.soon(lambda: m.board_clear())
+        check(f"...and nothing went wrong on the page ({oops})", until(lambda: not b.layers, 2) and not oops)
+        await ctx.close()
+
         # a phone
         ctx = await br.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
         pg = await ctx.new_page()
@@ -597,8 +702,11 @@ async def browse():
         await pg.tap(".sb-bank:has-text('My sounds')")
         got = await pg.evaluate(LOOK)
         bx = got["boxes"]
-        check(f"on a phone: the page no wider than its screen ({got['wide']}), the d-pad's buttons above the letters', "
-              f"each wide enough for a name ({bx['up'][2] - bx['up'][0]} px)", got["wide"] <= 0 and bx["down"][3] <= bx["x"][1]
+        lp = await pg.evaluate(LOOP)
+        check(f"on a phone: the page no wider than its screen ({got['wide']}), the loop's strip in it too "
+              f"({lp and lp['wide']}), the d-pad's buttons above the letters', each wide enough for a name "
+              f"({bx['up'][2] - bx['up'][0]} px)",
+              got["wide"] <= 0 and lp is not None and lp["wide"] <= 0 and bx["down"][3] <= bx["x"][1]
               and bx["up"][2] - bx["up"][0] >= 150 and all(v[0] >= 0 and v[2] <= 390 for v in bx.values()))
         await pg.tap(".sb-row[data-id='Laugh.wav'] .sb-t")
         got = await pg.evaluate(LOOK)

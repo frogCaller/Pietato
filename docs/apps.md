@@ -225,9 +225,25 @@ then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC 
 ## Soundboard
 
 Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
-once as you like, and one pressed again starts again. L and R go through the banks of eight, and SELECT stops
-them all. B is a button like the others there, so the way back is START, then B. START's card also has the bank
-and the volume. The sounds play wherever Settings > Sound sends them.
+once as you like, and one pressed again starts again. L and R go through the banks of eight, and holding START
+stops them all. B is a button like the others there, so the way back is START, then B. START's card also has the
+bank, the volume and the loop's settings. The sounds play wherever Settings > Sound sends them.
+
+SELECT records a loop. Press it, play some buttons, and press it again: what you played goes round and round,
+each hit moved to the nearest sixteenth note. Press SELECT again to record another layer on top of it. Hold SELECT
+to take back the last layer, and hold START to clear the loop. While you record, a quiet click counts the beats.
+START's card has the tempo, the loop's length (1, 2 or 4 bars), Snap to the beat and Click while recording. The
+loop plays while the Soundboard is open, and it's still there when you come back to it.
+
+Hold A, B, X or Y for a moment and the d-pad plays that button's sound as notes: ▲ a note higher, ▼ a note lower,
+▶ the same note again and ◀ the sound's own. The note shows on the button, and notes go into a loop like any
+other sound. They follow a scale, Major, Minor or Pentatonic (Notes, on START's card), up to an octave either way.
+Buttons pressed together quickly, as drums are, each play their own sound.
+
+With Settings > Share with other Pietatos on, your Pietatos that have the Soundboard open share one tempo and one
+beat, so their loops keep time together. A new tempo on one of them goes to all of them, and one that opens the
+Soundboard takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
+changes nothing for the others.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
@@ -243,8 +259,9 @@ plays it back, and START can record it again or delete it.
 
 The web page's Library has a Soundboard tab that adds, records, renames and deletes sounds, adds banks, and puts
 sounds on buttons: drag one onto a button or a bank, or on a phone tap the sound, then the button. Recording there
-uses the phone's or computer's microphone, on the secure page. What you change is on the Pietato's Soundboard at
-once. Which sound is on which button is kept in `static/soundboard.txt`.
+uses the phone's or computer's microphone, on the secure page. The tab also shows the loop, with its tempo,
+length, snapping and click to change. What you change is on the Pietato's Soundboard at once. Which sound is on
+which button is kept in `static/soundboard.txt`.
 
 The starter sounds are made by a script, `pitato/sounds/make.py`, and are in the public domain (CC0): see
 `pitato/sounds/CREDITS.txt`.

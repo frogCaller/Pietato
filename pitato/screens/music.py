@@ -165,16 +165,11 @@ class MusicScreen:
 
     # -- the glow, following the beat ------------------------------------------------------------------------------
     def pulse_wanted(self):
-        """The glow follows the beat: Now playing's, round the cover, or the Bot's, round just its face
-        (screens/bot.py), with a song of yours (a file) playing and the battery saver off."""
-        if self.view == "now":
-            if self.setting("now_art") == "On":
-                return False
-        elif not self.face_alone():
-            return False
+        """Now playing's glow follows the beat: a song of yours (a file) on it, the battery saver off."""
         it = self.cur or {}
-        return bool(self.active and self.kind == "audio" and self.proc is not None and not self.resting
-                    and not self.saver_on() and "://" not in (it.get("src") or "") and not self.proc_owns_screen())
+        return bool(self.active and self.view == "now" and self.kind == "audio" and self.proc is not None
+                    and self.setting("now_art") != "On" and not self.resting and not self.saver_on()
+                    and "://" not in (it.get("src") or "") and not self.proc_owns_screen())
 
     def music_tick(self, now):
         """(Main loop.) Now playing's glow, and what the search for covers says when it's done."""
@@ -185,7 +180,7 @@ class MusicScreen:
         self.pulse_tick(now)
 
     def pulse_tick(self, now):
-        """The ear for the song that's playing, kept or let go; the glow's next frame, when it's due."""
+        """The ear for the song on Now playing, kept or let go; the glow's next frame, when it's due."""
         if not self.pulse_wanted():
             if self.ear is not None:
                 self.ear_stop()
@@ -198,10 +193,7 @@ class MusicScreen:
             self.pos_off = None                        # (where it is, said afresh when it plays on)
         if now >= self.pulse_next:
             self.pulse_next = now + 1.0 / PULSE_FPS
-            if self.view == "now":
-                self.pulse_frame()
-            else:
-                self.face_pulse()
+            self.pulse_frame()
 
     def ear_stop(self):
         ear, self.ear = self.ear, None

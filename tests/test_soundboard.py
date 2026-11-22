@@ -794,6 +794,18 @@ def flush():
     return np.asarray(FB.last.convert("RGB")).astype(int)
 
 
+LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale"]   # (START's card: the loop's, after the bank's and volume)
+
+
+def quiet():
+    """Every sound stopped, between one check and the next (SELECT is the loop's button now: START held stops them,
+    as checked once below); and the buttons pressed let go of, as they'd be (held, A, B, X or Y makes the d-pad's
+    notes)."""
+    m.board_tell(do="stop")
+    for name in ("a", "b", "x", "y"):
+        m.release(name)
+
+
 def spin(secs=0.3, cond=None):
     end = time.monotonic() + secs
     while time.monotonic() < end:
@@ -864,7 +876,8 @@ caps = {pad: near(page, (boxes[pad][0] + 8, boxes[pad][1] + 8, boxes[pad][0] + 4
 check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.PAD_COLOUR.values()))} colours: "
       f"{min(caps.values())} pixels of it or more)", min(caps.values()) > 150 and len(set(SBD.PAD_COLOUR.values())) == 8)
 hints = m.sim_hints(s)
-check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Bank"), ("SELECT", "Stop"), ("START", "Back, more")])
+check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Bank"), ("SELECT", "Record a loop"),
+                                                             ("START", "More")])
 taps = {w[1]: box for box, w in m.taps_now() if w[0] == "keys"}
 check("...each tile tapped (the web page's copy of the screen, a touch screen) is its button pressed; the bank's "
       "name, L or R", all(tuple(taps.get(pad, ())) == boxes[pad] for pad in B.PADS) and "l" in taps and "r" in taps
@@ -878,13 +891,20 @@ for pad in B.PADS:
     lit = near(page, boxes[pad], SBD.PAD_COLOUR[pad])
     others = max(near(page, boxes[q], SBD.PAD_COLOUR[q]) for q in B.PADS if q != pad and sid(want[q]) not in b.playing)
     ok_each.append((pad, ok, lit, others))
-    m.press("select")
+    quiet()
     spin(1.0, lambda: not b.playing)
 area = (boxes["a"][2] - boxes["a"][0]) * (boxes["a"][3] - boxes["a"][1])
 check(f"each of the eight buttons plays the sound that's on it, and its tile lights up in its colour while it plays "
       f"(most of its {area} pixels: {[(p_, n_) for p_, _, n_, _ in ok_each]}; the others', their marks alone)",
       all(ok and lit > area * 0.6 and others < area * 0.15 for _, ok, lit, others in ok_each))
-check("...SELECT stopped each", not b.playing)
+check("...each stopped, one after another", not b.playing)
+m.press("x")
+spin(1.0, lambda: sid("Applause") in b.playing)
+m.press("start")
+spin(0.8, lambda: m.sim_opts is None and not b.playing)
+m.release("start")
+check("START held: every sound stopped (and its card, opened as it went down, gone again)",
+      not b.playing and m.sim_opts is None and m.board_shown())
 
 
 # your LEDs, lit by its sounds as they are by music (screens/glow.py's glow_flash)
@@ -915,7 +935,7 @@ def board_on():
 
 m.press("up")
 spin(1.0, lambda: sid(want["up"]) in b.playing)
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing)
 check("no LEDs about (no grid here, no board on your network): its sounds as ever, nothing sent anywhere",
       m.glow_out is None and b.hue is None and not m.glow_beats_wanted())
@@ -941,7 +961,7 @@ gaps = [round(b_[2] - a_[2], 2) for a_, b_ in zip(hues, hues[1:])]
 check(f"...its colour said again while it plays, twice a second, so the board keeps it ({gaps})",
       len(hues) >= 3 and all(0.4 <= x <= 0.8 for x in gaps) and all(x[1] == hues[0][1] for x in hues)
       and len([x for x in lights.said if x[0] == "beat"]) == 1)
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing and b.hue is None)
 n = len(lights.said)
 spin(0.8)
@@ -954,7 +974,7 @@ got = [(x[0], x[1]) for x in lights.said if x[0] == "colour"][:2]
 check(f"...two buttons, one after the other: each its own colour and its own beat ({got})",
       got == [("colour", G.colour_of("Red")), ("colour", G.colour_of("Pink"))]
       and len([x for x in lights.said if x[0] == "beat"]) == 2)
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing and b.hue is None)
 board_on()
 lights.said.clear()
@@ -964,7 +984,7 @@ m.proc, m.kind = None, None
 spin(0.3)
 check(f"...music playing as well: a beat with the sound, in the music's colour (the button's isn't said) "
       f"({[x[0] for x in lights.said]})", [x[0] for x in lights.said] == ["beat"] and b.hue is None)
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing)
 board_on()
 lights.said.clear()
@@ -973,7 +993,7 @@ m.press("up")
 spin(0.3)
 check("...Pulse to music off (Apps > LED backlight): its sounds light nothing", lights.said == [] and b.hue is None)
 m.set_setting("glow_beat", "On")
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing)
 m.lamps_stop()
 m.glow_out, m.glow_to, m.glow_seen = None, (), 0.0
@@ -981,7 +1001,7 @@ m.press("x"); m.press("up"); m.press("a")
 spin(1.0, lambda: len(b.playing) == 3)
 check(f"three pressed one after another: all three at once ({sorted(x.split('/')[1] for x in b.playing)})",
       b.playing == {sid("Applause"), sid("Air horn"), sid("Ding")})
-m.press("select")
+quiet()
 spin(1.0, lambda: not b.playing)
 mark = len(alog()[0])
 m.press("down")
@@ -1002,7 +1022,7 @@ m.press("b")
 spin(1.0, lambda: sid("Buzzer") in b.playing)
 check("B is a button like the others here: its sound, and the page stays", sid("Buzzer") in b.playing and m.tab == si
       and m.board_shown())
-m.press("select")
+quiet()
 m.press("r")
 spin(0.3)
 s = m.sim_game()
@@ -1028,12 +1048,13 @@ m.press("start")
 page = flush()
 rows = m.board_rows()
 check(f"START: its card ({[r[1] for r in rows]}): no Record a sound, with no microphone; its buttons "
-      f"{m.sim_hints(m.sim_game())}", m.sim_opts == 0 and [r[0] for r in rows] == ["bank", "volume"]
+      f"{m.sim_hints(m.sim_game())}", m.sim_opts == 0 and [r[0] for r in rows] == ["bank", "volume"] + LOOP_ROWS
       and m.sim_hints(m.sim_game()) == [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("B", "Back to Apps")]
       and not any(w == ("keys", "a") and box == boxes["a"] for box, w in m.taps_now()))
 m.press("up")
 spin(0.3)
-check("...the buttons are the card's while it's up: no sound", not b.playing and m.sim_opts == 1)
+check("...the buttons are the card's while it's up: no sound (▲ on its first row: its last)",
+      not b.playing and m.sim_opts == len(m.board_rows()) - 1)
 m.press("down")
 m.press("right")
 check("...◀▶ on Bank: the next bank, behind it", b.at == 1 and m.board_rows()[0][2] == "Drums")
@@ -1135,7 +1156,7 @@ check("...and without its saying so (the file edited by hand): within a second o
       spin(2.5, lambda: m.sim_game().pads == {"y": ("One", "ready")}))
 m.press("y")
 check("...its sounds play from where they are now", spin(1.0, lambda: "One.wav" in b.playing))
-m.press("select")
+quiet()
 spin(0.5, lambda: not b.playing)
 
 # something else has the sound card; the Bot talks
@@ -1153,7 +1174,7 @@ check(f"something else has the sound card: the page says so quietly ({m.sim_game
 os.remove(BUSY)
 check("...free again: it plays again, by itself", spin(6, lambda: b.sound_ok is True) and m.sim_game().trouble == ""
       and (m.press("y"), spin(1.0, lambda: "One.wav" in b.playing))[1])
-m.press("select")
+quiet()
 spin(3, lambda: b.device == "" or True)                # (back where Settings > Sound says, at its next look)
 spin(3, lambda: b.device != "plughw:CARD=Other" and b.sound_ok is True)
 m.voice.speaking = True
@@ -1217,17 +1238,19 @@ flush()
 # ---- a microphone: a sound recorded, and put on a button --------------------------------------------------------------
 m.press("l")                                           # (My sounds)
 m.press("start")
-check("still no Record a sound on START's card", [r[0] for r in m.board_rows()] == ["bank", "volume"])
+m.release("start")
+check("still no Record a sound on START's card", [r[0] for r in m.board_rows()] == ["bank", "volume"] + LOOP_ROWS)
 os.makedirs(A + "/card1/pcm0c")
 open(A + "/card1/usbid", "w").write("0c76:161f\n")
 open(A + "/cards", "w").write(HDMI + MIC)
 spin(3.5, lambda: b.mic is not None)
 check(f"a USB microphone plugged in: Record a sound is there ({[r[1] for r in m.board_rows()]}, {b.mic})",
-      [r[0] for r in m.board_rows()] == ["bank", "volume", "rec"] and b.mic == "plughw:CARD=Device,DEV=0")
+      [r[0] for r in m.board_rows()] == ["bank", "volume", "rec"] + LOOP_ROWS and b.mic == "plughw:CARD=Device,DEV=0")
 shutil.rmtree(A + "/card1")
 open(A + "/cards", "w").write(HDMI)
 spin(3.5, lambda: b.mic is None)
-check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["bank", "volume"])
+check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["bank", "volume"]
+      + ["tempo", "bars", "snap", "click", "scale"])
 os.makedirs(A + "/card1/pcm0c")
 open(A + "/card1/usbid", "w").write("0c76:161f\n")
 open(A + "/cards", "w").write(HDMI + MIC)
@@ -1259,8 +1282,9 @@ rec1 = HOME + "/Soundboard/Recording 1.wav"
 shape = wav_of(rec1) if os.path.isfile(rec1) else (0,)
 s = m.sim_game()
 check(f"A: kept, its silence trimmed ({shape[0]:.2f} s, of three and a half recorded round a second of sound), a "
-      f"file in your Soundboard folder; the Bot listens again ({listened})",
-      1.1 < shape[0] < 1.3 and listened[-1:] == [True] and b.placing == "Recording 1.wav")
+      f"file in your Soundboard folder; the Bot listens again ({listened}: the microphone's own look, plugged in "
+      f"just now, may have it listen too)",
+      1.1 < shape[0] < 1.3 and True in listened and b.placing == "Recording 1.wav")
 check(f"...on My sounds' next free button meanwhile, like any new sound ({s.pads}), and the page asks for the button "
       f"it's to go on ({s.placing}; {m.sim_hints(s)})", s.pads.get("up") == ("Recording 1", "ready") and s.placing == ("Recording 1", "up")
       and m.sim_hints(s) == [("L R", "Bank"), ("SELECT", "Hear it"), ("START", "More")])
@@ -1281,7 +1305,7 @@ check(f"...the button pressed is the one it goes on ({s.pads['a']}; {toasts[n_to
       and "[My sounds]\nup = Starter/Ding.wav\nb = Laugh.wav" in filed)
 m.press("a")
 check("...and plays there, now", spin(1.5, lambda: "Recording 1.wav" in b.playing) and not b.placing)
-m.press("select")
+quiet()
 spin(1, lambda: not b.playing)
 m.press("start"); m.press("down"); m.press("down"); m.press("a")
 spin(2.2, lambda: False)

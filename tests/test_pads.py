@@ -367,7 +367,7 @@ r = post("/press", {"button": "nope"})
 check("unknown button refused", "error" in r)
 cat = json.loads(get("/catalog")[0])
 check("catalog: apps, cartoons, films, radio (news and sports are Plex's)", len(cat["apps"]) >= 10
-      and len(cat["cartoons"]) == 13 and len(cat["films"]) == 5 and "news" not in cat and "sports" not in cat
+      and len(cat["cartoons"]) == 12 and len(cat["films"]) == 5 and "news" not in cat and "sports" not in cat
       and cat["radio"]["stations"])
 toon = cat["cartoons"][0]["items"][0]
 g.ia_best = lambda ident, name, timeout=8: f"https://archive.org/download/{ident}/{name}"

@@ -1,14 +1,13 @@
-"""Just the Bot's face, on the whole screen (Settings > Bot > Just its face): it looks round the room, and has a glow
-while music plays. Looking round: it starts in the middle; every so often it goes somewhere else on the screen, its
-eyes turning that way first, smoothly, all of it on the screen wherever it rests, whatever its shape; more often in
-the middle than anywhere else; drawn only as it changes; with something to do (listening, thinking, talking, a timer)
-it's back in the middle at once, and stays till the next time it'd go somewhere. The glow: none with nothing playing or
-the music paused; round its eyes and mouth as they're drawn while music or the radio plays, its face itself just as it
-is without it; stronger on a beat, when Now playing's glow would follow the beat (a song of yours, the battery saver
-off: the same ear), steady otherwise (the radio, a stream, the saver on); its frames just where the glow shows, none
-while it's the same, never more than Now playing's a second; and nothing left behind by any of these frames: the
-screen's always what drawing the whole page again would give. Its chat page with the conversation, its Character
-page and Now playing: as they were. Pictures saved, to look at."""
+"""Just the Bot's face, on the whole screen (Settings > Bot > Just its face): it looks round the room. It starts in
+the middle; every so often it goes somewhere else on the screen, its eyes turning that way first, smoothly, all of it
+on the screen wherever it rests, whatever its shape; more often in the middle than anywhere else; drawn only as it
+changes; with something to do (listening, thinking, talking, a timer) it's back in the middle at once, and stays till
+the next time it'd go somewhere; and nothing's left behind by any of its frames: the screen's always what drawing the
+whole page again would give. No glow round it while music plays (it had one, which didn't look good on a GPi Case's
+screen): with a song or the radio on it's drawn just as it is with nothing playing, and no ear's kept for the song.
+Its X menu over it: left as it is, the main loop left to wait (it wasn't: a whole core, for as long as the menu was
+open). Its chat page with the conversation, as it was; Now playing's own glow, as ever, its buttons still there for a
+tap on the web page's copy of the screen after a frame of it (they weren't). Pictures saved, to look at."""
 import math, os, shutil, sys, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; the tests' own)
 S = SP + "/t_faceroom"
@@ -22,7 +21,7 @@ except ImportError:
     sys.path.insert(0, SP + "/evdevlib")
 sys.path.insert(0, TESTS)
 import pietato_all as g
-from PIL import Image, ImageChops, ImageDraw, ImageStat
+from PIL import Image, ImageChops, ImageDraw
 from pitato import face as F
 from pitato.screens import bot as B
 from pitato.screens import music as M
@@ -96,38 +95,6 @@ for name, steps in SHAPES.items():
               f"({left:.2f} left, {up:.2f} up, {right:.2f} right, {down:.2f} down, of its size; {out} of 120 out)",
               out == 0 and max(left, right) < 0.8 and up < 0.68 and down < 0.5)
 
-# its glow's shape
-box = (40, 30, 440, 330)
-
-
-def white(d, k, look="idle"):
-    F.draw_face(d, 200 / k, 150 / k, 240 / k, look, 0.05, (255, 255, 255), (0, 0, 0))
-
-
-mask, lit = F.glow_mask(Image, ImageDraw, 240, box, white)
-plain = Image.new("RGB", (400, 300), (0, 0, 0))
-white(ImageDraw.Draw(plain), 1)
-ink = plain.convert("L").getbbox()
-reach = 240 * F.GLOW_REACH
-check(f"its glow: an L picture, just where it shows ({lit} of {box}), reaching past its eyes and mouth ({ink}, there) "
-      f"by about {reach:.0f}", mask.mode == "L" and mask.size == (lit[2] - lit[0], lit[3] - lit[1])
-      and all(4 <= e <= reach * 1.3 + 4 for e in (box[0] + ink[0] - lit[0], box[1] + ink[1] - lit[1],
-                                                 lit[2] - box[0] - ink[2], lit[3] - box[1] - ink[3])))
-ex, ey = round(200 - 240 * 0.23) - (lit[0] - box[0]), round(150 - 240 * 0.08) - (lit[1] - box[1])   # (its left eye)
-edge = ex - round(240 * 0.125)
-levels = [mask.getpixel((edge - off, ey)) for off in (-6, 2, 8, 14)] + [mask.getpixel((0, ey))]
-rim = max(mask.crop(b).getextrema()[1] for b in ((0, 0, mask.width, 1), (0, mask.height - 1, mask.width, mask.height),
-                                                (0, 0, 1, mask.height), (mask.width - 1, 0, mask.width, mask.height)))
-check(f"...all of it in its eyes and right at their edges, fading out to nothing {edge} past them ({levels}; at "
-      f"its own box's edges {rim} of 255 at most)", levels[0] == 255 and levels[1] > 180
-      and all(a >= b for a, b in zip(levels, levels[1:])) and 10 < levels[3] < 200 and rim <= 3
-      and 16 <= edge <= reach * 1.3 + 4)
-check("...none for a face with nothing drawn",
-      F.glow_mask(Image, ImageDraw, 240, box, lambda d, k: None) is None)
-tiny = F.glow_mask(Image, ImageDraw, 40, (0, 0, 100, 80), lambda d, k: F.draw_face(
-    d, 50 / k, 40 / k, 40 / k, "idle", 0.05, (255, 255, 255), (0, 0, 0)))
-check(f"...a small face's too ({tiny and tiny[1]})", tiny is not None and tiny[0].getextrema()[1] == 255)
-
 
 # ---- the Bot's page: just its face -----------------------------------------------------------------------------------
 class FB:
@@ -164,7 +131,7 @@ ears = []
 
 
 class FakeEar:
-    """The ear for the song (ear.py's), stood in for: as lit as the test says."""
+    """The ear for the song (ear.py's, Now playing's), stood in for: a beat as hard as the test says."""
     def __init__(self, src, where):
         self.src, self.closed = src, False
         ears.append(self)
@@ -196,6 +163,7 @@ look = ["idle"]
 m.face_now = lambda: T[0]                          # (its clock, and the main loop's: the test's)
 m.face_look = lambda: look[0]
 W, H = 640, 480
+EDGE = 30                                          # (it's always this far in from the screen's edges, at least)
 BACK = m.bot_palette()[1]
 SLOT = F.ROAM_SLOT
 
@@ -222,7 +190,7 @@ def same(a, b):
 
 
 def tick():
-    """The main loop's part in it, once: its face's frame if one's due, the glow's, the screen."""
+    """The main loop's part in it, once: its face's frame if one's due, Now playing's glow's, the screen."""
     m.face_tick(T[0])
     m.pulse_tick(T[0])
     m.flush()
@@ -270,8 +238,8 @@ def follow():
     bb = drawn(m.fb.last)
     parts.append(m.fb.parts[-1])
     track.append((T[0], at[0], at[1], (bb[0] + bb[2]) / 2 - at[0]))
-    if bb[0] < B.FACE_ONLY_EDGE or bb[1] < B.FACE_ONLY_EDGE or bb[2] > W - B.FACE_ONLY_EDGE \
-            or bb[3] > H - B.FACE_ONLY_EDGE:
+    if bb[0] < EDGE or bb[1] < EDGE or bb[2] > W - EDGE \
+            or bb[3] > H - EDGE:
         bad.append((round(T[0] - k * SLOT, 2), bb))
     shown = m.fb.last
     if not same(shown, whole()):
@@ -306,8 +274,8 @@ def note():
     if not m.face_roam.moving(T[0]):
         rests[(round(at[0]), round(at[1]))] = rests.get((round(at[0]), round(at[1])), 0) + 1
     bb = drawn(m.fb.last)
-    if bb[0] < B.FACE_ONLY_EDGE or bb[1] < B.FACE_ONLY_EDGE or bb[2] > W - B.FACE_ONLY_EDGE \
-            or bb[3] > H - B.FACE_ONLY_EDGE:
+    if bb[0] < EDGE or bb[1] < EDGE or bb[2] > W - EDGE \
+            or bb[3] > H - EDGE:
         bad.append(bb)
     track.append((at[0], at[1]))
     if len(track) % 7 == 0 and not same(m.fb.last, whole()):
@@ -379,7 +347,7 @@ for place in ((-1, 0), (1, 0), (-0.8, -1), (0.9, 0.9), (0, -1)):
     m.face_roam = F.Roam(place, place, T[0], 0)
     m.face_stay = None
     bb = drawn(whole())
-    bad += [bb] if bb[0] < 4 or bb[1] < 4 or bb[2] > W - 4 or bb[3] > H - 4 else []
+    bad += [bb] if bb[0] < EDGE or bb[1] < EDGE or bb[2] > W - EDGE or bb[3] > H - EDGE else []
 m.fb.last.save(S + "/pics/big-eyes.png")
 check(f"its eyes as big and far apart as they go, with eyelashes: less room ({[round(v) for v in big]}), all of it "
       f"on the screen wherever it rests ({bad[:2]})", big[0] < room[0] and big[1] <= room[1] and not bad)
@@ -392,13 +360,13 @@ T[0] = slot_with((1, 0), int(T[0] // SLOT) + 2) * SLOT + 5.0
 m.face_roam, m.face_stay = F.Roam((1, 0), (1, 0), T[0], 0), None
 bb = drawn(whole())
 check(f"a 960x540 screen: more room ({[round(v) for v in wide]}), on the screen at its far right ({bb})",
-      wide[0] > room[0] and bb[2] <= 960 - B.FACE_ONLY_EDGE and bb[0] > 480)
+      wide[0] > room[0] and bb[2] <= 960 - EDGE and bb[0] > 480)
 m.fb.w, m.fb.h = W, H
 
-# ---- its glow -------------------------------------------------------------------------------------------------------
+# ---- music playing: its face just as it is with nothing playing (no glow), and no ear kept for the song --------------
 def a_still_time(secs=2.5):
     """A moment early in one of its stretches with its eyes open and nothing of its own due for secs (no blink, no
-    glance): there, in the middle, for that stretch."""
+    glance): there, in the middle, for that stretch. The page as it is then: its picture."""
     k = int(T[0] // SLOT) + 2
     while True:
         for i in range(8):
@@ -410,18 +378,6 @@ def a_still_time(secs=2.5):
         k += 1
 
 
-def bare_now():
-    """The page as it'd be now with nothing playing (no glow): its picture; then as it is again."""
-    had = m.proc, m.kind
-    m.proc, m.kind = None, None
-    pic = whole().copy()
-    m.proc, m.kind = had
-    whole()
-    return pic
-
-
-bare = a_still_time()
-check("nothing playing: no glow, no ear", m.face_glow() is None and m.face_lit is None and not ears)
 m.queue = [{"title": "Song", "src": HOME + "/Music/song.mp3", "kind": "audio", "sub": ""}]
 m.qi, m.cur = 0, m.queue[0]
 
@@ -431,146 +387,40 @@ def play(kind="audio", src=None):
     m.proc, m.kind, m.paused = Player(), kind, False
 
 
-play()
-level[0] = 0.0
-tick()
-rest = m.fb.last.copy()
-rest.save(S + "/pics/glow-rest.png")
-lit = m.face_lit["box"]
-ink = drawn(bare)
-diff = ImageChops.difference(rest, bare)
-check(f"a song of yours playing: a glow ({diff.getbbox()}), round its eyes and mouth ({ink}), an ear for the song",
-      diff.getbbox() is not None and m.face_glow() == 0 and len(ears) == 1 and not ears[0].closed
-      and ears[0].src == m.cur["src"] and lit[0] < ink[0] and lit[1] < ink[1] and lit[2] > ink[2] and lit[3] > ink[3]
-      and ink[0] - lit[0] <= size * F.GLOW_REACH * 1.3 + 4)
-kept = Image.new("L", bare.size, 0)
-kept.paste(255, None, ImageChops.difference(bare, Image.new("RGB", bare.size, BACK)).convert("L").point(
-    lambda v: 255 if v else 0))
-check("...its face itself just as it is without one",
-      ImageChops.multiply(diff.convert("L"), kept).getbbox() is None)
-face_colour = m.bot_palette()[0]
-px = rest.getpixel((ink[0] - 5, (ink[1] + ink[3]) // 2 - 40))
-check(f"...in its colour, soft: a little way off its eye, between the screen's {BACK} and its {face_colour} ({px})",
-      all(min(b, c) <= p <= max(b, c) for p, b, c in zip(px, BACK, face_colour)) and px != BACK and px != face_colour)
-n0 = FB.frames
-got = run(0.9)
-check(f"...the same: no frames ({got} in 0.9 s)", got == 0)
-sums = []
-for lv in (0.3, 0.6, 1.0, 0.0):
-    level[0] = lv
-    T[0] += 0.1
-    was = FB.frames
-    tick()
-    part = m.fb.parts[-1] if FB.frames == was + 1 else "not one frame"
-    d2 = ImageChops.difference(m.fb.last, bare).convert("L")
-    sums.append(round(ImageStat.Stat(d2).sum[0]))
-    taps = m.taps_now()
-    stale = not same(m.fb.last, whole())
-    check(f"a beat ({lv}): step {m.face_glow()} of {g.GLOW_STEPS - 1}, one frame, the glow's part of the screen and "
-          f"no more ({part})" if lv else f"...gone by: at rest again, the same way ({part})",
-          part == lit and not stale and m.face_glow() == round(lv * (g.GLOW_STEPS - 1)))
-    check(f"...a tap on the web page's copy of the screen after it: A still, anywhere ({taps[-1:]})",
-          taps and taps[-1] == ((0, 0, W, H), ("keys", "a")))
-    if lv == 1.0:
-        m.fb.last.save(S + "/pics/glow-beat.png")
-        on_beat = m.fb.last.copy()
-check(f"...stronger the harder the beat ({sums})", sums[:3] == sorted(sums[:3]) and sums[2] > sums[3] * 1.5
-      and sums[3] < sums[0])
-area = (lit[2] - lit[0]) * (lit[3] - lit[1])
-check(f"...its frames small: {area} of the screen's {W * H} pixels", area < W * H * 0.3)
-kept_now = ImageChops.multiply(ImageChops.difference(on_beat, bare).convert("L"), kept).getbbox()
-check("...its face untouched by them", kept_now is None)
-
-# as often as Now playing's, no more; none while it's as it was
-frames = 0
-t0 = T[0]
-while T[0] < t0 + 4.0:
-    level[0] = 0.5 + 0.5 * math.sin(T[0] * 40)
-    was = FB.frames
-    tick()
-    frames += FB.frames - was
-    T[0] += 1 / 120
-check(f"the beat changing all the time: {frames / 4:.0f} frames a second, {M.PULSE_FPS} at most (with its blinks)",
-      M.PULSE_FPS * 0.5 <= frames / 4 <= M.PULSE_FPS + 6)
-
-# paused, played on, stopped
-level[0] = 0.0
-m.paused = True
-was = FB.frames
-tick()
-shown = m.fb.last.copy()
-colours = {c for _, c in shown.getcolors(100000)}
-check(f"paused: no glow, at once ({FB.frames - was} frame), nothing of it left on the screen ({len(colours)} colours)",
-      m.face_glow() is None and m.face_lit is None and FB.frames == was + 1 and same(shown, whole())
-      and len(colours) <= 4)
-m.paused = False
-tick()
-check("played on: its glow again", m.face_lit is not None and same(m.fb.last, whole()))
-m.proc, m.kind = None, None
-tick()
-check("stopped: no glow, the ear let go of", m.face_lit is None and ears[-1].closed and same(m.fb.last, whole()))
-
-# steady, where Now playing's is: the radio, a stream, the battery saver
-for name, kind, src, saver in (("the radio", "radio", "http://10.0.0.9/live", "Off"),
-                               ("a stream", "audio", "http://10.0.0.9/song.mp3", "Off"),
-                               ("the battery saver on", "audio", None, "On")):
-    had = len(ears)
-    a_still_time()
-    m.set_setting("battery", saver)
-    play(kind, src)
-    level[0] = 1.0
-    tick(); tick()
-    n = run(0.5)
-    check(f"{name}: a glow, steady (step {m.face_glow()}; {n} frames in half a second), no ear",
-          m.face_glow() == 0 and m.face_lit is not None and len(ears) == had and n == 0
-          and not same(m.fb.last, bare_now()))
+for name, kind, src in (("a song of yours", "audio", None), ("the radio", "radio", "http://10.0.0.9/live")):
     m.proc, m.kind = None, None
-    tick()
-m.set_setting("battery", "Off")
+    bare = a_still_time()
+    tick()                                         # (its face's own next look: a while off, from here)
+    play(kind, src)
+    level[0] = 1.0                                 # (a beat, were anything listening for one)
+    n = run(0.9)
+    shown = m.fb.last.copy()
+    check(f"{name} playing: its face just as it is with nothing playing, no glow ({n} frames in 0.9 s; "
+          f"{len({c for _, c in shown.getcolors(100000)})} colours on the screen), no ear for it",
+          same(shown, bare) and same(whole(), bare) and n == 0 and not ears and not m.pulse_wanted()
+          and m.ear is None)
+bare.save(S + "/pics/music.png")
+left = [n for n in dir(m) if n.startswith(("face_glow", "face_lit", "face_pulse"))] \
+    + [n for n in dir(F) + dir(B) if "glow" in n.lower()]
+check(f"...and none of its glow's code left behind ({left})", not left)
 
-# on its way somewhere, glowing: nothing left behind, all on the screen
+# its menu over it: left as it is, and the main loop left to wait
 play()
-k = slot_with((0.9, 0.9), int(T[0] // SLOT) + 2)
-T[0] = k * SLOT - 0.3
 whole()
-bad, stale = [], []
-
-
-def beat():
-    level[0] = 0.5 + 0.5 * math.sin(T[0] * 9)
-
-
-def glowing():
-    bb = drawn(m.fb.last)
-    if bb[0] < 2 or bb[1] < 2 or bb[2] > W - 2 or bb[3] > H - 2:
-        bad.append(bb)
-    if not same(m.fb.last, whole()):
-        stale.append(round(T[0] - k * SLOT, 2))
-
-
-n = run(0.3 + F.ROAM_LEAD + F.ROAM_SECS * 1.5 + 0.6, glowing, before=beat)
-m.fb.last.save(S + "/pics/glow-corner.png")
-at = m.face_shot[3]
-check(f"on its way to a corner, glowing to the beat: there ({at[0]:.0f}, {at[1]:.0f}) in {n} frames, its glow on the "
-      f"screen all the way ({bad[:2]}), nothing left behind ({stale[:3]})",
-      at[0] > W / 2 + 50 and at[1] > H / 2 + 20 and not bad and not stale)
-
-# its menu over it: no glow's frames; closed: its face and its glow again
 m.press("x")
 m.flush()
 was = FB.frames
-level[0] = 1.0
 run(5.0)
-check(f"its X menu over it: left as it is ({FB.frames - was} frames in 5 s), no glow kept",
-      m.friend_more is not None and FB.frames == was and m.face_lit is None)
+check(f"its X menu over it: left as it is ({FB.frames - was} frames in 5 s)",
+      m.friend_more is not None and FB.frames == was)
 check(f"...and the main loop left to wait, as with any menu: its face's next look {m.face_next - T[0]:+.2f} s off, not "
       f"overdue", 0.1 < m.face_next - T[0] <= 0.3)
 m.press("b")
 tick()
-check("...closed: its face, glowing", m.friend_more is None and m.face_lit is not None and same(m.fb.last, whole()))
+check("...closed: its face again", m.friend_more is None and m.face_shot is not None and same(m.fb.last, whole()))
 
 # ---- as they were ----------------------------------------------------------------------------------------------------
-# its chat page, with the conversation: its face in its card, where it is, no glow
+# its chat page, with the conversation: its face in its card, where it is
 bot_txt("")
 T[0] = slot_with((1, 0), int(T[0] // SLOT) + 2) * SLOT + 5.0
 had = len(ears)
@@ -578,8 +428,8 @@ chat = whole().copy()
 at = m.face_shot[3]
 n = run(SLOT * 2)
 check(f"its chat page with the conversation: its face in its card ({at[0]:.0f}, {at[1]:.0f}), where it stays "
-      f"({n} frames), no glow, no ear", m.face_shot[3] == at and at[0] < 200 and m.face_roam is None
-      and m.face_lit is None and m.face_glow() is None and len(ears) == had and at[2] == B.FACE_SIZE)
+      f"({n} frames), no ear", m.face_shot[3] == at and at[0] < 200 and m.face_roam is None and len(ears) == had
+      and at[2] == B.FACE_SIZE)
 box = m.face_shot[1]
 outside = Image.new("L", (W, H), 255)
 outside.paste(0, box)
@@ -587,7 +437,7 @@ outside.paste(0, (0, 0, W, m.LIST_TOP))            # (not the clock, along the t
 check("...the rest of its page untouched by its face's frames",
       ImageChops.multiply(ImageChops.difference(m.fb.last, chat).convert("L"), outside).getbbox() is None)
 
-# Now playing: its own glow's frames, as ever, and its buttons still there for a tap after one
+# Now playing: the cover's glow, as ever, and its buttons still there for a tap after a frame of it
 bot_txt()
 m.view = "now"
 m.meta, m.pos = {"title": "Song", "length": 180.0}, 12.0
@@ -598,19 +448,15 @@ for _ in range(100):                               # (drawn, and again once it's
     time.sleep(0.02)
     if not m.dirty:
         break
-called = []
-real = m.pulse_frame
-m.pulse_frame = lambda: called.append("now") or real()
-m.face_pulse = lambda: called.append("face")
+was = FB.frames
 level[0] = 1.0
 T[0] += 1.0
 m.pulse_tick(T[0])
-check(f"Now playing: its own glow's frame ({called}), the cover's part of the screen ({m.fb.parts[-1]})",
-      called == ["now"] and m.fb.parts[-1] is not None and len(ears) == had + 1)
+check(f"Now playing: its glow's frame on a beat, as ever (step {m.now_shot[2]}): the cover's part of the screen "
+      f"({m.fb.parts[-1]}), an ear for the song", FB.frames == was + 1 and m.fb.parts[-1] is not None
+      and m.now_shot[2] == g.GLOW_STEPS - 1 and len(ears) == had + 1 and ears[-1].src == m.cur["src"])
 taps = [t for t in m.taps_now() if t[1] == ("keys", "a")]
 check(f"...and its buttons still there for a tap on the web page's copy, after it ({taps[:1]})", bool(taps))
-del m.face_pulse
-m.pulse_frame = real
 
 # ---- drawn finely (a big screen: two of the picture's pixels to each of the menus'): the same, sharper ---------------
 from pitato import fine
@@ -626,16 +472,15 @@ m2.proc, m2.kind, m2.paused = Player(), "audio", False
 k = slot_with((-0.9, 0.9), int(T[0] // SLOT) + 2)
 T[0] = k * SLOT - 0.2
 m2.dirty = True; m2.flush()
-stale, parts, lit = [], set(), 0
+stale, parts, n, had = [], set(), 0, len(ears)
 end = T[0] + 0.2 + F.ROAM_LEAD + F.ROAM_SECS * 1.5 + 1.2
 while T[0] < end:
-    level[0] = 0.5 + 0.5 * math.sin(T[0] * 9)
     was = FB.frames
     m2.face_tick(T[0]); m2.pulse_tick(T[0]); m2.flush()
     if FB.frames != was:
         shown = m2.fb.last
         parts.add(m2.fb.parts[-1] is not None)
-        lit += m2.face_lit is not None
+        n += 1
         m2.dirty = True; m2.flush()
         if ImageChops.difference(shown.pic, m2.fb.last.pic).getbbox() is not None:
             stale.append(round(T[0] - k * SLOT, 2))
@@ -643,9 +488,9 @@ while T[0] < end:
 at = m2.face_shot[3]
 bb = ImageChops.difference(m2.fb.last.pic, Image.new("RGB", m2.fb.last.pic.size, BACK)).getbbox()
 m2.fb.last.save(S + "/pics/fine.png")
-check(f"drawn finely, on a 960x540 screen: to a corner, glowing to the beat ({at[0]:.0f}, {at[1]:.0f}; {lit} frames "
-      f"with its glow), all on the screen ({bb} of {m2.fb.last.pic.size}), nothing left behind ({stale[:3]})",
-      detail(m2.fb.last) == 2 and at[0] < 480 - 60 and at[1] > 270 + 20 and lit > 20 and parts == {True}
-      and not stale and bb[0] >= 4 and bb[3] <= 1080 - 4)
+check(f"drawn finely, on a 960x540 screen, a song playing: to a corner ({at[0]:.0f}, {at[1]:.0f}) in {n} frames, all "
+      f"on the screen ({bb} of {m2.fb.last.pic.size}), nothing left behind ({stale[:3]}), no ear",
+      detail(m2.fb.last) == 2 and at[0] < 480 - 60 and at[1] > 270 + 20 and n > 20 and parts == {True}
+      and not stale and bb[0] >= 2 * EDGE and bb[3] <= 1080 - 2 * EDGE and len(ears) == had)
 fine.set_scale(1)
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}")

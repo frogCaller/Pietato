@@ -146,6 +146,8 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_fish())
                 if u.path == "/glow":                  # (the web page's LED backlight: its LEDs, and its settings)
                     return self.reply(200, media.web_glow())
+                if u.path == "/soundboard":            # (the web page's Soundboard: how its loop is, looked at here)
+                    return self.reply(200, {"loop": media.board_web_loop()})
                 if u.path == "/fishpic":               # (...and a fish's picture, to draw)
                     png = media.web_fish_pic(q.get("name", ""), q.get("id", "0"), q.get("size", "96"))
                     return self.reply(200, png, "image/png") if png else self.reply(404, {"error": "No such fish"})

@@ -8,8 +8,12 @@ in the Soundboard folder of your home folder. A new file there is on a button a 
 one). The web page's Soundboard adds, records, renames and deletes them, and puts them on the buttons.
 
 This draws the page: the bank's name, and the buttons laid out as they are on a controller, each with its sound's
-name, lit while it plays. (soundbank.py: the sounds and banks. soundplay.py: the player, a process of its own.
-screens/soundboard.py: its buttons, and what media mode does for it.)"""
+name, lit while it plays; the loop, recording or playing, with the beat it's on and the tempo; and a note played with
+A, B, X or Y held, on that button's tile. (soundbank.py: the sounds and banks. soundplay.py: the player, a process of
+its own. screens/soundboard.py: its buttons, and what media mode does for it.)"""
+import math
+import time
+
 from .sims import Sim
 from .theme import ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
 
@@ -43,6 +47,9 @@ class Soundboard(Sim):
         self.placing = None             # a sound being put on a button: (its name, the button it's on in this bank)
         self.rec = None                 # recording: (seconds so far, how loud just now, 0 to 1)
         self.own_hints = []             # its buttons
+        self.loop = None                # the loop: {"rec": recording a layer, "layers", "bar", "beat", "bpm"}, or None
+        self.clock = None               # ...its beat: (tempo, beat b0, heard at t0): drawn again on each beat
+        self.held_note = None           # a note being played: (the button held, the note's name)
         self.taps = []                  # where its buttons are on the screen: (box, the button)
         self.fonts = {}
         self.tiles = {}
@@ -58,7 +65,12 @@ class Soundboard(Sim):
         return None
 
     def frame_in(self, wall):
-        return STILL
+        if self.clock is None:
+            return STILL
+        bpm, b0, t0 = self.clock                       # (the loop: drawn again as each beat's heard)
+        now = time.monotonic()
+        beat = b0 + (now - t0) * bpm / 60.0
+        return max(0.02, t0 + (math.floor(beat) + 1 - b0) * 60.0 / bpm - now + 0.005)
 
     def hints(self):
         return self.own_hints
@@ -126,7 +138,9 @@ class Soundboard(Sim):
         got = self.pads.get(pad)
         lit = pad in self.lit and got is not None
         here = self.placing is not None and self.placing[1] == pad
-        key = (pad, got, lit, here, w, h, scale())
+        held = self.held_note
+        note = held[1] if held is not None and held[0] == pad and got is not None else None
+        key = (pad, got, lit, here, note, w, h, scale())
         tile = self.tiles.get(key)
         if tile is not None:
             return tile
@@ -158,6 +172,9 @@ class Soundboard(Sim):
         else:
             d.text((11 + r, 10 + r), PAD_NAME[pad], font=self.font(14 if not big else 16, bold=True), fill=ink,
                    anchor="mm")
+        if note is not None:                           # (a note being played on it: which, at its top right)
+            d.text((w - 13, 10 + r), note, font=self.font(20 if big else 17, bold=True),
+                   fill=co_mix(colour, BG, 0.85) if lit else colour, anchor="rm")
         y = max(20 + 2 * r, h - 14 - step * len(words)) + step // 2 - 1
         for k, (line, fill) in enumerate(words):
             plain = got is None or (k and got[1] == "bad" and not lit)
@@ -191,10 +208,32 @@ class Soundboard(Sim):
             d.text((x0 + EDGE + 2, mid), words, font=small, fill=TEXT, anchor="lm")
         elif self.trouble:
             d.text((x0 + EDGE + 2, mid), self.trouble, font=small, fill=WARN, anchor="lm")
-        if n > 1:
-            d.text((x0 + W - EDGE - 2, mid), f"{i + 1} of {n}", font=small, fill=MUTED, anchor="rm")
+        elif self.loop is not None:
+            self.loop_line(d, x0 + EDGE + 2, mid)
+        right = f"{i + 1} of {n}" if n > 1 else ""
+        if self.loop is not None:
+            right = f"{self.loop['bpm']} BPM" + (f"   {right}" if right else "")
+        if right:
+            d.text((x0 + W - EDGE - 2, mid), right, font=small, fill=MUTED, anchor="rm")
         self.taps.append(((x0, y0, x0 + W // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + W // 2, y0, x0 + W, y0 + TOP - 4), "r"))
+
+    def loop_line(self, d, x, mid):
+        """The loop, at the top left: recording (red) or playing, a mark for each beat of the bar (the one heard now,
+        lit), and which bar of the loop it's in."""
+        lp = self.loop
+        f = self.font(13, bold=True)
+        red, lit = _HUES["Red"], TEXT
+        d.ellipse((x, mid - 5, x + 10, mid + 5), fill=red if lp["rec"] else _HUES["Green"])
+        words = "Recording" if lp["rec"] else ("Loop" if lp["layers"] == 1 else f"Loop, {lp['layers']} layers")
+        d.text((x + 17, mid), words, font=f, fill=TEXT, anchor="lm")
+        x += 17 + f.getlength(words) + 10
+        for k in range(1, 5):
+            on = k == lp["beat"]
+            d.rounded_rectangle((x, mid - 4, x + 8, mid + 4), radius=2,
+                                fill=(red if lp["rec"] else lit) if on else co_mix(BG, ROW, 0.9))
+            x += 12
+        d.text((x + 4, mid), f"bar {lp['bar']}", font=self.font(13), fill=MUTED, anchor="lm")
 
     def rec_card(self, img, x0, y0):
         """Recording: how long so far, and how loud it is just now."""

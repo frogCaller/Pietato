@@ -59,7 +59,7 @@ class FB:
 
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 m.face_now = lambda: 4000.5                        # (its clock, still: it stays where it is, in the middle. Its looking
-                                                   #  round the room, and its glow: tests/test_face_room.py)
+                                                   #  round the room: tests/test_face_room.py)
 BG = g.BG if hasattr(g, "BG") else B.BG
 
 

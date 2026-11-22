@@ -166,42 +166,6 @@ Superman | Jungle Drums | 1943 | jungle_drums | jungle_drums_512kb.mp4
 Superman | Secret Agent | 1943 | secret_agent | secret_agent_512kb.mp4
 Superman | The Mummy Strikes | 1943 | mummy_strikes | mummy_strikes_512kb.mp4
 Superman | The Underground World | 1943 | superman_underground_world | Superman-16-The_Underground_World_512kb.mp4
-Betty Boop | Bamboo Isle | 1932 | bb_bamboo_isle | bb_bamboo_isle_512kb.mp4
-Betty Boop | Betty Boop for President | 1932 | Betty_Boop_for_President_1932 | Betty_Boop_for_President_1932_512kb.mp4
-Betty Boop | Chess-Nuts | 1932 | bb_chess_nuts | bb_chess_nuts_512kb.mp4
-Betty Boop | Minnie the Moocher | 1932 | bb_minnie_the_moocher | bb_minnie_the_moocher_512kb.mp4
-Betty Boop | Betty Boop's Big Boss | 1933 | bb_big_boss | bb_big_boss_512kb.mp4
-Betty Boop | Betty Boop's Crazy Inventions | 1933 | Betty_Boops_Crazy_Inventions_1933 | Betty_Boops_Crazy_Inventions_1933_512kb.mp4
-Betty Boop | Betty Boop's Ker-Choo | 1933 | BettyBoopCartoons | Betty_Boops_KerCho_1932_512kb.mp4
-Betty Boop | I Heard | 1933 | BettyBoop-IHeared1932 | BettyBoop-IHeared1932._512kb.mp4
-Betty Boop | Is My Palm Read? | 1933 | BettyBoopCartoons | Betty_Boop_Is_My_Palm_Read_1932_512kb.mp4
-Betty Boop | Morning, Noon and Night | 1933 | bb_morning_noon_and_night | bb_morning_noon_and_night_512kb.mp4
-Betty Boop | Mother Goose Land | 1933 | Betty_Boop_Mother_Goose_Land_1933 | Betty_Boop_Mother_Goose_Land_1933_512kb.mp4
-Betty Boop | Parade of the Wooden Soldiers | 1933 | bb_parade_of_the_wooden_soldiers | bb_parade_of_the_wooden_soldiers_512kb.mp4
-Betty Boop | Snow White | 1933 | bb_snow_white | bb_snow_white_512kb.mp4
-Betty Boop | The Old Man of the Mountain | 1933 | bb_old_man_of_the_mountain | bb_old_man_of_the_mountain_512kb.mp4
-Betty Boop | Betty Boop's Rise to Fame | 1934 | bb_rise_to_fame | bb_rise_to_fame_512kb.mp4
-Betty Boop | Betty in Blunderland | 1934 | bb_betty_in_blunderland | bb_betty_in_blunderland_512kb.mp4
-Betty Boop | A Language All My Own | 1935 | Betty_Boop_a_Language_All_My_Own_1935 | Betty_Boop_a_Language_All_My_Own_1935_512kb.mp4
-Betty Boop | Baby Be Good | 1935 | Betty_Boop_Baby_Be_Good_1935 | Betty_Boop_Baby_Be_Good_1935_512kb.mp4
-Betty Boop | Betty Boop and Grampy | 1935 | bb_and_grampy | bb_and_grampy_512kb.mp4
-Betty Boop | Betty Boop with Henry | 1935 | Betty_Boop_with_Henry_1935 | Betty_Boop_with_Henry_1935_512kb.mp4
-Betty Boop | Judge for a Day | 1935 | Betty_Boop_Judge_For_a_Day_1935 | Betty_Boop_Judge_For_a_Day_1935_512kb.mp4
-Betty Boop | Stop That Noise | 1935 | bb_stop_that_noise | bb_stop_that_noise_512kb.mp4
-Betty Boop | Swat the Fly | 1935 | bb_swat_the_fly | bb_swat_that_fly_512kb.mp4
-Betty Boop | A Song a Day | 1936 | BettyBoopCartoons | Betty_Boop_A_Song_a_Day_1936_512kb.mp4
-Betty Boop | Betty Boop and Little Jimmy | 1936 | Betty_Boop_and_Little_Jimmy_1936 | Betty_Boop_and_Little_Jimmy_1936_512kb.mp4
-Betty Boop | Betty Boop and the Little King | 1936 | bb_and_the_little_king | bb_and_the_little_king_512kb.mp4
-Betty Boop | Happy You and Merry Me | 1936 | bb_happy_you | bb_happy_you_512kb.mp4
-Betty Boop | More Pep | 1936 | BettyBoopCartoons | Betty_Boop_More_Pep_1936_512kb.mp4
-Betty Boop | Not Now | 1936 | bb_not_now | bb_not_now_512kb.mp4
-Betty Boop | Training Pigeons | 1936 | Betty_Boop_Training_Pigeons_1936 | Betty_Boop_Training_Pigeons_1936_512kb.mp4
-Betty Boop | House Cleaning Blues | 1937 | bb_house_cleaning_blues | bb_house_cleaning_blues_512kb.mp4
-Betty Boop | The Candid Candidate | 1937 | BettyBoopCartoons | The_Candid_Candidate_1937_512kb.mp4
-Betty Boop | The Impractical Joker | 1937 | bb_the_impractical_joker | bb_the_impractical_joker_512kb.mp4
-Betty Boop | Whoops! I'm a Cowboy | 1937 | Betty_Boop_Whoops_Im_a_Cowboy_1937 | Whoops_Im_a_Cowboy_1937_512kb.mp4
-Betty Boop | Musical Mountaineers | 1939 | bb_musical_mountaineers | bb_musical_mountaineers_512kb.mp4
-Betty Boop | The Scared Crows | 1939 | Betty_Boop_The_Scared_Crows_1939 | Betty_Boop_The_Scared_Crows_1939_512kb.mp4
 Casper & friends | Little Lulu: Lulu's Birthday Party | 1944 | 1944LulusBirthdayParty | 1944-12-29 Lulu's Birthday Party.mp4
 Casper & friends | The Friendly Ghost | 1945 | TheFriendlyGhost | TheFriendlyGhost_512kb.mp4
 Casper & friends | Little Lulu: Bargain Counter Attack | 1946 | littlelulu-publicdomain | Bargain Counter Attack (1946).mp4
@@ -236,7 +200,6 @@ Woody Woodpecker & Lantz | Oswald: Spooks | 1930 | oswald-collection | 76 - Spoo
 Woody Woodpecker & Lantz | Boy Meets Dog! | 1938 | Boy_Meets_Dog_1938 | Boy_Meets_Dog_1938_512kb.mp4
 Woody Woodpecker & Lantz | Woody Woodpecker: Pantry Panic | 1941 | woody_woodpecker_pantry_panic | woody_woodpecker_pantry_panic_512kb.mp4
 Woody Woodpecker & Lantz | Andy Panda: Canine Commandos | 1943 | CanineCommandos | CanineCommandos.mp4
-Color Classics | Poor Cinderella | 1934 | Betty_Boop_Poor_Cinderella_1934 | Betty_Boop_Poor_Cinderella_1934_512kb.mp4
 Color Classics | The Little Dutch Mill | 1934 | 1934ParamountFleischerStudiosColorClassicsCartoonLittleDutchMillwalterLantzMaxFleischer | 1934-paramount-fleischerStudios-colorClassicsCartoon-LittleDutchMillwalterLantzMaxFleischer.mp4
 Color Classics | The Song of the Birds | 1935 | TheSongOfTheBirds-1935 | CC-The_Song_Of_The_Birds-512K_512kb.mp4
 Color Classics | Somewhere in Dreamland | 1936 | 1936_20240806 | Somewhere in Dreamland (1936) Color Classic.mp4
@@ -327,11 +290,10 @@ Specials & holidays | Santa's Surprise | 1947 | SantasSuprise | SantasSuprise_51
 Specials & holidays | Hector's Hectic Life | 1948 | hectors_hectic_life | hectors_hectic_life_512kb.mp4
 Specials & holidays | Rudolph the Red-Nosed Reindeer | 1948 | RudolphTheRed-nosedReindeer1948 | RudolphTheRed-nosedReindeer1948_512kb.mp4
 """
-TOON_BADGES = {"Popeye": "POPE", "Looney Tunes": "LOON", "Superman": "SUPE", "Betty Boop": "BOOP",
-               "Casper & friends": "CASP", "Mighty Mouse & Terrytoons": "TERR",
-               "Woody Woodpecker & Lantz": "WOOD", "Color Classics": "COLR", "Felix & silents": "FELX",
-               "Flip the Frog & Iwerks": "FLIP", "Van Beuren": "VANB", "Private Snafu": "SNFU",
-               "Specials & holidays": "SPEC"}
+TOON_BADGES = {"Popeye": "POPE", "Looney Tunes": "LOON", "Superman": "SUPE", "Casper & friends": "CASP",
+               "Mighty Mouse & Terrytoons": "TERR", "Woody Woodpecker & Lantz": "WOOD", "Color Classics": "COLR",
+               "Felix & silents": "FELX", "Flip the Frog & Iwerks": "FLIP", "Van Beuren": "VANB",
+               "Private Snafu": "SNFU", "Specials & holidays": "SPEC"}
 
 
 # Old films from the Internet Archive, the same way as the cartoons above.

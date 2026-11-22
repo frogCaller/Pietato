@@ -142,6 +142,9 @@ if id "$USER_NAME" >/dev/null 2>&1 && command -v runuser >/dev/null \
 fi
 
 step() { echo; echo "==> $*"; }
+doing() {          # doing WHAT: on setup's own screen, beside its step's moving line, what it's on now (and while
+  if [ -n "${PIETATO_PROGRESS:-}" ]; then echo "@@working $*|"; fi   # apt's on a package, which: wizard.py)
+}
 
 # A long quiet job (a download, a build): its output into a log, and meanwhile a line that keeps moving, with how
 # long it's taken so far (and how far it's got, for a build that says), so it's clear the Pi is still working.
@@ -661,13 +664,16 @@ debian_non_free() {   # non-free on in Debian's own sources for this release: th
 }
 
 step "Installing packages"
+doing "Updating package lists"
 apt-get update
 if [ "$PC" = yes ] && [ "$OS_ID" = debian ] && ! apt_has libretro-snes9x; then
+  doing "Turning on Debian's non-free packages"
   echo "Turning on Debian's non-free packages: the SNES and Genesis emulators are there."
   debian_non_free || echo "(Couldn't turn on Debian's non-free packages: SNES and Genesis games won't start. Add" \
     "non-free after main in Debian's sources in /etc/apt, then run setup.sh again.)"
 fi
 # (kbd: chvt, to change the screen over; openssl: the web page's secure page)
+doing "What Pietato needs"
 apt-get install -y python3-evdev python3-pil python3-numpy fonts-dejavu-core \
   mplayer poppler-utils iw evtest device-tree-compiler python3-flask alsa-utils ffmpeg bluez kbd openssl
 if [ "$PC" = yes ] || [ "$HANDHELD" = yes ]; then   # (NAME.local, for the web page, as on a Pi: Ubuntu's and
@@ -675,10 +681,12 @@ if [ "$PC" = yes ] || [ "$HANDHELD" = yes ]; then   # (NAME.local, for the web p
   apt-get install -y avahi-daemon || echo "(Couldn't install avahi-daemon: open the web page by its address.)"
 fi
 # a USB camera (v4l2-ctl: its sizes, and turning one that turns) and a USB microphone (Vosk needs libatomic)
+doing "What a USB camera and microphone need"
 apt-get install -y v4l-utils libatomic1 || echo "(Couldn't install v4l-utils or libatomic1: a USB camera or microphone may not work.)"
 # Apps' cmatrix, nyancat, htop and hollywood: Linux's own. hollywood with what its panes show, but not
 # atop or plocate, which would keep running in the background
 if wanted toys; then
+doing "Apps' terminal toys"
 apt-get install -y cmatrix || echo "(Couldn't install cmatrix: Apps' cmatrix won't start.)"
 apt-get install -y nyancat || echo "(Couldn't install nyancat: Apps' nyancat won't start.)"
 apt-get install -y htop || echo "(Couldn't install htop: Apps' htop won't start.)"
@@ -709,12 +717,14 @@ build_cacafire() {
 if [ "$(cat "$PROGS/cacafire.version" 2>/dev/null)" = "$CACAFIRE" ] && [ -x "$PROGS/cacafire" ]; then
   echo "Apps' cacafire is built already."
 elif wanted toys; then
+  doing "Building cacafire"
   build_cacafire || echo "(Couldn't build cacafire: Apps' cacafire won't start.)"
 fi
 # Files > Other computers: Windows and Mac shared folders (cifs-utils, smbclient, and nmblookup in samba-common-bin
 # for a PC's own name), Linux computers over SSH (sshfs). (Without questions: samba-common asks one about WINS, and
 # the answer it'd take is No.)
 if wanted computers; then
+  doing "What opens other computers' files"
   DEBIAN_FRONTEND=noninteractive apt-get install -y cifs-utils smbclient samba-common-bin sshfs \
     || echo "(Couldn't install what opens other computers' files: Files > Other computers won't open them.)"
 else
@@ -725,12 +735,14 @@ fi
 if wanted classic && darkos_has mgba snes9x genesis_plus_gx; then   # (an RK3326 handheld: dArkOS's own)
   echo "dArkOS's own emulators play Game Boy, NES, SNES and Genesis games: nothing to install."
 elif wanted classic; then
+  doing "Game Boy, NES, SNES and Genesis emulators"
   for pkg in libretro-mgba libretro-nestopia libretro-snes9x libretro-genesisplusgx; do
     apt-get install -y "$pkg" || echo "(Couldn't install $pkg: the games it plays won't start without it.)"
   done
 else
   left_out classic "the Game Boy, NES, SNES and Genesis emulators"
 fi
+doing "Checking the game emulators"     # (each built here: a step of its own if it's to be built now)
 
 # PlayStation: PCSX ReARMed, built here from its source (Debian doesn't have it), tuned for this Pi
 PCSX_REARMED=c8816799b50388e61cfe237fe2cdbb7d8175f20a

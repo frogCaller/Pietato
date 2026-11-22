@@ -5,8 +5,7 @@ like (the Bot's Character).
 face_state() says how it looks at a moment; draw_face() draws it; face_wait() says when it next changes, so the
 screen is only drawn again when it does (a blink, a glance), not all the time.
 Just its face, on the whole screen (screens/bot.py): it looks round the room, going from one place on the screen to
-another now and then, its eyes first (roam_at, Roam); and while music plays it has a glow, as a cover has on Now
-playing (glow_mask)."""
+another now and then, its eyes first (roam_at, Roam)."""
 import math
 
 from .theme import BG
@@ -37,10 +36,6 @@ ROAM_LEAD = 0.25           # ...its eyes turning that way this long before it se
 ROAM_HOME = 0.4            # ...and this long back to the middle, when it has something to do (listening, thinking)
 ROAM_LOOKS = ("idle", "happy", "sad", "cool", "curious")   # the looks it goes about with (the rest: in the middle)
 ROAMS = ((0, 0), (0, 0), (0, 0), (0, 0), (-1, 0), (1, 0), (-0.8, -1), (0.8, -1), (-0.9, 0.9), (0.9, 0.9), (0, -1))
-GLOW_REACH = 0.1           # its glow, while music plays: this far (of its size) past its eyes and mouth...
-GLOW_SMALL = 4             # ...made this many times smaller than it's shown, and enlarged (it's soft: quick so)
-GLOW_EDGE = [min(255, max(0, v * 2 - 8)) for v in range(256)]   # (its eyes' edges, blurred, are half lit: all of it
-                           # there; and the last faint bit of it, far out, is nothing: no edge to see where it ends)
 
 # Its colours (the Bot's Character: Face, Background), each picked on its own: on just its face, up and down go from
 # one face colour to the next, left and right from one background to the next
@@ -394,26 +389,3 @@ def face_reach(shape=None, lashes=False):
             _REACH.clear()
         _REACH[key] = ((n - x0 + 1) / n, (n - y0 + 1) / n, (x1 - n + 1) / n, (y1 - n + 1) / n)
     return _REACH[key]
-
-
-def glow_mask(Image, ImageDraw, size, box, face):
-    """Its glow, over box (x0, y0, x1, y1 on the screen): (how much of it shows: an L picture, where it shows at all:
-    its own box on the screen), or None. All of it right at its eyes and mouth, fading out to nothing GLOW_REACH of
-    its size past them. face(d, k): draws it on d, white on black, k times smaller, box's corner at d's. Image,
-    ImageDraw: the ones the screen's drawn with (fine.py's, or PIL's)."""
-    from PIL import ImageFilter
-    w, h = int(box[2] - box[0]), int(box[3] - box[1])
-    k = GLOW_SMALL if size >= 16 * GLOW_SMALL else 1
-    small = Image.new("RGB", (max(1, -(-w // k)), max(1, -(-h // k))), (0, 0, 0))
-    face(ImageDraw.Draw(small), k)
-    soft = small.convert("L").filter(ImageFilter.GaussianBlur(size * GLOW_REACH * 0.42 / k)).point(GLOW_EDGE)
-    lit = soft.getbbox()                               # (just where it shows: enlarged, that's quicker)
-    if lit is None:
-        return None
-    lit = (max(0, lit[0] - 1), max(0, lit[1] - 1), min(soft.width, lit[2] + 1), min(soft.height, lit[3] + 1))
-    soft = soft.crop(lit)                              # (...and a little past it: it fades to nothing, enlarged)
-    x0, y0, x1, y1 = lit[0] * k, lit[1] * k, min(w, lit[2] * k), min(h, lit[3] * k)
-    if k > 1:
-        soft = soft.resize(((lit[2] - lit[0]) * k, (lit[3] - lit[1]) * k), Image.BILINEAR)
-        soft = soft.crop((0, 0, x1 - x0, y1 - y0))
-    return soft, (int(box[0]) + x0, int(box[1]) + y0, int(box[0]) + x1, int(box[1]) + y1)

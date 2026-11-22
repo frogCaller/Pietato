@@ -1185,6 +1185,10 @@ def ask(path):
 # ---- the screen while setup.sh works ------------------------------------------------------------------------------
 WARN = re.compile(r"^\((Couldn't|Couldn’t|No )")
 SUB_DONE = re.compile(r"^  (\S[^:]*): done \(took ([\d:]+)\)$")
+APT_DOING = ((re.compile(r"^Get:\d+ \S+ \S+ \S+ (\S+) \S+ \S+ \["), "Downloading"),   # apt's own lines: the package
+             (re.compile(r"^Unpacking (\S+) "), "Unpacking"),                          # it's on (shown beside the
+             (re.compile(r"^Setting up (\S+) "), "Setting up"),                        # step's moving line)
+             (re.compile(r"^Processing triggers for (\S+) "), "Finishing"))
 
 
 def read_answers(path):
@@ -1214,7 +1218,8 @@ class Show:
         self.out, self.log, self.l, self.a, self.now = out, log, look, answers, now
         self.step = self.hint = ""
         self.t0 = self.start = now()
-        self.sub = ""                            # what its build says: Building 41%
+        self.sub = ""                            # what its build says: Building 41% (or what setup.sh's doing)
+        self.pkg = ""                            # ...and the package apt's on: Unpacking ffmpeg
         self.spun = 0
         self.live = False                        # the moving line's on the screen
         self.notes = []                          # what didn't go in, said under its step once that's done
@@ -1272,7 +1277,8 @@ class Show:
         l = self.l
         mark = l.cyan(l.spin[self.spun % len(l.spin)])
         self.spun += 1
-        extra = f"  {l.dim(self.sub)}" if self.sub else (f"  {l.dim(self.hint)}" if self.hint else "")
+        doing = self.pkg or self.sub
+        extra = f"  {l.dim(doing)}" if doing else (f"  {l.dim(self.hint)}" if self.hint else "")
         self.write("\r\x1b[K" + self.timed(mark, self.step, self.now() - self.t0, extra))
         self.live = True
 
@@ -1283,7 +1289,7 @@ class Show:
         for note in self.notes:
             self.wrapped(note, l.yellow, first=l.yellow(l.warn) + " ")
         self.notes = []
-        self.step = self.hint = self.sub = ""
+        self.step = self.hint = self.sub = self.pkg = ""
 
     def take(self, raw):
         """A line of setup.sh's."""
@@ -1293,6 +1299,7 @@ class Show:
             if text.startswith("@@working "):
                 what, _, pct = text[10:].partition("|")
                 self.sub = what + (f" {pct}%" if pct.strip().isdigit() else "")
+                self.pkg = ""
             return
         self.log_line(text)
         if self.final is not None:
@@ -1315,7 +1322,13 @@ class Show:
         elif text.startswith("setup.sh stopped before it was done"):
             self.stopped = text.strip()
         elif SUB_DONE.match(text):
-            self.sub = ""
+            self.sub = self.pkg = ""
+        elif self.step and text[:1] in "GUSP":
+            for pat, verb in APT_DOING:
+                hit = pat.match(text)
+                if hit:
+                    self.pkg = f"{verb} {hit.group(1).split(':')[0]}"
+                    break
         elif WARN.match(text):
             note = text.strip()[1:]
             self.notes.append(note[:-1] if note.endswith(")") else note)

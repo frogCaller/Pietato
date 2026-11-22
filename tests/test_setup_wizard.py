@@ -873,6 +873,54 @@ if not ONLY or "show" in ONLY:
           and "│  It took 2:41. All it did is in /var/log/pietato-setup.log" in sc and sc.endswith("└  Restarting now…"))
     check("...all it said in its log, as it said it (not what was for the screen)",
           log.split("\n")[:-1] == [x for x in FEED if not x.startswith("@@")])
+    # what setup.sh's on, beside its step's moving line: its own words (doing), and the package apt's on as it goes
+    feed = ["==> Installing packages", "@@working Updating package lists|",
+            "Hit:1 http://deb.debian.org/debian bookworm InRelease",
+            "Get:2 http://deb.debian.org/debian bookworm/main arm64 Packages [8,688 kB]", "Reading package lists...",
+            "@@working What Pietato needs|", "Reading package lists...",
+            "Get:1 http://deb.debian.org/debian bookworm/main arm64 ffmpeg arm64 7:5.1.6-0+deb12u1 [1,234 kB]",
+            "Get:2 http://deb.debian.org/debian bookworm/main arm64 fonts-dejavu-core all 2.37-6 [1,068 kB]",
+            "Unpacking ffmpeg (7:5.1.6-0+deb12u1) ...", "Setting up libc6:arm64 (2.36-9+deb12u7) ...",
+            "Processing triggers for man-db (2.11.2-2) ...", "@@working Checking the game emulators|",
+            "PlayStation's emulator is built already.", "", "==> Bluetooth", "Pair Bluetooth controllers.", "",
+            "All set."]
+    clock = [0.0]
+    out, log = Out(), Out()
+    s = W.Show(out, log, W.Look(fancy=True, colour=False), {}, now=lambda: clock[0])
+    beside = []
+    for line in feed:
+        clock[0] += 1
+        s.take(line)
+        s.moving()
+        moving = CSI.sub("", out.parts[-1]).replace("\r", "")
+        hit = re.match(r"^[◒◐◓◑]  (Installing packages|Bluetooth)  (.*?) +\d+:\d\d$", moving)
+        beside.append(hit.group(2) if hit else None)
+    want = ["", "Updating package lists", "Updating package lists", "Updating package lists",
+            "Updating package lists", "What Pietato needs", "What Pietato needs", "Downloading ffmpeg",
+            "Downloading fonts-dejavu-core", "Unpacking ffmpeg", "Setting up libc6", "Finishing man-db",
+            "Checking the game emulators", "Checking the game emulators"]
+    s.finish("/var/log/pietato-setup.log")
+    sc = screen(out.text())
+    check(f"Installing packages says what it's on beside its moving line: Updating package lists, then each part, "
+          f"and the package apt's on ({beside[1:13]})", [b or "" for b in beside[:14]] == want)
+    check("...none of it left on the screen once the step's done (its line: its name and how long it took)",
+          [re.sub(r" {2,}", " | ", r) for r in sc.split("\n") if r.startswith("◇")][:2]
+          == ["◇ | Installing packages | 0:15", "◇ | Bluetooth | 0:03"]
+          and not [w for w in ("Updating", "ffmpeg", "man-db", "@@") if w in sc])
+    check("...and all of apt's lines in the log as they came, not setup's words for the screen",
+          log.text().split("\n")[:-1] == [x for x in feed if not x.startswith("@@")])
+    said = subprocess.run(["bash", "-c", 'eval "$(sed -n "/^doing() {/,/^}/p" "$1")"; doing "Updating package lists"; '
+                           'PIETATO_PROGRESS=1 doing "Updating package lists"', "_", ROOT + "/setup.sh"],
+                          capture_output=True, text=True, timeout=10)
+    part = open(ROOT + "/setup.sh").read().split('step "Installing packages"')[1].split('doing "Checking the game')[0]
+    part += 'doing "Checking the game emulators"'
+    apts = [ln.strip() for ln in part.split("\n") if ln.strip().startswith(("apt-get ", "DEBIAN_FRONTEND"))
+            or ln.strip().startswith('doing "')]
+    check(f"...setup.sh says it (to setup's own screen alone: nothing on a plain run), before each lot of apt-get in "
+          f"that step ({said.stdout!r}; {len(apts)} lines)", said.stdout == "@@working Updating package lists|\n"
+          and apts[0] == 'doing "Updating package lists"' and apts[1] == "apt-get update"
+          and all(not a.startswith("apt-get install") or apts[k - 1].startswith(("doing", "apt-get install"))
+                  for k, a in enumerate(apts)) and apts[-1] == 'doing "Checking the game emulators"')
     sc2 = shown(FEED, {"REBOOT": "no"})[0]
     sc3 = shown(FEED, {"REBOOT": "no", "GPI": "yes"})[0]
     check("...not restarting: Pietato's starting, restart when you're ready (in a GPi Case: its screen needs it)",

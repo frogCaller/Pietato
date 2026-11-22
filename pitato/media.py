@@ -629,9 +629,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return max(0.0, min(0.25, self.update_next - time.monotonic()))   # (its dots' next step)
         if self.now_art():
             return max(0.0, min(0.25, self.lofi_next - time.monotonic()))   # (the lofi art's next frame)
-        if self.ear is not None and not self.paused:   # (a glow, following the beat: its next frame. Now playing's
-            soon = self.pulse_next if self.view == "now" else min(self.pulse_next, self.face_next)   # or the Bot's
-            return max(0.0, min(0.25, soon - time.monotonic()))                                      # face's)
+        if self.ear is not None and not self.paused:   # (Now playing's glow, following the beat: its next frame)
+            return max(0.0, min(0.25, self.pulse_next - time.monotonic()))
         if self.on_sim_page() and self.sim_opts is None:      # (its next frame; the Clock's: a second or so off)
             return max(0.0, min(0.25 if self.sim_paced() is not None else 0.05, self.sim_next - time.monotonic()))
         if self.on_face_page() or self.on_char_page():   # (the bot's face: as it next changes)
@@ -2023,6 +2022,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.on_camera_page():
             self.camera.release(name)
             self.dirty = True
+        elif self.board_shown():                       # (Apps > Soundboard: a button held, and let go of)
+            self.release_board(name)
 
     def press(self, name, repeat=False):
         """Returns 'exit' when media mode should close."""

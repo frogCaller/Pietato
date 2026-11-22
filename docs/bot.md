@@ -23,9 +23,7 @@ break after it. Its face blinks, looks around, and shows when it's listening, th
 SELECT switches its chat page to just its face, big, on the whole screen, with no words, and back. It
 still talks, and with a microphone it listens: press A and talk to it. Without one, A opens the
 keyboard. On its face, up and down change its colour and left and right its background. There it looks
-around the room, going from one place on the screen to another now and then. While music or the radio
-plays it has a glow, and with a song of yours the glow follows the beat, as a cover's does on Now
-playing (not with the battery saver on).
+around the room, going from one place on the screen to another now and then.
 
 Make it your own in its Character, like a game's character creator: X > Edit Character on the Bot, or
 first in its settings (START). Its name, its eyes (size, height, corners, spacing, eyelashes), its mouth,

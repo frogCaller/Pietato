@@ -14,7 +14,14 @@ and is kept as it came out (the folder given on the command line), so it's there
 Told what to do a line of JSON at a time (stdin), it says what happens the same way (stdout):
 
     {"do": "load", "sounds": [[name, file]...]}    the sounds there are (the ones wanted soonest first)
-    {"do": "play", "id": name}                     one played (from its start again, if it's playing)
+    {"do": "play", "id": name, "semis": 0}         one played (from its start again, if it's playing), at its own pitch
+                                                   or this many semitones higher (lower: less than 0)
+    {"do": "loop", "hits": [[beat, name, semis, from, beats]...], "beats": 8, "bpm": 100, "b0": 0.0, "t0": when,
+     "click": true}                                the loop, played round and round: each sound at its beat of its
+                                                   layer's loop, that many beats long ("beats", if it doesn't say),
+                                                   from: not before that beat; at the tempo, beat b0 heard at t0
+                                                   (time.monotonic()); click: a quiet tick on each beat. Without hits
+                                                   or click: no loop
     {"do": "stop"}                                 all of them stopped
     {"do": "volume", "v": 0 to 100}
     {"do": "device", "device": aplay's -D}         where the sound goes ("": where ALSA would send it)
@@ -30,11 +37,14 @@ Told what to do a line of JSON at a time (stdin), it says what happens the same 
     {"is": "level", "peak": 0 to 1, "secs": 2.1}   recording: how loud just now, how long so far
     {"is": "recorded", "name": "Recording 2.wav", "secs": 1.4}    kept, its silence trimmed ("name": null: not, "why")
 """
+import bisect
+import collections
 import fcntl
 import gc
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import select
 import signal
@@ -72,6 +82,11 @@ PLAY_SOON = 1.5                  # seconds a sound asked for before it's ready i
 LEVEL_EVERY = 0.08               # seconds between a recording's levels
 LIMIT_BACK = 0.04                # how much of the way back to full the limiter comes, each chunk
 DOWN = 24                        # frames it takes to turn everything down, when it's too loud together
+LEAD_SECS = 2.0                  # seconds of writes the quickest is taken from: when a frame written is heard (one
+                                 # that went straight after the one before, aplay filling its buffer, says nothing)
+SEMIS_MOST = 24                  # semitones a sound's played higher or lower, at most
+LOOP_HITS_MOST = 2000            # sounds in a loop, at most
+CLICK_LOUD = (7000, 4500)        # how loud the loop's click is, on a bar's first beat and the others (of 32768)
 PLAIN = dict(os.environ, LC_ALL="C")   # what aplay and arecord run with: what they say is read here, so in English
 
 
@@ -330,11 +345,52 @@ class Out:
 
 
 class Voice:
-    """A sound, playing: where it's got to, and how much of its fade out is left (None: it isn't fading)."""
-    __slots__ = ("id", "data", "pos", "fade")
+    """A sound, playing: where it's got to, and how much of its fade out is left (None: it isn't fading); how many
+    frames of the next chunk go by before it starts (a loop's sound, at its very frame); how fast it's played (a
+    note: 2 ** (semitones / 12)), and how loud (1: as it is)."""
+    __slots__ = ("id", "data", "pos", "fade", "wait", "rate", "gain", "shown")
 
-    def __init__(self, sid, data):
+    def __init__(self, sid, data, wait=0, rate=1.0, gain=1.0):
         self.id, self.data, self.pos, self.fade = sid, data, 0, None
+        self.wait, self.rate, self.gain, self.shown = wait, rate, gain, True
+
+
+def click_sound(accent):
+    """The loop's click: a short tick, higher on a bar's first beat."""
+    t = np.arange(int(0.012 * RATE)) / RATE
+    x = np.sin(2 * np.pi * (2400.0 if accent else 1600.0) * t) * np.exp(-t / 0.0025)
+    return (x * CLICK_LOUD[0 if accent else 1]).astype(np.int16)
+
+
+def loop_from(c):
+    """What a "loop" says, checked: its layers' sounds, by how long a loop each goes round in ([(beats, hits sorted by
+    beat, their beats)]), the tempo, beat b0 and when it's heard (t0), and the click. None: no loop."""
+    try:
+        beats, bpm = float(c.get("beats")), float(c.get("bpm"))
+        b0, t0 = float(c.get("b0")), float(c.get("t0"))
+    except (TypeError, ValueError):
+        return None
+    if not (1 <= beats <= 64 and 20 <= bpm <= 300 and math.isfinite(b0) and math.isfinite(t0)):
+        return None
+    hits = c.get("hits")
+    groups = {}
+    for h in (hits if isinstance(hits, list) else ())[:LOOP_HITS_MOST]:
+        try:
+            p, sid, semis, after = float(h[0]), h[1], int(h[2]), float(h[3])
+            n = float(h[4]) if len(h) > 4 else beats
+        except (TypeError, ValueError, IndexError):
+            continue
+        if (isinstance(sid, str) and 1 <= n <= 64 and 0 <= p < n and abs(semis) <= SEMIS_MOST
+                and math.isfinite(after)):
+            groups.setdefault(n, []).append((p, sid, semis, after))
+    click = c.get("click") is True
+    if not groups and not click:
+        return None
+    out = []
+    for n, hs in sorted(groups.items()):
+        hs.sort(key=lambda h: h[0])
+        out.append((n, hs, [h[0] for h in hs]))
+    return {"groups": out, "bpm": bpm, "b0": b0, "t0": t0, "click": click}
 
 
 # ---- the player ---------------------------------------------------------------------------------------------------------
@@ -365,6 +421,13 @@ class Player:
         self.stale = True                              # which sounds are playing may have changed (said if so)
         self.wrote = False                             # a chunk's been written since select last said there was room
         self.rec = None
+        self.fed = 0                                   # frames written to aplay since it opened: the loop's clock
+        self.wrote_at = None                           # ...and when the last chunk was
+        self.lead = collections.deque()                # (when, when its first frame was written) the quickest lately
+        self.base = None                               # ...and so when aplay's first frame is heard (monotonic)
+        self.loop = None                               # the loop (loop_from), played round and round
+        self.clicks = (click_sound(True), click_sound(False))
+        self.ramp = np.arange(CHUNK, dtype=np.float64)
         self.buf = b""
         self.done = False
         self.wake_r, self.wake_w = os.pipe()
@@ -458,6 +521,8 @@ class Player:
             self.tried, self.fails = now, self.fails + 1
             self.sound(False, f"aplay: {ex.strerror or ex}")
             return False
+        self.fed, self.base, self.wrote_at = 0, None, None
+        self.lead.clear()
         return True
 
     def close(self):
@@ -509,13 +574,79 @@ class Player:
             return
         if out.write(self.mix()):
             self.wrote = True
+            self.heard_from(time.monotonic(), out)
             self.took(out)
 
     def took(self, out):
         """A chunk's been written (bandplay.py keeps count: how fast aplay takes them is how it keeps time)."""
 
+    def heard_from(self, now, out):
+        """A chunk's been written: when aplay's first frame is heard, from the quickest of the writes lately that
+        waited for aplay to take the one before (one written late, the Pi busy, says nothing of when it's heard; nor
+        does one aplay took at once, filling its buffer). aplay takes a chunk, waits a period for room for it, and
+        it's heard its buffer after that."""
+        if self.wrote_at is not None and now - self.wrote_at >= CHUNK / RATE / 2:
+            v = now - self.fed / RATE
+            lead = self.lead
+            while lead and lead[-1][1] >= v:
+                lead.pop()
+            lead.append((now, v))
+            while lead[0][0] < now - LEAD_SECS:
+                lead.popleft()
+            buffer, period = BUFFERS[out.level]
+            self.base = lead[0][1] + (buffer + period) / 1e6
+        self.wrote_at = now
+        self.fed += CHUNK
+
+    def loop_due(self):
+        """The loop's sounds (and its clicks) heard in the chunk about to be mixed: started at their very frames."""
+        lp = self.loop
+        if lp is None or self.base is None or self.rec is not None:
+            return
+        per = lp["bpm"] / 60.0
+        ta = self.base + self.fed / RATE
+        ba = lp["b0"] + (ta - lp["t0"]) * per
+        bb = ba + CHUNK / RATE * per
+        for n, hits, at in lp["groups"]:
+            k = math.floor(ba / n)
+            for kk in (k, k + 1):                      # (a chunk can go over the loop's end)
+                lo, hi = ba - kk * n, bb - kk * n
+                if hi <= 0 or lo >= n:
+                    continue
+                i = bisect.bisect_left(at, max(lo, 0.0))
+                while i < len(hits) and at[i] < hi:
+                    p, sid, semis, after = hits[i]
+                    beat = kk * n + p
+                    if beat >= after:
+                        have = self.sounds.get(sid)
+                        if have is not None:
+                            self.start(sid, have[1], semis, wait=int((beat - ba) / per * RATE), shown=False)
+                    i += 1
+        if lp["click"]:
+            beat = math.ceil(ba)
+            if beat < bb:
+                self.start(None, self.clicks[0 if beat % 4 == 0 else 1], 0, wait=int((beat - ba) / per * RATE))
+
+    def start(self, sid, data, semis=0, wait=0, shown=True):
+        """A sound started (the same one playing: it fades out as this one starts), at a pitch of its own, so many
+        frames into the next chunk. Not shown: a loop's (not said to be playing: its button isn't lit for it, as the
+        page would be drawn for every sound of the loop's)."""
+        for v in self.voices:
+            if v.id == sid and v.fade is None:
+                v.fade = FADE
+        v = Voice(sid, data, max(0, min(CHUNK - 1, wait)), 2.0 ** (semis / 12.0) if semis else 1.0)
+        v.shown = shown and sid is not None
+        self.voices.append(v)
+        live = [v for v in self.voices if v.fade is None]
+        for v in live[:max(0, len(live) - VOICES_MOST)]:
+            v.fade = FADE
+        if shown and sid is not None:
+            self.heard.pop(sid, None)
+            self.stale = True
+
     def mix(self):
         """The next chunk: the sounds playing, added up (silence, with none)."""
+        self.loop_due()
         if not self.voices:
             self.limit = 1.0
             return SILENCE
@@ -523,20 +654,35 @@ class Player:
         acc[:] = 0
         going = []
         for v in self.voices:
-            seg = v.data[v.pos:v.pos + CHUNK]
-            m = len(seg)
+            o = 0
+            if v.wait:                                 # (a loop's sound: it starts so far into the chunk)
+                o, v.wait = v.wait, 0
+            room = CHUNK - o
+            if v.rate == 1.0:
+                seg = v.data[v.pos:v.pos + room]
+                m = len(seg)
+            else:                                      # (a note: the sound played faster or slower)
+                idx = v.pos + self.ramp[:room] * v.rate
+                m = int(np.searchsorted(idx, len(v.data) - 1))
+                i0 = idx[:m].astype(np.int64)
+                fr = (idx[:m] - i0).astype(np.float32)
+                x0, x1 = v.data[i0].astype(np.float32), v.data[i0 + 1].astype(np.float32)
+                seg = x0 + (x1 - x0) * (fr if x0.ndim == 1 else fr[:, None])
             if v.fade is not None:
                 m = min(m, v.fade)
                 edge = EDGE[FADE - v.fade:FADE - v.fade + m]
-                seg = (seg[:m] * (edge if seg.ndim == 1 else edge[:, None])).astype(np.int32)
+                seg = seg[:m] * (edge if seg.ndim == 1 else edge[:, None])
                 v.fade -= m
+            if v.gain != 1.0:
+                seg = seg[:m] * v.gain
             if m:
+                seg = seg[:m].astype(np.int32) if seg.dtype.kind == "f" else seg[:m]
                 if seg.ndim == 1:
-                    acc[:m] += seg[:, None]
+                    acc[o:o + m] += seg[:, None]
                 else:
-                    acc[:m] += seg
-            v.pos += m
-            if v.pos < len(v.data) and (v.fade is None or v.fade > 0):
+                    acc[o:o + m] += seg
+            v.pos += m if v.rate == 1.0 else m * v.rate
+            if v.pos < len(v.data) - (0 if v.rate == 1.0 else 1) and (v.fade is None or v.fade > 0) and m:
                 going.append(v)
         if len(going) != len(self.voices):
             self.voices, self.stale = going, True
@@ -558,7 +704,7 @@ class Player:
             np.clip(acc, -32767, 32767, out=acc)
         return acc.astype("<i2").tobytes()
 
-    def play(self, sid, now):
+    def play(self, sid, now, semis=0):
         with self.lock:
             have = self.sounds.get(sid)
             if have is None and sid in dict(self.want) and sid not in self.bad:
@@ -568,15 +714,7 @@ class Player:
         self.soon.pop(sid, None)
         if self.out is None and not self.open(now, force=now - self.tried >= 0.3):
             return                                     # (the sound card won't open: not played later, out of the blue)
-        for v in self.voices:
-            if v.id == sid and v.fade is None:
-                v.fade = FADE                          # (playing: that one fades out as this one starts)
-        self.voices.append(Voice(sid, have[1]))
-        live = [v for v in self.voices if v.fade is None]
-        for v in live[:max(0, len(live) - VOICES_MOST)]:
-            v.fade = FADE
-        self.heard.pop(sid, None)
-        self.stale = True
+        self.start(sid, have[1], semis)                # (playing: that one fades out as this one starts)
         self.feed()
 
     def stop_all(self, now):
@@ -589,7 +727,7 @@ class Player:
     def playing(self, now):
         """The sounds heard now, said when they change (one that's just ended is still in the buffers a moment)."""
         self.stale = False
-        live = {v.id for v in self.voices if v.fade is None} if self.out is not None else set()
+        live = {v.id for v in self.voices if v.fade is None and v.shown} if self.out is not None else set()
         for sid in self.said_playing:
             if sid not in live and sid not in self.heard:
                 self.heard[sid] = now + HEARD_AFTER
@@ -679,8 +817,11 @@ class Player:
     def told(self, c, now):
         do = c.get("do")
         if do == "play":
-            if isinstance(c.get("id"), str) and self.rec is None:
-                self.play(c["id"], now)
+            semis = c.get("semis", 0)
+            if isinstance(c.get("id"), str) and self.rec is None and type(semis) is int and abs(semis) <= SEMIS_MOST:
+                self.play(c["id"], now, semis)
+        elif do == "loop":
+            self.loop = loop_from(c)
         elif do == "stop":
             self.stop_all(now)
         elif do == "load":

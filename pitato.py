@@ -71,8 +71,8 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
     Jellyfin    - your Jellyfin movies and shows and Continue watching, with search; the server
                   is found on your network, and you sign in once with a Quick Connect code
                   (or put server, user and password in static/jellyfin.txt)
-    Cartoons    - about 250 old cartoons from the Internet Archive (Popeye, Looney Tunes, Superman,
-                  Betty Boop, Casper...), listed in CLASSIC_TOONS below and streamed from
+    Cartoons    - about 210 old cartoons from the Internet Archive (Popeye, Looney Tunes, Superman,
+                  Casper...), listed in CLASSIC_TOONS below and streamed from
                   archive.org; plus the cartoon and anime channels on Plex's free Live TV
     Free Movies - about 150 old films from the Internet Archive (comedy, noir, horror, westerns,
                   silents), listed in FREE_FILMS below and streamed from archive.org;

@@ -779,6 +779,36 @@
   .sb-bank.plus { width: 38px; padding: 0; display: grid; place-items: center; color: var(--muted); }
   .sb-bank.over, .sb-pad.over { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px rgba(var(--accent-rgb), .8); }
   .sb-main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(290px, 2fr); gap: 14px; align-items: stretch; }
+  .sb-loop {                                   /* the loop: how it is on the Pi, its tempo, length, snapping, click */
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 28px;
+    padding: 12px 16px; border-radius: 18px; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line) inset;
+  }
+  .sb-loop[hidden] { display: none; }
+  .sb-loop-now { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 240px; }
+  .sb-loop-now h4 { margin: 0; font: 600 18px/1.2 var(--display); }
+  .sb-loop-now p { margin: 2px 0 0; font-size: 13.5px; line-height: 1.35; color: var(--muted); }
+  .sb-loop-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--line-3); }
+  .sb-loop-dot.on { background: var(--ok); }
+  .sb-loop-dot.rec { background: var(--bad); }
+  .sb-loop-sets {                              /* (label, setting; two of each a row, or one on a phone) */
+    display: grid; grid-template-columns: auto auto auto auto; justify-content: start; align-items: center; gap: 8px 14px;
+  }
+  .sb-loop-sets .seg, .sb-bpm { justify-self: start; }
+  .sb-loop-sets > :nth-child(4n + 3) { margin-left: 14px; }       /* (the second pair of a row: a little apart) */
+  .sb-loop-l { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+  .sb-bpm { display: inline-flex; align-items: center; padding: 3px; border-radius: 12px; background: var(--raised); }
+  .sb-bpm button { width: 28px; height: 27px; padding: 0; border: 0; border-radius: 9px; background: none; font: 600 17px/1 var(--display); color: var(--muted); }
+  .sb-bpm button:hover { color: var(--text); background: var(--press); }
+  .sb-bpm input {
+    width: 3.1em; padding: 0; border: 0; border-radius: 6px; background: none; text-align: right;
+    font: 600 14px/27px var(--display); color: var(--text); appearance: textfield; -moz-appearance: textfield;
+  }
+  .sb-bpm input::-webkit-outer-spin-button, .sb-bpm input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .sb-bpm-u { padding: 0 6px 0 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  @media (max-width: 700px) {
+    .sb-loop-sets { grid-template-columns: auto minmax(0, 1fr); }
+    .sb-loop-sets > :nth-child(4n + 3) { margin-left: 0; }
+  }
   .sb-board, .sb-list { min-width: 0; border-radius: 18px; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line) inset; }
   .sb-board { padding: 12px 16px 12px; }
   .sb-list { display: flex; flex-direction: column; min-height: 0; padding: 12px 8px 8px; }   /* (as tall as the buttons' */
@@ -5454,6 +5484,9 @@ function drawSound() {
   SB.sub = h.querySelector(".src");
   box.append(h);
   SB.root = el("div", "sb");
+  SB.loopBox = el("section", "sb-loop");                   // (the loop: hidden till the Pi says how it is)
+  SB.loopBox.hidden = true;
+  SB.loopSig = "";
   SB.tabs = el("div", "sb-banks");
   SB.tabs.setAttribute("role", "tablist");
   SB.tabs.setAttribute("aria-label", "Banks");
@@ -5466,10 +5499,10 @@ function drawSound() {
   SB.pick.onchange = () => { const files = Array.from(SB.pick.files || []); SB.pick.value = ""; sbAdd(files); };
   const main = el("div", "sb-main");
   main.append(SB.board, SB.list);
-  SB.root.append(SB.tabs, main, SB.pack, SB.pick);
+  SB.root.append(SB.loopBox, SB.tabs, main, SB.pack, SB.pick);
   box.append(SB.root);
   SB.edit = null; SB.drag = null;
-  if (SB.data) sbDraw();
+  if (SB.data) { sbLoopTake(); sbDraw(); }
   else noteInto(SB.board, "Loading", "");
   sbStart(token);
 }
@@ -5497,6 +5530,7 @@ async function sbPoll(token, gen) {   // (what's changed on the Pi, or in the fo
 }
 function sbTake(d, always) {
   SB.data = d;
+  sbLoopTake();
   const sig = JSON.stringify([d.banks, d.sounds]);
   if (sig === SB.sig && !always) return;
   SB.sig = sig;
@@ -5508,6 +5542,83 @@ async function sbDo(body) {      // a change, made on the Pi: what comes back is
     sbTake(d, true);
     return d;
   } catch (e) { toast(e.message); return null; }
+}
+// the loop (SELECT on the Pi's Soundboard records one): how it is there, and its tempo, length, snapping and click
+function sbLoopTake() {          // (drawn again when it's changed; not while its tempo's being typed)
+  const sig = JSON.stringify((SB.data && SB.data.loop) || null);
+  const typing = !!SB.loopBox && SB.loopBox.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
+  if (sig === SB.loopSig || typing || !SB.loopBox) return;
+  SB.loopSig = sig;
+  sbDrawLoop();
+}
+function sbDrawLoop() {
+  const box = SB.loopBox, lp = SB.data && SB.data.loop;
+  box.textContent = "";
+  box.hidden = !lp;
+  if (!lp) return;
+  const now = el("div", "sb-loop-now"), words = el("div");
+  words.append(el("h4", "", "Loop"), el("p", "sb-loop-say", sbLoopSays(lp)));
+  now.append(el("i", "sb-loop-dot" + (lp.open && lp.rec ? " rec" : lp.open && lp.layers ? " on" : "")), words);
+  const sets = el("div", "sb-loop-sets"), onOff = [["On", "On"], ["Off", "Off"]];
+  sets.append(el("span", "sb-loop-l", "Tempo"), sbTempo(lp),
+    el("span", "sb-loop-l", "Length"), sbSeg("Length", lp.lengths.map((n) => [n, n + (n === 1 ? " bar" : " bars")]), lp.bars, (bars) => sbLoopDo({ bars })),
+    el("span", "sb-loop-l", "Snap to the beat"), sbSeg("Snap to the beat", onOff, lp.snap, (snap) => sbLoopDo({ snap })),
+    el("span", "sb-loop-l", "Click while recording"), sbSeg("Click while recording", onOff, lp.click, (click) => sbLoopDo({ click })));
+  box.append(now, sets);
+}
+function sbLoopSays(lp) {
+  const n = lp.layers, layers = n + (n === 1 ? " layer" : " layers");
+  let say = lp.open && lp.rec ? "Recording a layer" : lp.open && n ? "Playing, " + layers
+    : n ? layers + ", heard while the Soundboard's open on the Pi"
+    : lp.open ? "None yet: SELECT records one" : "None yet: SELECT on the Pi's Soundboard records one";
+  const w = lp.with || [];
+  if (w.length) say += ". In time with " + (w.length > 1 ? w.slice(0, -1).join(", ") + " and " + w[w.length - 1] : w[0]);
+  return say;
+}
+function sbSeg(label, choices, value, pick) {   // (as Settings' short choices: the one it is, pressed)
+  const seg = el("div", "seg");
+  seg.setAttribute("role", "group"); seg.setAttribute("aria-label", label);
+  for (const [v, word] of choices) {
+    const k = button("", word);
+    k.setAttribute("aria-pressed", String(v === value));
+    k.onclick = () => {
+      if (k.getAttribute("aria-pressed") === "true") return;
+      for (const o of seg.children) o.setAttribute("aria-pressed", String(o === k));
+      pick(v);
+    };
+    seg.append(k);
+  }
+  return seg;
+}
+function sbTempo(lp) {           // beats a minute: typed, or a beat slower or faster at a time
+  const w = el("div", "sb-bpm"), [lo, hi] = lp.bpms;
+  const inp = el("input");
+  inp.type = "number"; inp.min = lo; inp.max = hi; inp.step = 1; inp.value = lp.bpm; inp.inputMode = "numeric";
+  inp.setAttribute("aria-label", "Tempo, in beats a minute");
+  let timer = 0;
+  const put = (v) => {
+    inp.value = Math.max(lo, Math.min(hi, v));
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (Number(inp.value) !== lp.bpm) sbLoopDo({ bpm: Number(inp.value) }); }, 350);
+  };
+  const by = (k) => { const v = Math.round(Number(inp.value)); put((Number.isFinite(v) ? v : lp.bpm) + k); };
+  const less = button("", "\u2212"), more = button("", "+");
+  less.setAttribute("aria-label", "Slower"); more.setAttribute("aria-label", "Faster");
+  less.onclick = () => by(-1); more.onclick = () => by(1);
+  inp.onchange = () => { const v = Math.round(Number(inp.value)); if (Number.isFinite(v) && inp.value !== "") put(v); else inp.value = lp.bpm; };
+  inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } };
+  w.append(less, inp, el("span", "sb-bpm-u", "BPM"), more);
+  return w;
+}
+async function sbLoopDo(want) {  // a change to the loop, made on the Pi: what comes back is how it is now
+  try {
+    sbTake(await post("/api/soundboard", Object.assign({ do: "loop" }, want)));
+  } catch (e) {
+    toast(e.message);
+    SB.loopSig = "";                                       // (as the Pi has it, again)
+    if (document.activeElement && SB.loopBox.contains(document.activeElement)) document.activeElement.blur();
+    sbLoopTake();
+  }
 }
 function sbBank(i) {
   SB.bank = i; store.set("sbbank", i);
