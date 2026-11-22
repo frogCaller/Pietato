@@ -1,16 +1,18 @@
 """Apps' Soundboard: a sound on every button. The d-pad's four and A, B, X and Y each play the sound that's on them,
 as many at once as you like (pressed again while it plays, a sound starts again); SELECT stops them all; L and R go
 through the banks of eight. START has the rest: the bank, the volume, a new sound recorded with a USB microphone and
-put on a button, and B there goes back (here, B is a button like the others).
+put on a button, and B there goes back (here, B is a button like the others: HOME goes back too).
 
 The sounds: a starter pack that comes with Pietato (pitato/sounds, public domain), and your own, wav, mp3 or ogg files
 in the Soundboard folder of your home folder. A new file there is on a button a moment later (My sounds' first free
 one). The web page's Soundboard adds, records, renames and deletes them, and puts them on the buttons.
 
-This draws the page: the bank's name, and the buttons laid out as they are on a controller, each with its sound's
-name, lit while it plays; the loop, recording or playing, with the beat it's on and the tempo; and a note played with
-A, B, X or Y held, on that button's tile. (soundbank.py: the sounds and banks. soundplay.py: the player, a process of
-its own. screens/soundboard.py: its buttons, and what media mode does for it.)"""
+This draws the page: the bank's name (and a dot for each bank), and the buttons laid out as they are on a controller,
+each with its sound's name, lit from behind in its button's colour, brightly while it plays; the loop, recording or
+playing, with the beat it's on, how far round it is and the tempo; and a note played with A, B, X or Y held, on that
+button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py).
+(soundbank.py: the sounds and banks. soundplay.py: the player, a process of its own. screens/soundboard.py: its
+buttons, and what media mode does for it.)"""
 import math
 import time
 
@@ -28,6 +30,8 @@ TOP = 40                         # px for the bank's line
 EDGE, GAP, MIDDLE = 12, 8, 24    # px round the buttons, between them, between the d-pad's and the letters'
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
+INK = (16, 19, 23)               # the words on a lit tile: dark, whatever the page is
+BANK_DOTS = 8                    # banks shown as a dot each, at most (more: which, of how many)
 
 
 class Soundboard(Sim):
@@ -138,52 +142,57 @@ class Soundboard(Sim):
         d.polygon(pts, fill=fill)
 
     def tile(self, pad, w, h):
-        """A button's tile: its key, and its sound's name. Lit in its own colour while its sound plays. Kept."""
+        """A button's tile, a pad lit from behind in its button's colour: dimly, and brightly while its sound plays;
+        its button, and its sound's name. Nothing on it: an outline. Kept."""
         from .fine import Image, ImageDraw, scale
         got = self.pads.get(pad)
         lit = pad in self.lit and got is not None
         here = self.placing is not None and self.placing[1] == pad
         held = self.held_note
         note = held[1] if held is not None and held[0] == pad and got is not None else None
-        key = (pad, got, lit, here, note, w, h, scale())
+        key = (pad, got, lit, here, note, w, h, scale(), BG)
         tile = self.tiles.get(key)
         if tile is not None:
             return tile
         colour = PAD_COLOUR[pad]
         tile = Image.new("RGB", (w, h), BG)
         d = ImageDraw.Draw(tile)
-        big = h >= 104                                 # (a bigger screen than the GPi Case's: bigger words to match)
-        f, small = self.font(19 if big else 16, bold=True), self.font(15 if big else 13)
-        r, step = (14, 24) if big else (12, 20)
+        size = max(16, min(28, round(h * 0.17)))       # (a bigger screen than the GPi Case's: bigger words to match)
+        f, small = self.font(size, bold=True), self.font(size - 3)
+        r, step = max(12, min(20, round(h * 0.125))), round(size * 1.25)
+        edge = 14 if h >= 104 else 12
         if got is None:                                # nothing on it
-            d.rounded_rectangle((0, 0, w - 1, h - 1), radius=12, fill=co_mix(BG, ROW, 0.45), outline=LINE)
-            cap, ink, words = co_mix(ROW, colour, 0.3), co_mix(BG, ROW, 0.45), [("Empty", MUTED)]
+            d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=BG, outline=co_mix(BG, LINE, 1.0), width=2)
+            cap, ink, words = co_mix(BG, colour, 0.22), BG, [("Empty", MUTED)]
         else:
             name, state = got
-            if lit:
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=12, fill=colour)
-                cap, ink, text = co_mix(colour, BG, 0.82), colour, co_mix(colour, BG, 0.9)
+            if lit:                                    # (dark words on it, on a light page too)
+                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=colour)
+                cap, ink, text = co_mix(colour, INK, 0.82), colour, co_mix(colour, INK, 0.9)
             else:
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=12, fill=ROW,
-                                    outline=TEXT if here else LINE, width=2 if here else 1)
-                cap, ink = colour, co_mix(colour, BG, 0.85)
+                glow = 0.18 if state == "ready" else 0.05
+                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=co_mix(ROW, colour, glow),
+                                    outline=TEXT if here else co_mix(ROW, colour, glow + 0.14), width=2 if here else 1)
+                cap = colour if state == "ready" else co_mix(ROW, colour, 0.45)
+                ink = co_mix(colour, BG, 0.85)
                 text = TEXT if state == "ready" else MUTED
-            words = [(line, text) for line in self.fitted(name, f, w - 26)]
+            words = [(line, text) for line in self.fitted(name, f, w - 2 * edge)]
             if state == "bad" and not lit:
                 words = words[:1] + [("Can't play it", co_mix(WARN, ROW, 0.25))]
-        d.ellipse((11, 10, 11 + 2 * r, 10 + 2 * r), fill=cap)
+        top = edge - 2
+        d.ellipse((edge - 2, top, edge - 2 + 2 * r, top + 2 * r), fill=cap)
         if pad in ("up", "down", "left", "right"):
-            self.arrow(d, pad, 11 + r, 10 + r, r * 0.46, ink)
+            self.arrow(d, pad, edge - 2 + r, top + r, r * 0.46, ink)
         else:
-            d.text((11 + r, 10 + r), PAD_NAME[pad], font=self.font(14 if not big else 16, bold=True), fill=ink,
+            d.text((edge - 2 + r, top + r), PAD_NAME[pad], font=self.font(max(14, r + 2), bold=True), fill=ink,
                    anchor="mm")
         if note is not None:                           # (a note being played on it: which, at its top right)
-            d.text((w - 13, 10 + r), note, font=self.font(20 if big else 17, bold=True),
+            d.text((w - edge, top + r), note, font=self.font(size + 1, bold=True),
                    fill=co_mix(colour, BG, 0.85) if lit else colour, anchor="rm")
-        y = max(20 + 2 * r, h - 14 - step * len(words)) + step // 2 - 1
+        y = max(top + 2 * r + 10, h - edge - step * len(words)) + step // 2
         for k, (line, fill) in enumerate(words):
             plain = got is None or (k and got[1] == "bad" and not lit)
-            d.text((13, y), line, font=small if plain else f, fill=fill, anchor="lm")
+            d.text((edge, y), line, font=small if plain else f, fill=fill, anchor="lm")
             y += step
         if len(self.tiles) > 300:
             self.tiles.clear()
@@ -191,11 +200,13 @@ class Soundboard(Sim):
         return tile
 
     def top(self, d, x0, y0):
-        """The bank's line: its name between ◀ and ▶ (L and R), which it is of how many; putting a sound on a
-        button, what to do instead of the count. A few words at the left if the sound can't be heard."""
+        """The bank's line: its name between ◀ and ▶ (L and R), and at the right a dot for each bank, this one's lit
+        (a lot of them: which it is, of how many); putting a sound on a button, what to do. A few words at the left if
+        the sound can't be heard. The loop: at the left, its tempo at the right, and how far round it is under them."""
         i, n, name = self.bank
         W, mid = self.w, y0 + TOP // 2 - 2
-        f, small = self.font(18, bold=True), self.font(13)
+        big = W >= 960                                 # (a bigger screen than the GPi Case's)
+        f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
         name = name or "Soundboard"
         while len(name) > 4 and f.getlength(name) > W * 0.42:
             name = name[:-2].rstrip() + "…"
@@ -203,8 +214,8 @@ class Soundboard(Sim):
         cx = x0 + W / 2
         d.text((cx, mid), name, font=f, fill=TEXT, anchor="mm")
         if n > 1:
-            self.arrow(d, "left", cx - nw / 2 - 20, mid, 5, MUTED)
-            self.arrow(d, "right", cx + nw / 2 + 20, mid, 5, MUTED)
+            self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
+            self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
         if self.placing is not None:
             words = f"Press a button for {self.placing[0]}"
             room = W / 2 - nw / 2 - 44 - EDGE
@@ -214,31 +225,49 @@ class Soundboard(Sim):
         elif self.trouble:
             d.text((x0 + EDGE + 2, mid), self.trouble, font=small, fill=WARN, anchor="lm")
         elif self.loop is not None:
-            self.loop_line(d, x0 + EDGE + 2, mid)
-        right = f"{i + 1} of {n}" if n > 1 else ""
+            self.loop_line(d, x0 + EDGE + 2, mid, big)
+        x = x0 + W - EDGE - 2
+        if 1 < n <= BANK_DOTS:                         # (the banks: a dot each)
+            r, step = (4, 14) if big else (3, 11)
+            for k in reversed(range(n)):
+                d.ellipse((x - 2 * r, mid - r, x, mid + r), fill=TEXT if k == i else co_mix(BG, MUTED, 0.55))
+                x -= step
+            x -= 8
+        elif n > 1:
+            x -= small.getlength(f"{i + 1} of {n}") + 14
+            d.text((x + 14, mid), f"{i + 1} of {n}", font=small, fill=MUTED, anchor="lm")
         if self.loop is not None:
-            right = f"{self.loop['bpm']} BPM" + (f"   {right}" if right else "")
-        if right:
-            d.text((x0 + W - EDGE - 2, mid), right, font=small, fill=MUTED, anchor="rm")
+            d.text((x, mid), f"{self.loop['bpm']} BPM", font=small, fill=MUTED, anchor="rm")
+            self.loop_track(d, x0 + EDGE, x0 + W - EDGE, y0 + TOP - 7)
         self.taps.append(((x0, y0, x0 + W // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + W // 2, y0, x0 + W, y0 + TOP - 4), "r"))
 
-    def loop_line(self, d, x, mid):
+    def loop_line(self, d, x, mid, big=False):
         """The loop, at the top left: recording (red) or playing, a mark for each beat of the bar (the one heard now,
         lit), and which bar of the loop it's in."""
         lp = self.loop
-        f = self.font(13, bold=True)
+        f = self.font(15 if big else 13, bold=True)
         red, lit = _HUES["Red"], TEXT
-        d.ellipse((x, mid - 5, x + 10, mid + 5), fill=red if lp["rec"] else _HUES["Green"])
+        r, b = (6, 5) if big else (5, 4)
+        d.ellipse((x, mid - r, x + 2 * r, mid + r), fill=red if lp["rec"] else _HUES["Green"])
         words = "Recording" if lp["rec"] else ("Loop" if lp["layers"] == 1 else f"Loop, {lp['layers']} layers")
-        d.text((x + 17, mid), words, font=f, fill=TEXT, anchor="lm")
-        x += 17 + f.getlength(words) + 10
+        d.text((x + 2 * r + 7, mid), words, font=f, fill=TEXT, anchor="lm")
+        x += 2 * r + 7 + f.getlength(words) + 10
         for k in range(1, 5):
             on = k == lp["beat"]
-            d.rounded_rectangle((x, mid - 4, x + 8, mid + 4), radius=2,
+            d.rounded_rectangle((x, mid - b, x + 2 * b, mid + b), radius=2,
                                 fill=(red if lp["rec"] else lit) if on else co_mix(BG, ROW, 0.9))
-            x += 12
-        d.text((x + 4, mid), f"bar {lp['bar']}", font=self.font(13), fill=MUTED, anchor="lm")
+            x += 2 * b + 4
+        d.text((x + 4, mid), f"bar {lp['bar']}", font=self.font(15 if big else 13), fill=MUTED, anchor="lm")
+
+    def loop_track(self, d, x0, x1, y):
+        """A line under the bank's: how far round the loop it is (to the beat), recording (red) or playing."""
+        lp = self.loop
+        beats = 4 * max(1, lp.get("bars", 1))
+        done = ((lp["bar"] - 1) * 4 + lp["beat"]) / beats
+        d.rounded_rectangle((x0, y, x1, y + 2), radius=1, fill=co_mix(BG, ROW, 0.9))
+        d.rounded_rectangle((x0, y, x0 + max(4, round((x1 - x0) * done)), y + 2), radius=1,
+                            fill=_HUES["Red"] if lp["rec"] else _HUES["Green"])
 
     def rec_card(self, img, x0, y0):
         """Recording: how long so far, and how loud it is just now."""
@@ -262,32 +291,58 @@ class Soundboard(Sim):
                anchor="lm")
         img.paste(card, (x0 + (self.w - w) // 2, y0 + (self.h - h) // 2), card)
 
-    def bounce_top(self, d, x0, y0):
-        """Bounce's line: its shape between ◀ and ▶ (L and R), its key and scale at the left, its balls at the right."""
+    def bounce_top(self, d, x0, y0, w):
+        """Bounce's line, over its shape (w wide): the shape between ◀ and ▶ (L and R), how many balls at the left."""
         v = self.bounce
         mid = y0 + TOP // 2 - 2
-        f, small = self.font(18, bold=True), self.font(13)
-        cx = x0 + self.w / 2
+        big = self.w >= 960
+        f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
+        cx = x0 + w / 2
         d.text((cx, mid), v["shape"], font=f, fill=TEXT, anchor="mm")
         nw = f.getlength(v["shape"])
-        self.arrow(d, "left", cx - nw / 2 - 20, mid, 5, MUTED)
-        self.arrow(d, "right", cx + nw / 2 + 20, mid, 5, MUTED)
-        d.text((x0 + EDGE + 2, mid), f"{v['key']} {v['scale'].lower()}, {v['sound']}", font=small, fill=TEXT,
-               anchor="lm")
+        self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
+        self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
         n = v["count"]
-        d.text((x0 + self.w - EDGE - 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED,
-               anchor="rm")
-        self.taps.append(((x0, y0, x0 + self.w // 2, y0 + TOP - 4), "l"))
-        self.taps.append(((x0 + self.w // 2, y0, x0 + self.w, y0 + TOP - 4), "r"))
+        d.text((x0 + EDGE + 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED, anchor="lm")
+        self.taps.append(((x0, y0, x0 + w // 2, y0 + TOP - 4), "l"))
+        self.taps.append(((x0 + w // 2, y0, x0 + w, y0 + TOP - 4), "r"))
+
+    def bounce_panel(self, w, h, fonts):
+        """Bounce's sliders, a picture kept till one of them (or what X and Y change) does: the balls are drawn
+        frame by frame, and words are slow to draw on a Pi Zero."""
+        from .fine import Image, ImageDraw, scale
+        from .theme import ACCENT
+        v = self.bounce
+        key = ("panel", tuple(v["sliders"]), v["sel"], v["sound"], v["key"], v["scale"], w, h, scale(), BG, ACCENT)
+        tile = self.tiles.get(key)
+        if tile is None:
+            tile = Image.new("RGB", (w, h), BG)
+            BN.draw_panel(ImageDraw.Draw(tile), (0, 0, w, h), v, fonts)
+            for k in [k for k in self.tiles if k[0] == "panel"]:
+                del self.tiles[k]                      # (the one before: not wanted again soon)
+            self.tiles[key] = tile
+        return tile
+
+    def bounce_fonts(self):
+        """Bounce's words: its shape's, and its sliders' (bigger on a bigger screen)."""
+        big = self.w >= 960
+        return {"bold": self.font(26 if big else 20, bold=True), "small": self.font(18 if big else 14),
+                "label": self.font(19 if big else 14), "label_b": self.font(19 if big else 14, bold=True),
+                "info": self.font(19 if big else 14, bold=True), "badge": self.font(15 if big else 11, bold=True),
+                "info_h": 44 if big else 28, "knob": 9 if big else 6, "track": 6 if big else 4}
 
     def draw(self, img, x0, y0):
         from .fine import ImageDraw
         self.taps = []
-        if self.bounce is not None:                    # (Bounce: its shape and balls, bounce.py)
-            d = ImageDraw.Draw(img)
-            self.bounce_top(d, x0, y0)
-            BN.draw(d, (x0, y0 + TOP, x0 + self.w, y0 + self.h), self.bounce,
-                    {"bold": self.font(20, bold=True), "small": self.font(14)}, time.monotonic())
+        if self.bounce is not None:                    # (Bounce: its shape and balls, and its sliders at the right,
+            d = ImageDraw.Draw(img)                    #  bounce.py)
+            pw = BN.PANEL[self.w >= 960]
+            shape_w = self.w - pw - 2 * EDGE
+            fonts = self.bounce_fonts()
+            self.bounce_top(d, x0, y0, shape_w)
+            BN.draw(d, (x0, y0 + TOP, x0 + shape_w, y0 + self.h), self.bounce, fonts, time.monotonic())
+            px, py = x0 + shape_w + EDGE, y0 + 6
+            img.paste(self.bounce_panel(self.w - shape_w - 2 * EDGE, self.h - 12, fonts), (px, py))
             return
         self.top(ImageDraw.Draw(img), x0, y0)
         for pad, (x, y, w, h) in self.boxes().items():

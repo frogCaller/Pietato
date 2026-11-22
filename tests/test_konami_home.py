@@ -258,6 +258,18 @@ check("...HOME stops it, at once", m.konami_rec is None and m.active and switche
 key(pad, e.BTN_MODE, False)
 check("...let go: nothing more", m.active and switches == [])
 
+# ---- the Soundboard's page: HOME back to Apps, as it's let go of (B's one of its sounds there) -----------------------
+m.soon_jobs.append(lambda: (m.web_tab("Soundboard"), setattr(m.board_open(), "start_at", time.monotonic() + 1e6)))
+m.wake(); wait(0.3)
+said = len(toasts)
+key(pad, e.BTN_MODE, True)
+check("the Soundboard's page (its player not started, here), HOME down: nothing yet",
+      m.board_shown() and switches == [])
+key(pad, e.BTN_MODE, False)
+check(f"...let go: back to Apps, the Soundboard picked, nothing said ({toasts[said:]})", m.view == "list"
+      and g.LIBRARY[m.tab]["name"] == "Apps" and m.tab_items()[m.sels[m.tab]]["title"] == "Soundboard"
+      and toasts[said:] == [] and switches == [] and m.active)
+
 # ---- a controller without HOME: SELECT and START together ------------------------------------------------------------
 at_home()
 key(nohome, e.BTN_SELECT, True); key(nohome, e.BTN_START, True)

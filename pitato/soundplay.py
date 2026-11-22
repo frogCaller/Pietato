@@ -22,13 +22,20 @@ Told what to do a line of JSON at a time (stdin), it says what happens the same 
                                                    from: not before that beat; at the tempo, beat b0 heard at t0
                                                    (time.monotonic()); click: a quiet tick on each beat. Without hits
                                                    or click: no loop
-    {"do": "note", "id": name, "semis": 2.5, "gain": 0.8, "at": when}
+    {"do": "note", "id": name, "semis": 2.5, "gain": 0.8, "at": when, "pan": -0.3}
                                                    Bounce's (bounce.py): a wall's note, so many semitones from the
-                                                   sound's own (Tones/Bell, Tones/Pluck, Tones/Pad: its own sounds,
-                                                   made here at middle C), heard at when (time.monotonic(): as soon as
-                                                   it can be, if that's gone by), or now without it; a few at a time
-                                                   (BOUNCE_MOST), each faded in and no longer than BOUNCE_SECS
-    {"do": "echo", "on": true, "secs": 0.45}       Bounce's notes echoed, lightly, this far apart (off: none)
+                                                   sound's own (Tones/Bell, Tones/Marimba...: its own sounds, made here
+                                                   from middle C's), heard at when (time.monotonic(): as soon as it can
+                                                   be, if that's gone by), or now without it, from the left (-1) or the
+                                                   right (1); a few at a time (BOUNCE_MOST), each faded in and no
+                                                   longer than BOUNCE_SECS
+    {"do": "tone", "id": "Tones/Bell"}             one of its own sounds made ready (it takes a moment)
+    {"do": "fx", "space": 0.5, "echo": 0.3, "tone": 0.7, "secs": 0.45}
+                                                   Bounce's notes through its effects (soundfx.py), each 0 to 1: a
+                                                   room round them, an echo this far apart, and their tone (1: as
+                                                   they are, less: softer)
+    {"do": "drone", "level": 0.2, "note": 48}      a quiet chord held under them, on that note (level 0: none)
+    {"do": "space", "v": 0.3}                      the Soundboard's own sounds in a room too, 0 to 1
     {"do": "pitch", "id": name}                    a sound's own note, as near as it can tell
     {"do": "stop"}                                 all of them stopped
     {"do": "volume", "v": 0 to 100}
@@ -99,28 +106,33 @@ SEMIS_MOST = 24                  # semitones a sound's played higher or lower, a
 LOOP_HITS_MOST = 2000            # sounds in a loop, at most
 CLICK_LOUD = (7000, 4500)        # how loud the loop's click is, on a bar's first beat and the others (of 32768)
 BOUNCE_MOST = 6                  # Bounce's notes at a time (one more: the oldest fades out), so a Pi Zero keeps up
-BOUNCE_SECS = 2.0                # seconds of a Bounce note played, at most (then it fades out)
+BOUNCE_SECS = 2.5                # seconds of a Bounce note played, at most (then it fades out)
 BOUNCE_LATE = 64                 # Bounce's notes waiting for their time, at most
 FADE_IN = 96                     # frames a Bounce note fades in over (2 ms): no click as it starts
-TONE_ROOT = 60                   # the note Bounce's own sounds are made at (MIDI: bounce.py's TONE_ROOT)
-TONES = {"Tones/Bell": 2.2, "Tones/Pluck": 1.3, "Tones/Pad": 2.4}   # ...and how long each is
-ECHO_FEED = 77                   # Bounce's echo: each as loud as this of what it echoes (of 256: a light one)
-ECHO_GAP = (0.12, 0.6)           # ...seconds between them, at least and at most
-ECHO_TAIL = 4.0                  # ...kept going this long after the last note (by then it's died away)
+TONE_ROOT = 60                   # the note Bounce's own sounds are played from (MIDI: bounce.py's TONE_ROOT)
+TONE_ROOTS = (48, 60, 72)        # ...each made at these, and a note played from the nearest (it sounds as it should)
+DRONE_SECS = 4.0                 # its drone: a loop this long
+DRONE_GLIDE = 1.0                # ...seconds it takes to come and go, or go from one key to another
+DRONE_SPACE = 0.6                # ...how much of it goes into the space round the notes
+DRONE_MOST = 0.6                 # ...how loud it is, all the way up (of the loop as it's made)
 PITCH_HZ = (55.0, 1500.0)        # a sound's own note is looked for between these
 PLAIN = dict(os.environ, LC_ALL="C")   # what aplay and arecord run with: what they say is read here, so in English
 
 
-def soundbank():
-    """soundbank.py, beside this (run with -I, this isn't in a package): WAV files, a recording's silence trimmed."""
-    spec = importlib.util.spec_from_file_location("pitato_soundbank", os.path.join(HERE, "soundbank.py"))
+def beside(name):
+    """A module beside this (run with -I, this isn't in a package): soundbank.py (WAV files, a recording's silence
+    trimmed), soundfx.py (Bounce's effects and its own sounds)."""
+    spec = importlib.util.spec_from_file_location("pitato_" + name, os.path.join(HERE, name + ".py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-B = soundbank()
+B = beside("soundbank")
+FX = beside("soundfx")
+TONES = {"Tones/" + name: FX.SECS[name] for name in FX.NAMES}   # Bounce's own sounds, and how long each is
 EDGE = np.linspace(1.0, 0.0, FADE, dtype=np.float32)   # a fade out
+EDGE_CHUNK = np.linspace(1.0, 0.0, CHUNK, dtype=np.float32)[:, None]   # ...over a whole chunk
 RISE = np.linspace(0.0, 1.0, FADE_IN, dtype=np.float32)   # a fade in
 
 
@@ -370,14 +382,15 @@ class Voice:
     """A sound, playing: where it's got to, and how much of its fade out is left (None: it isn't fading); how many
     frames of the next chunk go by before it starts (a loop's sound, at its very frame); how fast it's played (a
     note: 2 ** (semitones / 12)), and how loud (1: as it is)."""
-    __slots__ = ("id", "data", "pos", "fade", "wait", "rate", "gain", "shown", "rise", "left", "bounce")
+    __slots__ = ("id", "data", "pos", "fade", "wait", "rate", "gain", "shown", "rise", "left", "bounce", "pan")
 
     def __init__(self, sid, data, wait=0, rate=1.0, gain=1.0):
         self.id, self.data, self.pos, self.fade = sid, data, 0, None
         self.wait, self.rate, self.gain, self.shown = wait, rate, gain, True
         self.rise = 0                  # frames of its fade in still to come (Bounce's notes)
         self.left = None               # ...frames of it to be played before it fades out (None: all of it)
-        self.bounce = False            # ...one of Bounce's (echoed, if its echo's on; a few at a time)
+        self.bounce = False            # ...one of Bounce's (through its effects; a few at a time)
+        self.pan = None                # ...how loud on the left and on the right, of gain (None: both as it is)
 
 
 def click_sound(accent):
@@ -387,24 +400,15 @@ def click_sound(accent):
     return (x * CLICK_LOUD[0 if accent else 1]).astype(np.int16)
 
 
-def make_tone(sid):
-    """One of Bounce's own sounds, at middle C: Tones/Bell (a soft bell), Tones/Pluck, Tones/Pad."""
-    f = 440.0 * 2 ** ((TONE_ROOT - 69) / 12)
-    t = np.arange(int(TONES[sid] * RATE)) / RATE
-    x = np.zeros_like(t)
-    if sid == "Tones/Bell":                            # (a bell's overtones, not quite in tune with it, dying away)
-        for ratio, amp, decay in ((1.0, 1.0, 0.9), (2.0, 0.45, 0.45), (2.76, 0.28, 0.3), (4.07, 0.16, 0.2),
-                                  (5.4, 0.08, 0.12)):
-            x += amp * np.exp(-t / decay) * np.sin(2 * np.pi * f * ratio * t)
-    elif sid == "Tones/Pluck":                         # (a string's: the higher ones gone first)
-        for k in range(1, 9):
-            x += 0.85 ** k / k * np.exp(-t * (3.0 + 2.2 * k)) * np.sin(2 * np.pi * f * k * t)
-    else:                                              # (a pad: coming up slowly, two of it a little apart)
-        x = (np.sin(2 * np.pi * f * t) + 0.5 * np.sin(2 * np.pi * f * 1.005 * t) + 0.25 * np.sin(4 * np.pi * f * t)
-             + 0.12 * np.sin(6 * np.pi * f * t)) * np.minimum(1.0, t / 0.15) * np.exp(-t / 1.6)
-    x *= np.minimum(1.0, t / 0.004) * np.minimum(1.0, (t[-1] - t) / 0.03)   # (no click at either end)
-    loud = 0.3 if sid == "Tones/Pad" else 0.42
-    return (x / np.max(np.abs(x)) * loud * 32767).astype(np.int16)
+def make_tone(sid, root=TONE_ROOT):
+    """One of Bounce's own sounds (Tones/Bell, Tones/Marimba...), at that note (middle C, unless it says)."""
+    return FX.tone(sid[6:], root, RATE)
+
+
+def pan_of(p):
+    """How loud on the left and on the right, a note heard from p (-1: all left, 1: all right; 0: both as it is)."""
+    p = max(-1.0, min(1.0, float(p)))
+    return (1.0 - max(0.0, p), 1.0 + min(0.0, p))
 
 
 def pitch_of(data):
@@ -507,12 +511,22 @@ class Player:
         self.lead = collections.deque()                # (when, when its first frame was written) the quickest lately
         self.base = None                               # ...and so when aplay's first frame is heard (monotonic)
         self.loop = None                               # the loop (loop_from), played round and round
-        self.bounce_tones = {}                         # Bounce's own sounds, made the first time they're wanted
         self.bounce_wait = []                          # Bounce's notes waiting for their time: (when, n, samples...)
         self.bounce_n = itertools.count()
-        self.echo = None                               # its echo: {"ring": what's gone by, "at": where in it}
-        self.echo_left = 0                             # ...frames it's kept going for yet
         self.bacc = np.zeros((CHUNK, 2), dtype=np.int32)
+        self.fx = FX.Bus(RATE, CHUNK)                  # Bounce's effects: its notes' tone, echo and space
+        self.fx_space = (0.0, 0.0)                     # ...how much space Bounce wants, and the Soundboard's own sounds
+        self.fx_send = (0.0, 0.0)                      # ...and so how much of each goes into it
+        self.fx_stop = False                           # ...everything stopped: what's ringing fades out at once
+        self.fx_f = np.zeros((CHUNK, 2), dtype=np.float32)
+        self.fx_o = np.zeros((CHUNK, 2), dtype=np.float32)
+        self.fx_in = np.zeros((CHUNK, 2), dtype=np.float32)
+        self.fx_t = np.zeros((CHUNK, 2), dtype=np.float32)
+        self.drone = None                              # its drone, sounding: {"note", "loop", "at", "gain", "to"}
+        self.drones_going = []                         # ...ones going (from other keys)
+        self.drone_want = (0.0, None)                  # ...how loud it's wanted (0 to 1), on what note
+        self.to_make, self.made = [], {}               # Bounce's own sounds and drones: being made, and made
+        threading.Thread(target=self.maker, daemon=True, name="tones").start()
         self.clicks = (click_sound(True), click_sound(False))
         self.ramp = np.arange(CHUNK, dtype=np.float64)
         self.buf = b""
@@ -575,6 +589,31 @@ class Player:
                         self.sounds[sid] = (key, data)
                         self.news.append({"is": "ready", "id": sid, "secs": round(len(data) / RATE, 2)})
                 self.poke()
+
+    def maker(self):
+        """(A thread of its own.) Bounce's own sounds and its drones, made as they're wanted: a moment's work each,
+        which the sound mustn't wait for. ("tone", the sound, at which note) or ("drone", its note)."""
+        while True:
+            with self.lock:
+                while not self.to_make:
+                    self.lock.wait()
+                key = self.to_make[0]
+            try:
+                data = FX.tone(key[1][6:], key[2], RATE) if key[0] == "tone" else FX.drone(key[1], DRONE_SECS, RATE)
+            except Exception as ex:                    # (never the maker's end)
+                print(f"soundplay: {key} couldn't be made ({ex!r})", file=sys.stderr, flush=True)
+                data = None
+            with self.lock:
+                self.made[key] = data
+                self.to_make.remove(key)
+            self.poke()
+
+    def make(self, key):
+        """One of Bounce's own sounds, or a drone, to be made (if it isn't, and isn't being)."""
+        with self.lock:
+            if key not in self.made and key not in self.to_make:
+                self.to_make.append(key)
+                self.lock.notify_all()
 
     def read(self, path):
         """(The reader's.) A sound's samples, from what it was told is its file (bandplay.py: or what it's made of)."""
@@ -714,16 +753,23 @@ class Player:
             if beat < bb:
                 self.start(None, self.clicks[0 if beat % 4 == 0 else 1], 0, wait=int((beat - ba) / per * RATE))
 
-    def bounce_tone(self, sid):
-        if sid not in TONES:
-            return None
-        if sid not in self.bounce_tones:
-            self.bounce_tones[sid] = make_tone(sid)
-        return self.bounce_tones[sid]
+    def bounce_tone(self, sid, semis=0.0):
+        """One of Bounce's own sounds, as made at the note nearest the one wanted, and the semitones from there: (its
+        samples, semitones), or (None, ...) while it's being made (asked for now)."""
+        root = min(TONE_ROOTS, key=lambda r: abs(TONE_ROOT + semis - r))
+        key = ("tone", sid, root)
+        data = self.made.get(key)
+        if data is None:
+            self.make(key)
+        return data, semis - (root - TONE_ROOT)
 
-    def bounce_play(self, sid, semis, gain, at, now):
-        """A Bounce note: heard at at (time.monotonic()) if that's to come, else as soon as it can be."""
-        data = self.bounce_tone(sid) if sid in TONES else (self.sounds.get(sid) or (None, None))[1]
+    def bounce_play(self, sid, semis, gain, at, now, pan=None):
+        """A Bounce note: heard at at (time.monotonic()) if that's to come, else as soon as it can be; from the left
+        or the right (pan: -1 to 1), or from both as it is."""
+        if sid in TONES:
+            data, semis = self.bounce_tone(sid, semis)
+        else:
+            data = (self.sounds.get(sid) or (None, None))[1]
         if data is None:
             return
         if self.out is None and not self.open(now, force=now - self.tried >= 0.3):
@@ -733,10 +779,10 @@ class Player:
             ta = self.base + self.fed / RATE           # (when the next chunk mixed is heard)
             if at >= ta + CHUNK / RATE:                # (later than that: it waits its turn)
                 if len(self.bounce_wait) < BOUNCE_LATE:
-                    heapq.heappush(self.bounce_wait, (at, next(self.bounce_n), data, semis, gain))
+                    heapq.heappush(self.bounce_wait, (at, next(self.bounce_n), data, semis, gain, pan))
                 return
             wait = max(0, int((at - ta) * RATE))
-        self.bounce_start(data, semis, gain, wait)
+        self.bounce_start(data, semis, gain, wait, pan)
         self.feed()
 
     def bounce_due(self):
@@ -745,10 +791,10 @@ class Player:
             return
         ta = self.base + self.fed / RATE
         while self.bounce_wait and self.bounce_wait[0][0] < ta + CHUNK / RATE:
-            at, _, data, semis, gain = heapq.heappop(self.bounce_wait)
-            self.bounce_start(data, semis, gain, max(0, int((at - ta) * RATE)))
+            at, _, data, semis, gain, pan = heapq.heappop(self.bounce_wait)
+            self.bounce_start(data, semis, gain, max(0, int((at - ta) * RATE)), pan)
 
-    def bounce_start(self, data, semis, gain, wait):
+    def bounce_start(self, data, semis, gain, wait, pan=None):
         """A Bounce note started: one of only BOUNCE_MOST (one more: the oldest fades out), fading in, and no longer
         than BOUNCE_SECS."""
         live = [v for v in self.voices if v.bounce and v.fade is None]
@@ -758,12 +804,12 @@ class Player:
                 self.voices.remove(v)
         v = Voice(None, data, max(0, min(CHUNK - 1, wait)), 2.0 ** (semis / 12.0) if semis else 1.0, gain)
         v.shown, v.bounce, v.rise, v.left = False, True, FADE_IN, int(BOUNCE_SECS * RATE)
+        if pan is not None and pan != 0:
+            v.pan = np.array(pan_of(pan), dtype=np.float32) * np.float32(gain)
         self.voices.append(v)
         live = [v for v in self.voices if v.fade is None]
         for v in live[:max(0, len(live) - VOICES_MOST)]:
             v.fade = FADE
-        if self.echo is not None:
-            self.echo_left = int(ECHO_TAIL * RATE)
 
     def start(self, sid, data, semis=0, wait=0, shown=True):
         """A sound started (the same one playing: it fades out as this one starts), at a pitch of its own, so many
@@ -782,18 +828,31 @@ class Player:
             self.heard.pop(sid, None)
             self.stale = True
 
+    def fx_ringing(self):
+        """Something of the effects still to be heard with no sound going in: an echo or a space dying away, the
+        drone."""
+        fx = self.fx
+        return fx.echo.left > 0 or fx.space.left > 0 or self.drone is not None or bool(self.drones_going)
+
+    def fx_wanted(self):
+        """The effects have something to do: they're set to (Bounce's, the Soundboard's space), or still ringing."""
+        fx = self.fx
+        return (fx.tone.want < 1.0 or fx.tone.amt < 1.0 or fx.echo.want > 0 or fx.space.want > 0
+                or self.fx_ringing())
+
     def mix(self):
-        """The next chunk: the sounds playing, added up (silence, with none); Bounce's echoed, if its echo's on."""
+        """The next chunk: the sounds playing, added up (silence, with none); Bounce's through its effects, and the
+        Soundboard's own into the space too if START's card says so."""
         self.loop_due()
         self.bounce_due()
-        echo = self.echo if self.echo is not None and self.echo_left > 0 else None
-        if not self.voices and echo is None:
+        if not self.voices and not self.fx_ringing():
             self.limit = 1.0
             return SILENCE
         acc = self.acc
         acc[:] = 0
-        bacc = self.bacc if echo is not None else acc  # (Bounce's notes: echoed, then added in)
-        if echo is not None:
+        effects = self.fx_wanted()
+        bacc = self.bacc if effects else acc           # (Bounce's notes: through its effects, then added in)
+        if effects:
             bacc[:] = 0
         going = []
         for v in self.voices:
@@ -822,7 +881,9 @@ class Player:
                 ramp = RISE[FADE_IN - v.rise:FADE_IN - v.rise + k]
                 seg[:k] *= ramp if seg.ndim == 1 else ramp[:, None]
                 v.rise -= k
-            if v.gain != 1.0:
+            if v.pan is not None and m:                # (a Bounce note from one side: louder there, and as loud as
+                seg = (seg[:m, None] if seg.ndim == 1 else seg[:m]) * v.pan   # its gain says)
+            elif v.gain != 1.0:
                 seg = seg[:m] * v.gain
             if m:
                 into = bacc if v.bounce else acc
@@ -840,16 +901,8 @@ class Player:
                 going.append(v)
         if len(going) != len(self.voices):
             self.voices, self.stale = going, True
-        if echo is not None:                           # (Bounce's echo: what went by that long ago, a little of it)
-            ring = echo["ring"]
-            idx = (echo["at"] + np.arange(CHUNK)) % len(ring)
-            wet = bacc + ((ring[idx] * ECHO_FEED) >> 8)
-            ring[idx] = wet
-            echo["at"] = (echo["at"] + CHUNK) % len(ring)
-            acc += wet
-            self.echo_left -= CHUNK
-            if self.echo_left <= 0:
-                ring[:] = 0                            # (died away: nothing of it left to come back later)
+        if effects:
+            self.effects(acc, bacc)
         if self.gain != 256:
             acc *= self.gain
             acc >>= 8
@@ -867,6 +920,109 @@ class Player:
             acc = (acc * ramp[:, None]).astype(np.int32)
             np.clip(acc, -32767, 32767, out=acc)
         return acc.astype("<i2").tobytes()
+
+    def effects(self, acc, bacc):
+        """(mix's.) Bounce's notes (bacc) through its tone, then its echo, then its space (soundfx.py); its drone with
+        them; and the Soundboard's own sounds (acc) into the space too, as much as START's card says: all of it added
+        into acc. Everything stopped: what's ringing faded out over this chunk, and gone."""
+        fx, f, o = self.fx, self.fx_f, self.fx_o
+        np.copyto(f, bacc, casting="unsafe")
+        flat = f.reshape(-1)
+        live = float(np.dot(flat, flat)) > FX.QUIET
+        s = fx.tone.go(f, live)
+        np.copyto(o, s)
+        e = fx.echo.go(s, live) if fx.echo.want or fx.echo.left > 0 else None
+        if e is not None:
+            o += e
+        d = self.drone_chunk()
+        if fx.space.want or fx.space.left > 0:
+            (mine, theirs), into = self.fx_send, o
+            if mine != 1.0 or d is not None or theirs:     # (Bounce's notes as they are: what goes in, as it is)
+                into = self.fx_in
+                np.multiply(o, mine, out=into)
+                if d is not None:
+                    np.multiply(d, DRONE_SPACE, out=self.fx_t)
+                    into += self.fx_t
+                if theirs:
+                    np.multiply(acc, theirs, out=self.fx_t, casting="unsafe")
+                    into += self.fx_t
+            if not (live and mine) and e is None:
+                flat = into.reshape(-1)
+                live = float(np.dot(flat, flat)) > FX.QUIET
+            r = fx.space.go(into, live or e is not None)
+            if r is not None:
+                o += r
+        if d is not None:
+            o += d
+        if self.fx_stop:
+            o *= EDGE_CHUNK
+            fx.clear()
+            self.fx_stop = False
+        np.add(acc, o, out=acc, casting="unsafe")
+
+    def drone_chunk(self):
+        """(effects'.) The drone's next chunk (float32), gliding to how loud it's wanted, and from one key's to the
+        next's; None: there's none."""
+        out = None
+        step = CHUNK / (DRONE_GLIDE * RATE)
+        for dr in self.drones_going + ([self.drone] if self.drone is not None else []):
+            loop, at, g0 = dr["loop"], dr["at"], dr["gain"]
+            n = len(loop)
+            seg = loop[at:at + CHUNK] if at + CHUNK <= n else np.concatenate((loop[at:], loop[:at + CHUNK - n]))
+            dr["at"] = (at + CHUNK) % n
+            g1 = min(dr["to"], g0 + step) if dr["to"] > g0 else max(dr["to"], g0 - step)
+            dr["gain"] = g1
+            x = seg * np.linspace(g0, g1, CHUNK, dtype=np.float32)[:, None] if g0 != g1 else seg * np.float32(g1)
+            out = x if out is None else out + x
+        self.drones_going = [dr for dr in self.drones_going if dr["gain"] > 0]
+        if self.drone is not None and self.drone["gain"] <= 0 and self.drone["to"] <= 0:
+            self.drone = None
+        return out
+
+    def drone_set(self, level, note):
+        """Its drone (told): as loud as level (0 to 1), on note (MIDI). Another note: the one sounding goes as the new
+        one comes (made first, a thread's work: drone_made)."""
+        to = DRONE_MOST * max(0.0, min(1.0, level)) ** 1.5
+        self.drone_want = (to, note)
+        dr = self.drone
+        if dr is not None and dr["note"] != note:      # (another key: this one goes, as the new one comes)
+            dr["to"] = 0.0
+            self.drones_going.append(dr)
+            self.drone = None
+        elif dr is not None:
+            dr["to"] = to
+        if to > 0 and note is not None and self.drone is None:
+            self.make(("drone", note))
+            self.drone_made()
+
+    def drone_made(self):
+        """The drone wanted, if it's made now (and not sounding yet): it comes in."""
+        to, note = self.drone_want
+        loop = self.made.get(("drone", note)) if note is not None else None
+        if to > 0 and loop is not None and self.drone is None:
+            self.drone = {"note": note, "loop": loop.astype(np.float32), "at": 0, "gain": 0.0, "to": to}
+            with self.lock:                            # (another key's, no longer wanted: let go of)
+                for key in [k for k in self.made if k[0] == "drone" and k[1] != note]:
+                    del self.made[key]
+
+    def fx_set(self, c):
+        """Bounce's effects as told (soundfx.py: each 0 to 1), and the Soundboard's own sounds' space: the space as
+        much as the most either wants, each going into it as much as it wants of that."""
+        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)   # noqa: E731
+        fx = self.fx
+        if num(c.get("tone")):
+            fx.tone.set(c["tone"])
+        if num(c.get("echo")):
+            fx.echo.set(c["echo"], c["secs"] if num(c.get("secs")) else None)
+        mine, theirs = self.fx_space
+        if num(c.get("space")):
+            mine = max(0.0, min(1.0, float(c["space"])))
+        if num(c.get("pads")):
+            theirs = max(0.0, min(1.0, float(c["pads"])))
+        self.fx_space = (mine, theirs)
+        most = max(mine, theirs)
+        fx.space.set(most)
+        self.fx_send = (mine / most, theirs / most) if most else (0.0, 0.0)
 
     def play(self, sid, now, semis=0):
         with self.lock:
@@ -887,9 +1043,7 @@ class Player:
                 v.fade = FADE
         self.soon.clear()
         self.bounce_wait = []
-        if self.echo is not None:
-            self.echo["ring"][:] = 0
-        self.echo_left = 0
+        self.fx_stop = self.fx.ringing()               # (an echo or a space dying away: gone, without a click)
         self.stale = True
 
     def playing(self, now):
@@ -993,21 +1147,25 @@ class Player:
         elif do == "note":                             # (Bounce's: a wall's note)
             sid, semis, gain, at = c.get("id"), c.get("semis", 0), c.get("gain", 1.0), c.get("at")
             num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)   # noqa: E731
+            pan = c.get("pan")
             if (isinstance(sid, str) and self.rec is None and num(semis) and abs(semis) <= SEMIS_MOST and num(gain)
-                    and 0 <= gain <= 1.5 and (at is None or num(at))):
-                self.bounce_play(sid, float(semis), float(gain), at, now)
-        elif do == "echo":
-            secs = c.get("secs")
-            if c.get("on") is True and isinstance(secs, (int, float)) and not isinstance(secs, bool) \
-                    and math.isfinite(secs):
-                n = int(max(ECHO_GAP[0], min(ECHO_GAP[1], secs)) * RATE)
-                if self.echo is None or len(self.echo["ring"]) != n:
-                    self.echo, self.echo_left = {"ring": np.zeros((n, 2), dtype=np.int32), "at": 0}, 0
-            else:
-                self.echo, self.echo_left = None, 0
+                    and 0 <= gain <= 1.5 and (at is None or num(at)) and (pan is None or (num(pan) and abs(pan) <= 1))):
+                self.bounce_play(sid, float(semis), float(gain), at, now, pan)
+        elif do == "tone":                             # (one of Bounce's own sounds, made ready)
+            if c.get("id") in TONES:
+                for root in TONE_ROOTS:
+                    self.make(("tone", c["id"], root))
+        elif do == "fx":
+            self.fx_set(c)
+        elif do == "space":
+            self.fx_set({"pads": c.get("v")})
+        elif do == "drone":
+            level, note = c.get("level"), c.get("note")
+            if isinstance(level, (int, float)) and not isinstance(level, bool) and math.isfinite(level):
+                self.drone_set(float(level), note if type(note) is int and 12 <= note <= 96 else None)
         elif do == "pitch":
             sid = c.get("id")
-            data = (self.bounce_tone(sid) if sid in TONES else (self.sounds.get(sid) or (None, None))[1]) \
+            data = (make_tone(sid) if sid in TONES else (self.sounds.get(sid) or (None, None))[1]) \
                 if isinstance(sid, str) else None
             if data is not None:
                 say(**{"is": "pitch", "id": sid, "midi": pitch_of(data)})
@@ -1045,6 +1203,7 @@ class Player:
             self.voices = []
             self.soon.clear()
             self.bounce_wait = []
+            self.fx.clear()
             self.close()
             self.ok, self.stale = None, True
         elif do == "rec":
@@ -1082,6 +1241,8 @@ class Player:
             pass
         with self.lock:
             news, self.news = self.news, []
+        if self.drone is None and self.drone_want[0] > 0:
+            self.drone_made()                          # (made now, perhaps: its drone comes in)
         for n in news:
             say(**n)
             if n["is"] == "ready" and now - self.soon.pop(n["id"], -1e9) <= PLAY_SOON:

@@ -5,8 +5,8 @@ click, quiet, on each beat and higher on a bar's first; a sound played as a note
 loop of nothing, or of nonsense, and none at all. Then the app in media mode: SELECT records a layer and stops it, the
 buttons pressed meanwhile played back round and round where they were pressed (snapped to the beat, or not); more
 layers; SELECT held drops the last; START held clears it all; START tapped, its card; A, B, X or Y held and the d-pad,
-its sound as notes of a scale, the note on its tile, and into the loop; the tempo and the loop's length on START's
-card; the page as it goes."""
+its sound as notes of a scale, the note on its tile, and into the loop; the tempo, the loop's length and the space on
+START's card; the page as it goes."""
 import json, math, os, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -358,13 +358,15 @@ if not ONLY or "app" in ONLY:
     b = m.board
     s = m.sim_game()
     check(f"Apps > Soundboard: its buttons along the bottom say SELECT records a loop ({m.sim_hints(s)})",
-          m.board_shown() and m.sim_hints(s) == [("L R", "Bank"), ("SELECT", "Record a loop"), ("START", "More")])
+          m.board_shown() and m.sim_hints(s) == [("L R", "Bank"), ("SELECT", "Record a loop"), ("START", "More"),
+                                                 ("HOME", "Back")])
     tap("start")
     rows = m.board_rows()
     check(f"START tapped: its card, with the loop's tempo, length, snapping, click and the notes' scale "
           f"({[(k, v) for k, _, v in rows]})", m.sim_opts is not None and b.card == "more"
           and [(k, v) for k, _, v in rows][2:] == [("tempo", "100 BPM"), ("bars", "2 bars"), ("snap", "On"),
-                                                  ("click", "On"), ("scale", "Major"), ("bounce", None)])
+                                                  ("click", "On"), ("scale", "Major"), ("space", "Off"),
+                                                  ("bounce", None)])
     img, (cx, cy) = m.board_opts_card(s)
     (bx0, by0, bx1, by1), _ = m.sim_box()
     m.sim_opts = len(rows) - 1
@@ -391,7 +393,7 @@ if not ONLY or "app" in ONLY:
     tap("select")
     check(f"SELECT: a layer's recording (nothing for its player yet: the click's off, as it's set); the buttons say "
           f"SELECT keeps it ({m.sim_hints(m.sim_game())})", b.take is not None and loops()[-1] == {"do": "loop"}
-          and m.sim_hints(m.sim_game())[-2] == ("SELECT", "Keep it"))
+          and m.sim_hints(m.sim_game())[-3:] == [("SELECT", "Keep it"), ("START", "More"), ("HOME", "Back")])
     c = b.clock
     first = math.ceil(c.beat(time.monotonic())) + 2
     mark = log_at()
@@ -560,6 +562,17 @@ if not ONLY or "app" in ONLY:
         m.sim_opts = k
         while m.board_rows()[k][2] not in ("2 bars", "On", "Major"):
             m.press("right")
+    m.sim_opts = [r[0] for r in m.board_rows()].index("space")
+    m.press("right")
+    m.press("right", repeat=True)
+    m.press("left")
+    space = [c for c in told if c.get("do") == "space"]
+    check(f"...and Space, ◀▶ (held: on and on): the Soundboard's own sounds in a room, kept, its player told "
+          f"({m.board_rows()[m.sim_opts][2]}, {space[-3:]})", m.setting("board_space") == "1"
+          and [c["v"] for c in space[-3:]] == [0.1, 0.2, 0.1] and m.board_rows()[m.sim_opts][2] == "1")
+    m.press("left")
+    check(f"...back to Off ({m.board_rows()[m.sim_opts][2]})", m.board_rows()[m.sim_opts][2] == "Off"
+          and m.setting("board_space") == "0")
     tap("start")
 
     # leaving it and coming back: the loop's still there

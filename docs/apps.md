@@ -226,8 +226,9 @@ then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC 
 
 Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
 once as you like, and one pressed again starts again. L and R go through the banks of eight, and holding START
-stops them all. B is a button like the others there, so the way back is START, then B. START's card also has the
-bank, the volume and the loop's settings. The sounds play wherever Settings > Sound sends them.
+stops them all. B is a button like the others there, so HOME is the way back (START, then B, works too). START's
+card also has the bank, the volume, the loop's settings and Space, which plays the sounds in a room or a hall. The
+sounds play wherever Settings > Sound sends them.
 
 SELECT records a loop. Press it, play some buttons, and press it again: what you played goes round and round,
 each hit moved to the nearest sixteenth note. Press SELECT again to record another layer on top of it. Hold SELECT
@@ -245,13 +246,18 @@ beat, so their loops keep time together. A new tempo on one of them goes to all 
 Soundboard takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
 changes nothing for the others.
 
-START's card also has Bounce: a shape turning slowly in the middle of the page, with balls bouncing inside it. Each
-wall is a note of a scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note and
-lights it up. A adds a ball and B takes one away (up to 8), ◀▶ turn the shape either way, ▲▼ speed the balls up or
-down, L and R change the shape (more sides, more notes), and SELECT changes the scale: major, minor, pentatonic or
-blues. START pauses it, and its card has the rest: the sound (a bell, a pluck, a pad, or any sound on your
-Soundboard, played at each wall's note), the key, a light echo, Snap to the tempo (each note on the loop's beat) and
-Leave Bounce. Your LEDs, if you have them, flash in the wall's colour.
+START's card also has Bounce: a shape turning slowly, with balls bouncing inside it. Each wall is a note of a
+scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note and lights it up. A ball
+that hits a wall straight on plays louder than one that only grazes it, and you hear it from the side it hits. A
+adds a ball and B takes one away (up to 8), X changes the sound and Y the key, L and R change the shape (more
+sides, more notes), and SELECT changes the scale: major, minor, pentatonic or blues.
+
+Its sliders are on the right: ▲▼ pick one and ◀▶ move it. Spin turns the shape either way, Speed is how fast the
+balls go, Space puts the notes in a room or a big hall, Echo repeats them from side to side in time with the
+tempo, Tone makes them softer or brighter, and Drone holds a quiet note in the key under them. START pauses it,
+and its card has the sound (a bell, a marimba, a kalimba, glass, a pluck, a pad, or any sound on your Soundboard,
+played at each wall's note), the key, Snap to the tempo (each note on the loop's beat) and Leave Bounce. HOME
+leaves it too. Your LEDs, if you have them, flash in the wall's colour.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
@@ -284,9 +290,9 @@ Share with other Pietatos on, and not while they're in a game, a video or the te
 SELECT starts the band, with a bar counted in, and stops it. The d-pad's four and A, B, X and Y play the
 instrument marked on the page, and L and R pick another. A, B, X and Y follow the bar's chord, so they always
 fit; the d-pad's four are notes of the song. While you play an instrument, the Pietato leaves it to you. B is a
-note there, so the way back is START, then B. START's card also has the song (Rock, Blues, Funk or Chill), the
-tempo and the volume. With others in the band it has Timing too: a TV or a Bluetooth speaker takes a moment with
-its sound, so if one Pietato sounds behind the rest, ◀ on Timing there plays it a little earlier.
+note there, so HOME is the way back (START, then B, works too). START's card also has the song (Rock, Blues, Funk
+or Chill), the tempo and the volume. With others in the band it has Timing too: a TV or a Bluetooth speaker takes a
+moment with its sound, so if one Pietato sounds behind the rest, ◀ on Timing there plays it a little earlier.
 
 Each player decides what to do with its next four bars: play its part, play busier or simpler, sit out, play a
 fill or take a solo. Dice decide that. With a [Bot](bot.md) set up and a decision model on its computer, the

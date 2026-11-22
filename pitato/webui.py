@@ -1585,7 +1585,8 @@ def sound_loop(got, part="loop"):
     return loop if isinstance(loop, dict) else None
 
 
-BOUNCE_ASKS = ("on", "paused", "balls", "spin", "speed", "shape", "key", "scale", "sound", "echo", "snap")
+BOUNCE_ASKS = ("on", "paused", "balls", "spin", "speed", "shape", "key", "scale", "sound", "space", "echo", "tone",
+               "drone", "snap")
 
 
 def sound_trim(B, path):

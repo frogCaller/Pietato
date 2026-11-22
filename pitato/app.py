@@ -95,7 +95,7 @@ def run(ui, media, control=None, stop=None):
             media.stir()
             return
         if media.active and (media.game_home() or media.prog_home() or media.chromium_home() or media.konami_home()
-                             or media.file_home() or media.media_home() or media.net_home()):
+                             or media.file_home() or media.media_home() or media.net_home() or media.sim_home()):
             menu_held.clear()
             return
         if media.active:                              # (HOME on its own here once went to the terminal: said how now)

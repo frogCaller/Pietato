@@ -727,6 +727,12 @@ m.press("start"); m.press("b")
 spin(0.3)
 check("START, then B: back to Apps, and its player's gone", m.view == "list" and m.tab_type() == "group"
       and m.gig is None and until(lambda: players() == [], 4))
+m.press("a")
+spin(8, lambda: m.gig is not None and m.gig.loaded and len(m.gig.ready) == len(m.gig.loaded) and m.gig.sound_ok)
+home = m.sim_home()
+spin(0.3)
+check("HOME: back to Apps at once (B's a button of its own here), and its player's gone", home is True
+      and m.view == "list" and m.tab_type() == "group" and m.gig is None and until(lambda: players() == [], 4))
 
 # ---- who decides: a decision model on your bot's computer (a stand-in) ---------------------------------------------------
 class Fake:

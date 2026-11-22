@@ -599,6 +599,27 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         name = LIBRARY[i].get("parent")
         return next((k for k, t in enumerate(LIBRARY) if t["name"] == name), None) if name else None
 
+    def back_out(self, ttype=None):
+        """B: out to the tab this one's in (the TV menu, Apps), with this one picked. False: it's in none."""
+        parent = self.parent_of(self.tab)
+        if parent is None:
+            return False
+        if ttype == "remote":
+            self.hass.stop()
+            if self.remote_pad is not None:
+                self.close_pad()
+        if ttype == "lights":
+            self.lights_close()
+        if ttype == "pihole":
+            self.pihole_close()
+        self.chan_stack[self.tab] = []
+        child = LIBRARY[self.tab]["name"]
+        self.tab = parent
+        self.load_tab(parent)
+        self.sels[parent] = next((k for k, it in enumerate(self.items[parent]) if it["title"] == child), 0)
+        self.dirty = True
+        return True
+
     @staticmethod
     def visible_tabs():
         return [i for i, t in enumerate(LIBRARY) if not t.get("parent")]
@@ -2339,25 +2360,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             if ttype == "browser" and self.cwd.rstrip("/") != home_dir() and self.cwd != "/":
                 self.browse(os.path.dirname(self.cwd.rstrip("/")) or "/", select=self.cwd)
                 return None
-            parent = self.parent_of(self.tab)
-            if parent is not None:                    # back out to the TV menu
-                if ttype == "remote":
-                    self.hass.stop()
-                    if self.remote_pad is not None:
-                        self.close_pad()
-                if ttype == "lights":
-                    self.lights_close()
-                if ttype == "pihole":
-                    self.pihole_close()
-                self.chan_stack[self.tab] = []
-                child = LIBRARY[self.tab]["name"]
-                self.tab = parent
-                self.load_tab(parent)
-                self.sels[parent] = next((k for k, it in enumerate(self.items[parent])
-                                          if it["title"] == child), 0)
-                self.dirty = True
-                return None
-            self.go_home()
+            if not self.back_out(ttype):
+                self.go_home()
             return None
         if name in ("l", "r"):
             if not repeat:

@@ -77,8 +77,8 @@ a controller, and the sounds on them. Tap a button to hear its sound on your pho
 mp3 or ogg) with the button or by dropping them on the page, record one with your microphone, and rename or
 delete them in the list. Drag a sound onto a button or a bank to put it there, or on a phone tap the sound, then
 the button. Above the banks is the loop: whether one's playing, and its tempo, length, snapping and click. Under it
-is Bounce, with its balls, spin, speed, shape, scale, key, echo and snapping, and the sound its balls play. The
-Pi's Soundboard has each change at once.
+is Bounce, with its balls, spin, speed, shape, scale, key, space, echo, tone, drone and snapping, and the sound
+its balls play. The Pi's Soundboard has each change at once.
 
 **Files** takes files or whole folders dropped on it. Music, videos, pictures, documents and games
 each go to their own folder, and settings files like `radio.txt` go to Settings. Each file can

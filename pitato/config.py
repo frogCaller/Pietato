@@ -111,10 +111,12 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "glow_wiring": "Rows", "glow_count": "60", "glow_start": "Bottom left", "glow_way": "Clockwise",
                     "glow_bottom": "Yes",             # (Apps > LED backlight: screens/glow.py)
                     "board_bpm": "100", "board_bars": "2", "board_snap": "On", "board_click": "On",
-                    "board_scale": "Major",           # (Apps > Soundboard's loop and notes: screens/soundboard.py)
+                    "board_scale": "Major", "board_space": "0",   # (Apps > Soundboard's loop, notes and space:
+                                                                  #  screens/soundboard.py)
                     "bounce_sound": "Tones/Bell", "bounce_key": "C", "bounce_scale": "Pentatonic",
-                    "bounce_shape": "Hexagon", "bounce_echo": "On", "bounce_snap": "Off", "bounce_spin": "0.30",
-                    "bounce_speed": "0.80",           # (...its Bounce: screens/bounce.py)
+                    "bounce_shape": "Hexagon", "bounce_echo": "3", "bounce_snap": "Off", "bounce_spin": "0.30",
+                    "bounce_speed": "0.80", "bounce_space": "5", "bounce_tone": "8",
+                    "bounce_drone": "0",              # (...its Bounce: screens/bounce.py)
                     "oled": "Off"}
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Screen > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,

@@ -1,8 +1,10 @@
 """The Soundboard's Bounce (Apps > Soundboard, START's card > Bounce): a shape turning slowly in the middle of the page,
 balls bouncing about inside it, and each of its walls a note. A ball that hits a wall plays that wall's note, and the
 wall lights up a moment. The notes are a scale's, from its key up, wall after wall round the shape, so whatever's hit
-sounds right with the rest. (screens/soundboard.py: its buttons, its notes to the player, the web page's say.
-soundplay.py: the notes played, a few at a time, and their echo. soundboard.py: its page, drawn with this.)
+sounds right with the rest: a ball that hits a wall straight on louder than one that grazes it, and heard from where
+it hits, left or right. Beside it, its sliders. (screens/bounce.py: its buttons, its notes to the player, the web
+page's say. soundplay.py and soundfx.py: the notes played, a few at a time, and its space, echo, tone and drone.
+soundboard.py: its page, drawn with this.)
 
 The shape's corners are 1 from its middle, and everything's measured that way: the page draws it as big as it fits.
 A ball goes in a straight line at the speed it's set to, and comes off a wall as off a mirror; off one that's turning
@@ -16,16 +18,25 @@ SHAPES = (("Triangle", 3), ("Square", 4), ("Pentagon", 5), ("Hexagon", 6))
 SCALES = {"Major": (0, 2, 4, 5, 7, 9, 11), "Minor": (0, 2, 3, 5, 7, 8, 10), "Pentatonic": (0, 2, 4, 7, 9),
           "Blues": (0, 3, 5, 6, 7, 10)}
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-TONES = ("Bell", "Pluck", "Pad")       # its own sounds (the player makes them): Tones/Bell and so on
+TONES = ("Bell", "Marimba", "Kalimba", "Glass", "Pluck", "Pad")   # its own sounds (the player makes them):
+                                                                   # Tones/Bell and so on
 TONE_ROOT = 60                         # ...each made at this note (MIDI: middle C)
 BALLS_MOST = 8
 BALLS_FIRST = 3                        # balls in it the first time
 RADIUS = 0.05                          # a ball's (of the shape's corners' distance from its middle)
-SPIN_STEP, SPIN_MOST = 0.1, 1.5        # radians a second: each press of ◀ or ▶, and at most either way round
-SPEED_STEP, SPEEDS = 0.2, (0.2, 2.4)   # (its corners' distance from its middle) a second: each press of ▲ or ▼
+SPIN_STEP, SPIN_MOST = 0.15, 1.5       # radians a second: a step of its Spin slider, and at most either way round
+SPEED_STEP, SPEEDS = 0.2, (0.2, 2.4)   # (its corners' distance from its middle) a second: a step of Speed's
 STEP = 1 / 120                         # seconds of each step of the balls
 AGAIN = 0.06                           # seconds before a ball's heard on the same wall again (a corner: one note)
 LIT = 0.3                              # seconds a wall stays lit after a ball hits it
+DIM = 0.55                             # a wall's colour, not lit: this much of it (the rest the page's)
+SLIDERS = (("spin", "Spin", -10, 10, 2), ("speed", "Speed", 1, 12, 4), ("space", "Space", 0, 10, 5),
+           ("echo", "Echo", 0, 10, 3), ("tone", "Tone", 0, 10, 8), ("drone", "Drone", 0, 10, 0))
+SLIDER = {key: (low, high, usual) for key, _, low, high, usual in SLIDERS}   # its sliders: each from, to, and as it
+LEVELS = ("space", "echo", "tone", "drone")   # starts. Spin and Speed: steps of how fast; these: of its sound
+ECHO_WAS = {"On": 3, "Off": 0}         # its echo, before it had a slider: on or off
+QUIET = ("space", "echo", "drone")     # sliders that are off at 0
+PANEL = (196, 340)                     # px wide, its sliders: on the GPi Case's screen, and a bigger one
 
 
 def shape_sides(name):
@@ -117,7 +128,9 @@ class World:
         return [(math.cos(a + 2 * math.pi * k / n), math.sin(a + 2 * math.pi * k / n)) for k in range(n)]
 
     def step(self, dt):
-        """dt seconds on (a step at a time): [(the wall, when it was hit, the ball)]: a ball that's come off it."""
+        """dt seconds on (a step at a time): [(the wall, when it was hit, the ball, how hard, where across)]: a ball
+        that's come off it, how straight on (1: head on, as fast as it goes; less, a glancing blow), and how far left
+        or right it was (-1 to 1, as the shape's drawn)."""
         hits = []
         n = max(1, math.ceil(dt / STEP - 1e-9))
         h = dt / n
@@ -151,7 +164,8 @@ class World:
                                     dx, dy = vx / sp, vy / sp
                                 key = (num, k)
                                 if self.t - self.last.get(key, -1.0) >= AGAIN:
-                                    hits.append((k, self.t, num))
+                                    hard = min(1.0, (vn - wn) / self.speed) if self.speed > 0 else 1.0
+                                    hits.append((k, self.t, num, round(hard, 3), round(x - out * ux, 3)))
                                 self.last[key] = self.t
                             x -= out * ux                 # (inside again)
                             y -= out * uy
@@ -168,6 +182,69 @@ class World:
         """Every ball inside every wall (the tests')."""
         far = math.cos(math.pi / self.sides) - RADIUS
         return all(x * ux + y * uy <= far + slack for _, x, y, _, _ in self.balls for ux, uy in self.walls())
+
+
+def slider_words(key, v):
+    """A slider's value, as its page says it: Spin either way (+ anticlockwise), Off for the sound's at 0."""
+    if key == "spin":
+        return f"{v:+d}" if v else "0"
+    return "Off" if key in QUIET and v == 0 else str(v)
+
+
+def draw_panel(d, box, view, fonts):
+    """Its sliders, at the right of the page: what X and Y change at the top (its sound; its key, and scale), then
+    each slider, the one ▲▼ picked lit, its value at its right (◀▶ move it)."""
+    from .theme import ACCENT, ACCENTS, BG, BODY, co_mix, MUTED, ROW, TEXT
+    x0, y0, x1, y1 = box
+    hues = dict(ACCENTS)
+    ih = fonts["info_h"]
+    r = ih * 0.32
+    for (letter, colour), words in ((("X", hues["Pink"]), view["sound"]),
+                                    (("Y", hues["Gold"]), f"{view['key']} {view['scale'].lower()}")):
+        mid = y0 + ih / 2
+        d.ellipse((x0 + 6, mid - r, x0 + 6 + 2 * r, mid + r), fill=colour)
+        d.text((x0 + 6 + r, mid), letter, font=fonts["badge"], fill=co_mix(colour, (16, 19, 23), 0.85), anchor="mm")
+        f = fonts["info"]
+        room = x1 - x0 - 2 * r - 22
+        while len(words) > 3 and f.getlength(words) > room:
+            words = words[:-2].rstrip() + "…"
+        d.text((x0 + 2 * r + 16, mid), words, font=f, fill=TEXT, anchor="lm")
+        y0 += ih
+    y0 += 6
+    rows = view["sliders"]
+    rh = (y1 - y0) / max(1, len(rows))
+    knob, thick = fonts["knob"], fonts["track"]
+    for i, (key, label, v, low, high) in enumerate(rows):
+        on = i == view["sel"]
+        top = y0 + i * rh
+        if on:
+            d.rounded_rectangle((x0, top + 1, x1, top + rh - 2), radius=10, fill=ROW)
+        ly, ty = top + rh * 0.36, top + rh * 0.72
+        tx0, tx1 = x0 + 12 + knob, x1 - 12 - knob
+        d.text((x0 + 12, ly), label, font=fonts["label_b" if on else "label"], fill=TEXT if on else BODY, anchor="lm")
+        words = slider_words(key, v)
+        f = fonts["label_b" if on else "label"]
+        vx = x1 - 12
+        if on:                                         # (◀ and ▶ either side of it: they move it)
+            a = knob * 0.7
+            d.polygon([(vx, ly), (vx - a, ly - a), (vx - a, ly + a)], fill=ACCENT)
+            vx -= a + 8
+            d.text((vx, ly), words, font=f, fill=TEXT, anchor="rm")
+            lx = vx - f.getlength(words) - 8
+            d.polygon([(lx - a, ly), (lx, ly - a), (lx, ly + a)], fill=ACCENT)
+        else:
+            d.text((vx, ly), words, font=f, fill=MUTED, anchor="rm")
+        at = (v - low) / (high - low) if high > low else 0.0
+        kx = tx0 + (tx1 - tx0) * at
+        zero = tx0 + (tx1 - tx0) * ((0 - low) / (high - low) if low < 0 else 0.0)   # (Spin: from the middle)
+        d.rounded_rectangle((tx0, ty - thick / 2, tx1, ty + thick / 2), radius=thick / 2,
+                            fill=co_mix(BG, TEXT, 0.14))
+        a, b = sorted((zero, kx))
+        if b - a >= 1:
+            d.rounded_rectangle((a, ty - thick / 2, b, ty + thick / 2), radius=thick / 2,
+                                fill=ACCENT if on else co_mix(BG, TEXT, 0.38))
+        k = knob if on else knob * 0.8
+        d.ellipse((kx - k, ty - k, kx + k, ty + k), fill=TEXT if on else co_mix(BG, TEXT, 0.6))
 
 
 def draw(d, box, view, fonts, now):
@@ -187,7 +264,7 @@ def draw(d, box, view, fonts, now):
         colour = view["colours"][k]
         glow = max(0.0, 1.0 - (now - lit[k]) / LIT) if lit[k] else 0.0
         width = round(thin + (thick - thin) * glow)
-        fill = co_mix(co_mix(BG, colour, 0.45), colour, glow)
+        fill = co_mix(co_mix(BG, colour, DIM), colour, glow)
         a, b = pts[k], pts[(k + 1) % n]
         d.line((a, b), fill=fill, width=width)
         for px, py in (a, b):                             # (round corners: no notch where two walls meet)

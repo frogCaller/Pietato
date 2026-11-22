@@ -7,8 +7,9 @@ only when there's one to record with. Your LEDs (Apps > LED backlight, an ESP32 
 sounds as they are by music: a pulse in the button's colour as each is heard, and that colour while it plays.
 
 Its buttons: the d-pad's four, A, B, X and Y play what's on them; L and R go through the banks; START, tapped, has its
-card (the bank, the volume, the loop's tempo and length, snapping to the beat, the click, the notes' scale, Record a
-sound), where A or START goes on and B goes back to Apps. Recording a sound: A keeps it, B drops it; kept (its silence
+card (the bank, the volume, the loop's tempo and length, snapping to the beat, the click, the notes' scale, its space,
+Record a sound), where A or START goes on and B goes back to Apps; HOME goes back to Apps from anywhere on it
+(screens/sims.py's sim_home). Recording a sound: A keeps it, B drops it; kept (its silence
 trimmed, a file in your Soundboard folder), the next button pressed is the one it goes on (L and R: in another bank;
 SELECT: hear it first; START: leave it where it is, record it again, or delete it).
 
@@ -119,6 +120,9 @@ class Board:
         self.bounce_at = 0.0           # ...when its balls were last moved on
         self.bounce_slots = {}         # ...its notes snapped to the tempo lately: (wall, eighth) -> its beat
         self.bounce_plan = {}          # ...its notes told ahead: (a ball, a wall) -> when it'll hit (the last few)
+        self.bounce_levels = {}        # ...its sliders for its sound while it's up (bounce.py's LEVELS): 0 to 10
+        self.bounce_sel = 0            # ...the slider ▲▼ have picked
+        self.bounce_bpm = None         # ...the tempo its echo was told
         self.pitch = {}                # a sound -> its own note, as its player could tell (None: it hasn't one)
 
     def bank(self):
@@ -191,7 +195,9 @@ class SoundboardScreen:
         if b.clock is not None:                        # (opened again: the beat of your others' wins, if they're
             b.clock = b.clock.fresh(now, self.board_me())   # playing already)
         self.board_loop_tell()                         # (the loop, if there is one: it goes on)
-        self.bounce_told()                             # (Bounce, if it's up: its echo, its sound's own note)
+        if self.board_space():
+            self.board_tell(do="space", v=self.board_space() / 10)
+        self.bounce_told()                             # (Bounce, if it's up: its effects, its sound's own note)
         if not self.voice.speaking:
             self.board_tell(do="warm")
 
@@ -628,18 +634,18 @@ class SoundboardScreen:
         elif b.placing is not None:
             s.own_hints = many + [("SELECT", "Hear it"), ("START", "More")]
         elif b.take is not None:
-            s.own_hints = many + [("SELECT", "Keep it"), ("START", "More")]
+            s.own_hints = many + [("SELECT", "Keep it"), ("START", "More"), ("HOME", "Back")]
         elif b.layers:
-            s.own_hints = many + [("SELECT", "Add to the loop"), ("START", "More")]
+            s.own_hints = many + [("SELECT", "Add to the loop"), ("START", "More"), ("HOME", "Back")]
         else:
-            s.own_hints = many + [("SELECT", "Record a loop"), ("START", "More")]
+            s.own_hints = many + [("SELECT", "Record a loop"), ("START", "More"), ("HOME", "Back")]
         now = time.monotonic()
         if b.take is not None or b.layers:             # (the loop: recording or playing, where it is, how fast)
             c = self.board_clock()
             n = BAR * self.board_bars()
             at = self.board_beat(now) % n
             s.loop = {"rec": b.take is not None, "layers": len(b.layers), "bar": int(at // BAR) + 1,
-                      "beat": int(at % BAR) + 1, "bpm": round(c.bpm)}
+                      "beat": int(at % BAR) + 1, "bpm": round(c.bpm), "bars": self.board_bars()}
             s.clock = (c.bpm, c.b0, c.t0)
         else:
             s.loop = s.clock = None
@@ -979,6 +985,7 @@ class SoundboardScreen:
                  ("snap", "Snap to the beat", "Off" if self.setting("board_snap") == "Off" else "On"),
                  ("click", "Click while recording", "Off" if self.setting("board_click") == "Off" else "On"),
                  ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major"),
+                 ("space", "Space", str(self.board_space()) if self.board_space() else "Off"),
                  ("bounce", "Bounce", None)]
         return rows
 
@@ -1002,6 +1009,8 @@ class SoundboardScreen:
             self.set_volume(VOLUME_STEP if name == "right" else -VOLUME_STEP)
         elif name in ("left", "right") and key == "tempo":
             self.board_tempo(self.board_clock().bpm + (1 if name == "right" else -1))
+        elif name in ("left", "right") and key == "space" and b.card != "kept":
+            self.board_set_space(self.board_space() + (1 if name == "right" else -1))
         elif repeat:
             return None
         elif name in ("left", "right") and key in ("bars", "snap", "click", "scale") and b.card != "kept":
@@ -1035,6 +1044,19 @@ class SoundboardScreen:
             return None
         self.dirty = True
         return None
+
+    def board_space(self):
+        """START's card's Space: how much of a room its own sounds are played in, 0 (none) to 10."""
+        try:
+            return max(0, min(10, int(self.setting("board_space"))))
+        except (TypeError, ValueError):
+            return 0
+
+    def board_set_space(self, v):
+        v = max(0, min(10, v))
+        if v != self.board_space():
+            self.set_setting("board_space", str(v))
+        self.board_tell(do="space", v=v / 10)
 
     def board_choose(self, key, way):
         """START's card, ◀▶ on the loop's length, snapping, the click, the notes' scale: the next one."""

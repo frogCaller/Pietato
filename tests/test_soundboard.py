@@ -9,9 +9,9 @@ busy, and breaking up (a longer buffer: aplay says so, and is asked to in Englis
 in); an mp3, an ogg and WAVs of other kinds (through FFmpeg, once: kept); what isn't a sound; and a recording, its
 silence trimmed (arecord's a pretend one too). Then the app in media mode: in
 Apps, its page on the GPi Case's screen, every button its own sound, L and R through the banks, SELECT stopping them,
-START's card (B there goes back; no Record a sound without a microphone); a file put in your Soundboard folder on its
-button without anything started again, taken out, changed; the web page's word that something changed; and with a USB
-microphone, a sound recorded and put on a button from the controller."""
+START's card (B there goes back; HOME goes back from anywhere on it; no Record a sound without a microphone); a file
+put in your Soundboard folder on its button without anything started again, taken out, changed; the web page's word
+that something changed; and with a USB microphone, a sound recorded and put on a button from the controller."""
 import json, os, shutil, signal, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -794,8 +794,9 @@ def flush():
     return np.asarray(FB.last.convert("RGB")).astype(int)
 
 
-LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "bounce"]   # (START's card: the loop's, after the bank's and
-                                                                    #  volume; then Bounce)
+LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "space", "bounce"]   # (START's card: the loop's, after
+                                                                             #  the bank's and volume; then its space
+                                                                             #  and Bounce)
 
 
 def quiet():
@@ -878,7 +879,7 @@ check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.
       f"{min(caps.values())} pixels of it or more)", min(caps.values()) > 150 and len(set(SBD.PAD_COLOUR.values())) == 8)
 hints = m.sim_hints(s)
 check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Bank"), ("SELECT", "Record a loop"),
-                                                             ("START", "More")])
+                                                             ("START", "More"), ("HOME", "Back")])
 taps = {w[1]: box for box, w in m.taps_now() if w[0] == "keys"}
 check("...each tile tapped (the web page's copy of the screen, a touch screen) is its button pressed; the bank's "
       "name, L or R", all(tuple(taps.get(pad, ())) == boxes[pad] for pad in B.PADS) and "l" in taps and "r" in taps
@@ -1092,6 +1093,20 @@ m.press("a")
 spin(3, lambda: len(b.ready) == 24 and b.sound_ok)
 check("opened again: its player again, the bank you were on", m.board_shown() and len(players()) == 1
       and players() != [pid] and m.sim_game().bank == (1, 3, "Drums"))
+home = m.sim_home()
+spin(0.3)
+check("HOME: back to Apps at once (B's a button of its own here), the Soundboard picked, its player gone", home is True
+      and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard"
+      and until(lambda: players() == [], 4) and m.sim_home() is False)
+m.press("a")
+spin(3, lambda: len(b.ready) == 24 and b.sound_ok)
+m.press("start")
+home = m.sim_home()
+spin(0.3)
+check("...from START's card too, the card gone with it", home is True and m.tab == ai and m.sim_opts is None
+      and b.card is None)
+m.press("a")
+spin(3, lambda: len(b.ready) == 24 and b.sound_ok and len(players()) == 1)
 
 # your own sounds: a file put in the folder
 tone(S + "/laugh.wav", 0.6)
