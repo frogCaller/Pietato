@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""A pretend rpicam-vid: --codec mjpeg -o - sends JPEGs one after another at --framerate, as big as --width x
+--height, each with a thumbnail inside (as a camera's EXIF can have: its own end marker in it) and each in two
+writes. FAKE_PICAM_BUSY: another program has the camera."""
+import io, os, sys, time
+a = sys.argv[1:]
+
+
+def opt(name, default=None):
+    return a[a.index(name) + 1] if name in a else default
+
+
+log = os.environ.get("FAKE_RPICAM_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write("rpicam-vid " + " ".join(a) + "\n")
+if os.environ.get("FAKE_PICAM_BUSY"):
+    sys.stderr.write("[0:00:01.234567] [1234]  INFO Camera camera_manager.cpp:327 libcamera v0.3.0+rpt20240617\n")
+    sys.stderr.write("ERROR: *** failed to acquire camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a ***\n")
+    sys.exit(1)
+from PIL import Image, ImageDraw
+w, h = int(opt("--width", "640")), int(opt("--height", "480"))
+fps = float(opt("--framerate", "30"))
+frames = []
+for k in range(6):
+    im = Image.new("RGB", (w, h), (40 * k, 120, 255 - 40 * k))
+    ImageDraw.Draw(im).rectangle((k * 10, 10, k * 10 + 60, 70), fill=(255, 255, 255))
+    b = io.BytesIO()
+    im.save(b, "JPEG", quality=int(opt("--quality", "50")))
+    j = b.getvalue()
+    app1 = b"Exif\x00\x00thumb\xff\xd8\xff\xe0\x00\x02xx\xff\xd9tail"
+    frames.append(j[:2] + b"\xff\xe1" + (len(app1) + 2).to_bytes(2, "big") + app1 + j[2:])
+out = sys.stdout.buffer
+k = 0
+try:
+    while True:
+        j = frames[k % len(frames)]
+        out.write(j[:len(j) // 2])
+        out.flush()
+        out.write(j[len(j) // 2:])
+        out.flush()
+        k += 1
+        time.sleep(1 / fps)
+except (BrokenPipeError, KeyboardInterrupt):
+    pass

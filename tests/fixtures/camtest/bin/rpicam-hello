@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""A pretend rpicam-hello --list-cameras: the camera modules in FAKE_PICAM (their sensors, a comma between), or none."""
+import os, sys
+log = os.environ.get("FAKE_RPICAM_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write("rpicam-hello " + " ".join(sys.argv[1:]) + "\n")
+SIZES = {"imx708": (4608, 2592), "imx219": (3280, 2464), "ov5647": (2592, 1944), "imx477": (4056, 3040)}
+cams = [s for s in os.environ.get("FAKE_PICAM", "").split(",") if s]
+if "--list-cameras" in sys.argv:
+    sys.stderr.write("[0:00:01.234567] [1234]  INFO Camera camera_manager.cpp:327 libcamera v0.3.0+rpt20240617\n")
+    if not cams:
+        print("No cameras available!")
+        sys.exit(0)
+    print("Available cameras\n-----------------")
+    for i, s in enumerate(cams):
+        w, h = SIZES.get(s.split("_")[0], (1920, 1080))
+        print(f"{i} : {s} [{w}x{h} 10-bit RGGB] (/base/axi/pcie@120000/rp1/i2c@{88000 + i * 4000}/{s.split('_')[0]}@1a)")
+        print("    Modes: 'SRGGB10_CSI2P' : 1536x864 [120.13 fps - (768, 432)/3072x1728 crop]")
+        print(f"                             {w}x{h} [14.35 fps - (0, 0)/{w}x{h} crop]")

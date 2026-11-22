@@ -127,7 +127,7 @@ class WebSettingsScreen:
             choice("group_talk", "They talk among themselves", ["On", "Off"],
                    note="In Apps > Group chat, and popping up on the one you're at. Off: they still answer you."),
             choice("group_eyes", "Its camera notices you", ["On", "Off"],
-                   note="A USB camera plugged in looks for someone moving, so your others know you're here.")]
+                   note="A camera plugged into this Pi looks for someone moving, so your others know you're here.")]
             if self.setting("share") != "Off" else [])
             + self.web_peer_rows(), "Prices and the weather fetched once for them all, a game carried on on "
             "another of them (each keeps its own saves), and Group chat.")

@@ -117,7 +117,7 @@ def turn_file(data, deg, quality=90):
 # ---- cameras: other Pis (PiE-ink, or camera.py), or any camera on your network -----------------
 CAMERA_HEAD = ("# Cameras for the Camera tab, one per line:   camera = address   (a name after it if you like)\n"
                "# Any camera on your network: its address and port (the picture is found there), or its link.\n"
-               "# A Pi can share its USB camera too: sudo bash setup.sh --camera on it.\n")
+               "# A Pi can share its camera too: sudo bash setup.sh --camera on it.\n")
 
 
 def read_cameras(patterns):

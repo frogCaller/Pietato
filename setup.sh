@@ -55,7 +55,7 @@
 #   --gpi2      it's in a GPi Case 2 (don't ask)
 #   --no-gpi    it isn't (don't ask)
 #   --login     keep asking for your password at start-up (instead of signing you in by itself)
-#   --camera    only share this Pi's USB camera on the network, for Pietato's Camera tab on
+#   --camera    only share this Pi's camera (USB, or a camera module) on the network, for Pietato's Camera tab on
 #               another Pi (camera.py, port 5433); nothing else is installed
 #   --update    no questions: it's set up as it was before (System > Update software runs it
 #               once it has the newest version, then restarts the Pi itself)
@@ -225,11 +225,15 @@ settings_folder() {
 }
 
 # --------------------------------------------------------------------------
-# the camera server (camera.py, port 5433): this Pi's USB camera, for Pietato's Camera tab on another Pi
+# the camera server (camera.py, port 5433): this Pi's camera, for Pietato's Camera tab on another Pi
 install_camera() {
-  step "Installing the camera server (this Pi's USB camera, port 5433)"
+  step "Installing the camera server (this Pi's camera, port 5433)"
   apt-get update
   apt-get install -y ffmpeg v4l-utils python3
+  if ! command -v rpicam-vid > /dev/null && ! command -v libcamera-vid > /dev/null \
+      && LC_ALL=C apt-cache policy rpicam-apps-lite 2> /dev/null | grep -q '^ *Candidate: [^(]'; then
+    apt-get install -y rpicam-apps-lite || echo "(Couldn't install rpicam-apps-lite: a camera module won't work.)"
+  fi
   install -d /usr/local/share/pitato
   install -m 644 "$HERE/pitato/camera.py" /usr/local/share/pitato/camera.py
   settings_folder camera-server.txt
@@ -241,7 +245,7 @@ install_camera() {
   fi
   cat > /etc/systemd/system/pitato-camera.service <<CAMSVC
 [Unit]
-Description=Pietato camera server: this Pi's USB camera on the network (port 5433)
+Description=Pietato camera server: this Pi's camera on the network (port 5433)
 After=network-online.target
 Wants=network-online.target
 
@@ -262,7 +266,7 @@ CAMSVC
   systemctl restart pitato-camera || true
 }
 
-# --camera: this Pi only shares its USB camera
+# --camera: this Pi only shares its camera
 if [ "$CAMERA" = yes ]; then
   if [ ! -f "$HERE/pitato/camera.py" ]; then
     echo "pitato/camera.py isn't here. Run this from the Pietato folder."
@@ -680,9 +684,14 @@ if [ "$PC" = yes ] || [ "$HANDHELD" = yes ]; then   # (NAME.local, for the web p
                                                     # Debian's servers haven't it, nor has dArkOS)
   apt-get install -y avahi-daemon || echo "(Couldn't install avahi-daemon: open the web page by its address.)"
 fi
-# a USB camera (v4l2-ctl: its sizes, and turning one that turns) and a USB microphone (Vosk needs libatomic)
-doing "What a USB camera and microphone need"
+# a USB camera (v4l2-ctl: its sizes, and turning one that turns) and a USB microphone (Vosk needs libatomic); a
+# camera module on a Pi's ribbon: Raspberry Pi OS's rpicam-vid and rpicam-still, if they aren't there already
+doing "What a camera and microphone need"
 apt-get install -y v4l-utils libatomic1 || echo "(Couldn't install v4l-utils or libatomic1: a USB camera or microphone may not work.)"
+if [ "$PC" != yes ] && [ "$HANDHELD" != yes ] && ! command -v rpicam-vid > /dev/null \
+    && ! command -v libcamera-vid > /dev/null && apt_has rpicam-apps-lite; then
+  apt-get install -y rpicam-apps-lite || echo "(Couldn't install rpicam-apps-lite: a camera module won't work.)"
+fi
 # Apps' cmatrix, nyancat, htop and hollywood: Linux's own. hollywood with what its panes show, but not
 # atop or plocate, which would keep running in the background
 if wanted toys; then

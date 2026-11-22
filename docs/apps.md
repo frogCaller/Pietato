@@ -24,9 +24,9 @@ Pietato starts on a home screen of apps:
 - **Weather** (press START there to set where you are, and °F or °C), and **Finance**: stock and coin prices
   and charts. Press Y on Finance to look up more to add
 - **Files**: PDFs, documents, text, pictures, video and music, on the Pi or on your other computers
-- **Camera**: a USB camera plugged into the Pi (it shows up by itself, and on your other Pietatos under On your
-  network), any camera on your network, or the ones on your other Pis: switch between them with L and R, steer
-  an OBSBOT, take pictures, and have your bot say what it sees
+- **Camera**: a USB camera plugged into the Pi, or a Raspberry Pi camera module on its ribbon (it shows up by
+  itself, and on your other Pietatos under On your network), any camera on your network, or the ones on your other
+  Pis: switch between them with L and R, steer an OBSBOT, take pictures, and have your bot say what it sees
 - **Bot**: does what you ask, like setting a timer, adding to your list or playing some music, and chats
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice

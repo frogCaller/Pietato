@@ -641,9 +641,9 @@ class CameraScreen:
         if n == 1:                                    # nothing yet but the row to add one
             y = top_y + self.ROW_H + 18
             for line in ("Any camera on your network: its address and",
-                         "port, or its link. A Pi can share its USB camera",
+                         "port, or its link. A Pi can share its camera",
                          "too: sudo bash setup.sh --camera on that Pi.",
-                         "A USB camera plugged into this Pi shows up here."):
+                         "A camera plugged into this Pi shows up here."):
                 d.text((W / 2, y), line, font=F["small"], fill=MUTED, anchor="mm")
                 y += 22
         kind, entry = rows[sel]

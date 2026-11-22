@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""camera.py - this Pi's USB camera, shared on your network for Pietato's Camera tab.
+"""camera.py - this Pi's camera (a USB one, or a camera module on its ribbon), shared on your network for Pietato's
+Camera tab.
 
 It answers the same calls as PiE-ink's camera (/api/camera.jpg, /api/ptz/..., /api/photos),
 so Pietato treats this Pi like a PiE-ink one: the live picture, pictures into ~/Pictures,
@@ -16,10 +17,15 @@ setup.sh tells the service where that is; run by hand, it's the one beside the f
     name =             what Pietato calls it (this Pi's name if blank)
     size = 640x480     the live picture (the camera's biggest is used for pictures you take)
     fps = 15
-    device =           /dev/video0 and so on (blank: the first USB camera)
+    device =           /dev/video0 and so on, or picam for a camera module (blank: the first USB camera, or a
+                       camera module when there's none)
     hosts =            other names you reach this Pi by, if your router gives it one
 
-Pietato uses it on its own Pi too, for a USB camera plugged into that Pi (OwnCameras): each one plugged in
+A camera module (Raspberry Pi's, on the ribbon) is read with Raspberry Pi OS's own rpicam-vid, its pictures turned
+into JPEGs on the Pi as it sends them (a USB camera mostly sends JPEGs itself), and its pictures you take with
+rpicam-still. It's found as the Pi starts (camera_auto_detect=1 in config.txt, as Raspberry Pi OS has it).
+
+Pietato uses it on its own Pi too, for a USB camera plugged into that Pi or a camera module on it (OwnCameras): each
 answers the same calls at /usb/<its id>, on 127.0.0.1 only. With Settings > Share with other Pietatos on, each
 answers your other Pietatos too, and nobody else on the network, on a port of its own.
 """
@@ -34,6 +40,7 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -51,6 +58,16 @@ CONF_FILE = os.path.join(STATIC, "camera-server.txt")
 IDLE = 15.0               # nobody has asked for a picture this long: the camera is let go
 FIRST_FRAME = 8.0         # a camera just started can take this long for its first picture
 NOT_CAMERAS = ("bcm2835", "rpivid", "hevc", "-isp", "codec", "unicam", "pispbe", "rp1-cfe")
+PICAM = "picam:"                 # a camera module's "device": picam:<its number to libcamera> (read by rpicam-vid,
+                                 # not through a node of its own)
+PI_CAM_NODES = ("unicam", "rp1-cfe")   # the Pi's camera receivers' nodes: there when a camera module was found as the
+                                       # Pi started (Pi 4 and before, Pi 5)
+PI_CAM_AGAIN = 600.0             # seconds before libcamera's asked again for camera modules, when it said there were
+                                 # none
+PI_CAM_NAMES = {"ov5647": "Pi Camera Module 1", "imx219": "Pi Camera Module 2", "imx708": "Pi Camera Module 3",
+                "imx477": "Pi HQ Camera", "imx296": "Pi Global Shutter Camera", "imx500": "Pi AI Camera"}
+PI_PHOTO_WIDE = 2592             # px: a camera module's pictures you take, at most this wide (its own can be 12 MP)
+PI_JPEG = 70                     # its live pictures' JPEG quality
 TICK, HEARTBEAT = 0.1, 0.7       # a held d-pad moves it every TICK; quiet for HEARTBEAT: it stops
 ARCSEC = 3600.0                  # pan and tilt are in arc-seconds
 LOWEST = -30.0                   # never further down than this (an OBSBOT pointed down falls asleep)
@@ -97,8 +114,14 @@ def node_caps(path):
 
 def find_camera(want=""):
     """(device, its name): the node a USB camera sends pictures on. Each camera has a second
-    node for metadata, and the Pi's own video blocks have some too; those are passed over."""
+    node for metadata, and the Pi's own video blocks have some too; those are passed over. No USB
+    camera: a camera module, if there's one (picam:0)."""
     if want:
+        if want.strip().lower() in ("picam", "pi"):    # (camera-server.txt's device = picam: the first camera module)
+            want = PICAM + "0"
+        if want.startswith(PICAM):
+            hit = next((c for c in pi_cameras_listed() if f"{PICAM}{c[0]}" == want), None)
+            return want, pi_camera_card(hit[1]) if hit else "Pi camera"
         return want, card_name(want)
     nodes = sorted(glob.glob("/dev/video*"), key=lambda p: int(re.sub(r"\D", "", p) or 0))
     for path in nodes:
@@ -111,6 +134,8 @@ def find_camera(want=""):
         if not caps and not os.path.exists(f"/sys/class/video4linux/{os.path.basename(path)}/device/driver"):
             continue
         return path, card
+    for n, sensor, _, _ in pi_cameras_listed()[:1]:
+        return f"{PICAM}{n}", pi_camera_card(sensor)
     return None, ""
 
 
@@ -183,6 +208,165 @@ def read_parts(stream):
         yield data
 
 
+# ---- a camera module: Raspberry Pi OS's own programs for it ------------------------------------------------------
+def rpicam(tool):
+    """Raspberry Pi OS's own camera program (rpicam-vid, rpicam-still, rpicam-hello; libcamera-... before Bookworm),
+    or None: it isn't installed."""
+    return shutil_which("rpicam-" + tool) or shutil_which("libcamera-" + tool)
+
+
+def pi_env():
+    return dict(os.environ, LIBCAMERA_LOG_LEVELS="*:ERROR")   # (libcamera's own chatter: errors only)
+
+
+def pi_camera_sign():
+    """The Pi's camera receivers' nodes now (none: no camera module). libcamera's asked again when they change."""
+    try:
+        names = sorted(n for n in os.listdir(V4L) if re.fullmatch(r"video\d+", n))
+    except OSError:
+        return ()
+    return tuple(n for n in names if read_text(os.path.join(V4L, n, "name")).lower().startswith(PI_CAM_NODES))
+
+
+def list_pi_cameras():
+    """libcamera's camera modules: [(its number, its sensor, its full size, where it is)], from rpicam-hello."""
+    tool = rpicam("hello")
+    if not tool:
+        return []
+    try:
+        out = subprocess.run([tool, "--list-cameras"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             timeout=20, env=pi_env()).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    cams = []
+    for line in out.splitlines():                     # 0 : imx708_wide [4608x2592 10-bit RGGB] (/base/.../imx708@1a)
+        m = re.match(r"\s*(\d+)\s*:\s*([\w-]+)\s*\[(\d+)x(\d+)[^\]]*\]\s*(?:\(([^)]*)\))?", line)
+        if m:
+            cams.append((int(m.group(1)), m.group(2).lower(), (int(m.group(3)), int(m.group(4))),
+                         m.group(5) or m.group(1)))
+    return cams
+
+
+_PI = {"sign": None, "cams": [], "at": -1e9, "asking": False}   # the camera modules, as libcamera last said
+_PI_LOCK = threading.Lock()
+
+
+def pi_cameras_listed(wait=True):
+    """The camera modules on this Pi, [(number, sensor, full size, where)]: libcamera's asked (rpicam-hello, a second
+    or so) only when the Pi's camera receivers change (as it starts: they're found then), or now and then when it
+    had none. Between, next to nothing. wait False: asked on a thread of its own, and what it had till then."""
+    sign = pi_camera_sign()
+    with _PI_LOCK:
+        if not sign:
+            _PI.update(sign=None, cams=[])
+            return []
+        due = _PI["sign"] != sign or (not _PI["cams"] and time.monotonic() - _PI["at"] >= PI_CAM_AGAIN)
+        if not due or _PI["asking"]:
+            return list(_PI["cams"])
+        _PI["asking"] = True
+
+    def ask():
+        try:
+            cams = list_pi_cameras()
+        except Exception as ex:                       # (whatever it says, the cameras carry on)
+            print(f"camera modules: {ex!r}", flush=True)
+            cams = []
+        with _PI_LOCK:
+            _PI.update(sign=sign, cams=cams, at=time.monotonic(), asking=False)
+
+    if wait:
+        ask()
+    else:
+        threading.Thread(target=ask, daemon=True, name="pi-cameras").start()
+    with _PI_LOCK:
+        return list(_PI["cams"])
+
+
+def pi_camera_card(sensor):
+    """A camera module's name, from its sensor's: imx708_wide_noir is a Pi Camera Module 3 Wide NoIR."""
+    parts = (sensor or "").lower().split("_")
+    name = PI_CAM_NAMES.get(parts[0], f"Pi camera ({parts[0]})" if parts[0] else "Pi camera")
+    return name + "".join(f" {word}" for word, part in (("Wide", "wide"), ("NoIR", "noir")) if part in parts[1:])
+
+
+def pi_cameras():
+    """The camera modules on this Pi, as own_cameras has its USB ones: [{"id", "dev", "card"}]. The id is the same
+    each time: where it is (which ribbon) and its sensor."""
+    return [{"id": hashlib.sha1(f"picam|{where}|{sensor}".encode()).hexdigest()[:8], "dev": f"{PICAM}{n}",
+             "card": pi_camera_card(sensor)} for n, sensor, _, where in pi_cameras_listed(wait=False)]
+
+
+def rpicam_cmd(tool, dev, size, fps):
+    """rpicam-vid sending a camera module's pictures as JPEGs one after another, for as long as it runs (made into
+    JPEGs on the Pi's processor: a camera module sends raw pictures), and nothing on the Pi's screen."""
+    return [tool, "-n", "-t", "0", "--camera", dev[len(PICAM):], "--width", str(size[0]), "--height", str(size[1]),
+            "--framerate", str(fps), "--codec", "mjpeg", "--quality", str(PI_JPEG), "--flush", "-o", "-"]
+
+
+def pi_trouble(why):
+    """What rpicam-vid said, when it sent no pictures, in words for the Camera tab."""
+    low = why.lower()
+    if "acquire" in low or "busy" in low or "in use" in low:
+        return "Something else is using the camera"
+    if "no cameras available" in low or "not found" in low:
+        return "The camera module isn't there (it's found as the Pi starts)"
+    return why
+
+
+def jpeg_in(buf):
+    """(The first whole JPEG in buf, how many bytes of buf it and what's before it are), or (None, the bytes before
+    it that aren't one, to drop). Its segments are stepped over by their lengths, so the end of a thumbnail inside
+    one isn't taken for its own; after its picture's start, its end is the first there is (none can be in a
+    picture's data)."""
+    s = buf.find(b"\xff\xd8")
+    if s < 0:
+        return None, max(0, len(buf) - 1)             # (a last 0xff kept: the start of one, cut in two)
+    p, n = s + 2, len(buf)
+    while True:
+        if p + 2 > n:
+            return None, s
+        if buf[p] != 0xFF:
+            return None, s + 2                        # (not a JPEG after all: past that start)
+        m = buf[p + 1]
+        if m == 0xFF:                                 # (fill)
+            p += 1
+        elif m == 0xD9:
+            return bytes(buf[s:p + 2]), p + 2
+        elif m == 0xD8:
+            return None, p                            # (another starts before it ended: from that one)
+        elif 0xD0 <= m <= 0xD7 or m == 0x01:
+            p += 2
+        else:
+            if p + 4 > n:
+                return None, s
+            seg = (buf[p + 2] << 8) | buf[p + 3]
+            if m == 0xDA:                             # (its picture: its end is the first after it)
+                e = buf.find(b"\xff\xd9", p + 2 + seg)
+                return (None, s) if e < 0 else (bytes(buf[s:e + 2]), e + 2)
+            p += 2 + seg
+
+
+def read_jpegs(stream, most=20_000_000):
+    """The JPEGs in rpicam-vid's MJPEG, one after another with nothing between to say how long each is."""
+    read = getattr(stream, "read1", None) or stream.read
+    buf = bytearray()
+    while True:
+        got = read(65536)
+        if not got:
+            return
+        buf += got
+        while True:
+            jpeg, used = jpeg_in(buf)
+            if used:
+                del buf[:used]
+            if jpeg is not None:
+                yield jpeg
+            elif not used:
+                break
+        if len(buf) > most:                           # (no end in sight: not JPEGs)
+            del buf[:]
+
+
 def parse_size(text, default=(640, 480)):
     m = re.match(r"\s*(\d{2,5})\s*[x×*]\s*(\d{2,5})\s*$", text or "")
     return (int(m.group(1)), int(m.group(2))) if m else default
@@ -250,28 +434,40 @@ class Feed:
                     return                                   # (started meanwhile)
             if not self.configure():
                 with self.cond:
-                    self.error, self.failed_at = "No USB camera is plugged in", time.monotonic()
+                    self.error, self.failed_at = "No camera is plugged in", time.monotonic()
                 return
-            size = self.size
-            if shutil_which("v4l2-ctl"):                     # it says what the camera sends
-                sizes = mjpeg_sizes(self.dev)
-                self.mjpeg = bool(sizes)                     # no MJPEG at all: raw it is
-                if sizes and size not in sizes:              # the nearest size it has, not bigger
-                    fits = [s for s in sizes if s[0] <= size[0] and s[1] <= size[1]]
-                    size = fits[0] if fits else sizes[-1]
+            picam = self.dev.startswith(PICAM)
+            if picam:                                        # a camera module: rpicam-vid reads it
+                tool = rpicam("vid")
+                if not tool:
+                    with self.cond:
+                        self.error = "rpicam-vid isn't installed (Raspberry Pi OS's rpicam-apps-lite)"
+                        self.failed_at = time.monotonic()
+                    return
+                cmd = rpicam_cmd(tool, self.dev, self.size, self.fps)
+            else:
+                size = self.size
+                if shutil_which("v4l2-ctl"):                 # it says what the camera sends
+                    sizes = mjpeg_sizes(self.dev)
+                    self.mjpeg = bool(sizes)                 # no MJPEG at all: raw it is
+                    if sizes and size not in sizes:          # the nearest size it has, not bigger
+                        fits = [s for s in sizes if s[0] <= size[0] and s[1] <= size[1]]
+                        size = fits[0] if fits else sizes[-1]
+                cmd = ffmpeg_cmd(self.dev, size, self.fps, self.mjpeg)
             try:
-                proc = subprocess.Popen(ffmpeg_cmd(self.dev, size, self.fps, self.mjpeg),
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        env=pi_env() if picam else None)
             except OSError as ex:
                 with self.cond:
-                    self.error, self.failed_at = f"Can't start ffmpeg ({ex.strerror or ex})", time.monotonic()
+                    self.error = f"Can't start {os.path.basename(cmd[0])} ({ex.strerror or ex})"
+                    self.failed_at = time.monotonic()
                 return
             with self.cond:
                 self.proc, self.error = proc, None
             said = []
             drain = threading.Thread(target=self.drain, args=(proc, said), daemon=True, name="feed-err")
             drain.start()
-            threading.Thread(target=self.read, args=(proc, said, drain), daemon=True, name="feed").start()
+            threading.Thread(target=self.read, args=(proc, said, drain, picam), daemon=True, name="feed").start()
 
     @staticmethod
     def drain(proc, said):
@@ -283,9 +479,9 @@ class Feed:
         except (OSError, ValueError):
             pass
 
-    def read(self, proc, said, drain):
+    def read(self, proc, said, drain, picam=False):
         got = 0
-        for jpeg in read_parts(proc.stdout):
+        for jpeg in (read_jpegs if picam else read_parts)(proc.stdout):
             got += 1
             with self.cond:
                 self.jpeg, self.at = jpeg, time.monotonic()
@@ -301,7 +497,9 @@ class Feed:
         with self.cond:
             if self.proc is proc:
                 self.proc = None
-                if not got and not self.held:
+                if not got and not self.held and picam:
+                    self.error, self.failed_at = pi_trouble(why), time.monotonic()
+                elif not got and not self.held:
                     if self.mjpeg and not shutil_which("v4l2-ctl") and "busy" not in why.lower():
                         self.mjpeg = False                   # it may send raw pictures only: those next
                     else:
@@ -377,7 +575,7 @@ class Ptz:
         if time.monotonic() - self.looked < 10 and dev == self.dev:
             return False
         self.looked, self.dev, self.ctrls = time.monotonic(), dev, {}
-        if not dev:
+        if not dev or dev.startswith(PICAM):          # (a camera module doesn't turn: nothing to ask)
             return False
         for line in run(["v4l2-ctl", "-d", dev, "--list-ctrls"]).splitlines():
             name = line.strip().split(" ", 1)[0]
@@ -552,10 +750,12 @@ class Shutter:
             feed = self.feed
             dev = feed.dev or feed.configure()
             if not dev:
-                raise ValueError("No USB camera is plugged in")
+                raise ValueError("No camera is plugged in")
             data = None
-            sizes = mjpeg_sizes(dev)
-            if sizes:
+            sizes = [] if dev.startswith(PICAM) else mjpeg_sizes(dev)
+            if dev.startswith(PICAM):
+                data = self.take_pi(dev)
+            elif sizes:
                 with feed.cond:
                     feed.held += 1
                 try:
@@ -579,6 +779,34 @@ class Shutter:
             while len(self.photos) > 5:
                 self.photos.popitem(last=False)
             return name
+
+    def take_pi(self, dev):
+        """A camera module's picture, by rpicam-still (its live picture stopped meanwhile: one program at a time can
+        have it), as big as it takes them but no wider than PI_PHOTO_WIDE. None: it couldn't."""
+        tool = rpicam("still")
+        if not tool:
+            return None
+        w, h = next((size for n, _, size, _ in pi_cameras_listed() if f"{PICAM}{n}" == dev),
+                    (PI_PHOTO_WIDE, PI_PHOTO_WIDE * 3 // 4))
+        if w > PI_PHOTO_WIDE:
+            w, h = PI_PHOTO_WIDE, 2 * round(h * PI_PHOTO_WIDE / w / 2)
+        feed = self.feed
+        with feed.cond:
+            feed.held += 1
+        try:
+            feed.stop()
+            with tempfile.TemporaryDirectory(prefix="pietato-photo-") as tmp:
+                out = os.path.join(tmp, "picture.jpg")
+                try:                                  # (a second for its exposure to settle)
+                    subprocess.run([tool, "-n", "-t", "1000", "--camera", dev[len(PICAM):], "--width", str(w),
+                                    "--height", str(h), "-o", out], capture_output=True, timeout=30, env=pi_env())
+                    with open(out, "rb") as f:
+                        return f.read() or None
+                except (OSError, subprocess.TimeoutExpired):
+                    return None
+        finally:
+            with feed.cond:
+                feed.held -= 1
 
 
 # ---- telling Pietato this camera is here ----------------------------------------------------
@@ -765,7 +993,7 @@ def serve(feed, ptz, shutter, port=PORT, host="", pick=None, about=shared_about,
     return server
 
 
-# ---- Pietato's own Pi: the USB cameras plugged into it, for its Camera tab and its bot ------------------------
+# ---- Pietato's own Pi: the USB cameras plugged into it (and a camera module), for its Camera tab and its bot -----
 VIDIOC_QUERYCAP = 0x80685600     # what a node is: _IOR('V', 0, struct v4l2_capability), 104 bytes
 CAP_CAPTURE, CAP_DEVICE_CAPS = 0x00000001, 0x80000000
 OWN_PORTS = (5434, 5435, 5436, 5437)   # on 127.0.0.1 only (5433 is this script's, shared): the first that's free
@@ -875,10 +1103,11 @@ def own_about(feed):
 
 
 class OwnCameras:
-    """The USB cameras plugged into Pietato's own Pi, for its Camera tab and its bot: each answers the same calls as
-    a camera on another Pi, at /usb/<its id> on 127.0.0.1, and its picture is taken only while someone's watching,
-    as this script's is. For your other Pietatos (share: media mode asks for it while Settings > Share with other
-    Pietatos is on) each answers on a port of its own too, as this script does for a Pi's camera, but only them."""
+    """The USB cameras plugged into Pietato's own Pi, and a camera module on it, for its Camera tab and its bot: each
+    answers the same calls as a camera on another Pi, at /usb/<its id> on 127.0.0.1, and its picture is taken only
+    while someone's watching, as this script's is. For your other Pietatos (share: media mode asks for it while
+    Settings > Share with other Pietatos is on) each answers on a port of its own too, as this script does for a Pi's
+    camera, but only them."""
 
     def __init__(self, ports=OWN_PORTS, share_ports=SHARE_PORTS):
         self.lock = threading.Lock()
@@ -895,12 +1124,12 @@ class OwnCameras:
         self.failed = -1e9          # when the server couldn't start (tried again a while after)
 
     def look(self, now=False):
-        """The USB cameras plugged in: [{"id", "dev", "card", "name", "addr"}] (looked for afresh every OWN_LOOK
-        seconds, or now). [] when there's none, or nowhere to answer for them."""
+        """The USB cameras plugged in, then the camera modules: [{"id", "dev", "card", "name", "addr"}] (looked for
+        afresh every OWN_LOOK seconds, or now). [] when there's none, or nowhere to answer for them."""
         with self.lock:
             if now or time.monotonic() - self.looked >= OWN_LOOK:
                 self.looked = time.monotonic()
-                self.found = own_cameras(self.seen)
+                self.found = own_cameras(self.seen) + pi_cameras()
                 here = {c["id"]: c["dev"] for c in self.found}
                 for cid, (feed, _, _) in self.cams.items():
                     feed.use(here.get(cid))            # (taken out; or plugged in again, on another node perhaps)
