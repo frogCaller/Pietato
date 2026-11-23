@@ -684,6 +684,8 @@ if [ "$PC" = yes ] || [ "$HANDHELD" = yes ]; then   # (NAME.local, for the web p
                                                     # Debian's servers haven't it, nor has dArkOS)
   apt-get install -y avahi-daemon || echo "(Couldn't install avahi-daemon: open the web page by its address.)"
 fi
+# Settings > WiFi > Hotspot: NetworkManager hands out the addresses on it with dnsmasq's (most systems have it already)
+apt-get install -y dnsmasq-base || echo "(Couldn't install dnsmasq-base: Settings > WiFi > Hotspot may not turn on.)"
 # a USB camera (v4l2-ctl: its sizes, and turning one that turns) and a USB microphone (Vosk needs libatomic); a
 # camera module on a Pi's ribbon: Raspberry Pi OS's rpicam-vid and rpicam-still, if they aren't there already
 doing "What a camera and microphone need"

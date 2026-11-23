@@ -6500,7 +6500,7 @@ const SET_DRAW = {
     };
     f.append(inp, save);
     c.append(f);
-    if (r.set) c.append(armedButton("Take it off", r.key, async (b) => {
+    if (r.set && !r.keep) c.append(armedButton("Take it off", r.key, async (b) => {   // (keep: one it always has)
       const said = await setSave(r.key, "", b, true);
       if (said && !said.said) toast("Taken off");
     }, "bad"));
@@ -6569,8 +6569,11 @@ const SET_DRAW = {
   },
   wifi(r) {
     const [row, c] = setRow({ key: r.key, status: r.status, tone: r.tone,
-      label: r.here ? "Connected to " + r.here : r.radio ? "Not connected" : "WiFi is off on the Pi",
-      note: "If this page reaches the Pi over its WiFi, it loses it for a moment while it changes networks." }, true);
+      label: r.hosting ? "Making its own WiFi: " + r.hosting : r.here ? "Connected to " + r.here
+        : r.radio ? "Not connected" : "WiFi is off on the Pi",
+      note: r.hosting ? "Its hotspot, below. Turn that off to join a network again."
+        : "If this page reaches the Pi over its WiFi, it loses it for a moment while it changes networks." }, true);
+    if (r.hosting) return row;                          // (no networks to join while it makes its own)
     if (!r.radio) {
       const on = button("btn2", "Turn WiFi on");
       on.disabled = r.busy;

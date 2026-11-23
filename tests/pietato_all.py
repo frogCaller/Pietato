@@ -28,6 +28,7 @@ _ORDER = ["theme", "config", "asyou", "util", "lengths", "net", "system", "gpica
           "screens.group", "fishtank", "screens.fishtank", "screens.lobby",
           "glow", "party", "screens.glow", "oled", "screens.oled", "cover", "coverfind", "ear", "screens.music",
           "screens.party", "soundbank", "soundboard", "screens.soundboard", "screens.band",
+          "hotspot", "screens.hotspot",
           "media", "app",
           "assist", "face", "screens.assist"]   # (last: their names never hide another module's, as computers' parse)
 _MAYBE = {"screens.hasettings", "screens.websettings", "www", "chromium", "screens.www", "screens.chromium",

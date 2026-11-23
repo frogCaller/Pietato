@@ -1,11 +1,12 @@
-"""Attract mode's games (screens/attract.py, Settings > Attract mode: Games only; test_bored has the rest of what the
+"""Attract mode's games (screens/attract.py, Settings > Bot > Attract mode: Games only; test_bored: the rest of what the
 Bot does when it's bored): left idle on the home screen, plugged in, a game plays by itself. Without the AI player: the game's own demo, from its start; with it (your bot's computer, the model last
 picked for games): it plays, from where you were, from a copy of your saves. Its saves apart from yours (yours never
 change, your other Pietatos aren't told, it isn't one of the games played last), its sound off, no achievements, 2D
 games only; the Bot's face in the corner (a picture the emulator puts over the game's, every frame); another game every
 few minutes (not the one before), one that won't start never again; START or A: that game, yours, from your own save;
 B, HOME, the web page: back where you were. Not on the battery, not with nothing to play, not while something's on,
-not with it Off. And the emulator's badge itself, on a pretend screen."""
+not with it Off. Its row: in the Bot's settings (and the web page's Bot), not on Settings' first page. And the
+emulator's badge itself, on a pretend screen."""
 import os, shutil, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -120,7 +121,7 @@ tick()                                                # (the screen awake again:
 m.set_setting("attract", "Off")
 idle()
 tick()
-check("Settings > Attract mode Off: never", m.attract is None)
+check("Settings > Bot > Attract mode Off: never", m.attract is None)
 m.set_setting("attract", "Games only")
 m.view = "list"
 m.tab = m.tab_index("camera")
@@ -151,7 +152,7 @@ from PIL import Image
 check(f"...the Bot's face in the corner: a picture for the emulator ({sent[-1:]})",
       sent[-1:] == ["badge " + badge] and Image.open(badge).size == AM.BADGE)
 
-# ---- B: back where you were --------------------------------------------------------------------------------------------
+# ---- B: back where you were ------------------------------------------------------------------------------------------
 m.press("b")
 check(f"B: back where you were (the home screen), the game gone ({m.view}, {m.game})", m.view == "home"
       and m.game is None and m.attract is None)
@@ -162,7 +163,7 @@ check(f"...its saves never yours: yours as they were, nobody told, not one of th
 tick()
 check("...and the wait starts again", m.attract is None)
 
-# ---- with the AI player: from where you were -----------------------------------------------------------------------------
+# ---- with the AI player: from where you were -------------------------------------------------------------------------
 g.random.choice = lambda seq: next(x for x in seq if x["system"] == "gba")
 m.snake_server = lambda: "http://192.168.1.20:11434"
 m.set_setting("game_ai_model", "clef-flash")
@@ -180,7 +181,7 @@ check("...what it learns kept beside your saves, its log with its own",
 check("never a 3D game (too much for a game nobody's playing)", all(not p.endswith(".z64") for p, _ in starts)
       and all(x["system"] != "n64" for x in m.attract_games()))
 
-# ---- START: yours ------------------------------------------------------------------------------------------------------
+# ---- START: yours ----------------------------------------------------------------------------------------------------
 opened = []
 was_open = m.game_open
 m.game_open = lambda it: (opened.append(it), was_open(it))[1]
@@ -193,7 +194,7 @@ m.game_end()
 m.game_open = was_open
 m.view = "home"
 
-# ---- another every few minutes; one that won't start, never again -------------------------------------------------------
+# ---- another every few minutes; one that won't start, never again ----------------------------------------------------
 g.random.choice = lambda seq: seq[0]
 idle()
 tick()
@@ -208,7 +209,7 @@ tick()
 check(f"...one that stops by itself: another, and that one's not played by itself again ({sorted(m.attract['bad'])})",
       m.attract is not None and second in m.attract["bad"] and m.attract["game"]["path"] != second)
 
-# ---- the web page, HOME --------------------------------------------------------------------------------------------------
+# ---- the web page, HOME ----------------------------------------------------------------------------------------------
 m.stir()
 tick()
 check("something done on the web page: back where you were", m.attract is None and m.view == "home")
@@ -223,7 +224,7 @@ tick()
 check("unplugged (the battery saver on): it stops", m.attract is None)
 m.set_setting("battery", "Off")
 
-# ---- nothing to play --------------------------------------------------------------------------------------------------
+# ---- nothing to play -------------------------------------------------------------------------------------------------
 for k, f in GAMES.items():
     os.remove(f"{HOME}/Games/{k}/{f}")
 idle()
@@ -231,7 +232,46 @@ tick()
 check(f"no games: nothing, and it doesn't look again for a while ({m.attract_wait - time.monotonic():.0f} s)",
       m.attract is None and m.attract_wait - time.monotonic() > 500)
 
-# ---- the emulator's badge, on a pretend screen ----------------------------------------------------------------------------
+# ---- its row: the Bot's settings, not Settings' first page -----------------------------------------------------------
+m.view, m.tab = "list", m.tab_index("settings")
+m.load_tab(m.tab)
+m.set_page = "root"
+root = [r[0] for r in m.settings_rows()]
+check(f"Settings' first page: no Attract mode now ({root})", "attract" not in root and "friend" in root)
+m.set_page = "friend"
+rows = m.settings_rows()
+keys = [r[0] for r in rows]
+check(f"Settings > Bot: Attract mode, last ({keys})", keys[-1] == "attract" and rows[-1][1] == "Attract mode"
+      and rows[-1][2] == ["On", "Games only", "Off"])
+m.set_setting("attract", "On")
+m.set_sel = keys.index("attract")
+m.press("right")
+check(f"...▶: Games only, kept, and said ({m.setting('attract')}, {m.msg!r})",
+      m.setting("attract") == "Games only" and m.friend_value("attract") == "Games only" and "games" in (m.msg or ""))
+m.press("right")
+m.press("right")
+check(f"...round again: Off, then On ({m.setting('attract')})", m.setting("attract") == "On")
+m.press("left")
+check(f"...◀: Off ({m.setting('attract')})", m.setting("attract") == "Off" and m.friend_value("attract") == "Off")
+m.press("a")
+check(f"...A: the next, as ▶ ({m.setting('attract')})", m.setting("attract") == "On")
+m.dirty = True
+m.flush()                                             # (its row drawn: nothing breaks)
+secs = {s["id"]: [r["key"] for r in s["rows"]] for s in m.web_settings()["sections"]}
+check(f"the web page: in the Bot's part, last, not General ({secs['general']}, {secs['bot'][-2:]})",
+      secs["bot"][-1] == "attract" and "attract" not in secs["general"])
+row = next(r for s in m.web_settings()["sections"] for r in s["rows"] if r["key"] == "attract")
+check(f"...its choices, and what it is ({row['choices']})", row["choices"] == ["On", "Games only", "Off"]
+      and row["label"] == "Attract mode" and "idle" in row["note"])
+said = m.web_settings_do({"cmd": "settings", "key": "attract", "value": "Games only"})
+check(f"...picked there: kept ({said}, {m.setting('attract')})", said == {"ok": True}
+      and m.setting("attract") == "Games only")
+check("...not one of its choices: refused", "error" in m.web_settings_do({"cmd": "settings", "key": "attract",
+                                                                          "value": "Sometimes"})
+      and m.setting("attract") == "Games only")
+m.view = "home"
+
+# ---- the emulator's badge, on a pretend screen -----------------------------------------------------------------------
 from pitato import emulator as E
 FBF = S + "/fb.bin"
 open(FBF, "wb").write(bytes(640 * 480 * 2))

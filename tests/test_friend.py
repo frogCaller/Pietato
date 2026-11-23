@@ -170,7 +170,7 @@ check("picked", "model = llama3.2:3b" in open(HOME + "/bot.txt").read() and m.se
       and m.settings_rows()[m.set_sel][0] == "f_model")
 check(f"Settings › Bot: its Character first, no 'Model that can see', just Model; Listens, where Vosk runs "
       f"({[r[1] for r in m.settings_rows()]})",
-      [r[0] for r in m.settings_rows()] == ["f_char", "f_server", "f_model", "f_listen", "f_face"])
+      [r[0] for r in m.settings_rows()] == ["f_char", "f_server", "f_model", "f_listen", "f_face", "attract"])
 m.set_sel = 0; m.press("a")                        # (its Character: what it calls you, how often it chats)
 m.char_sec, m.char_row = 0, 1
 m.press("a")

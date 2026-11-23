@@ -303,7 +303,7 @@ class DrawScreen:
     # status bar and headers -----------------------------------------------------
     def status_signature(self):
         t = cpu_temp()
-        sig = (time.strftime("%H:%M"), wifi_bars(wifi_quality()),
+        sig = (time.strftime("%H:%M"), wifi_bars(wifi_quality()), self.hotspot_st["up"],
                None if t is None else round(t), self.kind, self.meta.get("song"), self.assist_status())
         return sig + (battery(),) if is_handheld() else sig   # (an RK3326 handheld's battery: its level, on the bar)
 
@@ -327,9 +327,10 @@ class DrawScreen:
             h = 4 + k * 3
             d.rectangle((bx, y + 6 - h, bx + 3, y + 6), fill=TEXT if k < bars else LINE)
         x -= 34
-        if bars == 0:
-            d.text((x, y), "No WiFi", font=F["status"], fill=WARN, anchor="rm")
-            x -= d.textlength("No WiFi", font=F["status"]) + 14
+        if bars == 0:                                  # (making its own WiFi: that, not an empty one, in orange)
+            word = "Hotspot" if self.hotspot_st["up"] else "No WiFi"
+            d.text((x, y), word, font=F["status"], fill=MUTED if self.hotspot_st["up"] else WARN, anchor="rm")
+            x -= d.textlength(word, font=F["status"]) + 14
         b = battery() if is_handheld() else None
         if b:                                          # (a handheld's battery: how full, and a bolt while it charges)
             x = self.battery_mark(d, x, y, *b)

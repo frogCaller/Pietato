@@ -92,7 +92,7 @@ SETTINGS_FILES = ["radio.txt", "streams.txt", "streams.m3u", "finance.txt", "cry
                   "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt",   # media mode's settings: in static/
                   "soundboard.txt"]
 PRIVATE = {"webui.txt", "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt",   # passwords and keys:
-           "retroachievements.txt"}                                                            # never shown
+           "retroachievements.txt", "hotspot.txt"}                                             # never shown
 INLINE = set(KINDS["music"] + KINDS["videos"] + KINDS["pictures"] + [".pdf", ".txt", ".md"])
 ACCENTS = {"Blue": "#60aae4", "Teal": "#40c4b4", "Green": "#6ec878", "Purple": "#a082e6",
            "Pink": "#e878aa", "Red": "#ec6464", "Gold": "#e6be50", "White": "#e4e8ee"}
@@ -302,7 +302,7 @@ PAGE_ONLY = {"state", "catalog", "channels", "radio", "cameras", "friend", "comp
              "bluetooth", "settings", "places", "fish", "glow"}   # (pictures load without it)
 PEER_PATHS = ("/api/shared", "/api/saves", "/api/saves/file", "/api/saves/news", "/api/saves/home",   # your other
               "/api/handoff", "/api/handoff/file", "/api/together", "/api/group", "/api/party",     # Pietatos ask these
-              "/api/band", "/api/covers", "/api/covers/file")
+              "/api/band", "/api/covers", "/api/covers/file", "/api/hotspot")
 PEER_LOCKED = ("/api/pilot", "/api/name")   # ...and these from your network only, and with the page's password if it
                                             # has one (another of yours controlling this one can do what the page's
                                             # remote can; or rename it)
@@ -1044,6 +1044,19 @@ def shared():
     """What this Pietato has fetched (coin and stock prices and charts, the weather), for your other Pietatos to use
     rather than fetch it again: GET from your network only, as PiE-ink shares its own (nearby.py asks them)."""
     got = ask_pi("GET", "/shared", timeout=5)
+    if got is None or got[0] != 200:
+        return jsonify(ok=False, error="Pietato isn't answering"), 503
+    resp = Response(got[1], 200, content_type="application/json")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/api/hotspot")
+def hotspot():
+    """This Pietato's hotspot's name and password (Settings > WiFi > Hotspot), for another of yours to join it by itself
+    away from your WiFi: GET from your network only, as the rest your Pietatos ask each other. Anyone who can ask is on
+    a network with your Pietatos already, which is all the hotspot is for."""
+    got = ask_pi("GET", "/hotspot", timeout=5)
     if got is None or got[0] != 200:
         return jsonify(ok=False, error="Pietato isn't answering"), 503
     resp = Response(got[1], 200, content_type="application/json")

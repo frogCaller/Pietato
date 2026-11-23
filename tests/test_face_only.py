@@ -82,9 +82,9 @@ m.tab = m.tab_index("settings"); m.load_tab(m.tab)
 m.set_page = "friend"
 rows = m.settings_rows()
 keys = [r[0] for r in rows]
-check(f"Settings > Bot: Just its face, last (its colours and eyelashes: its Character, first), Off at first "
-      f"({keys}, {m.friend_value('f_face')})", keys[-1] == "f_face" and keys[0] == "f_char"
-      and rows[-1][1] == "Just its face" and m.friend_value("f_face") == "Off")
+check(f"Settings > Bot: Just its face, last but Attract mode (its colours and eyelashes: its Character, first), "
+      f"Off at first ({keys}, {m.friend_value('f_face')})", keys[-2:] == ["f_face", "attract"] and keys[0] == "f_char"
+      and rows[-2][1] == "Just its face" and m.friend_value("f_face") == "Off")
 m.set_sel = keys.index("f_face")
 m.press("right")
 conf = open(os.path.join(m.static_dir() if hasattr(m, "static_dir") else HOME, "bot.txt")).read() \

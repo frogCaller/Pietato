@@ -52,10 +52,10 @@ Pietato starts on a home screen of apps:
   consoles you have games for, a different one each time you come back to the home screen
 - **System**: a dashboard of the Pi's temperature, how busy it is, its memory, storage and network. SELECT
   shows it as a list instead, with Update software, Reboot and Shut down
-- **Settings**: WiFi, Bluetooth, the clock, battery saver, sound and controller, plus two pages that A opens
-  and B closes. Appearance has the home screen's background and style, the accent colour, the apps' pages and
-  full screen apps. Screen has the video size, a TV or monitor's resolution, turning the picture and an OLED's
-  music bars
+- **Settings**: WiFi (with a [Hotspot](#hotspot) for away from home), Bluetooth, the clock, battery saver, sound
+  and controller, plus two pages that A opens and B closes. Appearance has the home screen's background and
+  style, the accent colour, the apps' pages and full screen apps. Screen has the video size, a TV or monitor's
+  resolution, turning the picture and an OLED's music bars
 - Settings > Appearance > Background changes the home screen's background: dark ones, colourful ones like
   Sunset, Candy and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and
   A shows them all to pick from
@@ -115,6 +115,23 @@ from where the song is (a station starts again for all of them). One that missed
 way. One you took out with Leave the party stays out; to bring it back, play something on it and pick Join in
 HOME's menu on Now playing, which has it while a party is going. Starting Party mode on another Pietato moves
 them all to that one's party.
+
+## Hotspot
+
+Away from your WiFi (off-road, say), one Pietato can make a WiFi of its own for the others: Settings > WiFi >
+Hotspot, then ◀▶ to turn it on. Your other Pietatos join it by themselves, and Party mode, Group chat, the Fish
+Tank, your cameras and the rest work as they do at home. Your own WiFi comes first, so once you turn the hotspot
+off, they go back to it.
+
+Its name and password are on that page, made up the first time you open it. A changes them while it's off.
+They're the same on all your Pietatos, which pass them to each other while they're on your WiFi together, so do
+that once before you leave (Settings > Share with other Pietatos needs to be on). A phone or a laptop joins with
+the name and password shown there, and while it's on, the page says where a phone finds the web page. For an
+ESP32's LEDs, put them in its sketch as well ([esp32](../esp32/README.md)).
+
+The one making it isn't on your WiFi meanwhile, so it has no internet unless it has a cable. It stays on until
+you turn it off, even through a restart. It's on 2.4 GHz, the only WiFi a Pi Zero 2 W and an ESP32 can join. The
+web page's Settings > WiFi has it too.
 
 ## LED backlight
 
@@ -306,6 +323,8 @@ four bars ahead, and the band never waits for it.
 Each Pietato has a fish of its own in Apps > Fish Tank. With two or more on the same network, their tanks join up
 into one big tank, and the fish swim from one to the next. A calls your fish back, X feeds it, and START picks the
 fish and the light.
+
+When you open it, the names of the tanks next door show at the edges they're through for a few seconds, then go.
 
 The web page's Library has a Fish Tank too, with every tank at once. Tap a tank to feed it, or press Arrange and
 drag the tanks into a grid: side by side, one above another, or both. Fish swim between tanks that touch, with the

@@ -57,6 +57,8 @@ const char* AP_SSID   = "Pietato Matrix";
 const char* AP_PASS   = "12345678";
 const char* WIFI_SSID = "";        // your Wi-Fi, if you'd rather set it here than on the page
 const char* WIFI_PASS = "";
+const char* HOTSPOT_SSID = "";     // your Pietatos' hotspot, for away from your Wi-Fi (Settings > WiFi > Hotspot on
+const char* HOTSPOT_PASS = "";     // one of them shows them): looked for in turn with yours
 static const char *HOSTNAME = "matrix";              // http://matrix.local:8000 on your Wi-Fi
 static const int WEB_PORT = 8000;
 static const IPAddress BOARD_IP(10, 20, 30, 40);     // the hotspot's address
@@ -2501,15 +2503,20 @@ static void jsonText(String &s, const char *p) {   // a JSON string, quotes incl
 // ── Wi-Fi (your network, set from the page) ──────────────────
 static String homeSsid, homePass;
 static uint32_t joinAt = 0;
+static bool away = false;          // (your Pietatos' hotspot looked for, in place of your Wi-Fi)
 
 static void joinHome() {
   WiFi.disconnect();
-  if (homeSsid.length()) WiFi.begin(homeSsid.c_str(), homePass.c_str());
+  if (away) WiFi.begin(HOTSPOT_SSID, HOTSPOT_PASS);
+  else if (homeSsid.length()) WiFi.begin(homeSsid.c_str(), homePass.c_str());
   joinAt = millis();
 }
 
-static void wifiTick() {   // not joined: try again every minute
-  if (homeSsid.length() && WiFi.status() != WL_CONNECTED && millis() - joinAt > 60000) joinHome();
+static void wifiTick() {   // not joined: try again every minute (your Wi-Fi and your Pietatos' hotspot in turn)
+  if ((homeSsid.length() || HOTSPOT_SSID[0]) && WiFi.status() != WL_CONNECTED && millis() - joinAt > 60000) {
+    away = HOTSPOT_SSID[0] && (!away || !homeSsid.length());
+    joinHome();
+  }
 }
 
 static String buildState() {
@@ -2711,6 +2718,7 @@ void handleWifi() {
   }
   prefs.putString("ssid", homeSsid);
   prefs.putString("pass", homePass);
+  away = !homeSsid.length() && HOTSPOT_SSID[0];
   joinHome();
   server.send(200, "text/plain", "OK");
 }
@@ -2752,6 +2760,7 @@ static void startNetwork() {
 
   homeSsid = prefs.getString("ssid", WIFI_SSID);
   homePass = prefs.getString("pass", WIFI_PASS);
+  away = !homeSsid.length() && HOTSPOT_SSID[0];
   joinHome();
 
   Serial.print("Hotspot \""); Serial.print(AP_SSID); Serial.print("\": open http://");

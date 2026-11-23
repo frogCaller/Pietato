@@ -73,6 +73,7 @@ from .screens.sims import SimScreen
 from .screens.snake import SnakeScreen
 from .screens.games import GameScreen
 from .screens.settings import SettingsScreen
+from .screens.hotspot import HotspotScreen
 from .screens.bluetooth import BluetoothScreen
 from .screens.controller import ControllerScreen
 from .screens.weather import WeatherScreen
@@ -112,7 +113,8 @@ SCREEN_LOOK = 5.0              # seconds between looks for a screen, where there
 class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, JellyfinScreen,
             PhotoScreen, ReadingScreen, ChannelScreen, RadioScreen, FinanceScreen, CharacterScreen,
             RemoteScreen, LightsScreen, CameraScreen, BotScreen, AssistScreen, SimScreen,
-            SnakeScreen, GameScreen, SettingsScreen, BluetoothScreen, ControllerScreen, WeatherScreen, WebScreen,
+            SnakeScreen, GameScreen, SettingsScreen, HotspotScreen, BluetoothScreen, ControllerScreen, WeatherScreen,
+            WebScreen,
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen,
@@ -386,6 +388,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.loc_results, self.loc_status = [], None   # ...where you are: the towns found, and how it's going
         self.wifi = {"nets": [], "saved": {}, "status": None, "busy": False, "radio": True, "ssid": "",
                      "ssid_t": 0.0, "said": None}   # (said: how connecting or forgetting went, for the web page)
+        self.hotspot_init()          # Settings > WiFi > Hotspot: a WiFi of its own (screens/hotspot.py)
         self.bt = Bluetooth()        # Settings > Bluetooth, and the web page's: pitato/bluetooth.py
         self.bt.on_change = self.bt_changed
         self.bt_pick = None          # ...the device picked on its page (None: the switch)
@@ -1650,6 +1653,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.pie.hear(ip, msg) and self.sharing and self.setting("share") != "Off":
             self.share_tell(ip)
             self.guests_tell(ip)                       # (a game of its own, played on here: it takes it home)
+        if msg.get("pietato") == 1 and "hotspot" in msg:
+            self.hotspot_heard(ip, msg)                # (a newer hotspot than this one's: taken)
 
     def share_tell(self, ip):
         """This Pietato's beacon, straight to one at ip."""
@@ -1685,6 +1690,9 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
                 beacon["oled"] = oled
             if self.party_leading():                   # (a party: your lights follow it, not one that's not in it)
                 beacon["party"] = 1
+            tag = self.hotspot_tag()                   # (which hotspot it has: an older one's taken from it)
+            if tag:
+                beacon["hotspot"] = tag
         return beacon
 
     def web_shared(self):

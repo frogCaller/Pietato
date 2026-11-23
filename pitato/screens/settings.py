@@ -7,7 +7,7 @@ import threading
 import time
 
 from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
-from ..config import SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
+from ..config import ATTRACT_CHOICES, SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
 from ..system import has_desktop, is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
                       resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
@@ -45,9 +45,13 @@ class SettingsScreen:
             w = self.wifi
             rows = [("radio", "WiFi", ["On", "Off"])]
             if w["radio"]:
-                rows += [("net", n["ssid"], n) for n in w["nets"]]
-                rows.append(("other", "Other network…", "A hidden network, by name"))
+                rows.append(("hotspot", "Hotspot", ["On", "Off"]))   # (its own page: screens/hotspot.py)
+                if not self.hotspot_on():              # (making one: no network to join meanwhile)
+                    rows += [("net", n["ssid"], n) for n in w["nets"]]
+                    rows.append(("other", "Other network…", "A hidden network, by name"))
             return rows
+        if self.set_page == "hotspot":
+            return self.hotspot_rows()
         if self.set_page == "friend":
             rows = [("f_char", "Character", None), ("f_server", "Computer with Ollama", None),
                     ("f_model", "Model", None)]
@@ -55,7 +59,8 @@ class SettingsScreen:
             listen = self.listen_rows(found)
             rows += [r for r in (("f_listen", "Listens for you", ["Auto", "On", "Off"]), ("f_wake", "Wake phrase", None),
                                  ("f_mic", "Microphone", ["Auto"] + [c["name"] for c in found])) if r[0] in listen]
-            rows += [("f_face", "Just its face", ["On", "Off"])]
+            rows += [("f_face", "Just its face", ["On", "Off"]),
+                     ("attract", "Attract mode", ATTRACT_CHOICES)]   # (left idle, plugged in: screens/attract.py)
             return rows
         if self.set_page == "f_voices":
             ours = [i for i, _, _ in BOT_VOICES]
@@ -207,6 +212,8 @@ class SettingsScreen:
             self.set_sel = (self.set_sel + (1 if name == "down" else -1)) % len(rows)
         elif self.set_page == "wifi":
             return self.press_wifi(name, repeat, key, extra)
+        elif self.set_page == "hotspot":
+            return self.press_hotspot(name, repeat, key, extra)
         elif self.set_page in FRIEND_PAGES:
             return self.press_friend_settings(name, repeat, key, extra)
         elif self.set_page == "resolution":
@@ -227,9 +234,10 @@ class SettingsScreen:
         elif name == "a" and not repeat:
             if key in SETTINGS_PAGES:                  # (Appearance, Screen: its page of settings)
                 self.set_page, self.set_sel = key, 0
-            elif key == "wifi":
-                self.set_page, self.set_sel = "wifi", 1
-                self.wifi_rescan()
+            elif key == "wifi":                        # (the first network picked; the hotspot, while it's on)
+                self.set_page, self.set_sel = "wifi", 1 if self.hotspot_on() else 2
+                if not self.hotspot_on():
+                    self.wifi_rescan()
             elif key == "bluetooth":
                 self.bt_open()
             elif key == "resolution":
@@ -576,8 +584,16 @@ class SettingsScreen:
             on = not w["radio"]
             w["busy"], w["status"] = True, "Turning WiFi on…" if on else "Turning WiFi off…"
             threading.Thread(target=self.wifi_job, args=("radio", on), daemon=True).start()
+        elif key == "hotspot" and name == "a" and not repeat:
+            self.hotspot_open()
+        elif key == "hotspot" and name in ("left", "right") and not repeat:
+            if not self.hotspot_turn(not self.hotspot_on()):
+                self.toast("One thing at a time", 2)
         elif name == "x" and not repeat:
-            self.wifi_rescan()
+            if self.hotspot_on():
+                self.toast("Turn the hotspot off to look for networks", 3)
+            else:
+                self.wifi_rescan()
         elif key == "net" and name == "a" and not repeat:
             net = extra
             if net["active"]:
@@ -628,6 +644,9 @@ class SettingsScreen:
                 w["radio"] = args[0]
                 if args[0]:
                     time.sleep(3)                      # give it a moment to find networks
+                elif self.hotspot_on():                # (no WiFi: no hotspot either)
+                    self.set_setting("hotspot", "Off")
+                    self.hotspot_st["up"] = False
             elif what == "forget":
                 profile = w["saved"].get(args[0], args[0])
                 ok, _, err = nm(["connection", "delete", "id", profile], 15)
@@ -709,7 +728,7 @@ class SettingsScreen:
         self.header(img, d)
         rows = self.settings_rows()
         sel = self.set_sel % len(rows)
-        crumb = {"wifi": "Settings  ›  WiFi",
+        crumb = {"wifi": "Settings  ›  WiFi", "hotspot": "Settings  ›  WiFi  ›  Hotspot",
                  "friend": "Bot  ›  Settings" if self.bot_settings else "Settings  ›  Bot",
                  "f_models": "Bot  ›  Model", "f_voices": "Bot  ›  Voice",
                  "appearance": "Settings  ›  Appearance", "display": "Settings  ›  Screen",
@@ -736,11 +755,19 @@ class SettingsScreen:
         top, rh = self.LIST_TOP + 26, 46
         rows_fit = (H - self.FOOTER - top) // rh
         first = max(0, min(sel - rows_fit + 1, len(rows) - rows_fit))
-        if self.set_page == "wifi":
+        if self.set_page == "wifi" and self.hotspot_on():   # (making one: that, not a network it's on)
+            words, colour = self.hotspot_said(page=False)
+            d.text((W - 20, self.LIST_TOP + 10), self.fit(d, words, F["small"], 320), font=F["small"], fill=colour,
+                   anchor="rm")
+        elif self.set_page == "wifi":
             here = self.current_ssid()
             d.text((W - 20, self.LIST_TOP + 10), self.fit(d, f"Connected to {here}" if here else "Not connected",
                                                           F["small"], 320),
                    font=F["small"], fill=DONE if here else WARN, anchor="rm")
+        if self.set_page == "hotspot":
+            words, colour = self.hotspot_said()
+            d.text((W - 20, self.LIST_TOP + 10), self.fit(d, words, F["small"], 320), font=F["small"], fill=colour,
+                   anchor="rm")
         for r, k in enumerate(range(first, min(first + rows_fit, len(rows)))):
             key, label, extra = rows[k]
             y = top + r * rh
@@ -752,6 +779,9 @@ class SettingsScreen:
             self.tappable((0, y, W, y + rh), "sel", "attr", "set_sel", k)
             if self.set_page == "wifi":
                 self.wifi_row(d, key, label, extra, mid, on)
+                continue
+            if self.set_page == "hotspot":
+                self.hotspot_row(d, key, label, extra, mid, on, y, rh)
                 continue
             if self.set_page == "f_voices":
                 d.text((30, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
@@ -806,7 +836,7 @@ class SettingsScreen:
                               outline=LINE)
                 continue
             d.text((30, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
-            value = ((self.current_ssid() or "Not connected") if key == "wifi" else
+            value = (("Hotspot" if self.hotspot_on() else self.current_ssid() or "Not connected") if key == "wifi" else
                      self.bt_value() if key == "bluetooth" else
                      self.settings_page_value(key) if key in SETTINGS_PAGES else
                      self.pad_summary() if key == "pad" else
@@ -842,13 +872,18 @@ class SettingsScreen:
                        anchor="mm")
             k = rows[sel][0]
             hints = ([("◀▶", "On / off")] if k == "radio" else
+                     [("A", "Name, password"), ("◀▶", "On / off")] if k == "hotspot" else
                      [("A", "Connect")] + ([("Y", "Forget")] if k == "net" and rows[sel][1] in self.wifi["saved"]
                                            else []) if k == "net" else [("A", "Add")])
-            hints += [("X", "Scan"), ("B", "Back")]
+            hints += ([] if self.hotspot_on() else [("X", "Scan")]) + [("B", "Back")]
+        elif self.set_page == "hotspot":
+            d.text((W / 2, H - self.FOOTER - 22), self.fit(d, self.hotspot_note(), F["small"], W - 40),
+                   font=F["small"], fill=MUTED, anchor="mm")
+            hints = self.hotspot_hints(rows[sel][0])
         elif self.set_page == "friend":
             k = rows[sel][0]
             hints = ([("◀▶", "Change")] if k in ("f_style", "f_chatter", "f_speak", "f_listen", "f_mic", "f_face",
-                                                 "f_colour", "f_back", "f_lashes")
+                                                 "f_colour", "f_back", "f_lashes", "attract")
                      else [("A", "Open")] if k == "f_char"
                      else [("A", "Choose")] if k in ("f_model", "f_voice") else [("A", "Type")])
             hints += [("X", "Check"), ("B", "Back")]
@@ -886,8 +921,8 @@ class SettingsScreen:
         w = self.wifi
         d.text((30, mid), self.fit(d, label, F["row"], W - 260), font=F["row"], fill=TEXT if on else BODY,
                anchor="lm")
-        if key == "radio":
-            value = "On" if w["radio"] else "Off"
+        if key in ("radio", "hotspot"):
+            value = ("On" if w["radio"] else "Off") if key == "radio" else self.hotspot_value("hs_on")
             d.text((W - 28, mid), value, font=F["row"], fill=ACCENT if on else MUTED, anchor="rm")
             return
         if key == "other":

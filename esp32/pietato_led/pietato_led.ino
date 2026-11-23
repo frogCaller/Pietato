@@ -8,7 +8,8 @@
 
   To put it on a board (an ESP32-S3 dev board, or any ESP32 with an RGB LED):
     1. In the Arduino IDE, pick your board (ESP32S3 Dev Module, say).
-    2. Put your WiFi's name and password below (a 2.4 GHz one: an ESP32 doesn't do 5 GHz).
+    2. Put your WiFi's name and password below (a 2.4 GHz one: an ESP32 doesn't do 5 GHz). For away from it, your
+       Pietatos' hotspot's too (Settings > WiFi > Hotspot on one of them shows them): it looks for each in turn.
     3. Upload.
   The LED glows a dim amber while it looks for your WiFi, then green for a couple of seconds once it's on it,
   and goes dark till something plays on a Pietato (music, or a game). A Pietato's web page lists the boards
@@ -44,6 +45,8 @@
 // ---- yours to set -------------------------------------------------------------------------------------------
 const char *WIFI_NAME = "your WiFi's name";
 const char *WIFI_PASSWORD = "its password";
+const char *HOTSPOT_NAME = "";        // your Pietatos' hotspot, for away from your WiFi (Settings > WiFi > Hotspot on
+const char *HOTSPOT_PASSWORD = "";    // one of them shows them). Left empty: your WiFi alone
 
 #define LED_COUNT 1          // 1: the board's own LED. More: a strip of WS2812B LEDs on STRIP_PIN (needs FastLED)
 
@@ -121,6 +124,7 @@ bool listening = false;
 double helloAt = -1e9;
 bool owed = false;                  // (it's to say how it is, as soon as it may)
 double askedAt = 0;                 // when your WiFi was last asked for
+bool away = false;                  // (...or your Pietatos' hotspot, in its place)
 IPAddress source;                   // the Pietato it's following
 bool following = false;
 double offset = 0;                  // its clock, less that one's (the quickest packet's: nearest the truth)
@@ -262,6 +266,8 @@ int boardName(char *name, size_t room) {            // ("ESP32 A1B2C3": the end 
   return snprintf(name, room, "ESP32 %02X%02X%02X", mac[3], mac[4], mac[5]);
 }
 
+const char *wifiName() { return away ? HOTSPOT_NAME : WIFI_NAME; }   // (the WiFi it's looking for, or on)
+
 // How it is, in a line for the Serial Monitor (115200): what it lights, whether it's on your WiFi, and whether a
 // Pietato's lighting it. Said every ten seconds, and when that changes; never waited for.
 void sayHowItIs(double now) {
@@ -279,7 +285,7 @@ void sayHowItIs(double now) {
 #endif
   const int status = WiFi.status();
   if (status != WL_CONNECTED) {
-    snprintf(line, sizeof line, "Pietato LED (%s): looking for the WiFi \"%s\"%s", what, WIFI_NAME,
+    snprintf(line, sizeof line, "Pietato LED (%s): looking for the WiFi \"%s\"%s", what, wifiName(),
              status == WL_NO_SSID_AVAIL ? ". There's none of that name here (an ESP32 only sees 2.4 GHz ones)"
              : status == WL_CONNECT_FAILED ? ". It's there, but the password wasn't taken" : "");
   } else {
@@ -300,8 +306,8 @@ void sayHowItIs(double now) {
                          : ownEffect & HUES_SLOW ? " in colours that change slowly" : "";
       snprintf(fx, sizeof fx, "; with music, %s%s", ownEffect & SHOOT ? "beats shoot down it" : "it pulses", hues);
     }
-    snprintf(line, sizeof line, "Pietato LED (%s): on your WiFi as %d.%d.%d.%d, \"%s\" to your Pietatos; %s%s%s%s",
-             what, ip[0], ip[1], ip[2], ip[3], name, by, colour, dim, fx);
+    snprintf(line, sizeof line, "Pietato LED (%s): on your %s as %d.%d.%d.%d, \"%s\" to your Pietatos; %s%s%s%s",
+             what, away ? "Pietatos' hotspot" : "WiFi", ip[0], ip[1], ip[2], ip[3], name, by, colour, dim, fx);
   }
   Serial.println(line);
 }
@@ -714,10 +720,11 @@ void loop() {
   }
   if (WiFi.status() != WL_CONNECTED) {              // (looking for your WiFi: a dim amber)
     if (listening) { listening = false; askedAt = now; toSay = true; }   // (just lost: the board looks itself, at first)
-    if (now - askedAt >= WIFI_AGAIN) {              // (a while with no luck: asked for again)
-      askedAt = now;
+    if (now - askedAt >= WIFI_AGAIN) {              // (a while with no luck: asked for again, or your Pietatos'
+      askedAt = now;                                //  hotspot in its place, each in turn, when it's given)
       WiFi.disconnect();
-      WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
+      away = HOTSPOT_NAME[0] && !away;
+      WiFi.begin(wifiName(), away ? HOTSPOT_PASSWORD : WIFI_PASSWORD);
     }
     light(10, 5, 0);
     delay(100);

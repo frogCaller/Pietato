@@ -242,11 +242,17 @@ else:
     BOARD = True
 
 
-def build(name, strip=0, core="3,3,12", onboard=None, bright=None):
+def build(name, strip=0, core="3,3,12", onboard=None, bright=None, hotspot=None):
     """The sketch, built for the stand-in board (a strip of that many LEDs, if any; core: the version of the board's
     software; onboard: the pin of its own LED, given in the sketch; bright: the sketch's BRIGHTNESS, changed to
-    that): the program, or None. (A warning's an error: nothing the board's software says not to use.)"""
+    that; hotspot: your Pietatos' hotspot's name and password, given in it): the program, or None. (A warning's an
+    error: nothing the board's software says not to use.)"""
     src = open(SKETCH).read()
+    for was, now in zip(('const char *HOTSPOT_NAME = "";', 'const char *HOTSPOT_PASSWORD = "";'),
+                        (f'const char *HOTSPOT_NAME = "{hotspot[0]}";',
+                         f'const char *HOTSPOT_PASSWORD = "{hotspot[1]}";') if hotspot else ()):
+        assert src.count(was) == 1
+        src = src.replace(was, now)
     for was, now in ((("#define ONBOARD_PIN -1 ", f"#define ONBOARD_PIN {onboard} "),) if onboard is not None else ()) \
             + ((("#define BRIGHTNESS 90 ", f"#define BRIGHTNESS {bright} "),) if bright is not None else ()):
         assert src.count(was) == 1
@@ -285,6 +291,8 @@ def run(prog, script, kept=None):
     r = subprocess.run([prog], input="\n".join(script) + "\n", capture_output=True, text=True, timeout=60, env=env)
     leds, sent, begun, strip = [], [], [], []
     ASKED[:] = [float(line.split()[1]) for line in r.stdout.splitlines() if line.startswith("W ")]
+    ASKED_AS[:] = [(float(line.split()[1]), line.split(None, 2)[2]) for line in r.stdout.splitlines()
+                   if line.startswith("W ")]
     KEPT[:] = [(float(w[1]), int(w[2])) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "K"]
     SET_UP[:] = [w[1:] for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] in ("A", "P")]
     DITHER[:] = [int(w[1]) for w in (x.split() for x in r.stdout.splitlines()) if w and w[0] == "D"]
@@ -313,6 +321,7 @@ def run(prog, script, kept=None):
 
 ASKED, KEPT, SET_UP, DITHER, BRIGHT, SAID, MONITOR = [], [], [], [], [], [], []
 KEPT_B, OWN_SET, OWN_LED, OWN_SET_FIRST = [], [], [], []
+ASKED_AS = []                                         # (...and what it asked for: [(when, the WiFi's name)])
 
 
 def at(leds, t):
@@ -433,6 +442,21 @@ if BOARD and prog:
           and not [t for t in asked if 100.5 < t < 300])
     check(f"...lost later: the board's left to look for it at first, then it's asked for again ({asked[4:]})",
           len(asked) >= 5 and 329.5 <= asked[4] <= 331 and at(leds, 301.0) == (10, 5, 0))
+    check(f"...your WiFi, every time, with no hotspot given ({sorted({n for _, n in ASKED_AS})})",
+          {n for _, n in ASKED_AS} == {"your WiFi's name"})
+    hot = build("led_hot", hotspot=("Pietato-K7MP", "k7mp-x3vd-qa9f"))
+    run(hot, ["t 100.0"]) if hot else None
+    check(f"your Pietatos' hotspot given too (Settings > WiFi > Hotspot's): it and your WiFi asked for in turn, half a "
+          f"minute each ({ASKED_AS[:4]})", hot is not None
+          and [n for _, n in ASKED_AS[:4]] == ["your WiFi's name", "Pietato-K7MP"] * 2
+          and all(30 * k <= t <= 30 * k + 0.5 for k, (t, _) in enumerate(ASKED_AS[:4])))
+    said = [x for x in SAID if "K7MP" in x[1]]
+    check(f"...the Serial Monitor says which it's looking for ({said[:1]})", said
+          and said[0][1].endswith('looking for the WiFi "Pietato-K7MP"'))
+    run(hot, ["t 40.0", "wifi 1", "t 45.0"]) if hot else None
+    said = [x for x in SAID if " on your " in x[1]]
+    check(f"...on the hotspot: it says so ({said[:1]})", said
+          and " on your Pietatos' hotspot as 10.0.0.77, " in said[0][1])
     for core in ("2,0,17", "3,0,4", "3,0,5"):          # (its LED's lit by another name, before 3.0.5)
         old = build("led_" + core.replace(",", "_"), core=core)
         got = run(old, ["t 1.0", "wifi 1", "t 3.0"])[0] if old else []

@@ -8,7 +8,7 @@ import threading
 import time
 
 from ..theme import ACCENT, BG, BODY, LINE, MUTED, ROW, TEXT, WARN
-from ..config import clean_name, edit_config
+from ..config import ATTRACT_CHOICES, clean_name, edit_config
 from ..util import pictures_dir, save_picture
 from ..net import cam_address
 from ..screen import aplay_device
@@ -39,6 +39,9 @@ FACE_ONLY_ROAM = (0.36, 0.16)   # ...looking round the room, it goes this far fr
                                 # size: to either side; up or down)...
 FACE_ONLY_EDGE = 0.145          # ...and comes no nearer the screen's edges than this (of its size)
 FRIEND_MENU = (320, 44)         # the Bot page's X menu: its width, and each of its rows' height
+ATTRACT_SAYS = {"On": "Left idle, plugged in: it finds something to show you",   # Settings > Bot > Attract mode, as
+                "Games only": "Left idle, plugged in: it plays one of your games",   # it's changed
+                "Off": "Left idle: it waits for you"}
 FACE_CAN_DO = ("You can do things for them. When they ask you to play one of their games, their music or the radio, "
                "put something on to watch (a channel, cartoons, an old film), open an app, show their photos, or set a "
                "timer or a reminder, start your reply with what they'd say to you for it, in double square brackets, "
@@ -1010,6 +1013,8 @@ class BotScreen:
             return "On" if self.bot_speaks() else "Off"
         if key == "f_face":
             return "On" if self.bot_face_only() else "Off"
+        if key == "attract":
+            return self.setting("attract") or ATTRACT_CHOICES[0]
         if key == "f_char":
             return self.char_summary()
         if key == "f_colour":
@@ -1107,6 +1112,12 @@ class BotScreen:
                 self.friend_set(face_only="off" if self.bot_face_only() else "on")
                 self.toast("Its chat page: just its face" if self.bot_face_only() else
                            "Its chat page: its face and your conversation", 3)
+            elif key == "attract" and name in ("left", "right", "a"):
+                cur = self.setting("attract")
+                i = ATTRACT_CHOICES.index(cur) if cur in ATTRACT_CHOICES else 0
+                new = ATTRACT_CHOICES[(i + (-1 if name == "left" else 1)) % len(ATTRACT_CHOICES)]
+                self.set_setting("attract", new)
+                self.toast(ATTRACT_SAYS[new], 3)
             elif key == "f_colour" and name in ("left", "right", "a"):
                 self.bot_colour_step(-1 if name == "left" else 1)
             elif key == "f_back" and name in ("left", "right", "a"):

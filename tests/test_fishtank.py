@@ -437,6 +437,56 @@ check("a fish in the space between screens: on neither", view("Den", 1.15) == de
 check("...just into it: still partly on the screen it's leaving",
       view("Den", 1.02) != den_bare and view("Kitchen", 1.02) == kit_bare)
 check("...nearly through: partly on the next", view("Den", 1.28) == den_bare and view("Kitchen", 1.28) != kit_bare)
+
+# the tanks next door: their names at the edges for a few seconds once it's opened (or once they change), then gone
+from PIL import ImageChops, ImageStat
+side = F.FishTank(640, 480, random.Random(5))
+sq = side.aq
+sq.me, sq.kind = "Den", "Goldfish"
+sq.arrange({"Den": (0, 0), "Kitchen": (1, 0)}, 1.0, (0.3, 0.0))
+sq.others["o"] = {"name": "Kitchen", "accent": "", "decor": {"light": "Day"}, "food": [], "ate": [], "at": 0, "age": 0,
+                  "fish": None}
+sq.regrid()
+sq.fish = None
+
+
+def side_name(on=0.0, word="Kitchen →", where="right", away=0.0):
+    """How much of a name at the edge is drawn, after on more seconds on the screen (a frame every second and a half,
+    at least), or away seconds off it: its pixels' difference from the water there, all added up."""
+    side.looked -= away
+    while on > 0:
+        side.looked -= min(on, 1.5)
+        side.update(0.05)
+        on -= 1.5
+    side.update(0.05)
+    out = Image.new("RGB", (640, 480))
+    side.draw(out, 0, 0)
+    tag = side.tag(word, (200, 222, 236), 1)
+    x0 = 640 - tag.width - 6 if where == "right" else (640 - tag.width) // 2
+    y0 = int(480 * 0.42) if where == "right" else 480 - tag.height - 6
+    box = (x0, y0, x0 + tag.width, y0 + tag.height)
+    water = side.back(1).convert("RGB").crop(box)
+    return sum(ImageStat.Stat(ImageChops.difference(out.crop(box), water)).sum)
+
+
+full = side_name()
+check(f"the tank next door: its name at the edge it's through, at first ({full:.0f})", full > 1000)
+check("...a few seconds on, still", abs(side_name(1.5) - full) < 1 and abs(side_name(1.5) - full) < 1)
+fading = side_name(F.SIDES_SECS - 3.0 - F.SIDES_FADE / 2)
+check(f"...then fading away ({fading / full:.0%} of it)", 0.2 * full < fading < 0.8 * full)
+gone = side_name(1.0)
+check(f"...then gone: just the water there ({gone:.0f})", gone == 0)
+check("...and it stays gone", side_name(1.5) == 0 and side_name(1.5) == 0)
+check(f"...on the screen a while longer: still gone ({side_name(F.SIDES_SECS * 2):.0f})", side_name(0.5) == 0)
+check("...opened again (a while on another page): there again", abs(side_name(away=F.SIDES_AWAY + 5) - full) < 1)
+side_name(F.SIDES_SECS + 1)
+check("...gone again", side_name() == 0)
+sq.arrange({"Den": (0, 0), "Kitchen": (0, 1)}, 2.0, (0.0, 0.3))
+sq.regrid()
+below = side_name(0.1, "↓ Kitchen", "below")
+check(f"...gone, and the tanks moved round (the Kitchen's below now): its name at the bottom, for a while again "
+      f"({below:.0f})", below > 1000)
+check("...then gone again", side_name(F.SIDES_SECS + 1, "↓ Kitchen", "below") == 0)
 m.press("start")
 rows = [k for k, _, _, _ in m.sim_rows(type(s))]
 check(f"START: its options ({rows})", rows == ["kind", "light", "full"])

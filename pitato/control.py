@@ -129,6 +129,8 @@ def serve_control(media, control, port=CONTROL_PORT, key=None):
                     return self.reply(200, media.web_friend())
                 if u.path == "/shared":                # (what it has fetched, for your other Pietatos)
                     return self.reply(200, media.web_shared())
+                if u.path == "/hotspot":               # (its hotspot's name and password, for your other Pietatos)
+                    return self.reply(200, media.web_hotspot())
                 if u.path == "/saves":                 # (a game's saves, for your other Pietatos)
                     return self.reply(200, media.web_saves(q.get("game")))
                 if u.path == "/coverfile":             # (a song's cover, for another of yours that has none for it)

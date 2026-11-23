@@ -13,7 +13,8 @@ CONTROL_PORT = 5480        # the web page (webui.py) works media mode through th
 WEB_PORT = 5432            # ...which is itself on this port
 CONTROL_KEY = "/run/pitato/control-key"   # ...with this key, readable by you and root only
 # passwords and tokens: never shown
-WEB_PRIVATE = {"webui.txt", "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt", "retroachievements.txt"}
+WEB_PRIVATE = {"webui.txt", "homeassistant.txt", "plex.txt", "jellyfin.txt", "pihole.txt", "retroachievements.txt",
+               "hotspot.txt"}
 
 
 # ---- your settings files: the static folder ---------------------------------
@@ -56,6 +57,8 @@ WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings >
               "Rainbow", "Snow", "Space", "Black", "Picture"]       # the rest. How each looks: home.py's WALLS
 SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Screen > Video size; Y while a video plays
 OLED_CHOICES = ["Off", "Music bars"]               # Settings > Screen > Waveshare 2.23 OLED (screens/oled.py)
+ATTRACT_CHOICES = ["On", "Games only", "Off"]      # Settings > Bot > Attract mode: left idle, plugged in, the Bot gets
+                                                   # bored and finds something to do (screens/attract.py)
 SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page of its own). (Where you are and the
                # temperature's units are Weather's: START there)
     ("wifi", "WiFi", None),
@@ -65,8 +68,6 @@ SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page o
     ("clock", "Clock", ["12-hour", "24-hour"]),
     ("battery", "Battery saver", ["Auto", "On", "Off"]),   # the screen dark after a few minutes with nothing happening
                                                          # (Auto: while it runs on its battery; screens/rest.py)
-    ("attract", "Attract mode", ["On", "Games only", "Off"]),   # left idle, plugged in: the Bot gets bored and
-                                                            # finds something to do (screens/attract.py)
     ("sound", "Sound", None),
     ("pad", "Controller", None),
     ("pad_swap", "Swap A and B", ["Off", "On"]),   # on the controller in hand (kept with its buttons, not here)
@@ -103,6 +104,7 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "game_picture": "Fit", "start_song": "Off", "home_style": "Glass",
                     "ds_screens": "Left/Right", "ds_touch": "Right stick, R2", "app_full": "Off", "turn": "Off",
                     "sys_view": "Dashboard", "battery": "Auto", "share": "On", "attract": "On",
+                    "hotspot": "Off",                 # (Settings > WiFi > Hotspot: on again at start-up, if it was)
                     "group_talk": "On", "group_eyes": "On",   # (Apps > Group chat: they talk among themselves; a USB
                                                               # camera notices you: screens/group.py)
                     "glow_on": "Off", "glow_colour": "Off", "glow_follow": "Any of yours", "glow_bright": "25%",

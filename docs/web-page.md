@@ -85,7 +85,7 @@ each go to their own folder, and settings files like `radio.txt` go to Settings.
 be shown on the Pi's screen, downloaded or deleted. The Computers tab has your other computers' files.
 
 **Settings** has everything the Pi's Settings has, and each app's own: Home Assistant's address and
-token, WiFi, Weather's place, the Bot's computer, your stocks and coins, and this page's password.
+token, WiFi and its hotspot, Weather's place, the Bot's computer, your stocks and coins, and this page's password.
 It's easier than the Pi's keyboard for pasting a token. Passwords and tokens can be put in or taken
 off there, but the page never shows them. The home screen's backgrounds are there as little pictures to
 pick from.

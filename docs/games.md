@@ -84,8 +84,8 @@ the end of their address after it, like `raspberrypi (.62)`.
 Left on the home screen for five minutes while it's plugged in, your Bot gets bored, and one of the
 things it does is play one of your games by itself ([The Bot](bot.md) has the rest). With the AI player
 set up, it plays from where you were, on a copy of your saves; otherwise it's the game's own demo. START
-plays it for real, and any other button goes back. Settings > Attract mode turns it off, or Games only
-keeps it to games.
+plays it for real, and any other button goes back. Settings > Bot > Attract mode turns it off, or Games
+only keeps it to games.
 
 Press Y on the Games tab to find pictures of your games. If you have a lot of them, press Start to
 search by name (or by console, like `gba`), and B to see them all again.

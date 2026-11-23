@@ -8,7 +8,7 @@ import threading
 import time
 import urllib.parse
 
-from ..config import ACCENTS, WALLPAPERS, clean_name, edit_config, home_dir, read_config, settings_glob
+from ..config import ACCENTS, ATTRACT_CHOICES, WALLPAPERS, clean_name, edit_config, home_dir, read_config, settings_glob
 from ..homeassistant import ha_typed_url, ha_url, save_ha
 from ..pihole import dns_guess
 from ..screen import boot_resolution, res_name
@@ -111,13 +111,10 @@ class WebSettingsScreen:
         battery = choice("battery")
         if battery["value"] not in ("On", "Off"):
             battery["value"], battery["note"] = "Auto", self.saver_why()   # (Auto: on or off now, and why)
-        attract = choice("attract")
-        attract["note"] = ("Left idle, plugged in: the Bot gets bored and plays a game, looks through the camera or "
-                           "shows another app, till a button's pressed. Games only: just games.")
         sound = choice("sound", "Sound", root["sound"][1], value=self.sound_shown())   # (Bluetooth headphones, by
         if sound["value"] == "Auto" and self.sound_value() != "Auto":                   # name, while they have it)
             sound["note"] = self.sound_value()     # (Auto: HDMI, say)
-        sec("general", "General", [choice("clock"), battery, attract, sound])
+        sec("general", "General", [choice("clock"), battery, sound])
         sec("start", "Starting up", [choice("start"), choice("start_song")])
         sec("share", "Other Pietatos", [
             {"key": "name", "label": "This Pietato's name", "kind": "text", "value": self.setting("name") or "",
@@ -137,11 +134,14 @@ class WebSettingsScreen:
         status, tone = (w["status"] or "").replace(". X looks again", ""), "busy" if w["busy"] else ""
         if not w["busy"] and went and time.monotonic() - went[2] < WIFI_SAID:   # how connecting went, a while
             status, tone = went[1], "ok" if went[0] else "bad"
+        hot = self.hotspot_get() if self.hotspot_on() else None   # (making one: no networks to join meanwhile)
         sec("wifi", "WiFi", [{"key": "wifi", "label": "WiFi", "kind": "wifi", "radio": w["radio"],
-                              "here": self.current_ssid(), "busy": w["busy"], "status": status, "tone": tone,
-                              "nets": [{"ssid": n["ssid"], "signal": n["signal"], "secure": n["secure"],
-                                        "active": n["active"], "saved": n["ssid"] in w["saved"]}
-                                       for n in w["nets"]]}])
+                              "here": "" if hot else self.current_ssid(), "busy": w["busy"], "status": status,
+                              "tone": tone, "hosting": hot["name"] if hot else "",
+                              "nets": [] if hot else [{"ssid": n["ssid"], "signal": n["signal"], "secure": n["secure"],
+                                                       "active": n["active"], "saved": n["ssid"] in w["saved"]}
+                                                      for n in w["nets"]]}]
+            + (self.web_hotspot_rows() if w["radio"] else []))
 
         # Weather
         loc, finding = self.setting("location"), self.loc_status or ""
@@ -261,7 +261,10 @@ class WebSettingsScreen:
                   "names": {"on": "Yes", "off": "No"},
                   "note": "Its chat page shows only its face, big, on the whole screen, looking around the room. It "
                           "still talks and listens. SELECT on the Bot switches it on or off, and on its face up and "
-                          "down change its colour, left and right its background."}]
+                          "down change its colour, left and right its background."},
+                 choice("attract", "Attract mode", ATTRACT_CHOICES,
+                        note="Left idle, plugged in: the Bot gets bored and plays a game, looks through the camera or "
+                             "shows another app, till a button's pressed. Games only: just games.")]
         sec("bot", "Bot", rows, "It talks through Ollama on another computer on your network.")
 
         # the Bot's character: who it is, its look and its voice (on the Pi: X > Edit Character on the Bot)
@@ -813,6 +816,8 @@ class WebSettingsScreen:
         do = value.get("do")
         if w["busy"] and do != "look":
             return {"error": "One thing at a time. Try again in a moment"}
+        if do in ("look", "connect") and self.hotspot_on():
+            return {"error": "Turn the hotspot off first"}
         if do == "look":
             self.wifi_rescan()
             return {"ok": True}

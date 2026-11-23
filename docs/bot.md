@@ -51,8 +51,8 @@ else every minute or so: it plays one of your games, looks through your camera a
 camera that turns, like an OBSBOT, it turns to look around, then back), or puts up the weather, your
 stocks and coins, one of Apps, a slideshow of your photos or how the Pi's doing. Each time, it says
 something about it, on the screen and out loud between 8 in the morning and 10 at night. A or START keeps
-what it's showing, and any other button takes you back to where you were. Settings > Attract mode turns
-it off, or keeps it to games.
+what it's showing, and any other button takes you back to where you were. Settings > Bot > Attract mode
+turns it off, or keeps it to games.
 
 If that computer has a decision model (Ollama 0.35 or newer: `ollama pull nimble`), press X in
 Snake and the model plays. Beside the board you see its decisions as it makes them: the snake's moves,

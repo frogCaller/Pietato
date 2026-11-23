@@ -30,6 +30,10 @@ There are two sketches here. Use the one for your board:
 The LED is amber while it looks for your WiFi, green for a couple of seconds once it's on it, then dark until
 something plays on a Pietato.
 
+To take it away from home too, put your Pietatos' [hotspot](../docs/apps.md#hotspot) in `HOTSPOT_NAME` and
+`HOTSPOT_PASSWORD` (Settings > WiFi > Hotspot on a Pietato shows them). With no WiFi found, the board looks for
+your WiFi and the hotspot in turn, half a minute each.
+
 For a strip, set these at the top as well, before you upload:
 
 - `LED_COUNT`: how many LEDs the strip has.
@@ -56,6 +60,10 @@ If it doesn't work:
    password is `AP_PASS`, at the top of the sketch) and open `http://10.20.30.40:8000`.
 5. On that page, under Connection, tap Join Wi-Fi and pick your own WiFi. Your Pietatos find the board from
    then on, and its page is at `http://matrix.local:8000` too.
+
+For away from home, put your Pietatos' [hotspot](../docs/apps.md#hotspot) in `HOTSPOT_SSID` and `HOTSPOT_PASS`
+at the top of the sketch before you upload. With no WiFi found, the board tries your WiFi and the hotspot in turn,
+a minute each.
 
 Its page picks what the board shows: a liquid that pours as you tilt it, fire, scrolling text, a picture you
 paint, a few animations, and Music, which follows your Pietatos. The BOOT button steps through them. Keep the

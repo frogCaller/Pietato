@@ -123,8 +123,9 @@ check(secs["appearance"] == ("Appearance", ["wallpaper", "home_style", "accent",
 check(secs["screen"][0] == "Screen" and secs["screen"][1][0] == "screen"
       and set(secs["screen"][1]) <= {"screen", "resolution", "turn", "oled"},
       f"Screen, as there: Video size first, and what this one's screen has of the rest ({secs['screen']})")
-check(secs["general"] == ("General", ["clock", "battery", "attract", "sound"]),
-      f"General: the clock, battery saver, attract mode and sound ({secs['general']})")
+check(secs["general"] == ("General", ["clock", "battery", "sound"]),
+      f"General: the clock, battery saver and sound (attract mode's the Bot's) ({secs['general']})")
+check(secs["bot"][1][-1] == "attract", f"...Attract mode: the Bot's, last ({secs['bot'][1]})")
 labels = {r["key"]: r["label"] for s in out["sections"] for r in s["rows"]}
 check(labels["screen"] == "Video size" and secs["ha"][0] == "Home Assistant",
       f"Video size by its name, and Home Assistant by its own ({labels['screen']!r}, {secs['ha'][0]!r})")

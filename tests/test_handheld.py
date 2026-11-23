@@ -352,7 +352,8 @@ if not ONLY or "screen" in ONLY:
     m2.status_bar(ImageDraw.Draw(img), clock=False)
     check("on a Pi: no battery on the status bar, its signature as ever",
           sum(1 for p in pixels(img.crop((360, 0, 600, 40))) if p != (0, 0, 0)) == lit[3]
-          and len(m2.status_signature()) == len(sig1) - 1 == 6)   # (the handheld's has its battery at the end)
+          and len(m2.status_signature()) == len(sig1) - 1 == 7)   # (the handheld's has its battery at the end; and
+                                                                  #  whether it's making a hotspot: screens/hotspot.py)
     m2.leave()
     g.subprocess.run = REAL_RUN
 

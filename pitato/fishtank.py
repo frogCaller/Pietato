@@ -45,6 +45,11 @@ REMOTE_SETTLE = 0.15         # seconds another's fish, drawn where it is now (fr
 REMOTE_AHEAD = 0.6           # ...guessed on from what it said, this long at most
 GRID_MOST = 6                # cells across or down, at most
 GAP_MOST = 0.5               # the gap between tanks: as much as half a tank, at most
+SIDES = ((-1, 0, "← {}"), (1, 0, "{} →"), (0, -1, "↑ {}"), (0, 1, "↓ {}"))   # the tanks next door: their names at the
+                                                                        # edges they're through...
+SIDES_SECS = 5.0             # ...for this many seconds on the screen once it's opened, or once they change...
+SIDES_FADE = 0.8             # ...the last of it fading away
+SIDES_AWAY = 2.0             # seconds off the screen (another page, its options): opened again, as far as they go
 
 
 def fish_default(name):
@@ -568,6 +573,10 @@ class FishTank(Sim):
         self.aq = Aquarium(self.rng)                   # (media mode gives it its own: sim_game)
         self.pictures = {}
         self.made = 0                                  # (fish pictures drawn so far this frame)
+        self.near = None                               # the tanks next door, as their names were shown (SIDES)...
+        self.near_at = 0.0                             # ...from then: seconds it had been on the screen
+        self.shown = 0.0                               # seconds it's been on the screen
+        self.looked = time.monotonic()                 # (its last frame: long ago, and it's been opened again)
 
     def refit(self, w, h):
         self.w, self.h = w, h
@@ -577,9 +586,15 @@ class FishTank(Sim):
         self.aq.feed()
 
     def update(self, dt):
+        now = time.monotonic()
+        if now - self.looked > SIDES_AWAY:             # (opened again: the tanks next door said again)
+            self.near = None
+        else:
+            self.shown += now - self.looked            # (real seconds, however few frames a second it draws)
+        self.looked = now
         if dt > 0:
             self.clock += dt
-            self.aq.follow(time.monotonic())
+            self.aq.follow(now)
         return None
 
     def cell(self):
@@ -717,14 +732,24 @@ class FishTank(Sim):
                 tank.paste(t, (int(px - t.width / 2), int(py + length * 0.34)), t)
 
     def draw_sides(self, tank, fs, c, r):
-        """The tanks next door: their names at the edges they're through."""
+        """The tanks next door: their names at the edges they're through, for a few seconds once it's opened (or once
+        they change), then gone."""
         g = self.aq.grid
+        near = tuple(g.at.get((c + dc, r + dr)) for dc, dr, _ in SIDES)
+        if near != self.near:
+            self.near, self.near_at = near, self.shown
+        left = SIDES_SECS - (self.shown - self.near_at)
+        if left <= 0 or not any(near):
+            return
+        fade = min(1.0, left / SIDES_FADE)
         W, H, m = self.w * fs, self.h * fs, 6 * fs
-        for dc, dr, word in ((-1, 0, "← {}"), (1, 0, "{} →"), (0, -1, "↑ {}"), (0, 1, "↓ {}")):
-            name = g.at.get((c + dc, r + dr))
+        for (dc, dr, word), name in zip(SIDES, near):
             if not name:
                 continue
             t = self.tag(word.format(name), (200, 222, 236), fs)
+            if fade < 1:
+                t = t.copy()
+                t.putalpha(t.getchannel("A").point(lambda a: int(a * fade)))
             x = m if dc < 0 else W - t.width - m if dc > 0 else (W - t.width) // 2
             y = m if dr < 0 else H - t.height - m if dr > 0 else int(H * 0.42)
             tank.paste(t, (int(x), int(y)), t)
