@@ -95,7 +95,7 @@ class SettingsScreen:
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
                     and self.setting("turn") in (None, "Off"):
                 continue
-            elif key == "oled" and not self.oled_can():
+            elif key in ("oled", "oled_quiet") and not self.oled_can():
                 continue
             here.append((key, label, choices))
         return here

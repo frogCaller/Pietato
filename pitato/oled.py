@@ -9,7 +9,10 @@ slowly, FPS times a second. screens/oled.py has its setting (Settings > Screen >
 with its pins free); as it's turned on there, the bars come up a little once, so you can tell it's lit.
 Another of your Pietatos' music too, while this Pi plays none of its own: the one playing sends its bars as they're
 heard there (BarsOut: a UDP packet each, FPS times a second), and the one with the OLED takes them from your Pietatos
-only (BarsIn), whichever's playing, and shows them as they come."""
+only (BarsIn), whichever's playing, and shows them as they come.
+With no music for a while, it isn't left dark: it shows the time, the weather or a smiley face (what screens/oled.py's
+oled_quiet gives it: Settings > Screen > OLED with no music), dimmer than the bars, and moved a little every minute (an
+OLED left showing the same picture for hours wears it in)."""
 import errno
 import fcntl
 import glob
@@ -21,6 +24,10 @@ import threading
 import time
 
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+from .theme import FONT, FONT_BOLD, FONT_UI_BOLD
+from .weather import draw_wx
 
 OLED_W, OLED_H = 128, 32
 PAGES = OLED_H // 8          # its rows of bytes: each byte 8 pixels, one above the other (the top one its lowest bit)
@@ -45,6 +52,8 @@ INIT = (0xAE,                # the screen off, while it's set up
         0xAF)                # ...and on
 COLUMN = (0x04, 0x10)        # a row from its first column (after 0xB0 + the row)
 SCREEN_OFF = 0xAE
+CONTRAST = 0x81              # how bright, from the next byte (INIT's: BRIGHT)
+BRIGHT, DIM = 0x80, 0x40     # ...its bars, and its quiet picture (shown for hours: gentler on it, and on you at night)
 RESET_WAIT = 0.1             # seconds its reset is held each way
 
 SPI_IOC_WR_MODE, SPI_IOC_WR_BITS_PER_WORD, SPI_IOC_WR_MAX_SPEED_HZ = 0x40016B01, 0x40016B03, 0x40046B04
@@ -71,6 +80,11 @@ JUMP = 0.05                  # seconds out: what's fed isn't the next of it (a s
 QUIET_GAIN = 0.01            # the volume, at least, that what's fed is made up for
 IDLE_AFTER, IDLE_EVERY = 1.0, 0.25   # nothing fed and its bars down: looked at only now and then
 HELLO = 0.25                 # its bars as it's turned on: up this far once, and down again (so you can tell it's lit)
+QUIET_AFTER = 4.0            # seconds with no music (nothing fed, its bars down) before its quiet picture: not
+                             # between two songs
+DRIFT_SECS = 60.0            # its quiet picture moves a little this often...
+DRIFT_TIME, DRIFT_WX, DRIFT_FACE = (6, 2), (3, 1), (40, 1)   # ...this far each way at most (across, down): the
+                             # time, the weather, the face (narrow: it goes further)
 OLED_PORT = 5445             # another of yours' music, as bars, is taken here (UDP)
 BARS_MAGIC, BARS_VERSION = b"PO", 1
 BARS_HEAD = struct.Struct(">2sBd")   # ...a packet: magic, version, when it was sent (the sender's clock), then a
@@ -208,10 +222,18 @@ class Screen:
     def __init__(self, wires):
         self.wires = wires
         self.sent = [None] * PAGES
+        self.level = BRIGHT                            # (as INIT has it)
         wires.reset()
         for c in INIT:                                 # (each on its own, as Waveshare's driver sends them)
             wires.command((c,))
         self.show(BLANK)
+
+    def bright(self, level):
+        """How bright it is (0 to 255): sent only as it changes."""
+        if level != self.level:
+            self.wires.command((CONTRAST,))
+            self.wires.command((level,))
+            self.level = level
 
     def show(self, rows):
         for p, row in enumerate(rows):
@@ -242,6 +264,124 @@ def rows_of(px):
     lit = ((np.uint64(1) << cols) - np.uint64(1)) << (np.uint64(OLED_H) - cols)
     rows = lit.astype("<u4").view(np.uint8).reshape(OLED_W, PAGES).T.tobytes()
     return tuple(rows[p * OLED_W:(p + 1) * OLED_W] for p in range(PAGES))
+
+
+# ---- with no music: the time, the weather, a face -------------------------------------------------------------------
+def picture_rows(img):
+    """A picture (OLED_W by OLED_H, lit where it's 1) as the screen's PAGES rows of bytes: each byte 8 pixels, one
+    above the other, the top one its lowest bit."""
+    lit = np.asarray(img.convert("1"), dtype=np.uint8).reshape(PAGES, 8, OLED_W)
+    rows = np.packbits(lit, axis=1, bitorder="little").reshape(PAGES, OLED_W)
+    return tuple(bytes(r) for r in rows)
+
+
+def drift(slot, most):
+    """Where its quiet picture is moved to, the slot'th minute (DRIFT_SECS): (across, down), at most most each way.
+    A different place each minute, the same for that minute every time."""
+    h = (slot * 2654435761) & 0xFFFFFFFF
+    return h % (2 * most[0] + 1) - most[0], (h >> 16) % (2 * most[1] + 1) - most[1]
+
+
+_FONTS, _PICS = {}, {}
+
+
+def oled_font(path, size):
+    key = (path, size)
+    if key not in _FONTS:
+        _FONTS[key] = ImageFont.truetype(path, size)
+    return _FONTS[key]
+
+
+def quiet_time(text, ampm="", at=(0, 0)):
+    """The time, as big as fits (its AM or PM small beside it), in the middle (moved by at)."""
+    img = Image.new("1", (OLED_W, OLED_H), 0)
+    d = ImageDraw.Draw(img)
+    big, small = oled_font(FONT_UI_BOLD, 30), oled_font(FONT_BOLD, 9)
+    tw = d.textlength(text, font=big)
+    aw = d.textlength(ampm, font=small) + 3 if ampm else 0
+    x, y = (OLED_W - tw - aw) / 2 + at[0], OLED_H / 2 + at[1]
+    d.text((x, y), text, font=big, fill=1, anchor="lm")
+    if ampm:
+        d.text((x + tw + 3, d.textbbox((x, y), text, font=big, anchor="lm")[3]), ampm, font=small, fill=1, anchor="ls")
+    return img
+
+
+def wx_picture(name, size=28):
+    """A weather picture (weather.py's), as a shape to light."""
+    key = ("wx", name, size)
+    if key not in _PICS:
+        pic = draw_wx(name, size)
+        alpha = pic.getchannel("A") if pic.mode == "RGBA" else pic.convert("L")
+        _PICS[key] = alpha.point(lambda v: 255 if v > 120 else 0).convert("1")
+    return _PICS[key]
+
+
+def quiet_weather(temp, words, icon, at=(0, 0)):
+    """The weather now: its picture, how warm, and its words (on two lines, small; left out where they don't fit), in
+    the middle (moved by at)."""
+    img = Image.new("1", (OLED_W, OLED_H), 0)
+    d = ImageDraw.Draw(img)
+    pic, big = wx_picture(icon), oled_font(FONT_UI_BOLD, 26)
+    tw = d.textlength(temp, font=big)
+    room = OLED_W - 4 - pic.width - 6 - tw - 6
+    lines, font = [], None
+    for size in (10, 9):                               # (two lines at most: smaller, before they're left out)
+        font = oled_font(FONT, size)
+        lines = wrap_words(d, words, font, room)
+        if lines:
+            break
+    ww = max((d.textlength(line, font=font) for line in lines), default=0)
+    x = (OLED_W - (pic.width + 6 + tw + (6 + ww if lines else 0))) / 2 + at[0]
+    img.paste(1, (round(x), (OLED_H - pic.height) // 2 + at[1]), pic)
+    x += pic.width + 6
+    d.text((x, OLED_H / 2 + at[1]), temp, font=big, fill=1, anchor="lm")
+    x += tw + 6
+    for k, line in enumerate(lines):
+        y = OLED_H / 2 + at[1] + (k - (len(lines) - 1) / 2) * (font.size + 2)
+        d.text((x, y), line, font=font, fill=1, anchor="lm")
+    return img
+
+
+def wrap_words(d, words, font, room):
+    """Words on two lines at most, each no wider than room: [] where they don't fit."""
+    parts, lines = (words or "").split(), []
+    for word in parts:
+        if lines and d.textlength(lines[-1] + " " + word, font=font) <= room:
+            lines[-1] += " " + word
+        else:
+            lines.append(word)
+    if len(lines) > 2 or any(d.textlength(line, font=font) > room for line in lines):
+        return []
+    return lines
+
+
+SMILEY = 8                   # a smiley's drawn this many times as big, then made small (its curves smooth)
+
+
+def smiley():
+    """A smiley face, as a shape to light: two eyes and a smile, 34 pixels across and 22 down."""
+    if "smiley" not in _PICS:
+        s, w, h = SMILEY, 36, 24
+        big = Image.new("L", (w * s, h * s), 0)
+        d = ImageDraw.Draw(big)
+        cx = w * s / 2
+        for side in (-1, 1):                           # (its eyes: ovals, upright)
+            ex = cx + side * 11 * s
+            d.ellipse((ex - 3.2 * s, 1 * s, ex + 3.2 * s, 10 * s), fill=255)
+        d.arc((cx - 17 * s, -5 * s, cx + 17 * s, 23 * s), 30, 150, fill=255, width=round(2.6 * s))   # (its smile)
+        lit = np.asarray(big.resize((w, h), Image.LANCZOS)) >= 128
+        lit |= lit[:, ::-1]                            # (the same both sides, to the pixel)
+        pic = Image.fromarray(lit.astype(np.uint8) * 255).convert("1")
+        _PICS["smiley"] = pic.crop(pic.getbbox())
+    return _PICS["smiley"]
+
+
+def quiet_face(at=(0, 0)):
+    """A smiley face, in the middle (moved by at)."""
+    img = Image.new("1", (OLED_W, OLED_H), 0)
+    pic = smiley()
+    img.paste(1, ((OLED_W - pic.width) // 2 + at[0], (OLED_H - pic.height) // 2 + at[1]), pic)
+    return img
 
 
 class Heard:
@@ -453,10 +593,11 @@ class OledBars:
     """The bars on the OLED, FPS times a second, on a thread of its own: each bar up to how loud its piece of the sound
     heard now is, and falling back slowly. With nothing fed and its bars down, the screen's dark and it's looked at
     only now and then (what's fed wakes it). Another of yours' bars (told) are shown while this Pi's own sound isn't
-    fed."""
+    fed. quiet(now): its picture with no music for a while (QUIET_AFTER), as rows (None: dark), shown dimmer."""
 
-    def __init__(self, screen, clock=time.monotonic, run=True):
-        self.screen, self.clock = screen, clock
+    def __init__(self, screen, clock=time.monotonic, run=True, quiet=None):
+        self.screen, self.clock, self.quiet = screen, clock, quiet
+        self.resting = False                           # (its quiet picture's on the screen)
         self.heard_of = Heard()
         self.h = np.zeros(BARS)                        # each bar now (0 to 1)
         self.px = np.zeros(BARS, dtype=np.int64)       # ...and as it's drawn (pixels)
@@ -512,11 +653,31 @@ class OledBars:
     def idle(self, now):
         return not self.px.any() and now - self.fed > IDLE_AFTER
 
+    def rest(self, now):
+        """No music for a while, its bars down: its quiet picture, dimmer (as it changes). Music again (even its
+        quiet start): dark at once, as bright as ever, for its bars."""
+        rows = None
+        if self.quiet is not None and not self.px.any() and now - self.fed > QUIET_AFTER:
+            rows = self.quiet(now)
+        if rows is None and not self.resting:
+            return
+        with self.writing:
+            if self.closed:
+                return
+            if rows is None:
+                self.screen.show(rows_of(self.px))
+                self.screen.bright(BRIGHT)
+            else:
+                self.screen.bright(DIM)
+                self.screen.show(rows)
+        self.resting = rows is not None
+
     def run(self):
         due = self.clock()
         while not self.closed:
             now = self.clock()
             try:
+                self.rest(now)
                 self.frame(now)
             except Exception as ex:                    # (the SPI gone wrong, say: tried again in a moment; never
                 print(f"oled: the screen: {ex!r}", flush=True)   # its thread's end)

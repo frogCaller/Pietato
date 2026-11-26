@@ -233,7 +233,10 @@ then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC 
 - When its own Pi isn't playing, they follow whichever of your other Pietatos is, as an LED backlight does. Both
   need Settings > Share with other Pietatos on. A song that was already playing when the OLED's Pi came on may
   not show: the next one does.
-- They're the same at any volume, and dark when nothing plays.
+- They're the same at any volume.
+- With no music for a few seconds, it shows the time instead, a little dimmer than the bars and moved a little
+  each minute so it doesn't wear in. Settings > Screen > OLED with no music picks the time, the weather (the
+  Weather app's, for where you set it), a smiley face, all three in turn, or nothing.
 - With the OLED on, music takes a moment longer to start: it plays through the player that knows when each
   sound is heard, as it does for an LED backlight's beat.
 - The HAT uses the pin an [LED backlight](#led-backlight)'s LEDs are wired to, so turning one on turns the

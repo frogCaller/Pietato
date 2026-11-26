@@ -57,6 +57,7 @@ WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings >
               "Rainbow", "Snow", "Space", "Black", "Picture"]       # the rest. How each looks: home.py's WALLS
 SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Screen > Video size; Y while a video plays
 OLED_CHOICES = ["Off", "Music bars"]               # Settings > Screen > Waveshare 2.23 OLED (screens/oled.py)
+OLED_QUIET = ["Time", "Weather", "Smiley", "All three", "Nothing"]   # ...and what it shows with no music
 ATTRACT_CHOICES = ["On", "Games only", "Off"]      # Settings > Bot > Attract mode: left idle, plugged in, the Bot gets
                                                    # bored and finds something to do (screens/attract.py)
 SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page of its own). (Where you are and the
@@ -96,6 +97,7 @@ SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on 
                                                                     # clockwise (not there on the GPi Case's own)
         ("oled", "Waveshare 2.23 OLED", OLED_CHOICES),   # that OLED HAT on the Pi's pins: bars that move with your
                                                          # music (only on a Pi with its pins free: screens/oled.py)
+        ("oled_quiet", "OLED with no music", OLED_QUIET),   # ...and with none: the time, the weather, a smiley face
     ],
 }
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
@@ -105,6 +107,7 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "ds_screens": "Left/Right", "ds_touch": "Right stick, R2", "app_full": "Off", "turn": "Off",
                     "sys_view": "Dashboard", "battery": "Auto", "share": "On", "attract": "On",
                     "hotspot": "Off",                 # (Settings > WiFi > Hotspot: on again at start-up, if it was)
+                    "oled_quiet": "Time",             # (Settings > Screen > OLED with no music)
                     "group_talk": "On", "group_eyes": "On",   # (Apps > Group chat: they talk among themselves; a USB
                                                               # camera notices you: screens/group.py)
                     "glow_on": "Off", "glow_colour": "Off", "glow_follow": "Any of yours", "glow_bright": "25%",

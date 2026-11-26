@@ -8,19 +8,23 @@ of them at a time, so turning one on turns the other off. The first time, the Pi
 it isn't), and it's lit after a restart.
 Another of your Pietatos' music moves its bars too, while this Pi plays none of its own, as an LED backlight follows
 whichever of yours is playing: its beacon says its OLED's lit (oled_beacon), each of your others then plays its music
-on party mode's player and sends its bars here as they're heard there (oled.py's BarsOut, BarsIn)."""
+on party mode's player and sends its bars here as they're heard there (oled.py's BarsOut, BarsIn).
+With no music for a while, it shows something (Settings > Screen > OLED with no music): the time, the weather here
+(the Weather app's, while it isn't too old: else the time), a smiley face, all three in turn, or nothing."""
 import errno
 import os
 import time
 import urllib.parse
 
-from ..config import OLED_CHOICES, SETTINGS_PAGES
+from ..config import OLED_CHOICES, OLED_QUIET, SETTINGS_PAGES
 from ..glow import BLOCK, CONFIG_TXT, PI_MODEL, turn_spi_on
 from ..handheld import is_handheld
 from ..library import LISTEN_KINDS
-from ..oled import BarsIn, BarsOut, OLED_PORT, OLED_SPI, OledBars, Screen, wires
+from ..oled import (BarsIn, BarsOut, DRIFT_FACE, DRIFT_SECS, DRIFT_TIME, DRIFT_WX, OLED_PORT, OLED_SPI, OledBars,
+                    Screen, drift, picture_rows, quiet_face, quiet_time, quiet_weather, wires)
 from ..party import PartyProc
 from ..system import is_pc, read_file
+from ..weather import wx_icon_name, wx_words
 
 OLED_BARS = OLED_CHOICES[1]
 OLED_LOOK = 2.0              # seconds between looks for your others' OLEDs (where this one's bars go)
@@ -29,6 +33,8 @@ OLED_OUT_QUIET = 10.0        # seconds with no music for them: its bars' sender 
 OLED_LABEL = next(label for key, label, _ in SETTINGS_PAGES["display"] if key == "oled")   # (its row's name)
 OLED_NOTES = {errno.EBUSY: "Its pins are in use", errno.ENODEV: "No GPIO here"}
 RESTART = "Restart the Pi"   # its note, with SPI just turned on in config.txt
+QUIET_TURN = 15.0            # All three: each of them this many seconds
+QUIET_WX_OLD = 3 * 3600      # seconds old the weather's shown at most (older: the time instead)
 
 
 class OledScreen:
@@ -40,6 +46,9 @@ class OledScreen:
     oled_out = None          # this one's music, as bars, to your others' OLEDs (oled.BarsOut)
     oled_to = ()             # ...where they are: [(address, port)]
     oled_seen = 0.0          # ...and when they were last looked for
+    oled_quiet_key = None    # what it showed last with no music (quiet), and its rows
+    oled_quiet_rows = None
+    oled_quiet_said = False  # (what went wrong drawing it: said once)
 
     def oled_can(self):
         """An OLED HAT can go on this one: a Pi (not a PC or a handheld), and not in a GPi Case (its screen has the
@@ -77,10 +86,13 @@ class OledScreen:
     def oled_tick(self, now):
         """(Media mode's main loop: every couple of seconds.) Your others' OLEDs, looked for: this one's music on
         party mode's player has its bars sent to them (till there's been none for a while). One's just turned up, and
-        a song's only just begun on the plain player (which says nothing of its sound): moved over, from where it is."""
+        a song's only just begun on the plain player (which says nothing of its sound): moved over, from where it is.
+        The weather, for this one's OLED with no music: fetched again when it's due."""
         if now - self.oled_seen < OLED_LOOK:
             return
         self.oled_seen = now
+        if self.oled is not None and self.setting("oled_quiet") in ("Weather", "All three"):
+            self.weather.refresh()                     # (only does anything when it's due)
         was, to = self.oled_to, tuple(self.oled_peers())
         self.oled_to = to
         out = self.oled_out
@@ -157,7 +169,7 @@ class OledScreen:
             self.oled_note = OLED_NOTES.get(ex.errno) or ex.strerror or "It didn't start"
             print(f"oled: not lit: {ex}", flush=True)
             return
-        self.oled = OledBars(screen)
+        self.oled = OledBars(screen, quiet=self.oled_quiet)
         print(f"oled: the OLED's on ({spi})", flush=True)
         try:                                           # (your others' music, as bars: taken from them, for it)
             self.oled_in = BarsIn(self.oled.told, self.glow_named, port=getattr(self, "oled_port", OLED_PORT))
@@ -206,6 +218,50 @@ class OledScreen:
             return
         pos = (self.pos or 0.0) if self.kind == "audio" else 0.0
         self.play(self.queue, self.qi, start=max(0.0, pos), show=False)
+
+    # -- with no music: the time, the weather, a face ---------------------------------------------------------------
+    def oled_quiet(self, now):
+        """(The OLED's thread, with no music for a while.) Its picture (Settings > Screen > OLED with no music), as the
+        screen's rows: the time, the weather (the time instead, while there's none here that isn't too old), a smiley
+        face, or each in turn; moved a little each minute. None: nothing (dark). Drawn only as it changes."""
+        try:
+            pick = self.setting("oled_quiet") or OLED_QUIET[0]
+            if pick not in OLED_QUIET[:-1]:
+                return None
+            wall = getattr(self, "oled_wall", time.time)()   # (the tests' own clock)
+            wx = self.oled_weather(wall)
+            if pick == "All three":
+                turn = ["Time"] + (["Weather"] if wx else []) + ["Smiley"]
+                pick = turn[int(wall // QUIET_TURN) % len(turn)]
+            if pick == "Weather" and not wx:
+                pick = "Time"
+            slot = int(wall // DRIFT_SECS)
+            if pick == "Time":
+                t = time.localtime(wall)
+                ampm = "" if self.setting("clock") == "24-hour" else time.strftime("%p", t)
+                key = ("time", self.clock_text(t, ampm=False), ampm, drift(slot, DRIFT_TIME))
+            elif pick == "Weather":
+                key = ("weather",) + wx + (drift(slot, DRIFT_WX),)
+            else:
+                key = ("face", drift(slot, DRIFT_FACE))
+            if key != self.oled_quiet_key:
+                img = (quiet_time(key[1], key[2], at=key[3]) if pick == "Time" else
+                       quiet_weather(*key[1:4], at=key[4]) if pick == "Weather" else quiet_face(at=key[1]))
+                self.oled_quiet_rows, self.oled_quiet_key = picture_rows(img), key
+            return self.oled_quiet_rows
+        except Exception as ex:                        # (a font missing, say: dark, as before; said once)
+            if not self.oled_quiet_said:
+                self.oled_quiet_said = True
+                print(f"oled: its picture with no music: {ex!r}", flush=True)
+            return None
+
+    def oled_weather(self, wall):
+        """The weather here for it: (how warm, its words, its picture's name), or None (none, or too old)."""
+        w = getattr(self, "weather", None)
+        wx = w.data if w is not None else None
+        if not wx or wx.get("temp") is None or wall - w.t > QUIET_WX_OLD:
+            return None
+        return self.deg(wx["temp"]), wx_words(wx.get("code"))[0], wx_icon_name(wx.get("code"), wx.get("is_day", True))
 
     def web_oled_row(self):
         """Its row in the web page's Settings (None where there can't be one)."""
