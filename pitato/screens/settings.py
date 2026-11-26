@@ -8,6 +8,7 @@ import time
 
 from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
 from ..config import ATTRACT_CHOICES, SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
+from .oled import HAT_FLIP
 from ..system import has_desktop, is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
                       resolution_choices, set_boot_video, set_terminal_turn, set_turn, sound_away, sound_cards,
@@ -83,7 +84,8 @@ class SettingsScreen:
     def settings_here(self, rows):
         """These rows, as they are on this Pietato: Sound's outputs are this Pi's (and Bluetooth headphones connected
         to it), Resolution is there for a TV or monitor, Rotate screen for any screen but the GPi Case's own (unless
-        it's turned already: to turn it back), and the OLED on a Pi with its pins free (screens/oled.py)."""
+        it's turned already: to turn it back), and the OLED and the e-ink on a Pi with its pins free
+        (screens/oled.py, screens/eink.py), with upside down under them while one of them is on, named for it."""
         here = []
         for key, label, choices in rows:
             if key == "sound":
@@ -95,8 +97,14 @@ class SettingsScreen:
             elif key == "turn" and getattr(self, "case", None) and not self.res_info() \
                     and self.setting("turn") in (None, "Off"):
                 continue
-            elif key in ("oled", "oled_quiet") and not self.oled_can():
+            elif key == "oled" and not self.oled_can():
                 continue
+            elif key == "eink" and not self.eink_can():
+                continue
+            elif key == HAT_FLIP:
+                if not self.hat_on():
+                    continue
+                label = self.hat_flip_label()
             here.append((key, label, choices))
         return here
 
@@ -178,6 +186,10 @@ class SettingsScreen:
             self.glow_pick(key, value)                 # (the LED backlight's grid, as it's set now)
         elif key == "oled":
             self.oled_pick(value)                      # (the OLED HAT: lit, or dark)
+        elif key == "eink":
+            self.eink_pick(value)                      # (the e-Paper HAT: drawn on, or white and off)
+        elif key == HAT_FLIP:
+            self.hat_flip_pick(value)                  # (...whichever's on, which way up)
         else:
             self.set_setting(key, value)
             if (key, value) == ("start", "Desktop"):   # (how to come back, said as it's picked)
@@ -846,6 +858,7 @@ class SettingsScreen:
                      self.sound_value() if key == "sound" else
                      self.saver_value() if key == "battery" else
                      self.oled_value() if key == "oled" else
+                     self.eink_value() if key == "eink" else
                      self.res_value() if key == "resolution" else self.setting(key))
             x1 = W - 28
             if extra and on:                          # ◀ value ▶

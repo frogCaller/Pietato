@@ -19,7 +19,11 @@ while it records. SELECT held drops the last layer (the one being recorded, if o
 stops every sound. Its player plays the loop itself, each sound at its very frame (soundplay.py). The beat: a tempo,
 and which beat's heard when, shared with your other Pietatos that have their Soundboard open (beatlink.py), so their
 loops keep time with this one's. Notes: A, B, X or Y held, and the d-pad plays its sound up and down a scale (▲ a note
-higher, ▼ lower, ▶ the same again, ◀ back to its own), the note on its tile; recording, they go in the loop."""
+higher, ▼ lower, ▶ the same again, ◀ back to its own), the note on its tile; recording, they go in the loop.
+
+Its card also opens Bounce (screens/bounce.py) and the Sequencer (screens/sequencer.py), each on this page in place of
+the buttons, with this player and this beat: the Sequencer's cells are in the loop its player's told, with the layers
+recorded here."""
 import json
 import math
 import os
@@ -41,6 +45,7 @@ from ..screen import aplay_device, sound_place
 from ..theme import ACCENT, BODY, co_mix, LINE, MUTED, ROW, TEXT
 from ..util import home_folder
 from .bounce import BOUNCE_HOW
+from .sequencer import SEQ_HOW
 
 PLAYER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soundplay.py")
 BOARD_NICE = -8                  # its player's priority: ahead of the menus (a late sound is heard)
@@ -124,6 +129,13 @@ class Board:
         self.bounce_sel = 0            # ...the slider ▲▼ have picked
         self.bounce_bpm = None         # ...the tempo its echo was told
         self.pitch = {}                # a sound -> its own note, as its player could tell (None: it hasn't one)
+        self.seq = None                # the Sequencer's tune (sequencer.py: [its grid, the lead's notes]), once had
+        self.seq_was = None            # ...as it was before the last change to all of it (to take that back)
+        self.seq_up = False            # ...its page is up (screens/sequencer.py)
+        self.seq_on = False            # ...it's playing: its cells are in the loop
+        self.seq_at = (0, 0)           # ...the cell ◀▶▲▼ have moved to (row, step)
+        self.seq_rows = None           # ...its rows' sounds, as last worked out (the setting, your sounds then, them)
+        self.bars = None               # ...the sound's bars as its player last said them: (when, each 0 to 1)
 
     def bank(self):
         return self.banks[self.at] if 0 <= self.at < len(self.banks) else None
@@ -198,6 +210,7 @@ class SoundboardScreen:
         if self.board_space():
             self.board_tell(do="space", v=self.board_space() / 10)
         self.bounce_told()                             # (Bounce, if it's up: its effects, its sound's own note)
+        self.seq_told()                                # (the Sequencer: its lead's sound, its bars)
         if not self.voice.speaking:
             self.board_tell(do="warm")
 
@@ -241,7 +254,9 @@ class SoundboardScreen:
                 except ValueError:
                     continue
                 if isinstance(said, dict):
-                    self.soon(lambda said=said: self.board_said(proc, said))
+                    if said.get("is") == "bars" and self.seq_heard(proc, said):
+                        continue                       # (the Sequencer's bars, 20 times a second: kept for its page's
+                    self.soon(lambda said=said: self.board_said(proc, said))   # next frame, and that's all)
                     self.wake()
         except (OSError, ValueError):
             pass
@@ -277,6 +292,8 @@ class SoundboardScreen:
         if b is None:
             return
         self.bounce_keep()
+        self.seq_keep()
+        b.bars = None
         proc, b.proc = b.proc, None
         if b.rec is not None:
             self.board_rec_over()
@@ -360,6 +377,9 @@ class SoundboardScreen:
             b.rec["drawn"] = now
         elif what == "recorded":
             self.board_recorded(said)
+        elif what == "bars":
+            self.seq_said(said)                        # (the Sequencer's: drawn at its own pace)
+            return
         else:
             return
         self.dirty = True
@@ -415,7 +435,8 @@ class SoundboardScreen:
                 b.at = at[0]
                 self.toast(f"{B.title(new[-1])} is on {PAD_SAY[at[1]]} in {banks[at[0]]['name']}", 3)
         self.board_load()
-        self.dirty = True
+        self.board_loop_tell()                         # (the Sequencer's rows: one whose sound's gone has the one it
+        self.dirty = True                              #  starts with again)
 
     def board_keep(self):
         """The banks as they are, written to their file (yours)."""
@@ -452,11 +473,12 @@ class SoundboardScreen:
                 path = B.path_of(sid, folder) if sid else None
                 if path:
                     sounds.append([sid, path])
-        extra = self.bounce_sound_id() if b.bounce is not None else "Tones/"
-        if not extra.startswith("Tones/") and extra not in {sid for sid, _ in sounds}:
-            path = B.path_of(extra, folder)            # (Bounce's sound, on no button: wanted first)
-            if path:
-                sounds.insert(0, [extra, path])
+        extra = [self.bounce_sound_id()] if b.bounce is not None else []
+        for sid in extra + self.seq_extra():           # (Bounce's sound, and the Sequencer's drums: one that's on no
+            if not sid.startswith("Tones/") and sid not in {s for s, _ in sounds}:   # button is wanted first)
+                path = B.path_of(sid, folder)
+                if path:
+                    sounds.insert(0, [sid, path])
         names = {sid for sid, _ in sounds}
         b.ready = {s: v for s, v in b.ready.items() if s in names}
         b.bad = {s: v for s, v in b.bad.items() if s in names}
@@ -640,18 +662,21 @@ class SoundboardScreen:
         else:
             s.own_hints = many + [("SELECT", "Record a loop"), ("START", "More"), ("HOME", "Back")]
         now = time.monotonic()
-        if b.take is not None or b.layers:             # (the loop: recording or playing, where it is, how fast)
-            c = self.board_clock()
-            n = BAR * self.board_bars()
-            at = self.board_beat(now) % n
+        if b.take is not None or b.layers or b.seq_on:   # (the loop: recording or playing, where it is, how fast;
+            c = self.board_clock()                       # the Sequencer playing under these buttons, as one: a bar)
+            bars = self.board_bars() if b.take is not None or b.layers else 1
+            at = self.board_beat(now) % (BAR * bars)
             s.loop = {"rec": b.take is not None, "layers": len(b.layers), "bar": int(at // BAR) + 1,
-                      "beat": int(at % BAR) + 1, "bpm": round(c.bpm), "bars": self.board_bars()}
+                      "beat": int(at % BAR) + 1, "bpm": round(c.bpm), "bars": bars}
+            if b.seq_on:
+                s.loop["seq"] = True
             s.clock = (c.bpm, c.b0, c.t0)
         else:
             s.loop = s.clock = None
         s.held_note = (b.note_pad, self.board_note_name(b.note)) if b.note_pad is not None else None
         s.fps = self.sim_fps()
         self.bounce_page(s)                            # (Bounce, if it's up: its shape and balls, its buttons)
+        self.seq_page(s)                               # (...or the Sequencer: its grid, its buttons)
 
     def board_trouble(self):
         why = (self.board.sound_why or "").lower()
@@ -685,12 +710,18 @@ class SoundboardScreen:
             b.busy_said = now
             self.toast("No sound: " + self.board_trouble(), 3)
 
-    def board_sound(self, sid, pad=None, semis=0):
+    def board_sound(self, sid, pad=None, semis=0, gain=1.0):
         """A sound played (its player's told), and your LEDs lit by it (screens/glow.py's glow_flash): a pulse as it's
         heard (a moment on: what's mixed waits its turn, then the sound card's buffer), in its button's colour, kept
-        while it plays (board_tick). semis: as a note, that many semitones from its own."""
+        while it plays (board_tick). semis: as a note, that many semitones from its own. gain: how loud, of the sound
+        as it is (the Sequencer's cells, heard as they are in its tune)."""
         b = self.board
-        if not self.board_tell(**({"do": "play", "id": sid, "semis": semis} if semis else {"do": "play", "id": sid})):
+        what = {"do": "play", "id": sid}
+        if semis:
+            what["semis"] = semis
+        if gain != 1.0:
+            what["gain"] = gain
+        if not self.board_tell(**what):
             return False
         if pad is None:
             bank = b.bank()
@@ -708,6 +739,8 @@ class SoundboardScreen:
         b = self.board_open()
         if b.bounce is not None and b.rec is None and b.placing is None:
             return self.press_bounce(name, repeat)     # (Bounce: its buttons, screens/bounce.py)
+        if b.seq_up and b.rec is None and b.placing is None:
+            return self.press_seq(name, repeat)        # (the Sequencer: its buttons, screens/sequencer.py)
         if repeat:
             return None                                # (held down: once is once)
         if b.rec is not None:                          # recording: A keeps it, B drops it
@@ -863,10 +896,10 @@ class SoundboardScreen:
         self.dirty = True
 
     def board_clear(self):
-        """START held: the loop cleared, and every sound stopped."""
+        """START held: the loop cleared, and every sound stopped (the Sequencer too: its tune's kept)."""
         b = self.board
         had = bool(b.layers or b.take)
-        b.layers, b.take = [], None
+        b.layers, b.take, b.seq_on = [], None, False
         self.board_loop_tell()
         self.board_tell(do="stop")
         self.toast("Loop cleared" if had else "Stopped", 2)
@@ -898,7 +931,7 @@ class SoundboardScreen:
             return
         layers = b.layers + ([b.take] if b.take is not None else [])
         hits = [[round(p, 5), sid, semis, round(after, 4), beats]
-                for beats, hs in layers for p, sid, semis, after in hs]
+                for beats, hs in layers for p, sid, semis, after in hs] + self.seq_hits()
         click = b.take is not None and self.setting("board_click") != "Off"
         what = {}
         if hits or click:
@@ -971,6 +1004,8 @@ class SoundboardScreen:
         b = self.board
         if b.card == "bounce":
             return self.bounce_rows()
+        if b.card == "seq":
+            return self.seq_rows()
         if b.card == "kept":
             at = B.where(b.banks, b.placing) if b.placing else None
             stay = f"Leave it on {PAD_SAY[at[1]]} in {b.banks[at[0]]['name']}" if at else "Leave it off the buttons"
@@ -986,7 +1021,7 @@ class SoundboardScreen:
                  ("click", "Click while recording", "Off" if self.setting("board_click") == "Off" else "On"),
                  ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major"),
                  ("space", "Reverb", str(self.board_space()) if self.board_space() else "Off"),
-                 ("bounce", "Bounce", None)]
+                 ("seq", "Sequencer", None), ("bounce", "Bounce", None)]
         return rows
 
     def board_card_shut(self):
@@ -1000,6 +1035,8 @@ class SoundboardScreen:
         b.held.pop("start", None)                      # (anything pressed on the card: START wasn't being held)
         if b.card == "bounce":
             return self.press_bounce_card(name, repeat)
+        if b.card == "seq":
+            return self.press_seq_card(name, repeat)
         rows = self.board_rows()
         sel = self.sim_opts % len(rows)
         key = rows[sel][0]
@@ -1033,6 +1070,8 @@ class SoundboardScreen:
             self.board_rec_start()
         elif name == "a" and key == "bounce":
             self.bounce_start(time.monotonic())
+        elif name == "a" and key == "seq":
+            self.seq_start(time.monotonic())
         elif name in ("a", "b", "start"):              # (B too: HOME's the way back to Apps, not B)
             self.board_card_shut()
         elif name == "select":
@@ -1072,6 +1111,8 @@ class SoundboardScreen:
             return [("▲▼", "Choose"), ("A", "OK"), ("SELECT", "Hear it"), ("B", "Not now")]
         if b.card == "bounce":
             return self.bounce_card_hints()
+        if b.card == "seq":
+            return self.seq_card_hints()
         if value is None:
             return [("▲▼", "Choose"), ("A", "Record" if key == "rec" else "Open"), ("START", "Done"),
                     ("HOME", "Back to Apps")]
@@ -1096,6 +1137,8 @@ class SoundboardScreen:
             return self.rows_card(title, [f"{secs:.1f} seconds long." if secs else "Your new sound."], rows, False)
         if b.card == "bounce":
             return self.rows_card("Bounce", BOUNCE_HOW, rows)
+        if b.card == "seq":
+            return self.rows_card("Sequencer", SEQ_HOW, rows)
         return self.rows_card(LIBRARY[self.tab].get("title") or LIBRARY[self.tab]["name"], BOARD_HOW, rows)
 
     def rows_card(self, title, lede, rows, press_a=True):

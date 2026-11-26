@@ -10,13 +10,15 @@ one). The web page's Soundboard adds, records, renames and deletes them, and put
 This draws the page: the bank's name (and a dot for each bank), and the buttons laid out as they are on a controller,
 each with its sound's name, lit from behind in its button's colour, brightly while it plays; the loop, recording or
 playing, with the beat it's on, how far round it is and the tempo; and a note played with A, B, X or Y held, on that
-button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py).
+button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py). Or the
+Sequencer: its grid of sounds and steps, and the sound as bars under it (sequencer.py).
 (soundbank.py: the sounds and banks. soundplay.py: the player, a process of its own. screens/soundboard.py: its
 buttons, and what media mode does for it.)"""
 import math
 import time
 
 from . import bounce as BN
+from . import sequencer as SQ
 from .sims import Sim
 from .theme import ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
 
@@ -56,6 +58,9 @@ class Soundboard(Sim):
         self.clock = None               # ...its beat: (tempo, beat b0, heard at t0): drawn again on each beat
         self.held_note = None           # a note being played: (the button held, the note's name)
         self.bounce = None              # Bounce, while it's up (screens/bounce.py's bounce_page): drawn instead
+        self.seq = None                 # the Sequencer, while it's up (screens/sequencer.py's seq_page): drawn instead
+        self.seq_bars = [0.0] * SQ.BARS   # ...its bars as they're drawn (each falls back slowly), and when they were
+        self.seq_bars_at = 0.0
         self.fps = 20                   # ...frames a second, while its balls move
         self.taps = []                  # where its buttons are on the screen: (box, the button)
         self.fonts = {}
@@ -74,6 +79,8 @@ class Soundboard(Sim):
     def frame_in(self, wall):
         if self.bounce is not None:                    # (Bounce: frame by frame while it plays, else when it changes)
             return STILL if self.bounce["paused"] else 1.0 / max(1, self.fps)
+        if self.seq is not None:                       # (the Sequencer: frame by frame while there's sound to show)
+            return 1.0 / max(1, self.fps) if self.seq_moving(time.monotonic()) else STILL
         if self.clock is None:
             return STILL
         bpm, b0, t0 = self.clock                       # (the loop: drawn again as each beat's heard)
@@ -251,6 +258,8 @@ class Soundboard(Sim):
         r, b = (6, 5) if big else (5, 4)
         d.ellipse((x, mid - r, x + 2 * r, mid + r), fill=red if lp["rec"] else _HUES["Green"])
         words = "Recording" if lp["rec"] else ("Loop" if lp["layers"] == 1 else f"Loop, {lp['layers']} layers")
+        if lp.get("seq") and not lp["rec"] and not lp["layers"]:
+            words = "Sequencer"                        # (its tune alone, playing under these buttons)
         d.text((x + 2 * r + 7, mid), words, font=f, fill=TEXT, anchor="lm")
         x += 2 * r + 7 + f.getlength(words) + 10
         for k in range(1, 5):
@@ -334,9 +343,86 @@ class Soundboard(Sim):
                 "caption": self.font(17 if big else 12),
                 "info_h": 44 if big else 28, "knob": 9 if big else 6, "track": 6 if big else 4}
 
+    # -- the Sequencer -------------------------------------------------------------------------------------------------
+    def seq_moving(self, now):
+        """Its page changes by itself just now: it's playing (the bar goes along it), or there's sound (its bars up,
+        or still falling)."""
+        v = self.seq
+        if v["paused"]:
+            return False
+        heard = v["bars"] is not None and now - v["bars"][0] < SQ.BARS_KEPT and any(v["bars"][1])
+        return v["playing"] or heard or max(self.seq_bars) > 0.01
+
+    def seq_fonts(self):
+        big = self.w >= 960
+        return {"bold": self.font(22 if big else 18, bold=True), "small": self.font(15 if big else 13),
+                "row": self.font(19 if big else 14), "row_b": self.font(19 if big else 14, bold=True),
+                "note": self.font(15 if big else 11, bold=True), "arrow": 6 if big else 5}
+
+    def seq_cells(self, cw, ch, colour):
+        """A cell that's on, as it's drawn (and as it is while the bar's on it): pictures kept."""
+        from .fine import scale
+        key = ("seqcell", cw, ch, colour, BG, scale())
+        tiles = self.tiles.get(key)
+        if tiles is None:
+            tiles = self.tiles[key] = {head: SQ.lit_tile(cw, ch, colour, head, BG) for head in (False, True)}
+        return tiles
+
+    def seq_still(self, lay, fonts, tiles):
+        """Its page with the bar nowhere on it and no bars: a picture kept till something on it changes (the bar and
+        the bars are drawn frame by frame, and words are slow to draw on a Pi Zero)."""
+        from .fine import Image, ImageDraw, scale
+        v = self.seq
+        key = ("seq", v["grid"], v["names"], v["high"], tuple(v["rows"]), v["cursor"], v["key"], v["scale"],
+               v["bpm"], v["playing"], v["colour"], self.w, self.h, scale(), BG)
+        tile = self.tiles.get(key)
+        if tile is None:
+            tile = Image.new("RGB", (self.w, self.h), BG)
+            d = ImageDraw.Draw(tile)
+            SQ.draw_top(d, 0, 0, self.w, v, fonts, TOP)
+            SQ.draw_grid(tile, d, lay, v, fonts, tiles)
+            for k in [k for k in self.tiles if k[0] == "seq"]:
+                del self.tiles[k]                      # (the one before: not wanted again soon)
+            self.tiles[key] = tile
+        return tile
+
+    def seq_levels(self, now):
+        """Its bars as they're drawn now: up at once to what its player last said, falling back slowly."""
+        v = self.seq
+        said = v["bars"]
+        fresh = said[1] if said is not None and now - said[0] < SQ.BARS_KEPT else ()
+        fall = SQ.BARS_FALL ** (max(0.0, min(1.0, now - self.seq_bars_at)) * 20.0)
+        self.seq_bars_at = now
+        self.seq_bars = [max(fresh[k] if k < len(fresh) else 0.0, self.seq_bars[k] * fall) for k in range(SQ.BARS)]
+        return self.seq_bars
+
+    def draw_seq(self, img, x0, y0):
+        """The Sequencer's page: its line and grid (a picture kept), the column the bar's on, and the sound's bars."""
+        from .fine import ImageDraw
+        v = self.seq
+        fonts = self.seq_fonts()
+        lay = SQ.layout((0, TOP, self.w, self.h), self.w >= 960)
+        tiles = self.seq_cells(lay["cw"], lay["ch"], v["colour"])
+        frame = self.seq_still(lay, fonts, tiles).copy()
+        d = ImageDraw.Draw(frame)
+        now = time.monotonic()
+        if v["playing"] and not v["paused"]:
+            SQ.draw_head(frame, d, lay, v, fonts, tiles, SQ.step_at(v["clock"], now))
+        SQ.draw_bars(d, lay["bars"], self.seq_levels(now), v["colour"])
+        img.paste(frame, (x0, y0))
+        self.taps.append(((x0, y0, x0 + self.w // 2, y0 + TOP - 4), "l"))
+        self.taps.append(((x0 + self.w // 2, y0, x0 + self.w, y0 + TOP - 4), "r"))
+        cw, ch = lay["cw"], lay["ch"]
+        for r, y in enumerate(lay["ys"]):              # (a tap on a cell: on or off, as A there)
+            for c, x in enumerate(lay["xs"]):
+                self.taps.append(((x0 + x, y0 + y, x0 + x + cw, y0 + y + ch), ("seq", r, c)))
+
     def draw(self, img, x0, y0):
         from .fine import ImageDraw
         self.taps = []
+        if self.seq is not None and self.bounce is None:   # (the Sequencer: its grid, and the sound's bars)
+            self.draw_seq(img, x0, y0)
+            return
         if self.bounce is not None:                    # (Bounce: its shape and balls, and its sliders at the right,
             d = ImageDraw.Draw(img)                    #  bounce.py)
             pw = BN.PANEL[self.w >= 960]

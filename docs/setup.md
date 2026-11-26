@@ -33,8 +33,9 @@ and the Pi restarts with the picture where it should be. The case's buttons don'
 USB or Bluetooth controller there.
 
 A Pi with no screen at all works too. Use it from the [web page](web-page.md), whose Screen shows its menus.
-Music and radio play as ever, and LED backlights and an OLED's bars follow them. A video or a game needs a
-screen, so turn on Play here to have it on the web page instead.
+Music and radio play as ever, and LED backlights and an OLED's bars follow them. An
+[e-ink HAT](apps.md#e-ink-screen) can show the time, the weather and the song that's playing. A video or a game
+needs a screen, so turn on Play here to have it on the web page instead.
 
 ## Running it again
 

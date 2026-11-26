@@ -352,6 +352,8 @@ class WebScreen:
                 self.switch_tab(step)
                 self.dirty = True
             return []
+        if kind == "seq" and self.board_shown() and self.sim_opts is None:   # a cell of the Soundboard's Sequencer
+            return self.seq_tap(*args)
         if kind == "kb" and self.view == "keys" and self.kb:   # a key on the keyboard on the screen
             self.kb["r"], self.kb["c"] = args
             return ["a"]

@@ -56,8 +56,10 @@ WALLPAPERS = ["Midnight", "Dusk", "Ocean", "Forest", "Aurora",      # Settings >
               "Sky", "Peach", "Mint", "Lemon", "Bubblegum",         # home screen's words go dark over them); and
               "Rainbow", "Snow", "Space", "Black", "Picture"]       # the rest. How each looks: home.py's WALLS
 SCREEN_MODES = ["Fit", "Full screen", "Stretch"]   # Settings > Screen > Video size; Y while a video plays
-OLED_CHOICES = ["Off", "Music bars"]               # Settings > Screen > Waveshare 2.23 OLED (screens/oled.py)
-OLED_QUIET = ["Time", "Weather", "Smiley", "All three", "Nothing"]   # ...and what it shows with no music
+OLED_CHOICES = ["Off", "Music bars", "Time", "Weather", "Prices", "Face", "Each in turn"]   # Settings > Screen >
+                                                   # Waveshare 2.23 OLED: what it shows (screens/oled.py)
+EINK_CHOICES = ["Off", "Everything", "Time", "Weather", "Prices", "Face", "Each in turn"]   # ...and Waveshare 2.13
+                                                   # e-ink (screens/eink.py)
 ATTRACT_CHOICES = ["On", "Games only", "Off"]      # Settings > Bot > Attract mode: left idle, plugged in, the Bot gets
                                                    # bored and finds something to do (screens/attract.py)
 SETTINGS = [   # Settings' first page: key, label, choices (None: opens a page of its own). (Where you are and the
@@ -96,8 +98,12 @@ SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on 
         ("turn", "Rotate screen", ["Off", "90°", "180°", "270°"]),   # a screen on its side: the picture turned
                                                                     # clockwise (not there on the GPi Case's own)
         ("oled", "Waveshare 2.23 OLED", OLED_CHOICES),   # that OLED HAT on the Pi's pins: bars that move with your
-                                                         # music (only on a Pi with its pins free: screens/oled.py)
-        ("oled_quiet", "OLED with no music", OLED_QUIET),   # ...and with none: the time, the weather, a smiley face
+                                                         # music, the time, the weather, prices or the Bot's face
+                                                         # (only on a Pi with its pins free: screens/oled.py)
+        ("eink", "Waveshare 2.13 e-ink", EINK_CHOICES),  # that e-Paper HAT there instead: all of that at once, or
+                                                         # one of them (screens/eink.py)
+        ("hat_flip", "OLED or e-ink upside down", ["Off", "On"]),   # ...whichever of the two is on, for a Pi that
+                                                                    # sits the other way up (while one of them is)
     ],
 }
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
@@ -107,7 +113,6 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "ds_screens": "Left/Right", "ds_touch": "Right stick, R2", "app_full": "Off", "turn": "Off",
                     "sys_view": "Dashboard", "battery": "Auto", "share": "On", "attract": "On",
                     "hotspot": "Off",                 # (Settings > WiFi > Hotspot: on again at start-up, if it was)
-                    "oled_quiet": "Time",             # (Settings > Screen > OLED with no music)
                     "group_talk": "On", "group_eyes": "On",   # (Apps > Group chat: they talk among themselves; a USB
                                                               # camera notices you: screens/group.py)
                     "glow_on": "Off", "glow_colour": "Off", "glow_follow": "Any of yours", "glow_bright": "25%",
@@ -122,7 +127,8 @@ SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "l
                     "bounce_shape": "Hexagon", "bounce_echo": "3", "bounce_snap": "Off", "bounce_spin": "0.30",
                     "bounce_speed": "0.80", "bounce_space": "4", "bounce_tone": "5",
                     "bounce_drone": "0",              # (...its Bounce: screens/bounce.py)
-                    "oled": "Off"}
+                    "seq_tune": "", "seq_sounds": "",  # (...its Sequencer: screens/sequencer.py)
+                    "oled": "Off", "eink": "Off", "hat_flip": "Off"}
 TURN_DEGREES = {"Off": 0, "90°": 90, "180°": 180, "270°": 270}   # Settings > Screen > Rotate screen's choices
 HOME_STYLE_WAS = {"Original": "Bright", "Style 2": "Glass", "Style 3": "Glass", "Style 4": "Cards",   # (earlier names,
                   "Minimal": "Glass"}                                                               # and one gone)

@@ -47,6 +47,8 @@
   soundboard.py     Apps' Soundboard: a sound on every button (screens/soundboard.py: its buttons, recording)
   soundbank.py      ...its sounds (sounds/: the starter pack, public domain) and its banks' file
   soundplay.py      ...its player, a process of its own, as you: the sounds mixed for aplay, and recording
+  bounce.py         ...its Bounce: balls in a shape, a note off each wall (screens/bounce.py: its buttons)
+  sequencer.py      ...its Sequencer: a tune of sixteen steps, drawn as a grid (screens/sequencer.py: its buttons)
   bandstage.py      Apps' Band: your Pietatos play together, each its own instrument (screens/band.py: the others in
                     it, its buttons, who decides)
   band.py           ...the music: the songs, each instrument's parts, the song's shape, the dice
@@ -75,7 +77,8 @@ Beside them, each run on its own:
   camera.py         a Pi's camera on your network, for the Camera tab (setup.sh --camera); also
                     imported for this Pi's own cameras (on 127.0.0.1, and for your other Pietatos)
   hear.py           what a USB microphone hears, made out by Vosk (listen.py starts it, as you)
-  oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music
+  oled.py           a Waveshare 2.23inch OLED HAT on the Pi's pins: bars that move with the music, or a picture
+  eink.py           a Waveshare 2.13inch e-Paper HAT there instead: the time, the weather, prices, the Bot's face
   cover.py          a song's cover art (beside it in its folder, or inside its file), and what Music draws of it
   coverfind.py      covers for the songs with none: from your other Pietatos, then looked up online (Y on Music)
   ear.py            the beats of the song that's playing, for the glow round its cover on Now playing

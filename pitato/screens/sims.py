@@ -122,13 +122,16 @@ class SimScreen:
 
     def sim_home(self):
         """HOME on the Soundboard's page or the Band's, where B is a button of theirs: back, as START's card and B go
-        (Bounce: the Soundboard's own buttons again). False: not on either."""
+        (Bounce, or the Sequencer: the Soundboard's own buttons again). False: not on either."""
         if not (self.on_sim_page() and (self.board_tab() or self.band_tab())):
             return False
         if self.board_tab():
             b = self.board_open()
             if b.bounce is not None and b.rec is None and b.placing is None:
                 self.bounce_leave()
+                return True
+            if b.seq_up and b.rec is None and b.placing is None:
+                self.seq_leave()
                 return True
             b.card = None
         else:
@@ -549,8 +552,11 @@ class SimScreen:
             img.paste(self.sim_panel[1], self.sim_layout()[1][:2])
         s.draw(img, bx + inset, by + inset)
         if not card_open:
-            for box, name in getattr(s, "taps", ()):   # (a sim's own places to tap: the Soundboard's buttons)
-                self.tappable(box, "keys", name)
+            for box, name in getattr(s, "taps", ()):   # (a sim's own places to tap: the Soundboard's buttons, or
+                if isinstance(name, tuple):            #  something of its own: its Sequencer's cells)
+                    self.tappable(box, *name)
+                else:
+                    self.tappable(box, "keys", name)
         if not full:
             for tile, mask, at in self.sim_base[2]:
                 img.paste(tile, at, mask)

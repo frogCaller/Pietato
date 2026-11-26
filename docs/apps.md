@@ -55,7 +55,7 @@ Pietato starts on a home screen of apps:
 - **Settings**: WiFi (with a [Hotspot](#hotspot) for away from home), Bluetooth, the clock, battery saver, sound
   and controller, plus two pages that A opens and B closes. Appearance has the home screen's background and
   style, the accent colour, the apps' pages and full screen apps. Screen has the video size, a TV or monitor's
-  resolution, turning the picture and an OLED's music bars
+  resolution, turning the picture and what an OLED or e-ink HAT shows
 - Settings > Appearance > Background changes the home screen's background: dark ones, colourful ones like
   Sunset, Candy and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and
   A shows them all to pick from
@@ -67,7 +67,9 @@ Pietato starts on a home screen of apps:
 - If your screen is mounted on its side or upside down, Settings > Screen > Rotate screen turns the picture
   to match: the apps, games, videos and the console
 - With a Waveshare 2.23inch OLED HAT on the Pi's pins, Settings > Screen > Waveshare 2.23 OLED shows bars that
-  move with your music ([OLED screen](#oled-screen))
+  move with your music, the time, the weather, prices or the Bot's face ([OLED screen](#oled-screen))
+- With a Waveshare 2.13inch e-Paper HAT there instead, Settings > Screen > Waveshare 2.13 e-ink shows the time,
+  the weather, prices and the Bot's face on paper ([E-ink screen](#e-ink-screen))
 - On a 1080p or 4K TV, a Pi 4 or 5 (or a PC) draws the menus in the TV's finer detail, so text, icons and
   pictures stay sharp
 - On a battery (in a GPi Case, or on a laptop), the screen goes dark after three minutes with nothing
@@ -222,25 +224,62 @@ Brightness slider is the board's own. Keep it dim, since that board gets hot whe
 ## OLED screen
 
 A [Waveshare 2.23inch OLED HAT](https://www.waveshare.com/wiki/2.23inch_OLED_HAT) on the Pi can show bars that
-move with your music. Press the HAT onto the Pi's pins, wired as it comes (SPI), and set Settings > Screen >
-Waveshare 2.23 OLED to Music bars. Its bars come up once to show it's lit. The first time, it turns on the Pi's
-SPI if it isn't on, and asks you to restart.
+move with your music, the time, the weather, prices or the Bot's face. Press the HAT onto the Pi's pins, wired as
+it comes (SPI), and pick what it shows with ◀▶ on Settings > Screen > Waveshare 2.23 OLED. The first time, it
+turns on the Pi's SPI if it isn't on, and asks you to restart.
+
+- **Music bars**: bars that move with the music. While nothing plays, it shows the time.
+- **Time**, **Weather**, **Prices**, **Face**: that one, whether music is playing or not. The weather is the
+  Weather app's, for where you set it. Prices are your Finance app's stocks and coins, one at a time. The face
+  is the Bot's, as its Character has it, and it blinks and looks around.
+- **Each in turn**: the time, the weather, each price and the face, one after another.
+
+A picture is a little dimmer than the bars, and moves a little each minute so it doesn't wear in.
+
+While it's on, **OLED upside down** shows under it. It turns the picture round, for a Pi that sits the other way
+up.
 
 The setting is there on a Pi, with a TV on HDMI or with no screen at all (turn it on in the web page's Settings
-then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC or a handheld.
+then). It isn't on a Pi in a GPi Case, whose screen uses those pins, or on a PC or a handheld. The HAT uses the
+pin an [LED backlight](#led-backlight)'s LEDs are wired to, so turning one on turns the other off. An
+[e-ink HAT](#e-ink-screen) goes on the same pins, so that's one or the other too. ESP32 boards' LEDs work
+alongside it.
 
-- The bars follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
+About the bars:
+
+- They follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
 - When its own Pi isn't playing, they follow whichever of your other Pietatos is, as an LED backlight does. Both
   need Settings > Share with other Pietatos on. A song that was already playing when the OLED's Pi came on may
   not show: the next one does.
 - They're the same at any volume.
-- With no music for a few seconds, it shows the time instead, a little dimmer than the bars and moved a little
-  each minute so it doesn't wear in. Settings > Screen > OLED with no music picks the time, the weather (the
-  Weather app's, for where you set it), a smiley face, all three in turn, or nothing.
-- With the OLED on, music takes a moment longer to start: it plays through the player that knows when each
+- With the bars picked, music takes a moment longer to start: it plays through the player that knows when each
   sound is heard, as it does for an LED backlight's beat.
-- The HAT uses the pin an [LED backlight](#led-backlight)'s LEDs are wired to, so turning one on turns the
-  other off. ESP32 boards' LEDs work alongside it.
+
+## E-ink screen
+
+A [Waveshare 2.13inch e-Paper HAT](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT_Manual) on the Pi can show
+the time, the weather, prices and the Bot's face on paper, which needs no light of its own. Press the HAT onto the
+Pi's pins, and pick what it shows with ◀▶ on Settings > Screen > Waveshare 2.13 e-ink. The first time, it turns on
+the Pi's SPI if it isn't on, and asks you to restart. It's for the V4 panel, the one sold now (it says so on a
+label on its back). An older V3 isn't supported.
+
+- **Everything**: the date and the weather along the top, the Bot's face and the time in the middle, and along
+  the bottom the song that's playing, or two of your prices when nothing is.
+- **Time**, **Weather**, **Prices**, **Face**: that one, on all of the paper. Weather has today's high and low and
+  the next three days. Prices are your Finance app's stocks and coins, four at a time.
+- **Each in turn**: those four, a minute each.
+
+While it's on, **E-ink upside down** shows under it. It turns the picture round, for a Pi that sits the other way
+up.
+
+Paper is slow. What it shows changes about once a minute, and it flashes black and white now and then to clean
+itself up: when you pick something, and every so often after that. Set to Off, it goes white first, since
+whatever is left on paper stays there with the power off.
+
+The setting is there on a Pi, with a TV on HDMI or with no screen at all (use the web page's Settings then). It
+isn't on a Pi in a GPi Case, or on a PC or a handheld. The HAT uses the same pins as the [OLED HAT](#oled-screen),
+and the pin an [LED backlight](#led-backlight)'s LEDs are wired to, so it's one of the three at a time: turning
+one on turns the others off.
 
 ## Soundboard
 
@@ -280,6 +319,19 @@ Drone holds a soft note in the key under them. START pauses it, and its card has
 kalimba, glass, a pluck, a pad, or any sound on your Soundboard, played at each wall's note), the key, Snap to the
 tempo (each note on the loop's beat) and Leave Bounce. HOME leaves it too. Your LEDs, if you have them, flash in
 the same colour.
+
+START's card also has Sequencer: a grid of four sounds, a kick, a snare, a hi-hat and a lead, across the sixteen
+steps of a bar. A cell that's on plays its row's sound as the bar comes round to it, at the Soundboard's tempo. The
+d-pad moves from cell to cell, A turns one on or off, and B starts the tune and stops it. Each of the lead's cells
+has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
+Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like. L and R change the
+tempo, and SELECT the scale. Under the grid, bars show the sound as it plays, low notes at the left.
+
+The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
+the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new
+tune, Clear it, Take back the last change (what Y, A new tune or Clear it did) and Leave Sequencer. HOME leaves it
+too. The tune plays on under the Soundboard's buttons, in time with a loop you record there, and holding START
+stops it with the rest. It's kept for next time.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,

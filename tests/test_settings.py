@@ -112,7 +112,8 @@ open_app("Settings")
 root = keys()
 print("Settings:", [label for _, label, _ in m.settings_rows()])
 assert m.set_page == "root" and root[:5] == ["wifi", "bluetooth", "appearance", "display", "clock"], root
-moved = {"wallpaper", "home_style", "accent", "look", "app_full", "screen", "resolution", "turn", "oled"}
+moved = {"wallpaper", "home_style", "accent", "look", "app_full", "screen", "resolution", "turn", "oled", "eink",
+         "hat_flip"}
 assert not moved & set(root), root                       # (theirs are on the two pages, and only there)
 assert root == [k for k, _, _ in g.SETTINGS] and len(root) == len(set(root))
 assert dict((k, label) for k, label, _ in g.SETTINGS)["homeassistant"] == "Home Assistant"
@@ -139,7 +140,7 @@ m.press("a")
 shown = [label for _, label, _ in m.settings_rows()]
 print("Screen:", shown)
 assert (m.set_page, m.set_sel) == ("display", 0) and shown[0] == "Video size", (m.set_page, shown)
-assert set(keys()) <= {"screen", "resolution", "turn", "oled"} and "oled" not in keys(), keys()   # (no Pi here: no OLED)
+assert set(keys()) <= {"screen", "resolution", "turn"}, keys()   # (no Pi here: no OLED, and no e-ink)
 assert keys() == [k for k, _, _ in g.SETTINGS_PAGES["display"] if k in keys()]                      # (in their order)
 m.press("right"); print("video size:", m.setting("screen"))
 assert m.setting("screen") == g.SCREEN_MODES[1]

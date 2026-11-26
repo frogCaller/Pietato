@@ -99,9 +99,11 @@ from .screens.lobby import LobbyScreen
 from .screens.party import PartyScreen
 from .screens.soundboard import SoundboardScreen
 from .screens.bounce import BounceScreen
+from .screens.sequencer import SequencerScreen
 from .screens.band import BandScreen, Brain as BandBrain
 from .screens.glow import GlowScreen
 from .screens.oled import OledScreen
+from .screens.eink import EinkScreen
 from .screens.music import MusicScreen
 
 _SAVING = threading.Lock()     # (state.json written one at a time: the shrinker's and radio's threads save too)
@@ -118,7 +120,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             ComputersScreen, ProgScreen, PiholeScreen, SysDashScreen, SketchScreen, HaSettingsScreen,
             WebSettingsScreen, WwwScreen, ChromiumScreen, RestScreen, HandoffScreen, AttractScreen, TogetherScreen,
             KonamiScreen, NotesScreen, FortuneScreen, PilotScreen, GroupScreen, FishScreen,
-            LobbyScreen, PartyScreen, GlowScreen, OledScreen, SoundboardScreen, BounceScreen, BandScreen, MusicScreen):
+            LobbyScreen, PartyScreen, GlowScreen, OledScreen, EinkScreen, SoundboardScreen, BounceScreen,
+            SequencerScreen, BandScreen, MusicScreen):
     """Media mode: what the screen shows and what the buttons do there. Its state is all here; each
     app's buttons and drawing come from its part (pitato/screens/)."""
 
@@ -1094,6 +1097,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
     def shutdown(self):
         self.notes_save()                              # (what you typed in Notes, kept first)
+        self.eink_stop()                               # (an e-ink starts going white: it takes a couple of seconds)
         self.rest_end()                                # (the screen on again: "Shutting down" goes on it)
         self.chromium_close(wait=True)                 # (first, as it's on a console of its own: it goes too)
         self.prog_stop()                               # (first: "Shutting down" can't go over it)
@@ -1111,6 +1115,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.ear_stop()                                # (...and Now playing's ear for the beat)
         self.lamps_stop()
         self.glow_station_end()
+        self.eink_gone()                               # (...the e-ink's white by now, or waited for a moment)
         if self.active and self.fb is not None and system_stopping():
             self.goodbye()                 # the Pi is going off (the power switch, say): say so
             return
@@ -1767,6 +1772,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.party_tick(now)                       # (party mode: leading one, or in another's: screens/party.py)
         self.glow_tick(now)                            # (your LED backlights: this one's music on them)
         self.oled_tick(now)                            # (your others' OLEDs: this one's music, as bars)
+        self.eink_tick(now)                            # (an e-ink's weather and prices: fetched when they're due)
         self.board_tick(now)                           # (Apps > Soundboard: its player, with its page; its sounds)
         self.band_tick(now)                            # (Apps > Band: its player, the others in it, each bar ahead)
         if self.prog is not None:

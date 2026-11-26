@@ -366,7 +366,7 @@ if not ONLY or "app" in ONLY:
           f"({[(k, v) for k, _, v in rows]})", m.sim_opts is not None and b.card == "more"
           and [(k, v) for k, _, v in rows][2:] == [("tempo", "100 BPM"), ("bars", "2 bars"), ("snap", "On"),
                                                   ("click", "On"), ("scale", "Major"), ("space", "Off"),
-                                                  ("bounce", None)])
+                                                  ("seq", None), ("bounce", None)])
     img, (cx, cy) = m.board_opts_card(s)
     (bx0, by0, bx1, by1), _ = m.sim_box()
     m.sim_opts = len(rows) - 1

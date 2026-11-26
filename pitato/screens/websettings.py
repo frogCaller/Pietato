@@ -107,9 +107,10 @@ class WebSettingsScreen:
             rows.append(choice("turn"))
         if "oled" in root:
             rows.append(self.web_oled_row())
-        if "oled_quiet" in root:
-            rows.append(choice("oled_quiet", note="What the OLED shows while no music plays: the time, the weather, "
-                                                  "a smiley face, or all three in turn."))
+        if "eink" in root:
+            rows.append(self.web_eink_row())
+        if "hat_flip" in root:                     # (upside down: there while one of the two is on)
+            rows.append(self.web_flip_row(root["hat_flip"][1]))
         sec("screen", "Screen", rows)
         battery = choice("battery")
         if battery["value"] not in ("On", "Off"):
@@ -394,7 +395,7 @@ class WebSettingsScreen:
             return {"ok": True}
         if key in ("home_style", "clock", "app_full", "turn", "start", "start_song", "wallpaper", "accent", "look",
                    "sound", "screen", "units", "sim_full", "ds_screens", "ds_touch", "battery",
-                   "share", "attract", "oled", "oled_quiet") \
+                   "share", "attract", "oled", "eink", "hat_flip") \
                 or key.startswith("game_picture_") or key in GLOW_KEYS:
             return self.web_pick(key, value)
         handler = getattr(self, "web_set_" + key, None)

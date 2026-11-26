@@ -14,14 +14,18 @@ and is kept as it came out (the folder given on the command line), so it's there
 Told what to do a line of JSON at a time (stdin), it says what happens the same way (stdout):
 
     {"do": "load", "sounds": [[name, file]...]}    the sounds there are (the ones wanted soonest first)
-    {"do": "play", "id": name, "semis": 0}         one played (from its start again, if it's playing), at its own pitch
-                                                   or this many semitones higher (lower: less than 0)
-    {"do": "loop", "hits": [[beat, name, semis, from, beats]...], "beats": 8, "bpm": 100, "b0": 0.0, "t0": when,
-     "click": true}                                the loop, played round and round: each sound at its beat of its
+    {"do": "play", "id": name, "semis": 0, "gain": 1}
+                                                   one played (from its start again, if it's playing), at its own pitch
+                                                   or this many semitones higher (lower: less than 0), as loud as it
+                                                   is or this much of that; one of its own sounds too (Tones/Pluck)
+    {"do": "loop", "hits": [[beat, name, semis, from, beats, gain]...], "beats": 8, "bpm": 100, "b0": 0.0,
+     "t0": when, "click": true}                    the loop, played round and round: each sound at its beat of its
                                                    layer's loop, that many beats long ("beats", if it doesn't say),
-                                                   from: not before that beat; at the tempo, beat b0 heard at t0
-                                                   (time.monotonic()); click: a quiet tick on each beat. Without hits
-                                                   or click: no loop
+                                                   from: not before that beat; gain: how loud, of the sound as it is
+                                                   (1, if it doesn't say); at the tempo, beat b0 heard at t0
+                                                   (time.monotonic()); click: a quiet tick on each beat. A name can
+                                                   be one of its own sounds (Tones/Pluck: the Sequencer's lead, at
+                                                   its note). Without hits or click: no loop
     {"do": "note", "id": name, "semis": 2.5, "gain": 0.8, "at": when, "pan": -0.3}
                                                    Bounce's (bounce.py): a wall's note, so many semitones from the
                                                    sound's own (Tones/Bell, Tones/Marimba...: its own sounds, made here
@@ -37,6 +41,7 @@ Told what to do a line of JSON at a time (stdin), it says what happens the same 
     {"do": "drone", "level": 0.2, "note": 60}      a soft chord held under them, on that note (level 0: none)
     {"do": "space", "v": 0.3}                      the Soundboard's own sounds in a room too (its reverb), 0 to 1
     {"do": "pitch", "id": name}                    a sound's own note, as near as it can tell
+    {"do": "bars", "on": true}                     the Sequencer's page is up: the sound said as bars, as it plays
     {"do": "stop"}                                 all of them stopped
     {"do": "volume", "v": 0 to 100}
     {"do": "device", "device": aplay's -D}         where the sound goes ("": where ALSA would send it)
@@ -49,6 +54,9 @@ Told what to do a line of JSON at a time (stdin), it says what happens the same 
     {"is": "bad", "id": name, "why": "..."}        ...or one it can't play
     {"is": "playing", "ids": [...]}                the ones heard now, each time that changes
     {"is": "pitch", "id": name, "midi": 57.3}      a sound's own note (MIDI, with its cents), or null: it hasn't one
+    {"is": "bars", "v": [0 to 99, ...]}            the sound just now, how loud in each of BARS bands of notes (low
+                                                   ones first), whatever the volume: twenty times a second while
+                                                   there's any, then all 0 once, and no more till there is again
     {"is": "sound", "ok": false, "why": "..."}     the sound card won't open (or has gone); true: it's open
     {"is": "level", "peak": 0 to 1, "secs": 2.1}   recording: how loud just now, how long so far
     {"is": "recorded", "name": "Recording 2.wav", "secs": 1.4}    kept, its silence trimmed ("name": null: not, "why")
@@ -103,6 +111,7 @@ DOWN = 24                        # frames it takes to turn everything down, when
 LEAD_SECS = 2.0                  # seconds of writes the quickest is taken from: when a frame written is heard (one
                                  # that went straight after the one before, aplay filling its buffer, says nothing)
 SEMIS_MOST = 24                  # semitones a sound's played higher or lower, at most
+GAIN_MOST = 1.5                  # how loud a loop's sound or a Bounce note is played, at most (of the sound as it is)
 LOOP_HITS_MOST = 2000            # sounds in a loop, at most
 CLICK_LOUD = (7000, 4500)        # how loud the loop's click is, on a bar's first beat and the others (of 32768)
 BOUNCE_MOST = 6                  # Bounce's notes at a time (one more: the oldest fades out), so a Pi Zero keeps up
@@ -116,6 +125,11 @@ DRONE_GLIDE = 1.0                # ...seconds it takes to come and go, or go fro
 DRONE_SPACE = 0.6                # ...how much of it goes into the space round the notes
 DRONE_MOST = 0.8                 # ...how loud it is, all the way up (of the loop as it's made)
 PITCH_HZ = (55.0, 1500.0)        # a sound's own note is looked for between these
+BARS = 32                        # the Sequencer's bars: the sound just now, low notes first (sequencer.py's BARS)
+BARS_WIN = 2048                  # ...frames of it each look is at (43 ms)
+BARS_EVERY = 0.044               # ...seconds between looks, at least (every sixth chunk: twenty times a second)
+BARS_HZ = (40.0, 12000.0)        # ...from the lowest bar's notes to the highest's
+BARS_DB = (-54.0, -6.0)          # ...a bar at nothing and at its top: this far under as loud as a sound can be
 PLAIN = dict(os.environ, LC_ALL="C")   # what aplay and arecord run with: what they say is read here, so in English
 
 
@@ -447,9 +461,23 @@ def pitch_of(data):
     return round(69 + 12 * math.log2(RATE / (lag + bend) / 440.0), 2)
 
 
+def bars_bands(n=BARS, win=BARS_WIN, rate=RATE, hz=BARS_HZ):
+    """Which of a look's frequencies each bar has: where each starts, and where the last ends. A note's width each
+    (as many times higher at its top as at its bottom, bar after bar), but one frequency at least: the lowest few."""
+    edges = hz[0] * (hz[1] / hz[0]) ** (np.arange(n + 1) / n) * win / rate
+    starts, at = [], 0
+    for k in range(n):
+        lo = max(at, int(round(edges[k])))
+        starts.append(lo)
+        at = max(lo + 1, int(round(edges[k + 1])))
+    return np.array(starts), at
+
+
 def loop_from(c):
     """What a "loop" says, checked: its layers' sounds, by how long a loop each goes round in ([(beats, hits sorted by
-    beat, their beats)]), the tempo, beat b0 and when it's heard (t0), and the click. None: no loop."""
+    beat, their beats)]), the tempo, beat b0 and when it's heard (t0), and the click. None: no loop. A hit: [its
+    beat, the sound, semitones from its own note, the beat it's heard from, how long a loop it goes round in (beats:
+    the loop's, if it doesn't say), how loud (of the sound as it is: 1, if it doesn't say)]."""
     try:
         beats, bpm = float(c.get("beats")), float(c.get("bpm"))
         b0, t0 = float(c.get("b0")), float(c.get("t0"))
@@ -463,11 +491,12 @@ def loop_from(c):
         try:
             p, sid, semis, after = float(h[0]), h[1], int(h[2]), float(h[3])
             n = float(h[4]) if len(h) > 4 else beats
+            gain = float(h[5]) if len(h) > 5 else 1.0
         except (TypeError, ValueError, IndexError):
             continue
         if (isinstance(sid, str) and 1 <= n <= 64 and 0 <= p < n and abs(semis) <= SEMIS_MOST
-                and math.isfinite(after)):
-            groups.setdefault(n, []).append((p, sid, semis, after))
+                and math.isfinite(after) and 0 <= gain <= GAIN_MOST):
+            groups.setdefault(n, []).append((p, sid, semis, after, gain))
     click = c.get("click") is True
     if not groups and not click:
         return None
@@ -526,6 +555,13 @@ class Player:
         self.drones_going = []                         # ...ones going (from other keys)
         self.drone_want = (0.0, None)                  # ...how loud it's wanted (0 to 1), on what note
         self.to_make, self.made = [], {}               # Bounce's own sounds and drones: being made, and made
+        self.bars_on = False                           # the Sequencer's bars are wanted: the sound, said as bars
+        self.bars_tail = np.zeros(BARS_WIN, dtype=np.float32)   # ...the last of what was mixed (left and right, added)
+        self.bars_left = 0                             # ...frames of it that aren't silence yet
+        self.bars_said = 0.0                           # ...when they were last said
+        self.bars_none = True                          # ...and that there were none (no more's said till there are)
+        self.bars_at, self.bars_end = bars_bands()
+        self.bars_window = np.hanning(BARS_WIN).astype(np.float32)
         threading.Thread(target=self.maker, daemon=True, name="tones").start()
         self.clicks = (click_sound(True), click_sound(False))
         self.ramp = np.arange(CHUNK, dtype=np.float64)
@@ -698,10 +734,55 @@ class Player:
                 return
         elif n is None or n >= CHUNK_BYTES // 2:
             return
-        if out.write(self.mix()):
+        data = self.mix()
+        if out.write(data):
             self.wrote = True
-            self.heard_from(time.monotonic(), out)
+            now = time.monotonic()
+            self.heard_from(now, out)
             self.took(out)
+            if self.bars_on:
+                self.bars_take(data, now)
+
+    def bars_take(self, data, now):
+        """(feed's, with the Sequencer's page up.) A chunk as it was mixed, kept; and the sound as bars, said BARS_EVERY
+        apart: how loud it is in each bar's notes, 0 to 99, whatever the volume. Silence: said once, then no more."""
+        tail = self.bars_tail
+        if data is SILENCE:
+            if self.bars_left <= 0:                    # (nothing but silence in it)
+                if not self.bars_none:
+                    self.bars_none = True
+                    say(**{"is": "bars", "v": [0] * BARS})
+                return
+            tail[:-CHUNK] = tail[CHUNK:]
+            tail[-CHUNK:] = 0
+            self.bars_left -= CHUNK
+        else:
+            x = np.frombuffer(data, dtype="<i2").reshape(-1, 2)
+            tail[:-CHUNK] = tail[CHUNK:]
+            np.add(x[:, 0], x[:, 1], out=tail[-CHUNK:], dtype=np.float32, casting="unsafe")
+            self.bars_left = BARS_WIN
+        if now - self.bars_said < BARS_EVERY:
+            return
+        self.bars_said = now
+        power = np.abs(np.fft.rfft(tail * self.bars_window)[:self.bars_end]) ** 2
+        full = 32767.0 * 2 * BARS_WIN / 4 * max(1, self.gain) / 256.0   # (a sound as loud as can be, at this volume)
+        db = 10.0 * np.log10(np.add.reduceat(power, self.bars_at) / (full * full) + 1e-12)
+        v = np.clip((db - BARS_DB[0]) / (BARS_DB[1] - BARS_DB[0]) * 99.0, 0, 99).astype(int).tolist()
+        none = not any(v)
+        if none and self.bars_none:
+            return
+        self.bars_none = none
+        say(**{"is": "bars", "v": v})
+
+    def bars_set(self, on):
+        """The Sequencer's page is up (its bars are wanted), or it isn't any more. (Told as it is already: nothing.)"""
+        if bool(on) != self.bars_on:
+            self.bars_on = bool(on)
+            self.bars_clear()
+
+    def bars_clear(self):
+        self.bars_tail[:] = 0
+        self.bars_left, self.bars_said, self.bars_none = 0, 0.0, True
 
     def took(self, out):
         """A chunk's been written (bandplay.py keeps count: how fast aplay takes them is how it keeps time)."""
@@ -741,17 +822,25 @@ class Player:
                     continue
                 i = bisect.bisect_left(at, max(lo, 0.0))
                 while i < len(hits) and at[i] < hi:
-                    p, sid, semis, after = hits[i]
+                    p, sid, semis, after, gain = hits[i]
                     beat = kk * n + p
                     if beat >= after:
-                        have = self.sounds.get(sid)
-                        if have is not None:
-                            self.start(sid, have[1], semis, wait=int((beat - ba) / per * RATE), shown=False)
+                        data, semis = self.loop_sound(sid, semis)
+                        if data is not None:
+                            self.start(sid, data, semis, wait=int((beat - ba) / per * RATE), shown=False, gain=gain)
                     i += 1
         if lp["click"]:
             beat = math.ceil(ba)
             if beat < bb:
                 self.start(None, self.clicks[0 if beat % 4 == 0 else 1], 0, wait=int((beat - ba) / per * RATE))
+
+    def loop_sound(self, sid, semis):
+        """A loop's sound, and the semitones it's played at from there: one of the Soundboard's as it was read, or one
+        of the player's own (the Sequencer's lead: made at the note nearest the one wanted). None: not there yet."""
+        if sid in TONES:
+            return self.bounce_tone(sid, semis)
+        have = self.sounds.get(sid)
+        return (have[1] if have is not None else None), semis
 
     def bounce_tone(self, sid, semis=0.0):
         """One of Bounce's own sounds, as made at the note nearest the one wanted, and the semitones from there: (its
@@ -811,14 +900,14 @@ class Player:
         for v in live[:max(0, len(live) - VOICES_MOST)]:
             v.fade = FADE
 
-    def start(self, sid, data, semis=0, wait=0, shown=True):
+    def start(self, sid, data, semis=0, wait=0, shown=True, gain=1.0):
         """A sound started (the same one playing: it fades out as this one starts), at a pitch of its own, so many
         frames into the next chunk. Not shown: a loop's (not said to be playing: its button isn't lit for it, as the
-        page would be drawn for every sound of the loop's)."""
+        page would be drawn for every sound of the loop's). gain: how loud, of the sound as it is."""
         for v in self.voices:
             if v.id == sid and v.fade is None:
                 v.fade = FADE
-        v = Voice(sid, data, max(0, min(CHUNK - 1, wait)), 2.0 ** (semis / 12.0) if semis else 1.0)
+        v = Voice(sid, data, max(0, min(CHUNK - 1, wait)), 2.0 ** (semis / 12.0) if semis else 1.0, gain)
         v.shown = shown and sid is not None
         self.voices.append(v)
         live = [v for v in self.voices if v.fade is None]
@@ -1023,17 +1112,23 @@ class Player:
         fx.space.set(most)
         self.fx_send = (mine / most, theirs / most) if most else (0.0, 0.0)
 
-    def play(self, sid, now, semis=0):
-        with self.lock:
-            have = self.sounds.get(sid)
-            if have is None and sid in dict(self.want) and sid not in self.bad:
-                self.soon[sid] = now                   # (not read yet: played as soon as it is, if that's soon)
-        if have is None:
-            return
-        self.soon.pop(sid, None)
+    def play(self, sid, now, semis=0, gain=1.0):
+        if sid in TONES:                               # (one of its own: the Sequencer's lead, heard as it's picked)
+            data, semis = self.bounce_tone(sid, semis)
+            if data is None:
+                return                                 # (being made: there in a moment)
+        else:
+            with self.lock:
+                have = self.sounds.get(sid)
+                if have is None and sid in dict(self.want) and sid not in self.bad:
+                    self.soon[sid] = now               # (not read yet: played as soon as it is, if that's soon)
+            if have is None:
+                return
+            self.soon.pop(sid, None)
+            data = have[1]
         if self.out is None and not self.open(now, force=now - self.tried >= 0.3):
             return                                     # (the sound card won't open: not played later, out of the blue)
-        self.start(sid, have[1], semis)                # (playing: that one fades out as this one starts)
+        self.start(sid, data, semis, gain=gain)        # (playing: that one fades out as this one starts)
         self.feed()
 
     def stop_all(self, now):
@@ -1138,9 +1233,10 @@ class Player:
     def told(self, c, now):
         do = c.get("do")
         if do == "play":
-            semis = c.get("semis", 0)
-            if isinstance(c.get("id"), str) and self.rec is None and type(semis) is int and abs(semis) <= SEMIS_MOST:
-                self.play(c["id"], now, semis)
+            semis, gain = c.get("semis", 0), c.get("gain", 1.0)
+            if (isinstance(c.get("id"), str) and self.rec is None and type(semis) is int and abs(semis) <= SEMIS_MOST
+                    and isinstance(gain, (int, float)) and not isinstance(gain, bool) and 0 <= gain <= GAIN_MOST):
+                self.play(c["id"], now, semis, gain)
         elif do == "loop":
             self.loop = loop_from(c)
         elif do == "note":                             # (Bounce's: a wall's note)
@@ -1148,12 +1244,15 @@ class Player:
             num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)   # noqa: E731
             pan = c.get("pan")
             if (isinstance(sid, str) and self.rec is None and num(semis) and abs(semis) <= SEMIS_MOST and num(gain)
-                    and 0 <= gain <= 1.5 and (at is None or num(at)) and (pan is None or (num(pan) and abs(pan) <= 1))):
+                    and 0 <= gain <= GAIN_MOST and (at is None or num(at))
+                    and (pan is None or (num(pan) and abs(pan) <= 1))):
                 self.bounce_play(sid, float(semis), float(gain), at, now, pan)
         elif do == "tone":                             # (one of Bounce's own sounds, made ready)
             if c.get("id") in TONES:
                 for root in TONE_ROOTS:
                     self.make(("tone", c["id"], root))
+        elif do == "bars":                             # (the Sequencer's page: the sound as bars, while it's up)
+            self.bars_set(c.get("on") is True)
         elif do == "fx":
             self.fx_set(c)
         elif do == "space":
@@ -1205,6 +1304,9 @@ class Player:
             self.fx.clear()
             self.close()
             self.ok, self.stale = None, True
+            if self.bars_on and not self.bars_none:    # (the Sequencer's bars: nothing's heard now)
+                self.bars_clear()
+                say(**{"is": "bars", "v": [0] * BARS})
         elif do == "rec":
             if isinstance(c.get("folder"), str) and c["folder"]:
                 self.rec_start(c.get("mic") if isinstance(c.get("mic"), str) else "", c["folder"], now)

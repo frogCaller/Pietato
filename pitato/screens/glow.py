@@ -393,10 +393,12 @@ class GlowScreen:
 
     def glow_pick(self, key, value):
         """One of its settings picked. The LEDs on: an OLED screen on this Pi goes off (Settings > Screen > Waveshare
-        2.23 OLED, screens/oled.py: it's on the same pin), and that's said (True)."""
+        2.23 OLED, screens/oled.py: it's on the same pin), and that's said (True). An e-ink there too (Waveshare 2.13
+        e-ink, screens/eink.py)."""
         took = key == "glow_on" and value == "On" and self.setting("oled") not in (None, "Off")
         if took:
             self.oled_pick("Off")
+        ink = key == "glow_on" and value == "On" and self.eink_drop()
         self.set_setting(key, value)
         if key == "glow_on":
             if value == "On":
@@ -409,6 +411,8 @@ class GlowScreen:
         self.glow_seen = 0.0
         if took:
             self.toast("The OLED is off: the LEDs use its pin", 4)
+        elif ink:
+            self.toast("The e-ink is off: the LEDs use its pin", 4)
         return took
 
     # -- the grid ----------------------------------------------------------------------------------------------------

@@ -1,22 +1,25 @@
-"""An OLED HAT's bars (pitato/oled.py, screens/oled.py): a Waveshare 2.23inch OLED on a Pi's pins, showing bars that
-move with the music. First the pieces on their own: what's asked of the kernel for its two pins (the numbers and the
-shapes of linux/gpio.h, written out again here; the chip a Pi's own pins are on, whatever its number, a Pi 5's too;
-none, or the pins taken); its SPI; a command or the picture, by its D/C pin; the screen started as Waveshare's driver
-starts it, then only the rows that changed, and dark and off as it's shut; the picture for the bars (as that driver
-packs one: 25 bars, 4 wide, up from the bottom); the sound as it's heard (the sound heard now, not what's just been
-written; whatever the volume; nothing for now, a jump); and the bars themselves (as tall as the sound's loud, up at
-once, falling slowly, drawn only as they change, 25 times a second). Then media mode: Settings > Screen > Waveshare
+"""An OLED HAT (pitato/oled.py, screens/oled.py): a Waveshare 2.23inch OLED on a Pi's pins, showing bars that move with
+the music, or a picture. First the pieces on their own: what's asked of the kernel for its two pins (the numbers and
+the shapes of linux/gpio.h, written out again here; the chip a Pi's own pins are on, whatever its number, a Pi 5's
+too; none, or the pins taken); its SPI; a command or the picture, by its D/C pin; the screen started as Waveshare's
+driver starts it, then only the rows that changed, and dark and off as it's shut; the picture for the bars (as that
+driver packs one: 25 bars, 4 wide, up from the bottom); the sound as it's heard (the sound heard now, not what's just
+been written; whatever the volume; nothing for now, a jump); and the bars themselves (as tall as the sound's loud, up
+at once, falling slowly, drawn only as they change, 25 times a second). Then media mode: Settings > Screen > Waveshare
 2.23 OLED only on a Pi with its pins free (not in a GPi Case, on a handheld or a PC); picked, it's lit, and music
 plays through party mode's player (a song already playing moved to it), its bars up as the loud part of a song is
 heard, whatever the volume; one that's in another's party, by its leader's clock; an LED backlight on the same pin
-turned off for it, and the other way round; the Pi's SPI not on (turned on in config.txt, a restart asked for; the
-LED backlight's own part left as it is), its pins taken; the web page's Settings; and dark as Pietato goes. And
-another of your Pietatos' music: the one playing sends its bars as they're heard there (a packet each, to yours with
-an OLED lit, as their beacons say; its music on party mode's player for it), and the one with the OLED takes them
-from your Pietatos only, whichever's playing, and shows them while its own Pi plays nothing. And with no music for a
-while (Settings > Screen > OLED with no music): the time (as the clock's set), the weather (the time while there's
-none, or it's old), a smiley face, all three in turn, or nothing; dimmer than the bars, moved a little each minute,
-drawn only as it changes; gone at once as music's heard (even its quiet start), not shown between two songs."""
+turned off for it, and the other way round; the Pi's SPI not on (turned on in config.txt, a restart asked for; the LED
+backlight's own part left as it is), its pins taken; the web page's Settings; and dark as Pietato goes. And another of
+your Pietatos' music: the one playing sends its bars as they're heard there (a packet each, to yours with an OLED lit,
+as their beacons say; its music on party mode's player for it), and the one with the OLED takes them from your
+Pietatos only, whichever's playing, and shows them while its own Pi plays nothing. And a picture in place of its bars,
+the same row's other choices (◀ ▶ through them all, round and round), there whatever plays: the time (as the clock's
+set), the weather (the time while there's none, or it's old), your stocks' and coins' prices one at a time (fetched
+for it every few minutes, the prices alone, while the Finance tab isn't open), the Bot's own face (as its Character
+has it, blinking and glancing about), or each in turn; dimmer than the bars, moved a little each minute, drawn only as
+it changes; no music moved to party mode's player for one, nor your others' bars asked for. Set to its bars with no
+music for a while: the time, gone at once as music's heard (even its quiet start), not shown between two songs."""
 import ctypes, errno, os, shutil, socket, sys, threading, time, wave
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -26,6 +29,7 @@ import pietato_all as g
 import pitato.oled as O
 import pitato.screens.oled as SO
 import pitato.glow as G
+import pitato.face as FACE
 
 S = SP + "/t_oled"
 shutil.rmtree(S, ignore_errors=True)
@@ -319,6 +323,28 @@ check("...the same one again: nothing", len(fw.log) == n)
 scr.close()
 check(f"shut: dark, then off, and its wires let go of ({[x[1].hex() for x in fw.log[n:]][-1]})",
       fw.log[n:] == [("c", b"\xb3\x04\x10"), ("d", bytes(128)), ("c", b"\xae")] and fw.closed)
+dot = (b"\x01" + bytes(127), bytes(128), bytes(128), bytes(128))    # (one pixel lit: its top left)
+check("a picture upside down: its last row first, each from its other end, each byte's pixels the other way up (a "
+      "dot at its top left: at its bottom right); twice, as it was",
+      O.turned(dot) == (bytes(128), bytes(128), bytes(128), bytes(127) + b"\x80")
+      and O.turned(O.turned(tuple(rows))) == tuple(rows) and O.turned(O.BLANK) == O.BLANK)
+fw = FakeWires()
+scr = O.Screen(fw, flip=True)
+n = len(fw.log)
+scr.show(dot)
+lit = fw.lit()
+check("the screen, upside down (a Pi that sits the other way up): started just the same, and each picture sent "
+      "turned: the dot's at the bottom right, and only that row's sent",
+      fw.log[:1 + len(WAVESHARE)] == [("reset",)] + [("c", bytes((c,))) for c in WAVESHARE]
+      and fw.log[n:] == [("c", b"\xb3\x04\x10"), ("d", bytes(127) + b"\x80")] and lit[31, 127] == 1
+      and lit.sum() == 1 and scr.shown == dot)
+n = len(fw.log)
+scr.turn(False)
+back, sent = fw.lit(), len(fw.log) - n
+scr.turn(False)
+check(f"...turned the right way up as it is: what it shows, sent again that way (the two rows that changed: {sent} "
+      f"writes), and nothing when it's that way already", back[0, 0] == 1 and back.sum() == 1 and sent == 4
+      and len(fw.log) == n + sent and scr.flip is False and O.Screen(FakeWires()).flip is False)
 
 # ---- the picture for the bars ----------------------------------------------------------------------------------------
 rng = np.random.default_rng(3)
@@ -439,35 +465,37 @@ n = len(fw.log)
 bars.frame(clock.t + 1)
 check("...and nothing's written to it after that", len(fw.log) == n)
 
-# with no music for a while: its quiet picture
+# a picture in place of its bars: for the quiet alone (its bars picked), or whatever plays (a picture picked)
 pic = O.quiet_time("7:49", "PM")
 check("a picture as the screen's rows: each byte 8 pixels down, the top one its lowest bit (as the bars' are)",
       (FakeWires.lit(type("W", (), {"rows": lambda self: O.picture_rows(pic)})()) == np.asarray(pic, np.uint8)).all()
       and O.picture_rows(Image.new("1", (128, 32), 0)) == O.BLANK)
-quiet_rows, asked = O.picture_rows(pic), []
+quiet_rows, asked, pin, again = O.picture_rows(pic), [], False, None
 
 
-def quiet_pic(now):
-    asked.append(now)
-    return quiet_rows
+def a_picture(now, quiet):
+    """As screens/oled.py's: one for the quiet alone (its bars picked), or (pin) whatever plays."""
+    asked.append((now, quiet))
+    return (quiet_rows, again) if (quiet or pin) and quiet_rows is not None else None
 
 
 fw = FakeWires()
-bars = O.OledBars(O.Screen(fw), clock=clock, run=False, quiet=quiet_pic)
+bars = O.OledBars(O.Screen(fw), clock=clock, run=False, picture=a_picture)
 clock.t = 3000.0
 bars.fed = clock.t                                     # (music, a moment ago)
 n0 = len(fw.log)
 bars.rest(clock.t + O.QUIET_AFTER - 0.5)
-check(f"no music for a moment (between two songs, say): still dark, nothing asked or sent ({len(asked)})",
-      len(fw.log) == n0 and not asked and not bars.resting)
+check(f"no music for a moment (between two songs, say): not quiet yet: still dark, nothing sent ({asked})",
+      len(fw.log) == n0 and asked == [(clock.t + O.QUIET_AFTER - 0.5, False)] and not bars.resting)
 bars.rest(clock.t + O.QUIET_AFTER + 0.1)
 dim_at = fw.log.index(("c", bytes([O.CONTRAST])), n0) if ("c", bytes([O.CONTRAST])) in fw.log[n0:] else -1
-check(f"...for a while: its quiet picture, dimmer (the bars: {O.BRIGHT:#x}; this: {O.DIM:#x}), dimmed before it's "
-      f"drawn", fw.rows() == list(quiet_rows) and fw.log[dim_at + 1] == ("c", bytes([O.DIM])) and dim_at >= n0
-      and all(x[0] == "c" or k > dim_at for k, x in enumerate(fw.log[n0:], n0)) and bars.resting)
+check(f"...for a while: quiet: the picture for it, dimmer (the bars: {O.BRIGHT:#x}; this: {O.DIM:#x}), dimmed "
+      f"before it's drawn", fw.rows() == list(quiet_rows) and fw.log[dim_at + 1] == ("c", bytes([O.DIM]))
+      and dim_at >= n0 and all(x[0] == "c" or k > dim_at for k, x in enumerate(fw.log[n0:], n0)) and bars.resting
+      and asked[-1][1] is True and not bars.pinned)
 n = len(fw.log)
 bars.rest(clock.t + O.QUIET_AFTER + 0.4)
-check("...the same again: nothing sent", len(fw.log) == n and len(asked) == 2)
+check("...the same again: nothing sent", len(fw.log) == n and len(asked) == 3)
 bars.fed = clock.t = clock.t + 10                      # (music again: its quiet start)
 bars.rest(clock.t)
 bars.frame(clock.t)
@@ -482,18 +510,75 @@ bars.rest(clock.t + 4.0)
 check("...a moment after it's over: dark still", fw.heights() == [0] * 25 and not bars.resting)
 bars.rest(clock.t + O.QUIET_AFTER + 4.0)
 check("...quiet a while after: the picture again", fw.rows() == list(quiet_rows) and bars.resting)
-quiet_rows = None
+kept, quiet_rows = quiet_rows, None
 bars.rest(clock.t + O.QUIET_AFTER + 4.3)
-check("...nothing to show (Nothing): dark, as bright as ever for the next bars", fw.heights() == [0] * 25
+check("...no picture for it any more: dark, as bright as ever for the next bars", fw.heights() == [0] * 25
       and fw.log[-1] == ("c", bytes([O.BRIGHT])) and not bars.resting)
 n = len(fw.log)
 bars.rest(clock.t + O.QUIET_AFTER + 4.6)
 check("...and left so", len(fw.log) == n)
+quiet_rows, pin = kept, True                           # (a picture picked: whatever plays)
+bars.fed = clock.t = clock.t + 20
+feed(bars.heard_of, pcm_of(np.full(RATE // 2, 1.0)), clock.t)
+bars.frame(clock.t + 0.1)
+up, n = fw.heights(), len(fw.log)
+bars.rest(clock.t + 0.2)
+check(f"a picture picked while music plays (its bars are up: {up[:1]}): the picture, dimmer, in their place",
+      up == [32] * 25 and fw.rows() == list(quiet_rows) and bars.resting and bars.pinned
+      and fw.log[n:n + 2] == [("c", bytes([O.CONTRAST])), ("c", bytes([O.DIM]))])
+bars.wake.clear()
+bars.heard(pcm_of(np.full(480, 1.0)).tobytes(), clock.t + 0.5)
+woke = bars.wake.is_set()
+bars.poke()
+check("...what's played doesn't wake it (its picture's not for the quiet alone); what's picked next does (poke)",
+      not woke and bars.wake.is_set())
+bars.wake.clear()
+n = len(fw.log)
+bars.rest(clock.t + 0.5)
+check("...the music still playing: the picture stays, nothing sent", len(fw.log) == n and bars.resting)
+again = 0.05
+bars.rest(clock.t + 0.6)
+soon = bars.again
+again = 30.0
+bars.rest(clock.t + 0.7)
+late = bars.again
+again = 0.0001
+bars.rest(clock.t + 0.8)
+check(f"...asked for again as soon as it says (a blink's next frame: {soon}), a quarter of a second at most "
+      f"({late}), never at once ({bars.again})", soon == 0.05 and late == O.IDLE_EVERY and bars.again == 0.02)
+again, pin = None, False                               # (its bars picked again, music playing)
+bars.fed = clock.t = clock.t + 5
+feed(bars.heard_of, pcm_of(np.full(RATE // 2, 1.0)), clock.t)
+bars.rest(clock.t + 0.05)
+dark = fw.heights() == [0] * 25 and fw.log[-1] == ("c", bytes([O.BRIGHT])) and not bars.resting and not bars.pinned
+bars.frame(clock.t + 0.1)
+check("its bars picked again: dark at once, as bright as ever, and up from nothing as the music's heard",
+      dark and fw.heights() == [32] * 25)
 plain = O.OledBars(O.Screen(FakeWires()), clock=clock, run=False)
 plain.fed = clock.t - 100
 plain.rest(clock.t)
-check("one with nothing to show with no music (quiet: none): dark, as ever", plain.screen.wires.heights() == [0] * 25
-      and not plain.resting)
+check("one with no picture to show (none given): dark with no music, as ever",
+      plain.screen.wires.heights() == [0] * 25 and not plain.resting)
+
+# on its own thread, a picture picked: the music's bars never drawn over it
+fw = FakeWires()
+shown, pin = O.picture_rows(O.quiet_time("19:49", "")), True
+quiet_rows = shown
+bars = O.OledBars(O.Screen(fw), picture=a_picture)
+up = until(lambda: fw.rows() == list(shown), 2)
+t0 = time.monotonic()
+for k in range(40):                                    # (most of a second of loud music, as a player feeds it)
+    bars.heard(pcm_of(np.full(960, 1.0)).tobytes(), t0 + k * 0.02)
+    time.sleep(0.02)
+    if fw.rows() != list(shown):
+        up = False
+check(f"on its own thread, a picture picked: there at once, and loud music's bars never drawn over it ({up})",
+      up and fw.rows() == list(shown) and bars.resting)
+quiet_rows = O.picture_rows(O.quiet_time("19:50", ""))
+bars.poke()
+check("...what it shows changed (poke): shown at once", until(lambda: fw.rows() == list(quiet_rows), 0.2))
+bars.close()
+pin, quiet_rows = False, kept
 
 # on its own thread, by the clock
 fw = FakeWires()
@@ -702,7 +787,7 @@ class FB:
 
 m = g.Media(); m.load_fonts(); m.fb = FB(); m.active = True
 m.set_setting("name", "gpi")
-m.set_setting("oled_quiet", "Nothing")                 # (the bars first: its picture with no music has its own part)
+QUIET_WAS, O.QUIET_AFTER = O.QUIET_AFTER, 1e9          # (the bars first: the time with no music has its own part)
 m.oled_port = 0                                        # (your others' bars: taken at any port that's free, here)
 SETTINGS = next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.view, m.tab, m.set_page = "list", SETTINGS, "display"   # (Settings > Screen: its row's there)
@@ -724,16 +809,17 @@ check(f"this machine (no Pi): no OLED in Settings > Screen, here or on the web p
 SO.PI_MODEL, SO.is_pc, SO.is_handheld = MODEL, (lambda: False), (lambda: False)
 m.case = None
 r = rows()
-check(f"a Pi on a TV or monitor: Settings > Screen > Waveshare 2.23 OLED, the last of its rows but what it shows "
-      f"with no music: Off, or Music bars ({m.settings_rows()[r.index('oled')] if 'oled' in r else None})",
-      m.oled_can() and r[-2:] == ["oled", "oled_quiet"]
-      and r[0] == "screen" and m.settings_rows()[-2] == ("oled", "Waveshare 2.23 OLED", ["Off", "Music bars"])
+check(f"a Pi on a TV or monitor: Settings > Screen > Waveshare 2.23 OLED, the last of its rows but an e-ink's (the "
+      f"HAT that goes there instead: test_eink.py): one row, all it can show to cycle through "
+      f"({m.settings_rows()[r.index('oled')] if 'oled' in r else None})",
+      m.oled_can() and r[-2:] == ["oled", "eink"] and r[0] == "screen"
+      and m.settings_rows()[-2] == ("oled", "Waveshare 2.23 OLED", ["Off", "Music bars", "Time", "Weather", "Prices",
+                                                                    "Face", "Each in turn"])
       and m.settings_place("oled") == ("display", len(r) - 2)
       and "oled" not in [k for k, _, _ in m.settings_root_rows()])
-check(f"...and OLED with no music: the time, the weather, a smiley face, all three in turn, or nothing "
-      f"({m.settings_rows()[-1]})", m.settings_rows()[-1] == ("oled_quiet", "OLED with no music",
-                                                              ["Time", "Weather", "Smiley", "All three", "Nothing"])
-      and g.SETTINGS_DEFAULT["oled_quiet"] == "Time")
+check("...no second row for what it shows with no music (nor a setting for it): Off, to begin with",
+      "oled_quiet" not in r and "oled_quiet" not in g.SETTINGS_DEFAULT and g.SETTINGS_DEFAULT["oled"] == "Off"
+      and not any("no music" in label for _, label, _ in m.settings_rows()))
 m.case = "2w"
 in_case = m.oled_can(), "oled" in rows(), "oled" in web_rows()
 m.case = None
@@ -744,9 +830,6 @@ on_pc = m.oled_can(), "oled" in rows()
 SO.is_pc = lambda: False
 check(f"...not in a GPi Case (its screen has the pins: {in_case}), on a handheld ({on_handheld}) or a PC ({on_pc})",
       in_case == (False, False, False) and on_handheld == (False, False) and on_pc == (False, False) and m.oled_can())
-m.case = "2w"
-check("...nor what it shows with no music", "oled_quiet" not in rows() and "oled_quiet" not in web_rows())
-m.case = None
 
 # picked: lit
 made = []
@@ -844,15 +927,33 @@ m.play([item], 0)
 check(f"...and music's as ever, the plain player's ({spawned[-1:] and spawned[-1][0]})",
       spawned and spawned[-1][0] == SONG and type(m.proc).__name__ == "Proc")
 
-# turned on while a song plays: moved to the player that says what's heard
+# its bars picked while a song plays: moved to the player that says what's heard, once the row's stayed on them
 m.pos = 1.0
 m.view, m.tab = "list", SETTINGS                       # (Settings again, the song playing on)
 m.set_sel = rows().index("oled")
 m.press("right")
 fw = made[-1][1]
-check(f"turned on with a song playing on the plain player: the song's moved to party mode's player, from where it "
-      f"was ({type(m.proc).__name__}, {getattr(getattr(m.proc, 'player', None), 'pos0', None)})",
-      m.oled is not None and type(m.proc).__name__ == "PartyProc" and m.proc.player.pos0 == 1.0)
+due = m.oled_catch_at - time.monotonic()
+check(f"its bars picked with a song playing on the plain player: the song's left alone as the row's pressed (it may "
+      f"be on its way past them, to a picture), for a moment ({due:.1f} s)", m.oled is not None
+      and type(m.proc).__name__ == "Proc" and SO.OLED_SETTLE - 0.5 < due <= SO.OLED_SETTLE)
+m.oled_tick(m.oled_catch_at - 0.1)
+check("...not moved before then", type(m.proc).__name__ == "Proc" and m.oled_catch_at)
+m.press("right")
+seen_was = m.oled_seen
+m.oled_tick(time.monotonic() + 60)
+m.oled_seen = seen_was
+check(f"...▶ again before then, on to a picture ({m.setting('oled')}): never moved (no bars to show it by)",
+      m.setting("oled") == "Time" and not m.oled_catch_at and type(m.proc).__name__ == "Proc"
+      and made[-1][1] is fw and not m.oled_wanted())
+m.press("left")
+m.oled_tick(m.oled_catch_at - 0.1)
+still = type(m.proc).__name__
+m.oled_tick(m.oled_catch_at)
+check(f"...◀ back to its bars, and left on them: the song's moved to party mode's player, from where it was "
+      f"({still}, then {type(m.proc).__name__}, {getattr(getattr(m.proc, 'player', None), 'pos0', None)})",
+      m.setting("oled") == "Music bars" and still == "Proc" and type(m.proc).__name__ == "PartyProc"
+      and m.proc.player.pos0 == 1.0 and not m.oled_catch_at)
 seen = watch(1.5)
 during = [h for t, h in seen if 0.75 < t < 1.4]         # (from a second in: its loud second's from 0.5 to 1.5 now)
 check(f"...and shown from there ({min(during or [-1])} to {max(during or [-1])})", during and min(during) >= 14)
@@ -953,7 +1054,7 @@ check(f"the Pi's SPI not on: turned on in config.txt, and a restart asked for ({
       and m.setting("oled") == "Music bars")
 wr = web_rows().get("oled") or {}
 check(f"...the web page's Settings say so too ({wr.get('status')!r})", wr.get("value") == "Music bars"
-      and wr.get("status") == "Restart the Pi to turn its SPI on" and wr.get("choices") == ["Off", "Music bars"])
+      and wr.get("status") == "Restart the Pi to turn its SPI on" and wr.get("choices") == g.OLED_CHOICES)
 m.oled_pick("Off")
 m.oled_restart = False
 grid_part = G.config_with_spi("dtparam=audio=on\n", ["dtparam=spi=on", "core_freq_min=500"])
@@ -992,13 +1093,14 @@ m.oled_wires = make_wires
 
 # the web page's Settings
 wr = web_rows().get("oled") or {}
-check(f"the web page's Settings: Waveshare 2.23 OLED, the last of Screen's but what it shows with no music "
-      f"({wr.get('label')!r}, {wr.get('value')!r}, {wr.get('note')!r})",
+check(f"the web page's Settings: Waveshare 2.23 OLED, the last of Screen's but an e-ink's ({wr.get('label')!r}, "
+      f"{wr.get('value')!r}, {wr.get('note')!r})",
       wr.get("kind") == "choice" and wr.get("value") == "Off" and wr.get("label") == "Waveshare 2.23 OLED"
-      and wr.get("note") == "The OLED HAT on the Pi's pins: bars that move with the music, this Pi's or another "
-                            "of yours'."
-      and [(s["title"], s["rows"][0]["key"], [r["key"] for r in s["rows"][-2:]]) for s in m.web_settings()["sections"]
-           if s["id"] == "screen"] == [("Screen", "screen", ["oled", "oled_quiet"])]
+      and wr.get("note") == "The OLED HAT on the Pi's pins, and what it shows: bars that move with the music (this "
+                            "Pi's or another of yours'), the time, the weather, your Finance prices, the Bot's face, "
+                            "or each of those four in turn."
+      and [(s["title"], s["rows"][0]["key"], [r["key"] for r in s["rows"][-2:]])
+           for s in m.web_settings()["sections"] if s["id"] == "screen"] == [("Screen", "screen", ["oled", "eink"])]
       and "status" not in wr)
 said = m.web_settings_do({"key": "oled", "value": "Music bars"})
 fw = made[-1][1]
@@ -1158,18 +1260,32 @@ check("at start-up, set to Music bars: lit", m.oled is not None and ("c", b"\xaf
 m.oled_start()
 check("...once", len([x for x in made if x[1] is fw]) == 1 and made[-1][1] is fw)
 
-# ---- with no music: the time, the weather, a smiley face ----------------------------------------------------------
+# ---- a picture in place of its bars: the time, the weather, prices, the Bot's face ---------------------------------
 WALL = time.mktime((2026, 11, 25, 19, 49, 30, 0, 0, -1))   # (7:49 in the evening, here)
 m.oled_wall = lambda: WALL
 slot = int(WALL // O.DRIFT_SECS)
 m.set_setting("clock", "12-hour")
-m.set_setting("oled_quiet", "Time")
-got = m.oled_quiet(0)
-check("Time: the time, as the clock's set (12-hour: 7:49 with a small PM), moved a little for this minute",
-      got == O.picture_rows(O.quiet_time("7:49", "PM", at=O.drift(slot, O.DRIFT_TIME))))
-check("...asked again in the same minute: the same, not drawn again", m.oled_quiet(1) is got)
+
+
+def pic(now=0.0, quiet=False):
+    """Its picture's rows at `now`, music playing (or, quiet, none for a while). None: its bars."""
+    got = m.oled_picture(now, quiet)
+    return got[0] if got is not None else None
+
+
+time_now = O.picture_rows(O.quiet_time("7:49", "PM", at=O.drift(slot, O.DRIFT_TIME)))
+m.set_setting("oled", "Music bars")
+check("set to its bars: no picture while music plays; the time once there's been none for a while (not left dark)",
+      m.oled_picture(0, False) is None and pic(0, True) == time_now and m.oled_bars() and m.oled_wanted())
+m.set_setting("oled", "Time")
+got = pic()
+check("Time: the time, as the clock's set (12-hour: 7:49 with a small PM), moved a little for this minute, and "
+      "there whether music's playing or not", got == time_now and pic(1, True) == time_now)
+check("...asked again in the same minute: the same, not drawn again", pic(1) is got)
+check("...its music isn't moved to party mode's player for it, nor are your others' bars asked for",
+      not m.oled_bars() and not m.oled_wanted() and m.oled_beacon() is None)
 m.oled_wall = lambda: WALL + 60
-moved = m.oled_quiet(2)
+moved = pic(2)
 check(f"...the next minute: somewhere else ({O.drift(slot, O.DRIFT_TIME)} to {O.drift(slot + 1, O.DRIFT_TIME)}), "
       f"never far", moved != got and moved == O.picture_rows(O.quiet_time("7:50", "PM",
                                                                          at=O.drift(slot + 1, O.DRIFT_TIME))))
@@ -1178,104 +1294,325 @@ check(f"...a different place most minutes ({len(spots)} of {13 * 5}), never more
       len(spots) > 40 and all(abs(x) <= 6 and abs(y) <= 2 for x, y in spots))
 m.oled_wall = lambda: WALL
 m.set_setting("clock", "24-hour")
-check("...24-hour: 19:49, no AM or PM", m.oled_quiet(3) == O.picture_rows(O.quiet_time("19:49", "",
-                                                                                      at=O.drift(slot, O.DRIFT_TIME))))
-m.set_setting("oled_quiet", "Weather")
+time_24 = O.picture_rows(O.quiet_time("19:49", "", at=O.drift(slot, O.DRIFT_TIME)))
+check("...24-hour: 19:49, no AM or PM", pic(3) == time_24)
+
+# upside down: the row under its own and the e-ink's, while it's on
+m.view, m.tab, m.set_page = "list", SETTINGS, "display"
+m.oled_pick("Time")
+up = until(lambda: tuple(fw.rows()) == time_24, 3)
+r = rows()
+last = m.settings_rows()[-1]
+m.set_sel = r.index("hat_flip") if "hat_flip" in r else 0
+m.press("right")
+over = until(lambda: tuple(fw.rows()) == O.turned(time_24), 3)
+wr = web_rows()
+check(f"lit, one more row under its own and the e-ink's: {last[1] if last else None!r} ({r[-3:]}); ▶ there: On "
+      f"({m.setting('hat_flip')!r}): the picture it shows turned round at once ({up}, {over}); the web page's "
+      f"Settings has the row too ({(wr.get('hat_flip') or {}).get('label')!r})",
+      r[-3:] == ["oled", "eink", "hat_flip"] and last == ("hat_flip", "OLED upside down", ["Off", "On"])
+      and m.hat_on() == "OLED" and g.SETTINGS_DEFAULT["hat_flip"] == "Off" and m.setting("hat_flip") == "On"
+      and m.oled.screen.flip is True and up and over and wr["hat_flip"]["label"] == "OLED upside down"
+      and wr["hat_flip"]["value"] == "On" and wr["hat_flip"]["choices"] == ["Off", "On"]
+      and [x["key"] for s in m.web_settings()["sections"] if s["id"] == "screen" for x in s["rows"]][-3:]
+      == ["oled", "eink", "hat_flip"])
+m.oled_wall = lambda: WALL + 60
+m.oled.poke()
+next_min = O.picture_rows(O.quiet_time("19:50", "", at=O.drift(slot + 1, O.DRIFT_TIME)))
+later = until(lambda: tuple(fw.rows()) == O.turned(next_min), 3)
+m.oled_wall = lambda: WALL
+m.oled.poke()
+until(lambda: tuple(fw.rows()) == O.turned(time_24), 3)
+said = m.web_settings_do({"key": "hat_flip", "value": "Off"})
+back = until(lambda: tuple(fw.rows()) == time_24, 3)
+odd = [m.web_settings_do({"key": "hat_flip", "value": "Sideways"}),
+       m.web_settings_do({"key": "oled_flip", "value": "On"})]
+check(f"...the next minute's picture: upside down too ({later}); Off, picked on the web page ({said}): the right "
+      f"way up again ({back}); something it can't be: not taken ({odd})", later and said == {"ok": True} and back
+      and m.oled.screen.flip is False and m.setting("hat_flip") == "Off" and all("error" in x for x in odd))
+m.hat_flip_pick("On")
+m.oled_pick("Off")
+m.oled_pick("Time")
+fw2 = made[-1][1]
+again = until(lambda: tuple(fw2.rows()) == O.turned(time_24), 3)
+gone_row = (m.oled_pick("Off"), "hat_flip" in rows(), "hat_flip" in web_rows(),
+            m.web_settings_do({"key": "hat_flip", "value": "Off"}))
+check(f"...kept: lit again later, its picture's upside down from the start ({again}); with neither HAT on, no such "
+      f"row, here or on the web page ({gone_row[1:]})", again and fw2 is not fw and gone_row[1:3] == (False, False)
+      and "error" in gone_row[3] and m.hat_on() == "")
+m.set_setting("hat_flip", "Off")
+m.oled_pick("Time")
+fw = made[-1][1]
+m.set_sel = rows().index("oled")
+m.set_setting("oled", "Weather")
 wx_was = (m.weather.data, m.weather.t)
 m.weather.data, m.weather.t = None, 0.0
-check("Weather, with none yet: the time instead", m.oled_quiet(4) == O.picture_rows(
-    O.quiet_time("19:49", "", at=O.drift(slot, O.DRIFT_TIME))))
+check("Weather, with none yet: the time instead", pic(4) == time_24)
 m.weather.data, m.weather.t = {"temp": 61.6, "code": 2, "is_day": True}, WALL - 600
-check("...with some: its picture, how warm and its words (Partly cloudy)", m.oled_quiet(5) == O.picture_rows(
+check("...with some: its picture, how warm and its words (Partly cloudy)", pic(5) == O.picture_rows(
     O.quiet_weather("62°", "Partly cloudy", "partly_day", at=O.drift(slot, O.DRIFT_WX))))
 m.weather.data["is_day"] = False
-check("...at night, the night's picture", m.oled_quiet(6) == O.picture_rows(
+check("...at night, the night's picture", pic(6) == O.picture_rows(
     O.quiet_weather("62°", "Partly cloudy", "partly_night", at=O.drift(slot, O.DRIFT_WX))))
 m.weather.t = WALL - SO.QUIET_WX_OLD - 60
-check("...hours old (the WiFi's down, say): the time instead", m.oled_quiet(7) == O.picture_rows(
-    O.quiet_time("19:49", "", at=O.drift(slot, O.DRIFT_TIME))))
+check("...hours old (the WiFi's down, say): the time instead", pic(7) == time_24)
 m.weather.t = WALL - 600
-m.set_setting("oled_quiet", "Smiley")
-check("Smiley: a smiley face, moved further each minute (it's narrow)", m.oled_quiet(8) == O.picture_rows(
-    O.quiet_face(at=O.drift(slot, O.DRIFT_FACE))) and max(abs(O.drift(k, O.DRIFT_FACE)[0]) for k in range(200)) > 30)
-face = np.unpackbits(np.frombuffer(b"".join(O.picture_rows(O.quiet_face())), np.uint8).reshape(4, 1, 128), axis=1,
-                     bitorder="little").reshape(32, 128)
-cols = np.nonzero(face.any(axis=0))[0]
-check(f"...two eyes and a smile, the same both sides ({cols.min()} to {cols.max()} across)",
-      (face == face[:, ::-1]).all() and 25 <= cols.max() - cols.min() <= 40 and face[:12].any() and face[20:].any())
-m.set_setting("oled_quiet", "All three")
+
+# the face: the Bot's own, as its Character has it
+def lit_of(rows):
+    """A picture's rows as its pixels (32 by 128: 1 where lit)."""
+    return np.unpackbits(np.frombuffer(b"".join(rows), np.uint8).reshape(4, 1, 128), axis=1,
+                         bitorder="little").reshape(32, 128)
+
+
+def runs(on):
+    """The stretches of a line that are lit: [(first, last)]."""
+    out, at = [], None
+    for k, v in enumerate(list(on) + [False]):
+        if v and at is None:
+            at = k
+        elif not v and at is not None:
+            out.append((at, k - 1))
+            at = None
+    return out
+
+
+AHEAD = next(t for t in np.arange(0.5, 90, 0.5) if FACE.face_state("idle", t)[:2] == (1.0, (0, 0))
+             and FACE.face_wait("idle", t) > 0.3)       # (a moment it looks straight ahead, its eyes open)
+m.set_setting("oled", "Face")
+shape, lashes = m.oled_face()
+face = pic(AHEAD)
+check("Face: the Bot's own face (face.py's), the shape its Character gives it, moved a little each minute",
+      shape == FACE.face_shape(m.bot_steps()) and lashes is False
+      and face == O.picture_rows(O.quiet_face(shape, lashes, AHEAD, at=O.face_drift(slot, shape, lashes))))
+plain = lit_of(O.picture_rows(O.quiet_face(shape, lashes, AHEAD)))
+bands = runs(plain.any(axis=1))
+eyes = runs(plain[bands[0][0]:bands[0][1] + 1].any(axis=0)) if bands else []
+mouth = runs(plain[bands[-1][0]:bands[-1][1] + 1].any(axis=0)) if len(bands) == 2 else []
+eye_w = [b - a + 1 for a, b in eyes]
+mouth_w = mouth[0][1] - mouth[0][0] + 1 if len(mouth) == 1 else 999
+check(f"...two big eyes (each {eye_w} across, {bands[0][1] - bands[0][0] + 1 if bands else 0} down) and a little "
+      f"mouth under them ({mouth_w} across, {bands[-1][1] - bands[-1][0] + 1 if bands else 0} down): not a smile as "
+      f"wide as the face", len(bands) == 2 and len(eyes) == 2 and min(eye_w) >= 9 and eye_w[0] == eye_w[1]
+      and bands[0][1] - bands[0][0] + 1 >= 14 and mouth_w <= eye_w[0] + 2 and bands[1][1] - bands[1][0] + 1 <= 4
+      and eyes[0][0] < mouth[0][0] and mouth[0][1] < eyes[1][1]
+      and abs((mouth[0][0] + mouth[0][1]) - (eyes[0][0] + eyes[1][1])) <= 1)
+check(f"...all of it on the screen wherever its eyes look, a pixel to spare for the minute's move "
+      f"({O.face_fit(shape, lashes)})", all(
+          not lit_of(O.picture_rows(O.quiet_face(shape, lashes, t)))[[0, -1]].any()
+          for t in np.arange(0.0, 60.0, 0.37)))
+BLINK = FACE._blink_at(int(AHEAD // 4) + 1)[0]         # (its next blink but one's start)
+shut = m.oled_picture(BLINK + FACE.BLINK / 2)
+eyes_shut = lit_of(shut[0])
+check(f"...it blinks, as the Bot's does: its eyes shut (a line each) halfway through one, and it's asked for again "
+      f"in a twentieth of a second ({shut[1]:.2f})", shut[0] != face and shut[1] <= 0.05
+      and max(b - a + 1 for a, b in runs(eyes_shut[:20].any(axis=1))) <= 3
+      and m.oled_picture(AHEAD)[1] > 0.05)
+LOOKS = next(t for t in np.arange(1.0, 200, 3.0) if abs(FACE.face_state("idle", t)[1][0]) >= 0.7)
+glance = lit_of(pic(LOOKS))
+check("...and glances about: its eyes and mouth to one side", glance.any() and not np.array_equal(
+    np.nonzero(glance.any(axis=0))[0][[0, -1]], np.nonzero(lit_of(face).any(axis=0))[0][[0, -1]]))
+wide = FACE.face_shape({"eye_size": 10, "eye_height": 10, "eye_gap": 10, "mouth_size": 10})
+reach = O.face_fit(wide, True)[2]
+check(f"...a Character with the biggest eyes, furthest apart, and eyelashes: still all on the screen, moved less far "
+      f"each minute (it reaches {reach} either side)", all(
+          not lit_of(O.picture_rows(O.quiet_face(wide, True, AHEAD, at=O.face_drift(k, wide, True))))[
+              :, [0, -1]].any() and abs(O.face_drift(k, wide, True)[0]) <= 64 - reach for k in range(120))
+      and max(abs(O.face_drift(k, shape, lashes)[0]) for k in range(200)) > 30)
+m.set_setting("oled", "Each in turn")
 kinds = []
 for k in range(6):
     m.oled_wall = lambda k=k: WALL + k * SO.QUIET_TURN
-    m.oled_quiet(10)
+    m.oled_picture(10)
     kinds.append(m.oled_quiet_key[0])
-check(f"All three: each in turn, {SO.QUIET_TURN:.0f} seconds each ({kinds})", len(set(kinds[:3])) == 3
-      and kinds[:3] == kinds[3:])
+check(f"Each in turn, with no prices here: the other three in turn, {SO.QUIET_TURN:.0f} seconds each ({kinds})",
+      len(set(kinds[:3])) == 3 and kinds[:3] == kinds[3:] and "price" not in kinds)
 m.weather.data = None
 kinds = []
 for k in range(4):
     m.oled_wall = lambda k=k: WALL + k * SO.QUIET_TURN
-    m.oled_quiet(11)
+    m.oled_picture(11)
     kinds.append(m.oled_quiet_key[0])
 check(f"...with no weather: the time and the face ({kinds})", sorted(set(kinds)) == ["face", "time"]
       and kinds[0] != kinds[1])
 m.weather.data, m.weather.t = wx_was
+
+# your stocks' and coins' prices
+stocks_was, coins_was = (m.stocks.stocks, m.stocks.quotes), (m.crypto.coins, m.crypto.quotes)
+m.stocks.stocks = [{"symbol": "AAPL", "name": "Apple Inc."}, {"symbol": "TSLA", "name": "Tesla, Inc."}]
+m.stocks.quotes = {"AAPL": {"t": WALL - 120, "d": {"price": 235.86, "currency": "USD", "kind": "EQUITY",
+                                                   "change_1d": 1.2391}},
+                   "TSLA": {"t": WALL - SO.QUIET_WX_OLD - 60, "d": {"price": 350.1, "currency": "USD",
+                                                                     "change_1d": -3.0}}}
+m.crypto.coins = [{"id": "bitcoin", "symbol": "BTC", "name": "Bitcoin"},
+                  {"id": "dogecoin", "symbol": "DOGE", "name": "Dogecoin"}]
+m.crypto.quotes = {"bitcoin": {"t": WALL - 60, "d": {"price": 97140.2, "change_24h": -2.3104}},
+                   "dogecoin": {"t": WALL - 60, "d": {"price": 0.123412, "change_24h": None}}}
+mine = m.oled_prices(WALL)
+check(f"Prices: the Finance app's stocks, then its coins, as they're written there, how far they've moved today; "
+      f"one fetched hours ago left out ({mine})", mine == [("AAPL", "$235.86", 1.24), ("BTC", "$97,140", -2.31),
+                                                            ("DOGE", "$0.1234", None)])
+m.set_setting("oled", "Prices")
 m.oled_wall = lambda: WALL
-m.set_setting("oled_quiet", "Nothing")
-check("Nothing: nothing (dark)", m.oled_quiet(12) is None)
-m.set_setting("oled_quiet", "Time")
+first = pic(12)
+k0 = int(WALL // SO.PRICE_SECS) % 3
+check(f"...one at a time: its ticker, how far it's moved and its price ({m.oled_quiet_key[1:4]})",
+      first == O.picture_rows(O.quiet_price(*mine[k0], at=O.drift(slot, O.DRIFT_WX))))
+seen = []
+for k in range(6):
+    m.oled_wall = lambda k=k: WALL + k * SO.PRICE_SECS
+    m.oled_picture(13)
+    seen.append(m.oled_quiet_key[1])
+check(f"...each for {SO.PRICE_SECS:.0f} seconds, then the next, round and round ({seen})", len(set(seen[:3])) == 3
+      and seen[:3] == seen[3:])
+for q in list(m.stocks.quotes.values()) + list(m.crypto.quotes.values()):
+    q["t"] -= SO.QUIET_WX_OLD
+m.oled_wall = lambda: WALL
+check("...none that aren't hours old (no WiFi, say): the time instead", pic(14) == time_24)
+for q in list(m.stocks.quotes.values()) + list(m.crypto.quotes.values()):
+    q["t"] += SO.QUIET_WX_OLD
+m.set_setting("oled", "Each in turn")
+m.weather.data, m.weather.t = {"temp": 61.6, "code": 2, "is_day": True}, WALL - 600
+m.stocks.quotes["TSLA"]["t"] = WALL - 10 * SO.QUIET_WX_OLD
+kinds, start = [], WALL - WALL % 300                    # (a whole turn of them: 15 + 15 + 3 prices of 5 + 15 seconds)
+for k in range(int(60 / SO.PRICE_SECS)):
+    m.oled_wall = lambda k=k: start + k * SO.PRICE_SECS
+    m.oled_picture(15)
+    key = m.oled_quiet_key
+    kinds.append(key[1] if key[0] == "price" else key[0])
+turns = [x for k, x in enumerate(kinds) if k == 0 or kinds[k - 1] != x]
+check(f"Each in turn: the time, the weather, each price, the face, one after another ({turns})",
+      turns == ["time", "weather", "AAPL", "BTC", "DOGE", "face"]
+      and kinds.count("time") == kinds.count("weather") == kinds.count("face") == 3)
+m.weather.data, m.weather.t = wx_was
+m.set_setting("oled", "Prices")
+fetched, peers = [], []
+m.stocks.fetch_quote = lambda sym: fetched.append(sym)
+m.crypto.fetch_quote = lambda cid: fetched.append(cid)
+m.stocks.from_peer = m.crypto.from_pie = lambda job, ttl: peers.append(job) and False
+g.edit_config("finance.txt", {"stocks": "AAPL, MSFT", "coins": "bitcoin"}, head="")
+m.stocks.quotes["AAPL"]["t"] = time.time() - 30        # (just fetched: not again yet)
+m.oled_prices_at, m.oled_seen = 0.0, 0.0
+m.oled_tick(time.monotonic())
+until(lambda: not m.oled_prices_busy, 5)
+check(f"...fetched for it: the prices alone, of your stocks and coins as finance.txt has them, not one just fetched, "
+      f"your other Pietatos asked first ({fetched}, {peers})", fetched == ["MSFT", "bitcoin"]
+      and peers == [("quote", "MSFT"), ("quote", "bitcoin")] and m.stocks.symbols() == ["AAPL", "MSFT"])
+m.oled_seen = 0.0
+m.oled_tick(time.monotonic())
+check("...not again a moment later", fetched == ["MSFT", "bitcoin"] and not m.oled_prices_busy)
+m.oled_prices_at, m.oled_seen, m.stocks.running = 0.0, 0.0, True
+m.oled_tick(time.monotonic())
+check("...nor while the Finance tab's open (it fetches them)", fetched == ["MSFT", "bitcoin"]
+      and not m.oled_prices_busy)
+m.stocks.running = False
+m.set_setting("oled", "Time")
+m.oled_prices_at, m.oled_seen = 0.0, 0.0
+m.oled_tick(time.monotonic())
+check("...nor while it isn't showing them", fetched == ["MSFT", "bitcoin"] and not m.oled_prices_busy)
+del m.stocks.fetch_quote, m.crypto.fetch_quote, m.stocks.from_peer, m.crypto.from_pie
+(m.stocks.stocks, m.stocks.quotes), (m.crypto.coins, m.crypto.quotes) = stocks_was, coins_was
+m.oled_wall = lambda: WALL
 font_was = O.FONT_UI_BOLD
 O.FONT_UI_BOLD, m.oled_quiet_key = S + "/no-such-font.otf", None
 O._FONTS.clear()
-broken = [m.oled_quiet(13), m.oled_quiet(14)]
+broken = [m.oled_picture(13), m.oled_picture(14)]
 O.FONT_UI_BOLD = font_was
 O._FONTS.clear()
-check("...one that can't be drawn (its font's gone): dark, said once, and the OLED goes on",
+check("...one that can't be drawn (its font's gone): none (its bars, dark), said once, and the OLED goes on",
       broken == [None, None] and m.oled_quiet_said and m.oled is not None)
 m.oled_quiet_said = False
 asked_wx = []
 m.weather.refresh = lambda *a, **k: asked_wx.append(1)
-m.set_setting("oled_quiet", "Weather")
+m.set_setting("oled", "Weather")
 m.oled_seen = 0.0
 m.oled_tick(time.monotonic())
-m.set_setting("oled_quiet", "Time")
+m.set_setting("oled", "Time")
 m.oled_seen = 0.0
 m.oled_tick(time.monotonic())
 check(f"...the weather fetched again when it's due, for it (only while it shows it: {len(asked_wx)})",
       asked_wx == [1])
 del m.weather.refresh
 
-# on its own thread, with no music for a while
-O.QUIET_AFTER, quiet_was = 0.4, O.QUIET_AFTER
-want = O.picture_rows(O.quiet_time("7:49", "PM", at=O.drift(slot, O.DRIFT_TIME)))
+# on its own thread: what the row's set to, as it's cycled through, music or none
+O.QUIET_AFTER = 0.4
 m.set_setting("clock", "12-hour")
-m.oled_quiet_key = None
-shown = until(lambda: fw.rows() == list(want), 4)
-check(f"the OLED, with no music for a while: the time, dimmer ({shown})", shown
-      and ("c", bytes([O.DIM])) in fw.log and m.oled.resting)
-m.oled.heard(pcm_of(np.full(RATE // 5, 0.8)), time.monotonic() + 0.05)
+m.view, m.tab, m.set_page = "list", SETTINGS, "display"
+m.oled_pick("Music bars")
+m.set_sel = rows().index("oled")
+shown = until(lambda: fw.rows() == list(time_now), 4)
+check(f"the OLED, set to its bars, with no music for a while: the time, dimmer ({shown})", shown
+      and ("c", bytes([O.DIM])) in fw.log and m.oled.resting and not m.oled.pinned)
+m.oled_heard(pcm_of(np.full(RATE // 5, 0.8)).tobytes(), time.monotonic() + 0.05, 1.0)
 lit_again = until(lambda: not m.oled.resting and (fw.heights() or [0])[0] > 0, 3)
 check(f"...music: its bars at once, as bright as ever ({lit_again})", lit_again
       and fw.log[fw.log.index(("c", bytes([O.DIM]))):].count(("c", bytes([O.BRIGHT]))) >= 1)
-back = until(lambda: fw.rows() == list(want), 4)
+back = until(lambda: fw.rows() == list(time_now), 4)
 check(f"...over: the time again ({back})", back)
-m.set_setting("oled_quiet", "Smiley")
-check("...picked on the web page, Smiley: a smiley face", web_rows()["oled_quiet"]["choices"] == g.OLED_QUIET
-      and "smiley" in web_rows()["oled_quiet"]["note"]
-      and m.web_settings_do({"cmd": "settings", "key": "oled_quiet", "value": "Weather"}) == {"ok": True}
-      and m.setting("oled_quiet") == "Weather"
-      and "error" in m.web_settings_do({"cmd": "settings", "key": "oled_quiet", "value": "Sometimes"}))
-m.set_setting("oled_quiet", "Smiley")
-check("...and shown (it changes as it's set)", until(lambda: fw.rows() == list(O.picture_rows(
-    O.quiet_face(at=O.drift(slot, O.DRIFT_FACE)))), 3))
+m.press("right")
+check(f"▶ on its row: the next of its choices, Time ({m.setting('oled')!r}), with no new start of the OLED "
+      f"({len(made)} made)", m.setting("oled") == "Time" and made[-1][1] is fw and m.oled is not None
+      and m.oled_in is None and m.oled_value() == "Time")
+t0, fed_was = time.monotonic(), m.oled.fed
+stayed = True
+for k in range(30):                                    # (loud music, most of a second of it: the time stays up)
+    m.oled_heard(pcm_of(np.full(960, 0.9)).tobytes(), t0 + k * 0.02, 1.0)
+    time.sleep(0.02)
+    stayed = stayed and fw.rows() == list(time_now)
+check(f"...music playing: the time stays, no bars over it ({stayed}): its sound isn't passed on to the OLED at all",
+      stayed and m.oled.fed == fed_was)
+t0 = time.monotonic()
+for k in range(20):                                    # (...a bit that reaches it all the same: just as it's picked)
+    m.oled.heard(pcm_of(np.full(960, 0.9)).tobytes(), t0 + k * 0.02)
+    time.sleep(0.02)
+    stayed = stayed and fw.rows() == list(time_now)
+check(f"...and sound that reaches it all the same (played just as it's picked, say): the time stays ({stayed})",
+      stayed and m.oled.pinned and m.oled.resting)
+m.press("right")
+m.weather.data, m.weather.t = {"temp": 61.6, "code": 2, "is_day": True}, WALL - 600
+weather_now = O.picture_rows(O.quiet_weather("62°", "Partly cloudy", "partly_day", at=O.drift(slot, O.DRIFT_WX)))
+check("▶: Weather, shown at once", m.setting("oled") == "Weather" and until(lambda: fw.rows() == list(weather_now), 1))
+m.weather.data, m.weather.t = wx_was
+m.press("right")
+m.press("right")
+m.oled.picture_of = lambda now, quiet: m.oled_picture(AHEAD, quiet)   # (its face held still, to look at)
+m.oled.poke()
+check(f"▶▶: past Prices to Face ({m.setting('oled')!r}): the Bot's face, shown", m.setting("oled") == "Face"
+      and until(lambda: fw.rows() == list(face), 1))
+m.oled.picture_of = m.oled_picture
+m.press("right")
+m.press("right")
+made_was = len(made)
+check(f"▶▶: Each in turn, then round to Off: dark and off ({m.setting('oled')!r})", m.setting("oled") == "Off"
+      and m.oled is None and fw.closed)
+m.press("left")
+fw = made[-1][1]
+check(f"◀ from Off: round to the last, Each in turn: lit again, a picture at once ({m.setting('oled')!r})",
+      m.setting("oled") == "Each in turn" and m.oled is not None and not fw.closed
+      and until(lambda: m.oled.resting and fw.rows() == list(m.oled_quiet_rows) != list(O.BLANK), 1)
+      and m.oled_in is None and len(made) == made_was + 1)
+wr = web_rows()["oled"]
+check(f"the web page's Settings: the same choices on its one row ({wr['choices']})",
+      wr["choices"] == ["Off", "Music bars", "Time", "Weather", "Prices", "Face", "Each in turn"]
+      and wr["value"] == "Each in turn" and "oled_quiet" not in web_rows() and "face" in wr["note"]
+      and m.web_settings_do({"cmd": "settings", "key": "oled", "value": "Face"}) == {"ok": True}
+      and m.setting("oled") == "Face" and made[-1][1] is fw
+      and "error" in m.web_settings_do({"cmd": "settings", "key": "oled", "value": "Smiley"})
+      and "error" in m.web_settings_do({"cmd": "settings", "key": "oled_quiet", "value": "Time"}))
+m.dirty = True
+m.flush()
+FB.last.convert("RGB").save(S + "/settings_oled_face.png")
 pics = [O.quiet_time("7:49", "PM"), O.quiet_time("19:49", ""), O.quiet_weather("62°", "Partly cloudy", "partly_day"),
-        O.quiet_weather("104°", "Thunderstorm, hail", "storm"), O.quiet_face()]
+        O.quiet_weather("104°", "Thunderstorm, hail", "storm"), O.quiet_price("AAPL", "$235.86", 1.24),
+        O.quiet_price("BTC", "$97,140", -2.31), O.quiet_price("BRK-B", "$1,234.56", -0.08),
+        O.quiet_price("^GSPC", "5,912.17"), O.quiet_face(shape, lashes, AHEAD),
+        O.quiet_face(shape, lashes, BLINK + FACE.BLINK / 2), O.quiet_face(shape, lashes, LOOKS),
+        O.quiet_face(wide, True, AHEAD)]
 sheet = Image.new("L", (128 * 4 + 8, (32 * 4 + 8) * len(pics)), 60)
 for k, p in enumerate(pics):
     sheet.paste(p.convert("L").resize((128 * 4, 32 * 4), Image.NEAREST), (4, 4 + k * (32 * 4 + 8)))
 sheet.save(S + "/oled_quiet.png")
-O.QUIET_AFTER = quiet_was
-m.set_setting("oled_quiet", "Nothing")
+O.QUIET_AFTER = QUIET_WAS
 m.active = False
 m.shutdown()
 check("Pietato going: its OLED dark and off", m.oled is None and fw.closed and fw.log[-1] == ("c", b"\xae"))

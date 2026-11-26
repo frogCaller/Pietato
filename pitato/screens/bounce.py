@@ -106,6 +106,8 @@ class BounceScreen:
     def bounce_start(self, now):
         """START's card, Bounce: the shape in the middle of the page, a few balls in it, its sliders beside it."""
         b = self.board
+        if b.seq_up:
+            self.seq_leave()                           # (the Sequencer's page: Bounce's now. Its tune plays on)
         b.bounce_levels = {k: self.bounce_level(k) for k in BN.LEVELS}
         b.bounce = BN.World(BN.shape_sides(self.bounce_get("shape")), self.bounce_level("spin") * BN.SPIN_STEP,
                             self.bounce_level("speed") * BN.SPEED_STEP)

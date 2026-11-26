@@ -794,9 +794,10 @@ def flush():
     return np.asarray(FB.last.convert("RGB")).astype(int)
 
 
-LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "space", "bounce"]   # (START's card: the loop's, after
-                                                                             #  the bank's and volume; then its space
-                                                                             #  and Bounce)
+LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "space", "seq", "bounce"]   # (START's card: the loop's,
+                                                                                    #  after the bank's and volume;
+                                                                                    #  then its space, the Sequencer
+                                                                                    #  and Bounce)
 
 
 def quiet():
