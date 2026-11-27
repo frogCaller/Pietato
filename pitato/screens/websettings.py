@@ -267,8 +267,9 @@ class WebSettingsScreen:
                           "still talks and listens. SELECT on the Bot switches it on or off, and on its face up and "
                           "down change its colour, left and right its background."},
                  choice("attract", "Attract mode", ATTRACT_CHOICES,
-                        note="Left idle, plugged in: the Bot gets bored and plays a game, looks through the camera or "
-                             "shows another app, till a button's pressed. Games only: just games.")]
+                        note="Left idle, plugged in: the Bot gets bored and looks through the camera, shows another "
+                             "app or one of Apps' terminal toys, and plays a game once it's been through them all, "
+                             "till a button's pressed. Games only: just games.")]
         sec("bot", "Bot", rows, "It talks through Ollama on another computer on your network.")
 
         # the Bot's character: who it is, its look and its voice (on the Pi: X > Edit Character on the Bot)

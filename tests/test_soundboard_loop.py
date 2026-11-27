@@ -2,10 +2,11 @@
 pretend sound card that logs when each period of sound is heard: a loop's sounds heard at their beats, evenly, at the
 tempo it's told, and from the moment a new tempo's told; a sound in it that isn't to be heard before a beat isn't; the
 click, quiet, on each beat and higher on a bar's first; a sound played as a note (higher: shorter, lower: longer); a
-loop of nothing, or of nonsense, and none at all. Then the app in media mode: SELECT records a layer and stops it, the
-buttons pressed meanwhile played back round and round where they were pressed (snapped to the beat, or not); more
-layers; SELECT held drops the last; START held clears it all; START tapped, its card; A, B, X or Y held and the d-pad,
-its sound as notes of a scale, the note on its tile, and into the loop; the tempo, the loop's length and the space on
+loop of nothing, or of nonsense, and none at all. Then the app in media mode: START's card's first row (START, then
+A) records a layer and stops it, the buttons pressed meanwhile played back round and round where they were pressed
+(snapped to the beat, or not); more layers; its last row drops the last (the one recording, if one is); SELECT never
+records now (it's the banks'); START held clears it all; START tapped, its card; A, B, X or Y held and the d-pad, its
+sound as notes of a scale, the note on its tile, and into the loop; the tempo, the loop's length and the space on
 START's card; the page as it goes."""
 import json, math, os, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -344,6 +345,23 @@ if not ONLY or "app" in ONLY:
     def loops():
         return [c for c in told if c.get("do") == "loop"]
 
+    def at(key):
+        """Which of its card's rows that is."""
+        return [r[0] for r in m.board_rows()].index(key)
+
+    def rec():
+        """START, then A: its card's first row (Record a loop, Add to the loop, Stop recording)."""
+        tap("start")
+        tap("a")
+
+    def drop():
+        """START, ▲, then A: its card's last row (Drop the last layer, or this one)."""
+        tap("start")
+        tap("up")
+        label = m.board_rows()[m.sim_opts % len(m.board_rows())][1]
+        tap("a")
+        return label
+
     def until_t(when):
         while time.monotonic() < when:
             m.tick()
@@ -357,16 +375,23 @@ if not ONLY or "app" in ONLY:
     spin(4, lambda: m.board is not None and len(m.board.ready) == 24 and m.board.sound_ok)
     b = m.board
     s = m.sim_game()
-    check(f"Apps > Soundboard: its buttons along the bottom say SELECT records a loop ({m.sim_hints(s)})",
-          m.board_shown() and m.sim_hints(s) == [("L R", "Bank"), ("SELECT", "Record a loop"), ("START", "More"),
-                                                 ("HOME", "Back")])
+    check(f"Apps > Soundboard: its buttons along the bottom: SELECT's the banks' now, and the loop's on START's card "
+          f"({m.sim_hints(s)})", m.board_shown()
+          and m.sim_hints(s) == [("L R", "Sequencer, Bounce"), ("SELECT", "Bank"), ("START", "More"), ("HOME", "Back")])
     tap("start")
     rows = m.board_rows()
-    check(f"START tapped: its card, with the loop's tempo, length, snapping, click and the notes' scale "
-          f"({[(k, v) for k, _, v in rows]})", m.sim_opts is not None and b.card == "more"
-          and [(k, v) for k, _, v in rows][2:] == [("tempo", "100 BPM"), ("bars", "2 bars"), ("snap", "On"),
-                                                  ("click", "On"), ("scale", "Major"), ("space", "Off"),
-                                                  ("seq", None), ("bounce", None)])
+    check(f"START tapped: its card, Record a loop first ({m.sim_hints(m.sim_game())[1]}), then the bank, the volume, "
+          f"the loop's tempo, length, snapping, click and the notes' scale ({[(k, v) for k, _, v in rows]}); nothing "
+          f"to drop yet", m.sim_opts == 0 and b.card == "more" and rows[0] == ("loop", "Record a loop", None)
+          and m.sim_hints(m.sim_game())[1] == ("A", "Record")
+          and [(k, v) for k, _, v in rows][3:] == [("tempo", "100 BPM"), ("bars", "2 bars"), ("snap", "On"),
+                                                  ("click", "On"), ("scale", "Major"), ("space", "Off")])
+    from PIL import Image as PILImage, ImageDraw as PILDraw
+    probe = PILDraw.Draw(PILImage.new("RGB", (1, 1)))
+    how = m.wrap(probe, SB.BOARD_HOW, m.fonts["small"], 404 - 44, lines=3)
+    check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
+          and not how[-1].endswith("…") and " ".join(how).startswith("L and R: the Sequencer and Bounce. SELECT: the "
+                                                                      "next bank. START held clears the loop."))
     img, (cx, cy) = m.board_opts_card(s)
     (bx0, by0, bx1, by1), _ = m.sim_box()
     m.sim_opts = len(rows) - 1
@@ -378,22 +403,31 @@ if not ONLY or "app" in ONLY:
     spin(0.1)
     check("...START there closes it, and letting go of it doesn't open it again", m.sim_opts is None and b.card is None)
     m.press("start")
-    spin(0.8)
+    spin(0.6)
+    slow = (m.sim_opts, list(toasts))
+    spin(0.5)
     m.release("start")
     spin(0.1)
-    check(f"START held, nothing in the loop: every sound stopped, and no card ({toasts[-1:]})",
-          m.sim_opts is None and toasts[-1:] == ["Stopped"] and told[-1] == {"do": "stop"})
+    check(f"START held, nothing in the loop: every sound stopped, and no card ({toasts[-1:]}); a slow press of it "
+          f"(over half a second) isn't that yet: its card, still ({slow})", slow == (0, [])
+          and m.sim_opts is None and toasts[-1:] == ["Stopped"] and told[-1] == {"do": "stop"})
 
     # a layer: four sounds a little late on four beats, snapped to them, played back round and round
     m.board_tempo(120)
     m.set_setting("board_click", "Off")                 # (the click's its player's: heard here, it'd be counted)
-    tap("r")
-    hat = b.bank()["pads"]["up"]
-    check(f"(the Drums bank: {b.bank()['name']}, {hat.split('/')[-1]} on ▲)", b.at == 1 and b.ready.get(hat, 9) < 0.45)
     tap("select")
-    check(f"SELECT: a layer's recording (nothing for its player yet: the click's off, as it's set); the buttons say "
-          f"SELECT keeps it ({m.sim_hints(m.sim_game())})", b.take is not None and loops()[-1] == {"do": "loop"}
-          and m.sim_hints(m.sim_game())[-3:] == [("SELECT", "Keep it"), ("START", "More"), ("HOME", "Back")])
+    hat = b.bank()["pads"]["up"]
+    check(f"(SELECT: the Drums bank: {b.bank()['name']}, {hat.split('/')[-1]} on ▲; and nothing's recording)",
+          b.at == 1 and b.ready.get(hat, 9) < 0.45 and b.take is None and not b.layers)
+    rec()
+    tap("start")
+    stop_row = (m.board_rows()[0], m.sim_hints(m.sim_game())[1], m.board_rows()[-1])
+    tap("start")
+    check(f"START, then A (its card's first row): a layer's recording (nothing for its player yet: the click's off, as "
+          f"it's set), the card gone; the row's to stop it now ({stop_row[0][1]!r}, {stop_row[1]}), and the last row "
+          f"to drop it ({stop_row[2][1]!r})", b.take is not None and loops()[-1] == {"do": "loop"}
+          and stop_row == (("loop", "Stop recording", None), ("A", "Stop"), ("drop", "Drop this layer", None))
+          and m.sim_opts is None and b.card is None and m.sim_game().loop["rec"] is True)
     c = b.clock
     first = math.ceil(c.beat(time.monotonic())) + 2
     mark = log_at()
@@ -402,10 +436,10 @@ if not ONLY or "app" in ONLY:
         m.press("up")
         m.release("up")
     spin(0.25)
-    tap("select")
+    rec()
     spin(0.3)
     layer = b.layers[0] if b.layers else None
-    check(f"...SELECT again: kept, the four where they were played, each to its beat though played late "
+    check(f"...START, then A again: kept, the four where they were played, each to its beat though played late "
           f"({[h[0] for h in layer[1]] if layer else None}, a {layer[0] if layer else 0}-beat loop)",
           b.take is None and len(b.layers) == 1 and layer[0] == 8
           and [h[0] for h in layer[1]] == [float((first + k) % 8) for k in range(4)])
@@ -421,39 +455,45 @@ if not ONLY or "app" in ONLY:
     check(f"...and the next time round, each on its very beat ({out} ms from it)",
           len(on) == 4 and all(abs(x) <= 4 for x in out))
 
-    # without snapping, as it was played; SELECT held: that layer's gone
+    # without snapping, as it was played; its card's last row: that layer's gone
     m.set_setting("board_click", "On")
     m.set_setting("board_snap", "Off")
-    tap("select")
+    tap("start")
+    more_row = m.board_rows()[0][1]
+    tap("a")
     c = b.clock
-    at = math.ceil(c.beat(time.monotonic())) + 1.3
-    until_t(c.at(at))
+    beat = math.ceil(c.beat(time.monotonic())) + 1.3
+    until_t(c.at(beat))
     tap("up")
-    tap("select")
+    rec()
     pos = b.layers[-1][1][0][0] if len(b.layers) == 2 else None
-    check(f"snapping off: as it was played ({pos} of the loop's 8 beats, played at {at % 8:.2f})",
-          pos is not None and abs(pos - at % 8) < 0.03)
+    check(f"a loop there already: the row's {more_row!r}; snapping off: as it was played ({pos} of the loop's 8 beats, "
+          f"played at {beat % 8:.2f})", more_row == "Add to the loop" and pos is not None
+          and abs(pos - beat % 8) < 0.03)
     m.set_setting("board_snap", "On")
     m.press("select")
     spin(0.8)
     m.release("select")
     spin(0.1)
-    check(f"SELECT held: the last layer's gone (and the recording its going down started) ({len(b.layers)} layer, "
-          f"{toasts[-1:]})", len(b.layers) == 1 and b.take is None and toasts[-1:] == ["The last layer's gone"])
+    check(f"SELECT held: the next bank, once, and nothing dropped ({b.bank()['name']}, {len(b.layers)} layers)",
+          b.at == 2 and len(b.layers) == 2 and b.take is None and toasts[-1:] != ["The last layer's gone"])
     tap("select")
+    tap("select")                                       # (Drums again)
+    label = drop()
+    spin(0.1)
+    check(f"its card's last row, {label!r} (START, ▲, A): the last layer's gone, the card too ({len(b.layers)} layer, "
+          f"{toasts[-1:]})", label == "Drop the last layer" and b.at == 1 and len(b.layers) == 1 and b.take is None
+          and toasts[-1:] == ["The last layer's gone"] and m.sim_opts is None)
+    rec()
     clicked = loops()[-1].get("click")
     tap("up")
-    m.press("select")
-    spin(0.8)
-    m.release("select")
-    check(f"...SELECT held while one's recording (the click on, as it's set: {clicked}): that one's dropped, the ones "
-          f"before kept", len(b.layers) == 1 and b.take is None and clicked is True)
-    tap("select")
-    m.press("select")
-    spin(0.8)
-    m.release("select")
-    check(f"...and one that's had nothing played in it: nothing's dropped ({toasts[-1:]})",
-          len(b.layers) == 1 and b.take is None and toasts[-1:] == ["Nothing to take back"])
+    label = drop()
+    check(f"...while one's recording (the click on, as it's set: {clicked}), {label!r}: that one's dropped with what "
+          f"was played in it, the ones before kept ({toasts[-1:]})", label == "Drop this layer" and len(b.layers) == 1
+          and b.take is None and clicked is True and toasts[-1:] == ["That layer's gone"])
+    rec()
+    rec()
+    check("...and one stopped with nothing played in it: not kept", len(b.layers) == 1 and b.take is None)
 
     # notes: A held, and the d-pad
     told.clear()
@@ -496,7 +536,7 @@ if not ONLY or "app" in ONLY:
     tap("up")
     check("...the d-pad's own sound again",
           [c_ for c_ in told if c_.get("do") == "play"] == [{"do": "play", "id": hat}])
-    tap("select")
+    rec()
     c = b.clock
     first = math.ceil(c.beat(time.monotonic())) + 1
     until_t(c.at(first))
@@ -506,13 +546,13 @@ if not ONLY or "app" in ONLY:
     until_t(c.at(first + 2))
     m.press("up"); m.release("up")
     m.release("a")
-    tap("select")
+    rec()
     got = sorted((h[0], h[2]) for h in b.layers[-1][1])
     check(f"...played while a layer records: in it, each its note ({got})",
           got == sorted([(float(first % 8), 0), (float((first + 1) % 8), 2), (float((first + 2) % 8), 4)]))
 
     # the page as it goes
-    tap("select")
+    rec()
     spin(0.1)
     hue = dict(g.ACCENTS)
 
@@ -523,7 +563,7 @@ if not ONLY or "app" in ONLY:
     red = dot(flush(), hue["Red"])
     s = m.sim_game()
     rec_line = s.loop
-    tap("select")
+    rec()
     spin(0.1)
     green = dot(flush(), hue["Green"])
     s = m.sim_game()
@@ -543,26 +583,26 @@ if not ONLY or "app" in ONLY:
 
     # START's card: the tempo, the loop's length, snapping, the click, the scale
     tap("start")
-    m.sim_opts = 2
+    m.sim_opts = at("tempo")
     for _ in range(3):
         m.press("right")
     tempo = (b.clock.bpm, m.setting("board_bpm"))
-    m.sim_opts = 3
+    m.sim_opts = at("bars")
     m.press("right")
-    m.sim_opts = 4
+    m.sim_opts = at("snap")
     m.press("right")
-    m.sim_opts = 5
+    m.sim_opts = at("click")
     m.press("left")
-    m.sim_opts = 6
+    m.sim_opts = at("scale")
     m.press("right")
-    vals = [v for _, _, v in m.board_rows()[2:7]]
+    vals = [v for _, _, v in m.board_rows()[at("tempo"):at("scale") + 1]]
     check(f"START's card: ◀▶ change the tempo ({tempo}), the loop's length, snapping, the click and the scale ({vals})",
           tempo == (123, "123") and vals == ["123 BPM", "4 bars", "Off", "Off", "Minor"] and loops()[-1]["bpm"] == 123)
-    for k in (3, 4, 5, 6):
-        m.sim_opts = k
+    for key in ("bars", "snap", "click", "scale"):
+        k = m.sim_opts = at(key)
         while m.board_rows()[k][2] not in ("2 bars", "On", "Major"):
             m.press("right")
-    m.sim_opts = [r[0] for r in m.board_rows()].index("space")
+    m.sim_opts = at("space")
     m.press("right")
     m.press("right", repeat=True)
     m.press("left")
@@ -590,12 +630,14 @@ if not ONLY or "app" in ONLY:
     # START held: the loop's cleared, and every sound stopped
     told.clear()
     m.press("start")
-    spin(0.8)
+    spin(1.1)
     m.release("start")
     spin(0.1)
-    check(f"START held: the loop's cleared, every sound stopped, and no card ({toasts[-1:]})",
+    check(f"START held: the loop's cleared, every sound stopped, and no card ({toasts[-1:]}); nothing to drop on its "
+          f"card now ({m.board_rows()[0][1]!r} first, {m.board_rows()[-1][1]!r} last)",
           not b.layers and b.take is None and {"do": "loop"} in told and {"do": "stop"} in told
-          and m.sim_opts is None and toasts[-1:] == ["Loop cleared"])
+          and m.sim_opts is None and toasts[-1:] == ["Loop cleared"] and m.board_rows()[0][1] == "Record a loop"
+          and m.board_rows()[-1][0] == "space")
 
     # the beat shared with another of yours
     other = BL.Link("pie-den", "127.0.0.2", BL.BEAT_PORT)
@@ -613,7 +655,7 @@ if not ONLY or "app" in ONLY:
     check(f"...the web page's told so: the tempo's the shared one, and in time with whom, by name ({web['bpm']}, "
           f"{web['with']})", web["bpm"] == 90 and web["with"] == ["Den"] and web["open"] is True)
     tap("start")
-    m.sim_opts = 2
+    m.sim_opts = at("tempo")
     m.press("left")
     tap("start")
     end = time.monotonic() + 2

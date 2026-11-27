@@ -213,9 +213,10 @@ Tabs (edit LIBRARY in pitato/library.py to change them):
                 The song at start-up begins before a board's heard: it's moved to the
                 player that finds its beats once one is, and on it from the start the next time
     Soundboard  - a sound on every button: the d-pad's four and A, B, X and Y each play theirs (as many
-                at once as you like; pressed again, one starts again), L and R go through the banks of
-                eight, SELECT stops them all, START has the bank, the volume and (with a USB microphone)
-                Record a sound, and B there goes back. A starter pack comes with it (pitato/sounds: made
+                at once as you like; pressed again, one starts again), SELECT goes through the banks of
+                eight, L and R go round its three pages (these buttons, the Sequencer, Bounce), START has
+                Record a loop, the bank, the volume and (with a USB microphone) Record a sound, and HOME
+                goes back. A starter pack comes with it (pitato/sounds: made
                 by a script, public domain); your own are wav, mp3 or ogg files in ~/Soundboard, on a
                 button a moment after they're put there. Each lights your LEDs as it's heard: a pulse in
                 its button's colour, kept while it plays. Its player's a process of its own, as you

@@ -610,8 +610,9 @@ early = [h for t, h in seen if t < -0.05]
 during = [h for t, h in seen if 0.15 < t < 0.9]
 check(f"on its own thread: nothing sent while nothing plays ({idle}); a second of a tone, written a moment before "
       f"it's heard: dark till it's heard ({max(early or [0])}), its bars up while it is ({min(during or [0])} to "
-      f"{max(during or [0])}), drawn about {O.FPS:.0f} times a second ({frames} rows sent)",
-      idle == 0 and max(early or [0]) == 0 and min(during or [0]) >= 12 and 20 <= frames <= 4 * 30)
+      f"{max(during or [0])}), only the rows that change sent (a steady tone: few), never more than its "
+      f"{O.FPS:.0f} frames a second's worth ({frames} rows)",
+      idle == 0 and max(early or [0]) == 0 and min(during or [0]) >= 12 and 3 <= frames <= 4 * 30)
 until(lambda: fw.heights() == [0] * 25, 3)
 bars.close()
 check("...down again once it's over, and shut", fw.heights() == [0] * 25 and fw.closed)

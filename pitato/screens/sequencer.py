@@ -1,9 +1,9 @@
 """The Soundboard's Sequencer (sequencer.py: the tune, and its page): its buttons, its tune kept with the settings, its
 cells told to the Soundboard's player as part of the loop (so each is heard at its very moment, in time with a loop
 recorded there, with Bounce, and with your other Pietatos' Soundboards), its card (START), and the sound's bars, as
-its player says them. Opened from the Soundboard's own card (START, then Sequencer): B on its page starts it and
-stops it. It goes on playing when you leave it for the Soundboard's buttons, so they can be played over it, and
-START held there (which clears the loop) stops it too."""
+its player says them. One of the Soundboard's three pages (L and R go round them: screens/soundboard.py's
+board_cycle): B on its page starts it and stops it. It goes on playing when you leave it for the Soundboard's buttons
+(or Bounce), so they can be played over it, and START held there (which clears the loop) stops it too."""
 import random
 import time
 
@@ -13,9 +13,8 @@ from .. import soundbank as B
 from ..library import VOLUME_STEP
 from ..theme import ACCENT
 
-SEQ_HOW = ("A turns a cell on or off, X changes its note (a drum's: its sound), Y changes the tune a little. L and R: "
-           "the tempo. SELECT: the scale.")
-SEQ_TEMPO = 2                    # beats a minute L and R change the tempo by
+SEQ_HOW = ("A: a cell on or off. X: its note (a drum's: its sound). Y changes the tune a little. SELECT: the scale. L "
+           "and R: the Soundboard and Bounce.")
 SEQ_ALWAYS = -1e12               # the beat a cell's heard from: any (a loop's layer waits for its next time round)
 DPAD = ("up", "down", "left", "right")
 
@@ -119,7 +118,7 @@ class SequencerScreen:
 
     # -- its page up, and left -----------------------------------------------------------------------------------------
     def seq_start(self, now):
-        """START's card, Sequencer: its grid on the page (its tune playing or not, as it was: B starts it)."""
+        """L or R on to it (board_cycle): its grid on the page (its tune playing or not, as it was: B starts it)."""
         b = self.board
         if b.bounce is not None:
             self.bounce_leave()
@@ -133,7 +132,8 @@ class SequencerScreen:
         self.seq_going()
 
     def seq_leave(self):
-        """Its card's Leave Sequencer (or HOME): the Soundboard's buttons again. Its tune plays on, if it was."""
+        """L or R on to another page, or HOME: its page is left (the Soundboard's buttons again, or Bounce). Its tune
+        plays on, if it was."""
         b = self.board
         self.seq_keep()
         b.seq_up = False
@@ -168,8 +168,8 @@ class SequencerScreen:
     # -- its buttons ---------------------------------------------------------------------------------------------------
     def press_seq(self, name, repeat):
         """◀▶▲▼ move from cell to cell (held: on and on; round the edges); A a cell on or off; B stops it, or starts
-        it; X a drum's next sound, or a lead cell's next note; Y changes a little of the tune; L and R the tempo
-        (held: on and on); SELECT the scale; START its card."""
+        it; X a drum's next sound, or a lead cell's next note; Y changes a little of the tune; SELECT the scale; L
+        and R the Soundboard's page before and after; START its card."""
         b = self.board
         grid, notes = self.seq_tune()
         r, c = b.seq_at
@@ -179,10 +179,10 @@ class SequencerScreen:
             else:
                 c = (c + (1 if name == "right" else -1)) % SQ.STEPS
             b.seq_at = (r, c)
-        elif name in ("l", "r", "l2", "r2"):
-            self.board_tempo(self.board_clock().bpm + (-SEQ_TEMPO if name in ("l", "l2") else SEQ_TEMPO))
         elif repeat:
             return None
+        elif name in ("l", "r", "l2", "r2"):
+            self.board_cycle(-1 if name in ("l", "l2") else 1)
         elif name == "a":
             grid[r][c] = not grid[r][c]
             if grid[r][c]:
@@ -252,10 +252,8 @@ class SequencerScreen:
         self.seq_going()
 
     def seq_swap(self, tune):
-        """Its tune replaced (changed a little, a new one, cleared): the one before kept, to take that back."""
-        b = self.board
-        b.seq_was = [[list(row) for row in b.seq[0]], list(b.seq[1])]
-        b.seq = [tune[0], tune[1]]
+        """Its tune replaced (changed a little, a new one, cleared)."""
+        self.board.seq = [tune[0], tune[1]]
         self.seq_changed()
 
     # -- its card ------------------------------------------------------------------------------------------------------
@@ -265,8 +263,7 @@ class SequencerScreen:
         return [("tempo", "Tempo", f"{round(self.board_clock().bpm)} BPM"), ("volume", "Volume", str(self.volume)),
                 ("key", "Key", key), ("scale", "Scale", scale),
                 ("lead", "Lead", self.seq_sound_name(self.seq_sounds()[SQ.LEAD_ROW])),
-                ("new", "A new tune", None), ("clear", "Clear it", None),
-                ("back", "Take back the last change", None), ("leave", "Leave Sequencer", None)]
+                ("new", "A new tune", None), ("clear", "Clear all", None)]
 
     def press_seq_card(self, name, repeat):
         """Its card: ▲▼ a row, ◀▶ change it; A does a row that does something; START or B, on with it."""
@@ -296,15 +293,6 @@ class SequencerScreen:
         elif name == "a" and key == "clear":
             self.seq_swap(([[False] * SQ.STEPS for _ in range(SQ.ROWS)], list(b.seq[1])))
             self.toast("Cleared", 2)
-        elif name == "a" and key == "back":
-            if b.seq_was is None:
-                self.toast("Nothing to take back", 2)
-            else:
-                b.seq, b.seq_was = b.seq_was, None
-                self.seq_changed()
-                self.toast("Back as it was", 2)
-        elif name == "a" and key == "leave":
-            self.seq_leave()
         elif name in ("a", "b", "start"):
             b.card = None
             self.sim_close()
@@ -316,9 +304,8 @@ class SequencerScreen:
 
     def seq_card_hints(self):
         rows = self.seq_rows()
-        key, _, value = rows[self.sim_opts % len(rows)]
-        if value is None:
-            return [("▲▼", "Choose"), ("A", "Leave" if key == "leave" else "Do it"), ("START", "Play on")]
+        if rows[self.sim_opts % len(rows)][2] is None:
+            return [("▲▼", "Choose"), ("A", "Do it"), ("START", "Play on")]
         return [("▲▼", "Choose"), ("◀▶", "Change"), ("START", "Play on")]
 
     # -- its page, and the sound's bars --------------------------------------------------------------------------------

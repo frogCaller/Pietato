@@ -1,10 +1,13 @@
 """Attract mode (Settings > Attract mode): when Pietato's left idle, plugged in (the battery saver off), the Bot gets
-bored and finds something to do, something else every minute or so: it plays one of your games (as an arcade
-cabinet's does), looks through your camera and says what it sees (turning it to look around, when it's one that turns:
-an OBSBOT on a Pi), puts up the weather, your stocks and coins, one of Apps' (the Fish Tank, a new fortune from the
-Fortune Cookie), a slideshow of your photos, or how the Pi's
-doing. Each time, it says something about it: its model's words when it has one (Settings > Bot), else a line of its
-own; on the screen, and out loud in the day (with a voice, and Talks out loud on). Games only: just games, as it was.
+bored and finds something to do, something else every minute or so: it looks through your camera and says what it sees
+(turning it to look around, when it's one that turns: an OBSBOT on a Pi), puts up the weather, your stocks and coins,
+one of Apps' (the Fish Tank, a new fortune from the Fortune Cookie, the Clock), one of Linux's own (cmatrix, hollywood,
+nyancat, cacafire, htop: those installed), a slideshow of your photos, or how the Pi's doing; and when it's been
+through all of those, each once, it plays one of your games (as an arcade cabinet's does), then goes round again. So a
+game, whose AI player keeps your bot's computer busy all the while, comes last, and seldom. Each time, it says
+something about it: its model's words when it has one (Settings > Bot), else a line of its own; on the screen, and out
+loud in the day (with a voice, and Talks out loud on). Linux's own and the Clock: only ever a line of its own (its
+model's left alone; over Linux's own, which has the whole screen, it's just said). Games only: just games, as it was.
 
 A game: the AI player plays it (the decision model you last picked for it, on your bot's computer), from where you were
 in it; or, without one, the game's own demo plays, from its start. Its saves are kept apart (your own never change), its
@@ -28,6 +31,7 @@ from ..screen import aplay_device, screen_turn, sound_place
 from ..stocks import money
 from ..system import cpu_temp
 from ..theme import ACCENT, BG, LINE, MUTED, TEXT
+from .progs import prog_path
 
 ATTRACT_AFTER = 300.0         # seconds with nothing happening before the Bot gets bored
 ATTRACT_GAME = 180.0          # seconds each game plays, then something else
@@ -37,10 +41,14 @@ ATTRACT_AGAIN = 600.0         # seconds before it looks again for something to d
 ATTRACT_RECENT = 3            # the games played last aren't played again straight away
 BADGE = (128, 112)            # the badge in the corner: the Bot's face, and what START does
 SAVE_EXTS = (".srm", ".rtc", ".state.auto", ".disc")   # (yours, copied: where the AI player carries on from)
-BORED_FOR = {"camera": 80.0, "weather": 40.0, "finance": 40.0, "app": 75.0, "photos": 60.0, "system": 30.0}
+BORED_FOR = {"camera": 80.0, "weather": 40.0, "finance": 40.0, "app": 75.0, "toy": 60.0, "photos": 60.0,
+             "system": 30.0}
 BORED_STILL = 45.0            # ...a camera that doesn't turn: this long (it looks once)
-BORED_APPS = ("Fish Tank",                          # Apps' it watches
+BORED_APPS = ("Fish Tank", "Clock",                 # Apps' it watches
               "Fortune Cookie")                     # (...or opens)
+BORED_TOYS = ("cmatrix", "hollywood", "nyancat", "cacafire", "htop")   # Linux's own it puts on (Apps': those installed)
+BORED_OWN_WORDS = ("Clock",)  # Apps' it only ever has a line of its own for (its model isn't asked)
+BORED_TOY_SOON = 5.0          # seconds: one of Linux's own that stops by itself sooner didn't really start (not again)
 BORED_TALK = (8, 22)          # hours it says things out loud between (the rest of the time: just on the screen, so
                               # nobody's woken)
 BORED_SAY = (8.0, 30.0)       # seconds what it said stays up: at least, at most (longer while it's still saying it)
@@ -58,7 +66,10 @@ BORED_LINES = {
     "photos": ("Let's look at some of your photos.", "I love looking through your pictures.", "Photo time!"),
     "system": ("Let me check how I'm doing.", "Time for a quick check-up.", "How am I doing? Let's see."),
 }
-BORED_APP_LINES = {"Fish Tank": "Just watching the fish."}
+BORED_APP_LINES = {"Fish Tank": "Just watching the fish.", "Clock": "Let's see what time it is."}
+BORED_TOY_LINES = {"cmatrix": "Following the white rabbit.", "hollywood": "Time to look busy.",
+                   "nyancat": "Nyan, nyan, nyan.", "cacafire": "Warming up by the fire.",
+                   "htop": "Let's see what I'm running."}
 # ...and what its model's asked to say
 BORED_ASKS = {
     "game": "You're bored, so you just started playing {title}, one of their games, on the screen. Say something about "
@@ -109,32 +120,50 @@ class AttractScreen:
                 and find_core(g["system"]) and not self.game_cant(g)]
 
     # -- what there is to do --------------------------------------------------------------------------------------
-    def bored_choices(self):
-        """What it can do here, now: your games, your camera, the weather (once it knows where you are), your stocks and
-        coins, Apps', your photos and the Pi's own numbers. Games only: just games."""
-        a = self.attract
-        games = bool(self.attract_games(a["bad"]))
-        if self.setting("attract") == "Games only":
-            return ["game"] if games else []
-        out = ["game"] if games else []
+    def bored_things(self):
+        """What it can do here, now, games aside, each (its kind, which one of them): your camera, the weather (once it
+        knows where you are), your stocks and coins, each of Apps' it watches, each of Linux's own that's installed,
+        your photos and the Pi's own numbers."""
+        out = []
         if self.friend_camera():
-            out.append("camera")
+            out.append(("camera", None))
         if self.setting("location"):
-            out.append("weather")
+            out.append(("weather", None))
         if self.stocks.symbols() or self.crypto.coins:
-            out.append("finance")
-        if self.bored_apps():
-            out.append("app")
+            out.append(("finance", None))
+        out += [("app", name) for name in self.bored_apps()]
+        out += [("toy", name) for name in self.bored_toys() if name not in self.attract["bad"]]
         if self.bored_photo_list():
-            out.append("photos")
+            out.append(("photos", None))
         if self.tab_index("system") is not None:
-            out.append("system")
+            out.append(("system", None))
         return out
+
+    def bored_left(self):
+        """What's left for it to do this time round: everything but games first, each once; when it's been through
+        all of that, a game (its AI player keeps your bot's computer busy the whole game: last, then, and once a
+        round); after the game, round again. Games only: just games."""
+        a = self.attract
+        game = [("game", None)] if self.attract_games(a["bad"]) else []
+        if self.setting("attract") == "Games only":
+            return game
+        things = self.bored_things()
+        for _ in range(2):
+            left = [t for t in things if t not in a["round"]] or [t for t in game if t not in a["round"]]
+            if left:
+                return left
+            a["round"] = []                            # (been through it all: round again)
+        return []
 
     def bored_apps(self):
         """Apps' it watches: those here."""
         names = {t["name"] for t in LIBRARY}
         return [n for n in BORED_APPS if n in names]
+
+    def bored_toys(self):
+        """Linux's own it puts on (Apps' cmatrix and the rest): those installed here."""
+        names = {t["name"] for t in LIBRARY if t["type"] == "prog"}
+        return [n for n in BORED_TOYS if n in names and prog_path(n)]
 
     def bored_photo_list(self):
         """Your photos (Photos' pictures), looked for once while it's bored."""
@@ -154,37 +183,39 @@ class AttractScreen:
     # -- starting, and going on to the next thing ---------------------------------------------------------------------
     def attract_start(self, now):
         """Bored: where you were noted (to go back to), and the first thing to do."""
-        self.attract = {"kind": None, "since": now, "stirs": self.stirs, "view": self.view, "tab": self.tab,
-                        "sel": self.sels.get(self.tab), "home_sel": getattr(self, "home_sel", 0), "bad": set(),
-                        "recent": [], "done": [], "gen": 0, "say": None, "moved": False, "spoke": False}
+        self.attract = {"kind": None, "which": None, "since": now, "stirs": self.stirs, "view": self.view,
+                        "tab": self.tab, "sel": self.sels.get(self.tab), "home_sel": getattr(self, "home_sel", 0),
+                        "bad": set(), "recent": [], "round": [], "last": None, "gen": 0, "say": None, "moved": False,
+                        "spoke": False}
         if not self.bored_next(now):
             self.attract = None
             self.attract_wait = now + ATTRACT_AGAIN
 
     def bored_next(self, now):
-        """The next thing to do (not what it did last, nor the one before, when there's something else), started, with
-        a word about it. False: there's nothing it can do."""
+        """The next thing to do, started, with a word about it: one it hasn't done yet this time round (bored_left; not
+        what it did last, when there's something else). False: there's nothing it can do."""
         a = self.attract
         self.bored_end_one()
         tried = set()
         while True:
-            kinds = [k for k in self.bored_choices() if k not in tried]
-            if not kinds:
+            left = [t for t in self.bored_left() if t not in tried]
+            if not left:
                 return False
-            fresh = [k for k in kinds if k not in a["done"][-2:]] or kinds
-            kind = self.bored_pick(fresh)
-            a.update(kind=kind, since=now, say=None, gen=a["gen"] + 1)
+            thing = self.bored_pick([t for t in left if t != a["last"]] or left)
+            kind, which = thing
+            a.update(kind=kind, which=which, since=now, say=None, gen=a["gen"] + 1)
+            a["round"].append(thing)                   # (done, or it can't be: not again this time round)
+            tried.add(thing)
             if self.bored_begin(kind, now):
-                a["done"] = (a["done"] + [kind])[-4:]
+                a["last"] = thing
                 self.dirty = True
-                print(f"attract: {kind}", flush=True)
+                print(f"attract: {kind}" + (f" ({which})" if which else ""), flush=True)
                 return True
-            tried.add(kind)
 
     @staticmethod
-    def bored_pick(kinds):
+    def bored_pick(things):
         """One of them, at random."""
-        return kinds[random.randrange(len(kinds))]
+        return things[random.randrange(len(things))]
 
     def attract_next(self, now):
         """Something else (what it's doing ends first). Nothing else: back where you were."""
@@ -223,14 +254,10 @@ class AttractScreen:
                               look=lambda: (first, os.path.basename(first)))
             return True
         if kind == "app":
-            names = self.bored_apps()
-            if not names:
+            name = a["which"]
+            if name not in self.bored_apps() or self.web_tab(name) is None:
                 return False
-            fresh = [n for n in names if n != a.get("app")] or names
-            name = fresh[random.randrange(len(fresh))]
-            if self.web_tab(name) is None:
-                return False
-            a["app"], a["shown"] = name, self.tab
+            a["shown"] = self.tab
             if name == "Fortune Cookie":               # (a new fortune, and what it says read out)
                 cookie = self.sim_game()
                 cookie.new()
@@ -239,8 +266,17 @@ class AttractScreen:
                                   BORED_ASKS["fortune"].format(text=cookie.text))
                 return True
             about = next((t.get("about", "") for t in LIBRARY if t["name"] == name), "")
-            self.bored_remark(BORED_APP_LINES.get(name) or f"Here's {name}.",
+            self.bored_remark(BORED_APP_LINES.get(name) or f"Here's {name}.", None if name in BORED_OWN_WORDS else
                               BORED_ASKS["app"].format(name=name, about=about[:1].lower() + about[1:] or name))
+            return True
+        if kind == "toy":                              # (one of Linux's own, on the whole screen: Apps, and it)
+            name = a["which"]
+            if name not in self.bored_toys() or self.web_tab(name) is None or self.prog is None:
+                a["bad"].add(name)                     # (one that won't start: not again, and with nobody here,
+                self.msg = None                        #  nothing said of it)
+                return False
+            a["prog"] = self.prog
+            self.bored_remark(BORED_TOY_LINES.get(name) or f"Here's {name}.", None)
             return True
         name = {"weather": "Weather", "finance": "Finance", "system": "System"}[kind]
         if kind == "weather" and not self.setting("location"):
@@ -314,7 +350,10 @@ class AttractScreen:
                 self.attract_start(now)
             return
         kind = a["kind"]
-        gone = (self.game is not a.get("run")) if kind == "game" else not self.bored_shown()
+        ended = kind == "toy" and self.prog is None    # (one of Linux's own that stopped by itself: the next thing)
+        if ended and now - a["since"] < BORED_TOY_SOON:
+            a["bad"].add(a["which"])                   # (...at once: it didn't really start. Not again)
+        gone = (self.game is not a.get("run")) if kind == "game" else not (ended or self.bored_shown())
         if gone:                                       # (something else took the screen, a song from the web page,
             self.attract = None                        #  say: it's left as it is)
             return
@@ -342,7 +381,7 @@ class AttractScreen:
             self.bored_camera_tick(now)
             done = now - a["since"] >= (BORED_FOR["camera"] if a["turned"] else BORED_STILL)
         else:
-            done = now - a["since"] >= BORED_FOR[kind]
+            done = ended or now - a["since"] >= BORED_FOR[kind]
         if done and not (a["spoke"] and self.voice.speaking):   # (it finishes what it's saying first)
             self.attract_next(now)
 
@@ -353,6 +392,8 @@ class AttractScreen:
             return self.on_camera_page() and cam_key(self.camera.addr or "") == cam_key(a.get("cam") or "")
         if a["kind"] == "photos":
             return self.view == "photo"
+        if a["kind"] == "toy":
+            return self.prog is not None and self.prog is a.get("prog")
         return self.view == "list" and self.tab == a.get("shown")
 
     def bored_camera_tick(self, now):
@@ -455,10 +496,11 @@ class AttractScreen:
 
     def bored_remark(self, line, ask, look=None):
         """What it says as it starts something: its line on the screen at once; then its model's words, when it has a
-        model (said out loud), else the line (said out loud)."""
+        model (said out loud), else the line (said out loud). No ask (Linux's own, the Clock): its line, and its
+        model's left alone."""
         a = self.attract
         a["gen"] += 1
-        asked = self.bored_ask(ask, look, self.bored_done(a["kind"], a["gen"]))
+        asked = ask is not None and self.bored_ask(ask, look, self.bored_done(a["kind"], a["gen"]))
         self.bored_show(line, talk=not asked)
 
     def bored_ask(self, ask, look, done):
@@ -504,6 +546,10 @@ class AttractScreen:
                 first = first[:BORED_NOTICE - 1].rsplit(" ", 1)[0] + "…"
             if run is not None:
                 run.send("notice " + first)
+            return
+        if a["kind"] == "toy":                         # (Linux's own has the whole screen: just said)
+            if talk:
+                self.bored_talk(text)
             return
         spoke = self.bored_talk(text) if talk else False
         if a["kind"] == "camera":
@@ -552,7 +598,7 @@ class AttractScreen:
     # -- ending -----------------------------------------------------------------------------------------------------
     def bored_end_one(self):
         """What it's doing, over: the game ends (its saves were never yours: nothing's kept or told), the camera stops
-        turning (back to where it was, if it turned), the slideshow closes."""
+        turning (back to where it was, if it turned), the slideshow closes, Linux's own stops."""
         a = self.attract
         kind = a["kind"] if a else None
         if kind == "game":
@@ -570,6 +616,10 @@ class AttractScreen:
                 self.cam_bot = None
         elif kind == "photos" and self.view == "photo":
             self.close_viewer()
+        elif kind == "toy":
+            mine, a["prog"] = a.get("prog"), None
+            if mine is not None and self.prog is mine:
+                self.prog_stop()
         if a is not None:
             a["say"] = None
 

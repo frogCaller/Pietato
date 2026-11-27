@@ -8,8 +8,10 @@ together, turned down rather than left to crackle; where the sound goes; the sou
 busy, and breaking up (a longer buffer: aplay says so, and is asked to in English whatever language the Pi's set up
 in); an mp3, an ogg and WAVs of other kinds (through FFmpeg, once: kept); what isn't a sound; and a recording, its
 silence trimmed (arecord's a pretend one too). Then the app in media mode: in
-Apps, its page on the GPi Case's screen, every button its own sound, L and R through the banks, SELECT stopping them,
-START's card (B there shuts it; HOME goes back from anywhere on it; no Record a sound without a microphone); a file
+Apps, its page on the GPi Case's screen, every button its own sound, SELECT through the banks, L and R round its three
+pages (its buttons, the Sequencer, Bounce: its name on its line, the bank's beside it), START's card (Record a loop
+first; SELECT there stops the sounds; B there shuts it; HOME goes back from anywhere on it; no Record a sound without
+a microphone); a file
 put in your Soundboard folder on its button without anything started again, taken out, changed; the web page's word
 that something changed; and with a USB microphone, a sound recorded and put on a button from the controller."""
 import json, os, shutil, signal, subprocess, sys, threading, time, wave
@@ -20,6 +22,7 @@ import pietato_all as g
 import pitato.glow as G
 import pitato.soundbank as B
 import pitato.soundboard as SBD
+import pitato.screens.soundboard as SSB
 import pitato.listen as L
 import pitato.fine as FINE
 
@@ -794,19 +797,29 @@ def flush():
     return np.asarray(FB.last.convert("RGB")).astype(int)
 
 
-LOOP_ROWS = ["tempo", "bars", "snap", "click", "scale", "space", "seq", "bounce"]   # (START's card: the loop's,
-                                                                                    #  after the bank's and volume;
-                                                                                    #  then its space, the Sequencer
-                                                                                    #  and Bounce)
+LOOP_ROWS = ["volume", "tempo", "bars", "snap", "click", "scale", "space"]   # (START's card, after Record a loop,
+                                                                             #  the bank, and Record a sound when
+                                                                             #  there's a microphone: the volume,
+                                                                             #  the loop's, then its space)
 
 
 def quiet():
-    """Every sound stopped, between one check and the next (SELECT is the loop's button now: START held stops them,
-    as checked once below); and the buttons pressed let go of, as they'd be (held, A, B, X or Y makes the d-pad's
+    """Every sound stopped, between one check and the next (SELECT is the banks' button: START held stops them, as
+    checked once below); and the buttons pressed let go of, as they'd be (held, A, B, X or Y makes the d-pad's
     notes)."""
     m.board_tell(do="stop")
     for name in ("a", "b", "x", "y"):
         m.release(name)
+
+
+def to_bank(name):
+    """SELECT, till that bank's the one that's up (round and round: each of them once at most)."""
+    for _ in range(len(b.banks)):
+        if b.bank()["name"] == name:
+            break
+        m.press("select")
+        m.release("select")
+    return b.bank()["name"] == name
 
 
 def spin(secs=0.3, cond=None):
@@ -879,8 +892,20 @@ caps = {pad: near(page, (boxes[pad][0] + 8, boxes[pad][1] + 8, boxes[pad][0] + 4
 check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.PAD_COLOUR.values()))} colours: "
       f"{min(caps.values())} pixels of it or more)", min(caps.values()) > 150 and len(set(SBD.PAD_COLOUR.values())) == 8)
 hints = m.sim_hints(s)
-check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Bank"), ("SELECT", "Record a loop"),
+check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Sequencer, Bounce"), ("SELECT", "Bank"),
                                                              ("START", "More"), ("HOME", "Back")])
+from PIL import ImageDraw as PILDraw  # noqa: E402
+texts = []
+real_text = PILDraw.ImageDraw.text
+PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), xy[0])),
+                                                         real_text(self, xy, text, *a, **k))[1]
+m.sim_game().tiles.clear()
+flush()
+PILDraw.ImageDraw.text = real_text
+line = {t: x for t, x in texts}
+check(f"...its line: its own name in the middle, between ◀ and ▶ (L and R), and the bank that's up at the right, "
+      f"before its dots ({ {t: round(x) for t, x in line.items() if t in ('Soundboard', 'Starter')} })",
+      line.get("Soundboard") == 320 and 520 < line.get("Starter", 0) < 610)
 taps = {w[1]: box for box, w in m.taps_now() if w[0] == "keys"}
 check("...each tile tapped (the web page's copy of the screen, a touch screen) is its button pressed; the bank's "
       "name, L or R", all(tuple(taps.get(pad, ())) == boxes[pad] for pad in B.PADS) and "l" in taps and "r" in taps
@@ -904,10 +929,13 @@ check("...each stopped, one after another", not b.playing)
 m.press("x")
 spin(1.0, lambda: sid("Applause") in b.playing)
 m.press("start")
+spin(0.6)
+slow = (m.sim_opts, bool(b.playing))                  # (a slow press of it: its card, and nothing stopped yet)
 spin(0.8, lambda: m.sim_opts is None and not b.playing)
 m.release("start")
-check("START held: every sound stopped (and its card, opened as it went down, gone again)",
-      not b.playing and m.sim_opts is None and m.board_shown())
+check(f"START held: every sound stopped (and its card, opened as it went down, gone again); a slow press of it, over "
+      f"half a second, isn't that yet: its card, the sound still playing ({slow})",
+      slow == (0, True) and not b.playing and m.sim_opts is None and m.board_shown())
 
 
 # your LEDs, lit by its sounds as they are by music (screens/glow.py's glow_flash)
@@ -1026,19 +1054,36 @@ spin(1.0, lambda: sid("Buzzer") in b.playing)
 check("B is a button like the others here: its sound, and the page stays", sid("Buzzer") in b.playing and m.tab == si
       and m.board_shown())
 quiet()
-m.press("r")
+m.press("select")
+m.release("select")
 spin(0.3)
 s = m.sim_game()
-check(f"R: the next bank ({s.bank}), its sounds on the buttons ({s.pads['b'][0]}, {s.pads['a'][0]}...)",
-      s.bank == (1, 3, "Drums") and s.pads["b"] == ("Kick", "ready") and b.at == 1)
+check(f"SELECT: the next bank ({s.bank}), its sounds on the buttons ({s.pads['b'][0]}, {s.pads['a'][0]}...), and "
+      f"nothing recording", s.bank == (1, 3, "Drums") and s.pads["b"] == ("Kick", "ready") and b.at == 1
+      and b.take is None and not b.layers and s.loop is None)
 m.press("b")
 check("...and its buttons play them", spin(1.0, lambda: sid("Kick") in b.playing))
-m.press("r"); m.press("r")
-check("...round and round: R past the last is the first", m.sim_game().bank[0] == 0)
-m.press("l")
-check("...L the other way; L2 and R2 too", m.sim_game().bank[0] == 2 and (m.press("r2"), m.sim_game().bank[0])[1] == 0
-      and (m.press("l2"), m.sim_game().bank[0])[1] == 2)
-m.press("r")
+n_toasts = len(toasts)
+m.press("select")
+held = (m.press("select", repeat=True), spin(SSB.HOLD + 0.2), m.sim_game().bank[0])[2]
+m.release("select")
+m.press("select"); m.release("select")
+check(f"...round and round: SELECT past the last is the first; held, once is once, and nothing's said or dropped "
+      f"({toasts[n_toasts:]})", held == 2 and m.sim_game().bank[0] == 0 and toasts[n_toasts:] == [])
+quiet()
+went = []
+for name in ("r", "r", "r", "l", "l2", "r2", "r"):
+    m.press(name)
+    m.release(name)
+    spin(0.1)
+    went.append((name, m.board_mode(), m.sim_hints(m.sim_game())[0]))
+check(f"L and R: round its three pages, R on and L back (L2 and R2 too): {[(n, p) for n, p, _ in went]}; each with "
+      f"its own buttons ({went[0][2]}, {went[1][2]}), and the bank as it was ({m.sim_game().bank})",
+      [p for _, p, _ in went] == ["seq", "bounce", "pads", "bounce", "seq", "bounce", "pads"]
+      and [h for _, _, h in went[:3]] == [("A", "On/off"), ("A B", "Balls"), ("L R", "Sequencer, Bounce")]
+      and m.sim_game().bank[0] == 0 and b.bounce is None and not b.seq_up)
+m.press("r", repeat=True)
+check("...held: once is once (it doesn't run on through them)", m.board_mode() == "pads")
 m.set_setting("sim_full", "On")
 page = flush()
 check("no full screen for it (Apps' others' SELECT): its page is the whole of it, its buttons along the bottom",
@@ -1050,17 +1095,23 @@ spin(2, lambda: not b.playing)
 m.press("start")
 page = flush()
 rows = m.board_rows()
-check(f"START: its card ({[r[1] for r in rows]}): no Record a sound, with no microphone; its buttons "
-      f"{m.sim_hints(m.sim_game())}", m.sim_opts == 0 and [r[0] for r in rows] == ["bank", "volume"] + LOOP_ROWS
-      and m.sim_hints(m.sim_game()) == [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("HOME", "Back to Apps")]
+check(f"START: its card ({[r[1] for r in rows]}): Record a loop first, no Record a sound with no microphone, and no "
+      f"way to the Sequencer or Bounce there (L and R go); its buttons {m.sim_hints(m.sim_game())}",
+      m.sim_opts == 0 and [r[0] for r in rows] == ["loop", "bank"] + LOOP_ROWS
+      and rows[0][1:] == ("Record a loop", None)
+      and m.sim_hints(m.sim_game()) == [("▲▼", "Choose"), ("A", "Record"), ("START", "Done"), ("HOME", "Back to Apps")]
       and not any(w == ("keys", "a") and box == boxes["a"] for box, w in m.taps_now()))
 m.press("up")
 spin(0.3)
 check("...the buttons are the card's while it's up: no sound (▲ on its first row: its last)",
       not b.playing and m.sim_opts == len(m.board_rows()) - 1)
-m.press("down")
+m.press("l"); m.press("r")
+check("...L and R there: nothing (it's from its page that they go on to the others)", m.board_mode() == "pads"
+      and b.at == 0 and m.sim_opts == len(m.board_rows()) - 1)
+m.press("down"); m.press("down")
 m.press("right")
-check("...◀▶ on Bank: the next bank, behind it", b.at == 1 and m.board_rows()[0][2] == "Drums")
+check(f"...◀▶ on Bank: the next bank, behind it ({m.sim_hints(m.sim_game())})", b.at == 1
+      and m.board_rows()[1][2] == "Drums" and m.sim_hints(m.sim_game())[1:3] == [("◀▶", "Change"), ("A", "Done")])
 m.press("down")
 vol = m.volume
 m.press("left"); m.press("left")
@@ -1068,7 +1119,7 @@ spin(0.3)
 m.press("right", repeat=True)
 spin(0.2)
 check(f"...on Volume: quieter and louder (kept as the players' own: {vol}, {m.volume})", m.volume == vol - 5
-      and m.board_rows()[1][2] == str(vol - 5) and b.volume == m.volume)
+      and m.board_rows()[2][2] == str(vol - 5) and b.volume == m.volume)
 m.press("a")
 check("...A: on with the Soundboard, where it was", m.sim_opts is None and m.board_shown() and b.at == 1)
 m.press("start")
@@ -1173,7 +1224,8 @@ check(f"the web page's Soundboard moves a sound, adds a bank, and says so: here 
 text = open(S + "/static/soundboard.txt").read().replace("[Party]\nx = One.wav", "[Party]\ny = One.wav")
 open(tmp, "w").write(text)
 os.replace(tmp, S + "/static/soundboard.txt")
-m.press("r")
+m.press("select")
+m.release("select")
 check("...and without its saying so (the file edited by hand): within a second or so",
       spin(2.5, lambda: m.sim_game().pads == {"y": ("One", "ready")}))
 m.press("y")
@@ -1249,7 +1301,7 @@ FB.s = 2                                               # (a screen with pixels f
 m.fine_scale()
 fine = flush()
 pic = FB.last
-card_ok = (m.press("start"), flush(), m.press("a"))[1].shape == plain.shape
+card_ok = (m.press("start"), flush(), m.press("b"))[1].shape == plain.shape
 check(f"drawn finely (twice the pixels each way: {getattr(getattr(pic, 'pic', pic), 'size', None)}), it's the same page "
       f"(its usual-size copy {np.abs(fine - plain).mean():.2f} levels from the plain one, on average), START's card too",
       FINE.detail(pic) == 2 and pic.pic.size == (1280, 960) and np.abs(fine - plain).mean() < 3.0 and card_ok)
@@ -1258,20 +1310,20 @@ m.fine_scale()
 flush()
 
 # ---- a microphone: a sound recorded, and put on a button --------------------------------------------------------------
-m.press("l")                                           # (My sounds)
+to_bank("My sounds")
 m.press("start")
 m.release("start")
-check("still no Record a sound on START's card", [r[0] for r in m.board_rows()] == ["bank", "volume"] + LOOP_ROWS)
+check("still no Record a sound on START's card", [r[0] for r in m.board_rows()] == ["loop", "bank"] + LOOP_ROWS)
 os.makedirs(A + "/card1/pcm0c")
 open(A + "/card1/usbid", "w").write("0c76:161f\n")
 open(A + "/cards", "w").write(HDMI + MIC)
 spin(3.5, lambda: b.mic is not None)
 check(f"a USB microphone plugged in: Record a sound is there ({[r[1] for r in m.board_rows()]}, {b.mic})",
-      [r[0] for r in m.board_rows()] == ["bank", "volume", "rec"] + LOOP_ROWS and b.mic == "plughw:CARD=Device,DEV=0")
+      [r[0] for r in m.board_rows()] == ["loop", "bank", "rec"] + LOOP_ROWS and b.mic == "plughw:CARD=Device,DEV=0")
 shutil.rmtree(A + "/card1")
 open(A + "/cards", "w").write(HDMI)
 spin(3.5, lambda: b.mic is None)
-check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["bank", "volume"] + LOOP_ROWS)
+check("...taken out: gone again, with nothing said", [r[0] for r in m.board_rows()] == ["loop", "bank"] + LOOP_ROWS)
 os.makedirs(A + "/card1/pcm0c")
 open(A + "/card1/usbid", "w").write("0c76:161f\n")
 open(A + "/cards", "w").write(HDMI + MIC)

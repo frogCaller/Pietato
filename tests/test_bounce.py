@@ -5,12 +5,13 @@ was, and where; its walls' notes, a scale's from its key up; a sound's own note 
 player, against a pretend sound card: its own sounds, at middle C; a note heard when it's told, exactly; only a few
 at a time, each no longer than it should be; from the left or the right; its echo, at its distance, from side to
 side, and none with it off; its space, dying away; its tone; its drone; the Soundboard's own sounds in a space too;
-all of it stopped at once; and next to no work with nothing playing. Then in media mode: START's card, Bounce; its
-balls moving and their notes played as they hit, each wall's its own, BOUNCE_LATE after, louder straight on, from
-the side they hit; its effects told its player; A and B; its sliders (▲▼ pick one, ◀▶ move it); X its sound, Y the
-balls off another way; L and R, SELECT; START, its card (paused: nothing moves, nothing's drawn); its sound, key and
-snapping there (snapped: each note on an eighth of the Soundboard's tempo); Leave Bounce; drawn frame by frame while
-it plays, and the page as it is, all in the accent colour; HOME, back to the Soundboard, then to Apps."""
+all of it stopped at once; and next to no work with nothing playing. Then in media mode: L from the Soundboard's
+buttons, its page (no row for it on START's card now); its balls moving and their notes played as they hit, each
+wall's its own, BOUNCE_LATE after, louder straight on, from the side they hit; its effects told its player; A and B;
+its sliders (▲▼ pick one, ◀▶ move it); X its sound, Y the balls off another way; SELECT its shape; START, its card
+(paused: nothing moves, nothing's drawn); its sound, key, scale and snapping there (snapped: each note on an eighth of
+the Soundboard's tempo), and no row to leave it by; drawn frame by frame while it plays, and the page as it is, all in
+the accent colour; R on to the Soundboard's buttons, L back; HOME, back to the Soundboard, then to Apps."""
 import json, math, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -478,16 +479,29 @@ if not ONLY or "app" in ONLY:
     b = m.board
     tap("start")
     rows = m.board_rows()
-    m.sim_opts = [r[0] for r in rows].index("bounce")
-    hints = m.board_card_hints()
-    tap("a")
+    tap("start")
+    hints = m.sim_hints(m.sim_game())
+    tap("l")
     s = m.sim_game()
-    check(f"START's card has Bounce, last (its buttons: {hints}); A there: the shape, {BN.BALLS_FIRST} balls in it, "
-          f"the card gone ({s.bounce and (s.bounce['shape'], s.bounce['count'])}); its buttons along the bottom "
-          f"({m.sim_hints(s)})", rows[-1][:2] == ("bounce", "Bounce") and ("A", "Open") in hints
+    check(f"L from the Soundboard's buttons ({hints[0]}; START's card has no row for it now: {[r[0] for r in rows]}): "
+          f"the shape, {BN.BALLS_FIRST} balls in it ({s.bounce and (s.bounce['shape'], s.bounce['count'])}); its "
+          f"buttons along the bottom ({m.sim_hints(s)})", not any(r[0] in ("seq", "bounce") for r in rows)
+          and hints[0] == ("L R", "Sequencer, Bounce") and m.board_mode() == "bounce"
           and b.bounce is not None and len(b.bounce.balls) == BN.BALLS_FIRST and b.card is None and m.sim_opts is None
-          and s.bounce["shape"] == "Hexagon" and m.sim_hints(s)[:2] == [("A B", "Balls"), ("L R", "Shape")]
+          and s.bounce["shape"] == "Hexagon" and m.sim_hints(s)[:2] == [("A B", "Balls"), ("SELECT", "Shape")]
           and m.sim_hints(s)[-2:] == [("START", "Pause"), ("HOME", "Back")])
+    from PIL import ImageDraw as PILDraw
+    texts = []
+    real_text = PILDraw.ImageDraw.text
+    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]))),
+                                                             real_text(self, xy, text, *a, **k))[1]
+    flush()
+    PILDraw.ImageDraw.text = real_text
+    line = {t: x for t, x in texts if t == "Bounce" or t.startswith("Hexagon") or t.endswith(" pentatonic")}
+    check(f"...its line: its name over the shape, between ◀ and ▶ (L and R go on from it), its key and scale at the "
+          f"left, its shape's name and how many balls at the right ({line})", 150 < line.get("Bounce", 0) < 280
+          and line.get("C pentatonic", 0) == 14 and line.get(f"Hexagon, {BN.BALLS_FIRST} balls", 0) > 300
+          and "Hexagon" not in line)
     lights = []
     was_light = m.bounce_light
     m.bounce_light = lambda k, when: (lights.append((k, when)), was_light(k, when))[1]
@@ -577,15 +591,17 @@ if not ONLY or "app" in ONLY:
           f"(the key as it was: {m.setting('bounce_key')})", m.setting("bounce_sound") == "Tones/Marimba"
           and toasts[-1:] == ["Marimba"] and m.setting("bounce_key") == "C" and now_where == where
           and all(a != b_ for a, b_ in zip(ways, now_ways)) and all(abs(math.hypot(*w_) - 1) < 1e-6 for w_ in now_ways))
-    tap("r")
-    one = (b.bounce.sides, m.setting("bounce_shape"))
-    tap("l")
-    tap("l")
-    two = (b.bounce.sides, m.setting("bounce_shape"))
+    world = b.bounce
     tap("select")
-    check(f"R: the next shape, round and round ({one}); L the other way ({two}); SELECT the next scale "
-          f"({m.setting('bounce_scale')}); the balls still inside it", one == (3, "Triangle") and two == (5, "Pentagon")
-          and m.setting("bounce_scale") == "Blues" and b.bounce.inside())
+    one = (b.bounce.sides, m.setting("bounce_shape"))
+    tap("select")
+    tap("select", repeat=True)
+    tap("select")
+    two = (b.bounce.sides, m.setting("bounce_shape"))
+    check(f"SELECT: the next shape, round and round ({one}), and on ({two}; held: once is once); its scale's left "
+          f"alone ({m.setting('bounce_scale') or 'as it was'}: it's on its card); the balls still inside it",
+          one == (3, "Triangle") and two == (5, "Pentagon") and m.setting("bounce_scale") in (None, "", "Pentatonic")
+          and m.bounce_get("scale") == "Pentatonic" and b.bounce is world and b.bounce.inside())
     # START: its card, paused
     tap("start")
     t_was, frames = b.bounce.t, FB.frames
@@ -601,15 +617,23 @@ if not ONLY or "app" in ONLY:
     check(f"START: its card ({[r[0] for r in m.board_rows()]}), and it's paused: nothing moves, no notes, nothing "
           f"drawn ({FB.frames - n0} frames)", b.card == "bounce" and m.sim_opts == 0 and b.bounce.t == t_was
           and not notes(mark) and FB.frames - n0 <= 3
-          and [r[0] for r in m.board_rows()] == ["sound", "key", "scale", "snap", "leave"])
+          and [r[0] for r in m.board_rows()] == ["sound", "key", "scale", "snap"])
+    from PIL import Image as PILImage, ImageDraw as PILDraw
+    probe = PILDraw.Draw(PILImage.new("RGB", (1, 1)))
+    how = m.wrap(probe, SBN.BOUNCE_HOW, m.fonts["small"], 404 - 44, lines=3)
+    check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
+          and not how[-1].endswith("…") and "SELECT: the shape." in " ".join(how)
+          and " ".join(how).endswith("L and R: the Soundboard, the Sequencer."))
     tap("right")                                       # (sound: Kalimba)
     tap("down")
     tap("right")                                       # (key: C#)
-    m.sim_opts = 3
+    tap("down")
+    tap("right")                                       # (scale: Blues)
+    tap("down")
     tap("right")                                       # (snap: On)
     rows = {k: v for k, _, v in m.board_rows()}
-    check(f"...its sound, key and snapping, changed there ({rows})", rows["sound"] == "Kalimba" and rows["key"] == "C#"
-          and rows["snap"] == "On")
+    check(f"...its sound, key, scale and snapping, changed there ({rows})", rows["sound"] == "Kalimba"
+          and rows["key"] == "C#" and rows["scale"] == "Blues" == m.setting("bounce_scale") and rows["snap"] == "On")
     tap("start")
     m.board_tempo(120)
     c = b.clock
@@ -644,24 +668,27 @@ if not ONLY or "app" in ONLY:
           f"they're hit; the balls and the walls just hit {lit_px} px), and nothing in any other ({others} px)",
           s.bounce["colour"] == accent and dim_px + lit_px > 1800 and dim_px > 300 and lit_px > 300 and others < 400)
     tap("start")
-    m.sim_opts = [r[0] for r in m.board_rows()].index("leave")
+    labels = [r[1] for r in m.board_rows()]
     hints = m.board_card_hints()
-    tap("a")
+    tap("start")
+    tap("r", repeat=True)
+    held = m.board_mode()
+    tap("r")
     s = m.sim_game()
-    check(f"its card's Leave Bounce ({hints}): the Soundboard's buttons again, its effects and drone off "
-          f"({[c for _, c in told[-2:]]}), its sliders kept ({m.sim_hints(s)})",
-          b.bounce is None and b.card is None and s.bounce is None
+    check(f"R from Bounce (its card has no row to leave it by: {labels}; {hints}): the Soundboard's buttons again, "
+          f"its effects and drone off ({[c for _, c in told[-2:]]}), its sliders kept ({m.sim_hints(s)}); held: "
+          f"once is once", labels == ["Sound", "Key", "Scale", "Snap to the tempo"]
+          and hints == [("▲▼", "Choose"), ("◀▶", "Change"), ("START", "Play on")] and held == "bounce"
+          and m.board_mode() == "pads" and b.bounce is None and b.card is None and s.bounce is None
           and [c for _, c in told[-2:]] == [{"do": "fx", "space": 0, "echo": 0, "tone": 0.5},
                                             {"do": "drone", "level": 0}]
-          and m.sim_hints(s)[-2] == ("START", "More") and ("A", "Leave Bounce") in hints
+          and m.sim_hints(s)[-2] == ("START", "More")
           and m.setting("bounce_spin") == f"{BN.SPIN_MOST:.2f}" and m.setting("bounce_space") == "3"
           and m.setting("bounce_drone") == "1")
     tap("up")
     check("...and its buttons play their sounds as ever", spin(1.0, lambda: b.bank()["pads"]["up"] in b.playing))
-    tap("start")
-    m.sim_opts = [r[0] for r in m.board_rows()].index("bounce")
-    tap("a")
-    was = b.bounce is not None
+    tap("l")
+    was = b.bounce is not None and m.board_mode() == "bounce"
     home = m.sim_home()
     check("HOME in Bounce: the Soundboard's own buttons again (Bounce left, its page still up)", was and home is True
           and b.bounce is None and m.board_shown() and m.sim_opts is None)

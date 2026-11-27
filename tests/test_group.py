@@ -2,10 +2,12 @@
 each is made of, sized up; three of them on a pretend clock, talking (remarks now and then, answers, not too many, not
 at night), one going quiet (missed by one of them only, then you're asked whether it'll be back: No, a goodbye, and
 it isn't listed; back, and it's welcomed), you saying something (answered), Quiet (on all of them; they still answer
-you), where you are (a hello where you've come to), and one that was off catching up. Then media mode's part: the page,
-its buttons, a line popping up where you are (not in a game), the beacon told straight to yours saying more than the
-one to everyone, and a line from one that isn't yours turned away. Last, two real Pietatos (peer_pietato.py) saying
-lines to each other through their web pages, and a third catching up."""
+you), where you are (a hello where you've come to), and one that was off catching up; a party's bouncer (the one in
+it with a camera) saying so when someone comes in, now and then, and the others answering. Then media mode's part: the
+page, its buttons, a line popping up where you are (not in a game), the beacon told straight to yours saying more than
+the one to everyone, a line from one that isn't yours turned away, and its camera: someone moving, and at a party,
+someone come in after nobody had moved for a while. Last, two real Pietatos (peer_pietato.py) saying lines to each
+other through their web pages, and a third catching up."""
 import importlib, io, json, os, random, shutil, subprocess, sys, time, urllib.error
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 S = SP + "/tgroup"
@@ -252,6 +254,60 @@ t0 = clock.t
 run(6 * 3600)
 check("at night they don't talk of their own accord", not [m for m in den.lines(t0) if m.get("topic")])
 
+# ---- a party's bouncer: the one in it with a camera --------------------------------------------------------------
+t0 = clock.t
+models = []
+for p in PIES:                                         # (each with a Bot's model, as it might have: noted if asked)
+    p.circle.words = lambda how, ctx, p=p: (models.append((p.name, how)), "A model's words.")[1]
+kitchen.doing = "minding the door at the party"
+kitchen.circle.bouncer()                               # (its camera saw someone come in: screens/group.py's eyes_saw)
+run(10)
+door = kitchen.lines(t0, topic="bouncer")
+check(f"a party's bouncer, someone come in where its camera looks: it says what one at a door would "
+      f"({[m['text'] for m in door]}), at night too (a party's when it is), and the others have it", len(door) == 1
+      and door[0]["by"] == kitchen.id and door[0]["kind"] == "chat" and door[0]["text"] in C.LINES["bouncer"]
+      and den.circle.find(door[0]["id"]) is not None and den.circle.find(door[0]["id"])["topic"] == "bouncer")
+run(60)
+if not [m for m in den.lines(t0) if m.get("re") == door[0]["id"]]:
+    den.circle.schedule(1, "reply", {"re": door[0]["id"]})   # (none felt like answering, this time: one's due to)
+    run(10)
+answers = [m for m in den.lines(t0) if m.get("re") == door[0]["id"]]
+theirs = {t.format(speaker="Kitchen") for t in C.LINES["bouncer_re"]}
+check(f"...and may answer, as a party would ({[m['text'] for m in answers]}: of {len(theirs)} such lines)",
+      1 <= len(answers) <= 2 and all(m["text"] in theirs and m["by"] != kitchen.id for m in answers)
+      and C.reply_pool({"target_kind": "chat", "target_topic": "bouncer"}) == "bouncer_re"
+      and C.builtin_line("reply", {"target_kind": "chat", "target_topic": "bouncer", "speaker": "Kitchen"},
+                         random.Random(4)) in theirs)
+kitchen.circle.bouncer()
+den.circle.bouncer()                                   # (another with a camera, at the same party)
+run(120)
+check("...the door spoken for: not said again for a while, by it or by another of them",
+      len(den.lines(t0, topic="bouncer")) == 1 and C.BOUNCER_GAP >= 120)
+run(C.BOUNCER_GAP)
+t1 = clock.t
+den.circle.bouncer()
+run(10)
+again = den.lines(t1, topic="bouncer")
+check(f"...later, someone else, where another's camera looks: that one says so ({[m['text'] for m in again]})",
+      len(again) == 1 and again[0]["by"] == den.id and kitchen.circle.find(again[0]["id"]) is not None)
+run(C.BOUNCER_GAP)
+t1 = clock.t
+for p in PIES:
+    p.talk = False
+kitchen.circle.bouncer()
+run(30)
+hushed = len(den.lines(t1, topic="bouncer"))
+for p in PIES:
+    p.talk = True
+check("...Quiet: it keeps it to itself", hushed == 0)
+check(f"...and none of it asked of a Bot's model: its words about the door, and the answers to them, are their own "
+      f"({models})", models == [])
+for p in PIES:
+    p.circle.words = lambda how, ctx, c=p.circle: C.builtin_line(how, ctx, c.rng)
+kitchen.doing = "on the home screen"
+check("...its topic's one a line may have (kept, come from another)",
+      C.clean_msg(dict(GOOD, t=clock.t - 5, topic="bouncer"))["topic"] == "bouncer")
+
 # ---- sizing each other up -------------------------------------------------------------------------------------
 small = {"members": [], "my_power": 1.0, "weather": "", "doing": ""}
 c = den.circle
@@ -406,6 +462,60 @@ someone = GS.eyes_small(jpeg([(220, 80, 380, 470)]))
 check("its camera: nothing moving (a grainy picture too), nothing noticed; someone come in, noticed",
       not GS.eyes_moved(empty, empty2) and not GS.eyes_moved(empty, grainy) and GS.eyes_moved(empty, someone)
       and GS.eyes_small(b"not a picture") is None)
+
+# a party's bouncer: the one in it whose own camera's looking. Someone moving after nobody had for a while: come in
+doors = []
+real_bouncer = m.circle.bouncer
+m.circle.bouncer = lambda: doors.append(1)
+m.you_at = time.time() - 3600
+m.eyes_looking, m.party = True, None
+m.eyes_saw(False, 100.0)
+m.eyes_saw(True, 101.0 + GS.BOUNCER_AWAY)
+check("its camera, someone moving after nobody had for a while: you're noticed here, as ever; with no party on, "
+      f"that's all ({m.group_doing()})", time.time() - m.you_at < 5 and not doors and not m.bouncer_on()
+      and m.group_doing() == "on the home screen")
+m.party = {"lead": False}                              # (in a party: another's)
+m.eyes_saw(False, 200.0)
+m.eyes_saw(False, 204.0)
+m.eyes_saw(True, 195.0 + GS.BOUNCER_AWAY)
+check(f"in a party, its camera looking: it's the party's bouncer, and says so of itself to the others "
+      f"({m.group_doing()!r}); someone moving again before long: nobody new", m.bouncer_on()
+      and m.group_doing() == "minding the door at the party" and not doors)
+m.eyes_saw(False, 300.0)
+m.eyes_saw(False, 296.0 + GS.BOUNCER_AWAY)
+m.eyes_saw(True, 300.0 + GS.BOUNCER_AWAY)
+m.eyes_saw(True, 304.0 + GS.BOUNCER_AWAY)              # (still moving: the same one)
+check(f"...nobody for {GS.BOUNCER_AWAY} seconds, then someone: someone's come in, said once ({len(doors)})",
+      len(doors) == 1)
+m.eyes_looking = False
+m.eyes_saw(False, 400.0)
+m.eyes_saw(True, 401.0 + GS.BOUNCER_AWAY)
+check("...its camera not looking (taken out, or Group chat's camera off): not the bouncer, and nothing said",
+      not m.bouncer_on() and len(doors) == 1 and m.group_doing() == "on the home screen")
+m.circle.bouncer = real_bouncer
+m.eyes_looking = True
+m.eyes_saw(False, 500.0)
+m.eyes_saw(True, 500.0 + GS.BOUNCER_AWAY)              # (the group's own, this time)
+m.party = None
+n_said = len(said)
+hows = []
+real_words = m.circle.words
+m.circle.words = lambda how, ctx: (hows.append(how), real_words(how, ctx))[1]   # (its Bot's, were there one)
+for _ in range(12):                                    # (a line a look: what else was due is said first)
+    m.circle.tick(time.time() + 5)
+    if any(x.get("topic") == "bouncer" for x in m.circle.lines()):
+        break
+m.tick()
+door = [x for x in m.circle.lines() if x.get("topic") == "bouncer"]
+told = [x[1] for x in said[n_said:] if x[1].get("topic") == "bouncer"]
+popped = [p["msg"]["id"] for p in [m.group_pop] if p] + [msg["id"] for _, msg in m.group_pops]
+check(f"...in the group chat, in words of its own, its Bot's never asked for them ({[x['text'] for x in door]}; "
+      f"asked meanwhile: {hows}), told to the others, and popped up here, where it saw them", len(door) == 1
+      and door[0]["text"] in C.LINES["bouncer"] and "bouncer" not in hows
+      and door[0]["name"] == "Den" and [x["id"] for x in told] == [door[0]["id"]] and door[0]["id"] in popped)
+m.circle.words = real_words
+m.group_pop = None
+m.group_pops.clear()
 
 # one of yours that hasn't the group chat yet (an older Pietato): not asked again for a while
 calls = []

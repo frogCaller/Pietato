@@ -5552,7 +5552,7 @@ async function sbDo(body) {      // a change, made on the Pi: what comes back is
     return d;
   } catch (e) { toast(e.message); return null; }
 }
-// the loop (SELECT on the Pi's Soundboard records one): how it is there, and its tempo, length, snapping and click
+// the loop (START's card on the Pi's Soundboard records one): how it is there, its tempo, length, snapping and click
 function sbLoopTake() {          // (drawn again when it's changed; not while its tempo's being typed)
   const sig = JSON.stringify((SB.data && SB.data.loop) || null);
   const typing = !!SB.loopBox && SB.loopBox.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
@@ -5567,7 +5567,7 @@ function sbLoopTake() {          // (drawn again when it's changed; not while it
     sbDrawBounce();
   }
 }
-// its Bounce (START's card on the Pi's Soundboard: a shape turning, balls bouncing in it, each wall a note)
+// its Bounce (L or R on the Pi's Soundboard: a shape turning, balls bouncing in it, each wall a note)
 function sbDrawBounce() {
   const box = SB.bounceBox, bo = SB.data && SB.data.bounce;
   box.textContent = "";
@@ -5659,7 +5659,7 @@ function sbLoopSays(lp) {
   const n = lp.layers, layers = n + (n === 1 ? " layer" : " layers");
   let say = lp.open && lp.rec ? "Recording a layer" : lp.open && n ? "Playing, " + layers
     : n ? layers + ", heard while the Soundboard's open on the Pi"
-    : lp.open ? "None yet: SELECT records one" : "None yet: SELECT on the Pi's Soundboard records one";
+    : lp.open ? "None yet: START, then Record a loop" : "None yet: START on the Pi's Soundboard, then Record a loop";
   const w = lp.with || [];
   if (w.length) say += ". In time with " + (w.length > 1 ? w.slice(0, -1).join(", ") + " and " + w[w.length - 1] : w[0]);
   return say;

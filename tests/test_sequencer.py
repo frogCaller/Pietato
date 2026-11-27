@@ -4,12 +4,13 @@ and read back, its cells as the loop takes them (the lead's notes, the key's), w
 its page's parts go. Its player: one of its own sounds in a loop, at its note, at its very frame, as loud as the loop
 says; a row's sound starting again as its next cell comes, so never more sounds at once than rows; the sound as bars
 (low notes at the left, the same at any volume, said twenty times a second, silence said once), through the real
-player too, and nothing said of them till they're asked for. Then in media mode: START's card, Sequencer; its page,
-still till it plays; A turns a cell on and off (heard at once, stopped), X a lead cell's note or a drum's sound; a
-tap on a cell; B plays it: the loop told its cells, heard on their beats; the bar going along the grid, the sound's
-bars under it; Y, and taking that back; a new tune, clearing it; L and R, SELECT, its card; HOME, and the
-Soundboard's buttons over it; START held there; Bounce with it; the Soundboard left and opened again; the tune kept;
-a bigger screen, and drawn finely."""
+player too, and nothing said of them till they're asked for. Then in media mode: R from the Soundboard's buttons, its
+page (no row for it on START's card now), still till it plays; A turns a cell on and off (heard at once, stopped), X a
+lead cell's note or a drum's sound; a tap on a cell; B plays it: the loop told its cells, heard on their beats; the bar
+going along the grid, the sound's bars under it; Y; a new tune, Clear all (and nothing on its card that takes a change
+back, or leaves it); L and R round the Soundboard's three pages, the tune playing on under each; SELECT, its card;
+HOME, and the Soundboard's buttons over it; a layer being recorded there kept as L or R goes on; START held there;
+Bounce with it; the Soundboard left and opened again; the tune kept; a bigger screen, and drawn finely."""
 import json, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -552,20 +553,34 @@ if not ONLY or "app" in ONLY:
     KICK, SNARE, HAT = SQ.DRUMS
     tap("start")
     rows = m.board_rows()
-    m.sim_opts = [r[0] for r in rows].index("seq")
-    hints = m.board_card_hints()
+    tap("start")
+    hints = m.sim_hints(m.sim_game())
     t_open = time.monotonic()
-    tap("a")
+    tap("r")
     spin(0.3)
     s = m.sim_game()
     where = []
     real_draw = s.draw
     s.draw = lambda img, x0, y0: (where.append((x0, y0)), real_draw(img, x0, y0))[1]
+    from PIL import ImageDraw as PILDraw
+    texts = []
+    real_text = PILDraw.ImageDraw.text
+    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]))),
+                                                             real_text(self, xy, text, *a, **k))[1]
+    s.tiles.clear()
+    flush()
+    PILDraw.ImageDraw.text = real_text
+    line = {t: x for t, x in texts if t in ("Sequencer", "Stopped") or t.endswith((" BPM", " pentatonic"))}
+    check(f"...its line: its name in the middle, between ◀ and ▶ (L and R go on from it), its key and scale at the "
+          f"left with the tempo after them, and whether it's playing at the right ({line})",
+          line.get("Sequencer") == 320 and line.get("C pentatonic") == 14
+          and 14 < line.get(f"{s.seq['bpm']} BPM", 0) < 200 and line.get("Stopped", 0) > 500)
     want = SQ.born(SQ.seed_of("Den"))
-    check(f"START's card has Sequencer, before Bounce ({[r[0] for r in rows[-2:]]}; its buttons: {hints}); A there: "
-          f"its page, the card gone: a grid of four sounds ({s.seq and s.seq['rows']}) and sixteen steps, the tune "
-          f"this Pietato's name gives it, not playing yet; its buttons along the bottom ({m.sim_hints(s)})",
-          [r[:2] for r in rows[-2:]] == [("seq", "Sequencer"), ("bounce", "Bounce")] and ("A", "Open") in hints
+    check(f"R from the Soundboard's buttons ({hints[0]}; START's card has no row for it, nor for Bounce: "
+          f"{[r[0] for r in rows]}): its page: a grid of four sounds ({s.seq and s.seq['rows']}) and sixteen steps, "
+          f"the tune this Pietato's name gives it, not playing yet; its buttons along the bottom ({m.sim_hints(s)})",
+          not any(r[0] in ("seq", "bounce") for r in rows) and hints[0] == ("L R", "Sequencer, Bounce")
+          and m.board_mode() == "seq"
           and b.seq_up and not b.seq_on and b.card is None and m.sim_opts is None and s.seq is not None
           and s.seq["grid"] == tuple(tuple(r) for r in want[0]) and b.seq == [want[0], want[1]]
           and SQ.dumps(*b.seq) == DEN and s.seq["rows"] == ["Kick", "Snare", "Hi-hat", "Pluck"]
@@ -647,15 +662,16 @@ if not ONLY or "app" in ONLY:
     check(f"◀ from the first step: the last; ▼ from the last row: the first ({edge}, {wrap}); held, on and on "
           f"({b.seq_at})", edge == (3, 15) and wrap == (0, 15) and b.seq_at == (0, 4))
 
-    # its card: Clear it; a tap on a cell; B, and the tune heard on its beats
+    # its card: Clear all; a tap on a cell; B, and the tune heard on its beats
     card("clear")
     ask = m.board_card_hints()
+    label = m.board_rows()[m.sim_opts][1]
     tap("a")
     cleared = not any(any(r) for r in b.seq[0])
     tap("start")
-    check(f"START, its card; Clear it ({ask}): every cell off ({toasts[-1:]}), the lead's notes as they were, the "
-          f"card still up till START", cleared and toasts[-1:] == ["Cleared"] and b.card is None
-          and m.sim_opts is None and ("A", "Do it") in ask and len(b.seq[1]) == 16)
+    check(f"START, its card; {label} ({ask}): every cell off ({toasts[-1:]}), the lead's notes as they were, the "
+          f"card still up till START", label == "Clear all" and cleared and toasts[-1:] == ["Cleared"]
+          and b.card is None and m.sim_opts is None and ("A", "Do it") in ask and len(b.seq[1]) == 16)
     flush()
     places = {w[1:]: box_ for box_, w in m.taps_now() if w[0] == "seq"}
     x0, y0 = where[-1]
@@ -803,41 +819,49 @@ if not ONLY or "app" in ONLY:
           f"starts with, in the loop too ({after_it})", seen and with_it == ("Clap.wav", "Clap", ["Clap.wav", HAT])
           and gone and after_it == ("Snare", [SNARE, HAT]))
 
-    # Y, a new tune, and taking them back
+    # Y, and a new tune
     card("new")
     m.seq_rng = random.Random(11)
     tap("a")
     made = SQ.born(random.Random(11).getrandbits(32))
     new_ok = b.seq == [made[0], made[1]] and toasts[-1:] == ["A new tune"]
+    labels = [r[1] for r in m.board_rows()]
     tap("start")
     before = SQ.dumps(*b.seq)
     m.seq_rng = random.Random(3)
     tap("y")
     after = SQ.dumps(*b.seq)
     diff = sum(a != b_ for a, b_ in zip(before, after))
-    card("back")
-    tap("a")
-    took = (SQ.dumps(*b.seq), toasts[-1])
-    tap("a")
     check(f"its card's A new tune: one made afresh; Y: a little of it changed ({diff} of its cells and notes); its "
-          f"card's Take back the last change: as it was before Y ({took[1]}); again: nothing to take back "
-          f"({toasts[-1]})", new_ok and 1 <= diff <= 12 and after == SQ.dumps(*SQ.mutated(*made, random.Random(3)))
-          and took == (before, "Back as it was") and toasts[-1] == "Nothing to take back"
-          and SQ.dumps(*b.seq) == before)
-    tap("start")
+          f"card ends with A new tune and Clear all: nothing there takes a change back, or leaves it ({labels})",
+          new_ok and 1 <= diff <= 12 and after == SQ.dumps(*SQ.mutated(*made, random.Random(3)))
+          and labels == ["Tempo", "Volume", "Key", "Scale", "Lead", "A new tune", "Clear all"]
+          and not hasattr(b, "seq_was"))
+    m.seq_swap(SQ.loads(before))                        # (the new tune, as it was made: what's below goes on from it)
 
-    # L and R, SELECT, its card, while it plays
+    # L and R: the Soundboard's other pages, the tune playing on under them
     tap("b")
     spin(0.3)
     t1 = time.monotonic()
-    tap("r")
-    up = (m.setting("board_bpm"), round(b.clock.bpm), loops()[-1].get("bpm"))
-    for _ in range(3):
-        tap("l", repeat=True)
-    down = (m.setting("board_bpm"), round(b.clock.bpm), loops()[-1].get("bpm"))
-    check(f"L and R, as it plays: the Soundboard's tempo, two beats a minute at a time, the loop told from the beat "
-          f"it's at ({up}, then held: {down})", up == ("122", 122, 122) and down == ("116", 116, 116)
-          and len(said("loop", t1)) == 4)
+    bpm = round(b.clock.bpm)
+    went = []
+    for name in ("r", "r", "r", "l", "l", "l"):
+        tap(name)
+        spin(0.15)
+        went.append((m.board_mode(), b.seq_on and bool(loops()[-1].get("hits")), m.sim_game().seq is not None,
+                     m.sim_game().bounce is not None))
+    tap("r", repeat=True)
+    tap("l", repeat=True)
+    bars_on = [c["on"] for c in said("bars", t1)]
+    check(f"L and R, as it plays: on round the Soundboard's three pages and back ({[w[0] for w in went]}), the tune "
+          f"playing on under each, its bars asked for only while its own page is up ({bars_on}); held: once is once; "
+          f"and the tempo's left alone ({round(b.clock.bpm)}: it's on its card)",
+          [w[0] for w in went] == ["bounce", "pads", "seq", "pads", "bounce", "seq"] and all(w[1] for w in went)
+          and [w[2] for w in went] == [False, False, True, False, False, True]
+          and [w[3] for w in went] == [True, False, False, False, True, False]
+          and bars_on == [False, True, False, True] and m.board_mode() == "seq"
+          and round(b.clock.bpm) == bpm == int(m.setting("board_bpm")))
+    m.board_tempo(116)
     lead_at = 5                                        # (a lead cell at the scale's third note, to hear it change)
     b.seq[0][3][lead_at], b.seq[1][lead_at] = True, 2
     m.seq_changed()
@@ -858,9 +882,15 @@ if not ONLY or "app" in ONLY:
     quiet = drawn(0.8)
     check(f"START: its card ({[r[0] for r in rows]}; its buttons: {hints}), the tune playing on behind it (its page "
           f"not drawn frame by frame meanwhile: {quiet} frames)", b.card == "seq" and m.sim_opts == 0 and b.seq_on
-          and [r[0] for r in rows] == ["tempo", "volume", "key", "scale", "lead", "new", "clear", "back", "leave"]
+          and [r[0] for r in rows] == ["tempo", "volume", "key", "scale", "lead", "new", "clear"]
           and hints == [("▲▼", "Choose"), ("◀▶", "Change"), ("START", "Play on")] and quiet <= 3
           and loops()[-1].get("hits") and rows[0][2] == "116 BPM" and rows[3][2] == "Blues")
+    from PIL import Image as PILImage, ImageDraw as PILDraw
+    probe = PILDraw.Draw(PILImage.new("RGB", (1, 1)))
+    how = m.wrap(probe, SSQ.SEQ_HOW, m.fonts["small"], 404 - 44, lines=3)
+    check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
+          and not how[-1].endswith("…") and " ".join(how).endswith("SELECT: the scale. L and R: the Soundboard and "
+                                                                    "Bounce."))
     vol = m.volume
     tap("right")
     tap("down")
@@ -881,13 +911,13 @@ if not ONLY or "app" in ONLY:
           and said("tone", t1) == [{"do": "tone", "id": "Tones/Pad"}] and lead_id == "Tones/Pad"
           and lead_semis() == 5 and m.setting("bounce_key") == "C#" and m.sim_game().seq["rows"][3] == "Pad"
           and loops()[-1]["bpm"] == 117)
-    m.sim_opts = [r[0] for r in m.board_rows()].index("leave")
-    leave_hints = m.board_card_hints()
+    m.sim_opts = len(m.board_rows()) - 1
+    last_hints = m.board_card_hints()
     tap("start")
     going = drawn(1.0)
     check(f"...START again: on with it, drawn frame by frame again ({going} in a second); its last row's button: "
-          f"{leave_hints[1]}", b.card is None and m.sim_opts is None and b.seq_up and going >= 14
-          and leave_hints[1] == ("A", "Leave"))
+          f"{last_hints[1]}", b.card is None and m.sim_opts is None and b.seq_up and going >= 14
+          and last_hints[1] == ("A", "Do it"))
 
     # HOME: the Soundboard's buttons, over it
     t1 = time.monotonic()
@@ -898,7 +928,7 @@ if not ONLY or "app" in ONLY:
     lp = dict(s.loop or {})
     for _ in range(len(b.banks)):                      # (the Starter bank: a sound on every button)
         if b.bank()["name"] != "Starter":
-            tap("r")
+            tap("select")
     tap("up")
     over = spin(1.0, lambda: b.bank()["pads"].get("up") in b.playing)
     check(f"HOME: the Soundboard's buttons again, the tune still playing under them (its loop still told: "
@@ -907,20 +937,33 @@ if not ONLY or "app" in ONLY:
           home is True and not b.seq_up and b.seq_on and s.seq is None and m.board_shown()
           and said("bars", t1) == [{"do": "bars", "on": False}] and bool(loops()[-1].get("hits"))
           and lp.get("seq") is True and lp.get("layers") == 0 and lp.get("bars") == 1 and lp.get("rec") is False
-          and m.sim_hints(s)[-3:] == [("SELECT", "Record a loop"), ("START", "More"), ("HOME", "Back")] and over
+          and m.sim_hints(s)[-3:] == [("SELECT", "Bank"), ("START", "More"), ("HOME", "Back")] and over
           and m.setting("seq_tune") == tune)
-    tap("select")
+    tap("start")
+    tap("a")                                            # (its card's first row: Record a loop)
     c = b.clock
     spin(0.2)
     tap("up")
     spin(0.3)
-    tap("select")
+    tap("start")
+    tap("a")
     both = loops()[-1]
     check(f"...a loop recorded over it: its layer and the tune's cells, one loop ({len(both.get('hits') or [])} "
           f"sounds in it)", len(b.layers) == 1 and len(both["hits"]) == 1 + sum(sum(r) for r in b.seq[0])
           and sorted({h[4] for h in both["hits"]}) == [4.0, 8])
+    tap("start")
+    tap("a")                                            # (another layer, recording)
+    tap("down")
+    taking = b.take is not None and len(b.take[1]) == 1
+    tap("r")
+    spin(0.1)
+    kept = (m.board_mode(), b.take, len(b.layers))
+    tap("l")
+    check(f"...another layer being recorded, and R: kept first (it's from its buttons that one's stopped), then on to "
+          f"the Sequencer ({kept[0]}, {kept[2]} layers)", taking and kept == ("seq", None, 2)
+          and m.board_mode() == "pads" and len(loops()[-1]["hits"]) == 2 + sum(sum(r) for r in b.seq[0]))
     m.press("start")
-    spin(0.8)
+    spin(1.1)
     m.release("start")
     spin(0.1)
     check(f"START held there: the loop cleared and the tune stopped ({toasts[-1:]}, {loops()[-1]}), its cells as "
@@ -928,8 +971,7 @@ if not ONLY or "app" in ONLY:
               "do": "loop"} and SQ.dumps(*b.seq) == tune and m.sim_game().loop is None)
 
     # Bounce with it
-    card("seq")
-    tap("a")
+    tap("r")
     tap("b")
     spin(0.2)
     up_again = b.seq_up and b.seq_on and m.sim_game().seq is not None
@@ -940,9 +982,8 @@ if not ONLY or "app" in ONLY:
           f"the tune playing on with it ({why})", up_again and why is None and b.bounce is not None and not b.seq_up
           and b.seq_on and s.bounce is not None and s.seq is None and bool(loops()[-1].get("hits")))
     home = m.sim_home()
-    card("seq")
-    tap("a")
-    check("...HOME leaves Bounce; START's card, Sequencer: its page again, still playing", home is True
+    tap("r")
+    check("...HOME leaves Bounce; R: its page again, still playing", home is True
           and b.bounce is None and b.seq_up and b.seq_on and m.sim_game().seq is not None
           and m.sim_game().seq["playing"])
 
@@ -967,7 +1008,7 @@ if not ONLY or "app" in ONLY:
     tap("b")
 
     # the tune, kept
-    b.seq = b.seq_was = None
+    b.seq = None
     back = SQ.dumps(*m.seq_tune())
     m.set_setting("seq_tune", "nonsense")
     b.seq = None

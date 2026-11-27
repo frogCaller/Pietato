@@ -1,6 +1,7 @@
 """Apps > Group chat: your Pietatos talking among themselves, and with you (pitato/circle.py keeps the conversation and
 decides who says what, and when); a line said popping up on the one you're at; and where you are, for the others: its
-controller or keyboard pressed, or its camera seeing someone move."""
+controller or keyboard pressed, or its camera seeing someone move. In a party (party mode), the one whose camera's
+looking is its bouncer: someone moving where nobody had for a while is someone come in, and it says so."""
 import collections
 import io
 import math
@@ -29,6 +30,8 @@ EYES_EVERY = 4               # seconds between its camera's looks for someone mo
 EYES_IDLE = 30               # ...and between looks for whether it can (a camera plugged in, nothing else using it)
 EYES_MOVED = (24, 0.03)      # someone moved: this share of the camera's picture changed by this much (of 255)
 NOTICED_TELL = 120           # you, noticed here after this long away: your others told at once (not in 20 seconds)
+BOUNCER_AWAY = 45            # seconds its camera's seen nobody move before someone moving is someone come in (a
+                             # party's bouncer: the one in it with a camera)
 GROUP_OLDER = 3600           # one of yours without the group chat (not updated yet): not asked again for this long
 CASES = {"2w": "GPi Case 2W", "2": "GPi Case 2"}   # what a Pi's in (media.case), for the others
 
@@ -80,6 +83,7 @@ class GroupScreen:
         self.group_without = {}      # another of yours without the group chat (an older one) -> not asked till then
         self.eyes = None             # its camera looking for someone moving: the thread
         self.eyes_looking = False    # ...looking now
+        self.eyes_still = None       # ...since when it's seen nobody move (None: someone just did, or it's not known)
 
     # -- the group's hooks ---------------------------------------------------------------------------------------
     def group_own(self):
@@ -119,6 +123,8 @@ class GroupScreen:
                 if watching:                           # (another's game, watched here: screens/lobby.py)
                     return f"watching {watching['with']} play {title}" if title else f"watching {watching['with']} play"
                 return f"playing {title}" if title else "playing a game"
+            if self.bouncer_on():
+                return "minding the door at the party"
             if self.proc and self.cur:
                 title = (self.cur.get("title") or "")[:40]
                 if self.kind == "radio":
@@ -261,6 +267,25 @@ class GroupScreen:
                 and not (self.proc and self.kind in SCREEN_KINDS) and self.prog is None and self.chromium is None
                 and self.view != "update")
 
+    def bouncer_on(self):
+        """This one's a party's bouncer: it's in one (leading it, or in another's), and its own camera's looking (a
+        camera plugged into it, Group chat's camera on: eyes_loop)."""
+        return self.party_on() and self.eyes_looking
+
+    def eyes_saw(self, moved, now):
+        """(Its camera's thread.) A look of its camera's: someone moved, or nobody did. Someone moving: you, here
+        (you_noticed); and if nobody had for a while (BOUNCER_AWAY) and it's a party's bouncer, someone come in: it
+        says so (circle.py's bouncer: now and then)."""
+        still = self.eyes_still
+        if not moved:
+            if still is None:
+                self.eyes_still = now
+            return
+        self.eyes_still = None
+        self.you_noticed()
+        if still is not None and now - still >= BOUNCER_AWAY and self.bouncer_on():
+            self.circle.bouncer()
+
     def eyes_loop(self):
         prev, seq = None, None
         while True:
@@ -273,15 +298,15 @@ class GroupScreen:
                     if jpeg and n != seq:
                         seq = n
                         small = eyes_small(jpeg)
-                        if small is not None and prev is not None and eyes_moved(prev, small):
-                            self.you_noticed()
+                        if small is not None and prev is not None:
+                            self.eyes_saw(eyes_moved(prev, small), time.monotonic())
                         prev = small
                     wait = EYES_EVERY
                 else:
-                    prev = None
+                    prev = self.eyes_still = None
             except Exception as ex:
                 print(f"group chat: its camera couldn't look: {ex!r}", flush=True)
-                prev = None
+                prev = self.eyes_still = None
             self.eyes_looking = wait == EYES_EVERY
             time.sleep(wait)
 

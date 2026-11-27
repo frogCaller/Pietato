@@ -4,10 +4,13 @@ of its own on the screen at once, then its model's words (asked by itself: never
 too in the day (with a voice; not over a game, whose sound is its own; at night, just on the screen). The weather and
 Finance with a word about them; the camera, looked through (its model sees what's there), turned to look around when it
 turns (left, then right, back where it was), not when it's following you; one of Apps' watched; a slideshow of your
-photos (its model shown one); the Pi's own numbers; a game, with what it says over the game. What it says goes along
-the foot of the page (low, over a slideshow); the camera's over its picture. A or START: what it's showing is yours;
-any other button: back where you were (your list, on the row you were on). Something else on the screen: it's left as
-it is. Without a model: its own lines, said. Games only: just games."""
+photos (its model shown one); the Pi's own numbers; the Clock, and Linux's own (cmatrix and the rest, those installed:
+on the whole screen for a minute, stopped after, or on to the next thing when one stops by itself), with a line of its
+own and never a word asked of its model; and a game, with what it says over the game, only when it's been through all
+the rest, each once (then round again). What it says goes along the foot of the page (low, over a slideshow); the
+camera's over its picture. A or START: what it's showing is yours; any other button: back where you were (your list,
+on the row you were on). Something else on the screen: it's left as it is. Without a model: its own lines, said. Games
+only: just games."""
 import os, shutil, sys, threading, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; tests)
 sys.path.insert(0, TESTS)
@@ -69,6 +72,8 @@ def ollama(server, model, system, prompt, images=None, timeout=0):
 g.ollama_generate = ollama
 import pitato.screens.attract as AM
 AM.BORED_TALK = (0, 24)                              # (it talks, whatever the time the test runs at)
+INSTALLED = ["cmatrix", "cacafire", "htop"]          # (Linux's own that are here: hollywood and nyancat aren't)
+AM.prog_path = lambda name: "/usr/bin/" + name if name in INSTALLED else None
 
 
 class FB:
@@ -116,9 +121,49 @@ Image.new("RGB", (64, 48), (90, 90, 90)).save(jpeg)
 m.camera_look = lambda addr: (open(jpeg, "rb").read(), "Garage")
 m.later = lambda secs, job: job()                    # (its turns: let go at once, here)
 
+
+
+class Toy:                                            # (one of Linux's own, pretended: on till it's stopped)
+    def __init__(self, name):
+        self.name, self.code = name, None
+
+    def poll(self):
+        return self.code
+
+
+started, stopped, refused = [], [], set()
+
+
+def toy_start(name):
+    if name in refused:                               # (one that won't start: it says so, as prog_start does)
+        m.toast(f"{name} can't start (No such device)", 3)
+        return
+    m.prog, m.prog_name = Toy(name), name
+    started.append(name)
+
+
+def toy_stop():
+    p, m.prog, m.prog_name = m.prog, None, None
+    if p is not None:
+        stopped.append(p.name)
+        m.dirty = True
+
+
+m.prog_start, m.prog_stop = toy_start, toy_stop
 picks = []
-m.bored_pick = lambda kinds: (picks.append(list(kinds)), want[0] if want[0] in kinds else kinds[0])[1]
+
+
+def pick(things):
+    """(Its choice, made here: the one this test wants next, by its kind or its name.)"""
+    picks.append(list(things))
+    return next((t for t in things if want[0] in t), things[0])
+
+
+m.bored_pick = pick
 want = ["weather"]
+EVERYTHING = ([("camera", None), ("weather", None), ("finance", None), ("app", "Fish Tank"), ("app", "Clock"),
+               ("app", "Fortune Cookie")] + [("toy", name) for name in INSTALLED]
+              + [("photos", None), ("system", None)])
 
 
 def idle():
@@ -154,8 +199,8 @@ m.tick()
 a = m.attract
 check(f"left idle on your music list, plugged in: bored, it finds something to do ({a and a['kind']}, "
       f"{picks[:1]})", a is not None and a["kind"] == "weather")
-check(f"...from all it can do here ({sorted(picks[0]) if picks else None})", picks and
-      sorted(picks[0]) == sorted(["game", "camera", "weather", "finance", "app", "photos", "system"]))
+check(f"...from all it can do here but play a game, which waits till it's done the rest ({picks[:1]})", picks and
+      sorted(picks[0], key=str) == sorted(EVERYTHING, key=str) and ("game", None) not in picks[0])
 check(f"the weather: up on the screen, and a line of its own about it at once ({m.bored_said()!r})",
       g.LIBRARY[m.tab]["name"] == "Weather" and m.view == "list" and "64 degrees" in m.bored_said()
       and any(m.bored_said().startswith(x + " ") for x in AM.BORED_LINES["weather"]))
@@ -173,8 +218,9 @@ check("...and none of it kept in your conversation", len(m.friend.log) == log_be
 want[0] = "finance"
 later(AM.BORED_FOR["weather"] + 1)
 m.tick()
-check(f"a while on: something else, not what it did last ({m.attract['kind']}, {picks[-1]})",
-      m.attract["kind"] == "finance" and "weather" not in picks[-1] and g.LIBRARY[m.tab]["name"] == "Finance")
+check(f"a while on: something else, one it hasn't done yet ({m.attract['kind']}, {len(picks[-1])} left)",
+      m.attract["kind"] == "finance" and ("weather", None) not in picks[-1] and len(picks[-1]) == len(EVERYTHING) - 1
+      and g.LIBRARY[m.tab]["name"] == "Finance")
 check(f"...a word about your coins at once ({m.bored_said()!r})", "BTC's at $67,000.00, up 2.1% today." in m.bored_said()
       or "Bitcoin's at $67,000.00, up 2.1% today." in m.bored_said())
 settle()
@@ -255,15 +301,66 @@ settle()
 check(f"...its model told them ({asked[-1][0][:80]!r})", asked[-1][0].startswith("You're bored, so you just put your own "
                                                                                  "numbers on the screen"))
 
-# ---- a game: what it says goes over the game ------------------------------------------------------------------------
-want[0] = "game"
+# ---- the Clock: a line of its own, and its model left alone ----------------------------------------------------------
+want[0] = "Clock"
+n_asked = len(asked)
+later(AM.BORED_FOR["system"] + 1)
+m.tick()
+settle(0.5)
+check(f"the Clock: up, with a line of its own, said ({m.bored_said()!r}, {said[-1:]}); its model's not asked "
+      f"({len(asked) - n_asked} more)", m.attract["kind"] == "app" and g.LIBRARY[m.tab]["name"] == "Clock"
+      and m.on_sim_page() and m.bored_said() == AM.BORED_APP_LINES["Clock"] == said[-1] and len(asked) == n_asked)
+check("...along the foot of the page, over the clock", m.bored_said() in drawn())
+
+# ---- Linux's own: cmatrix and the rest, those installed --------------------------------------------------------------
+want[0] = "cmatrix"
+later(AM.BORED_FOR["app"] + 1)
+m.tick()
+settle(0.5)
+check(f"one of Linux's own: put on, on the whole screen, from Apps ({started}, {g.LIBRARY[m.tab]['name']}); a line of "
+      f"its own, just said ({said[-1:]}): nothing of it drawn, and its model's not asked",
+      m.attract["kind"] == "toy" and started == ["cmatrix"] and m.prog is not None and m.prog_name == "cmatrix"
+      and g.LIBRARY[m.tab]["name"] == "Apps" and said[-1] == AM.BORED_TOY_LINES["cmatrix"] and m.bored_said() == ""
+      and len(asked) == n_asked)
+offered = {which for ps in picks for kind, which in ps if kind == "toy"}
+check(f"...only those installed here were ever on its list ({sorted(offered)}), and no game yet",
+      offered == set(INSTALLED) and not any(("game", None) in ps for ps in picks))
+later(AM.BORED_FOR["toy"] - 5)
+m.tick()
+check("...on for a minute or so", m.attract["kind"] == "toy" and m.prog is not None and not stopped)
+want[0] = "cacafire"
+later(6)
+m.tick()
+check(f"...then it's stopped, and the next thing's on: another of them ({stopped}, {started})",
+      stopped == ["cmatrix"] and started == ["cmatrix", "cacafire"] and m.prog_name == "cacafire"
+      and m.attract["kind"] == "toy")
+later(AM.BORED_TOY_SOON + 1)
+m.prog.code = 0                                       # (it stops by itself)
+want[0] = "htop"
+m.tick()
+m.tick()
+check(f"one that stops by itself: on to the next thing ({started}, {m.attract and m.attract['kind']})",
+      m.attract is not None and started[-1] == "htop" and m.prog_name == "htop" and stopped[-1] == "cacafire")
+want[0] = "Fortune Cookie"
+later(AM.BORED_FOR["toy"] + 1)
+m.tick()
+settle()
+did = [which or kind for kind, which in m.attract["round"]]
+check(f"...and the last of Apps' ({g.LIBRARY[m.tab]['name']}): everything but a game now, each once ({did}); its "
+      f"model asked nothing about the Clock or Linux's own ({len(asked) - n_asked} more: the fortune)",
+      stopped[-1] == "htop" and m.prog is None and g.LIBRARY[m.tab]["name"] == "Fortune Cookie"
+      and sorted(m.attract["round"], key=str) == sorted(EVERYTHING, key=str) and len(asked) == n_asked + 1
+      and "fortune cookie" in asked[-1][0])
+
+# ---- a game, only now: what it says goes over the game ---------------------------------------------------------------
 gate.clear()                                          # (its model slow to answer)
 sent.clear()
 said_before = len(said)
-later(AM.BORED_FOR["system"] + 1)
+later(AM.BORED_FOR["app"] + 1)
 m.tick()
-check(f"a game: it plays it, a line of its own over the game at once ({m.view}, {sent[-1:]})",
-      m.attract["kind"] == "game" and m.view == "game" and m.game is not None
+check(f"it's been through all the rest: only now a game ({picks[-1]}): it plays it, a line of its own over the game "
+      f"at once ({m.view}, {sent[-1:]})", picks[-1] == [("game", None)]
+      and m.attract["kind"] == "game" and m.view == "game" and m.game is not None
       and any(x.startswith("notice ") and "Contra" in x for x in sent))
 gate.set()
 settle()
@@ -276,6 +373,9 @@ gate.clear()
 want[0] = "photos"
 later(AM.ATTRACT_GAME + 1)
 m.tick()                                              # (your photos: its model asked, and not answering yet)
+check(f"the game over: round again, everything but a game once more ({len(picks[-1])} to choose from), the game "
+      f"ended ({m.view})", sorted(picks[-1], key=str) == sorted(EVERYTHING, key=str) and m.game is None
+      and m.attract["kind"] == "photos")
 want[0] = "finance"
 later(AM.BORED_FOR["photos"] + 1)
 m.tick()
@@ -310,6 +410,56 @@ m.open_app(mi)                                        # (your music put up from 
 m.tick()
 check("something else on the screen meanwhile: it's left as it is", m.attract is None and m.tab == mi
       and m.view == "list")
+
+# ---- one of Linux's own: A keeps it, any other button stops it -------------------------------------------------------
+del started[:], stopped[:]
+want[0] = "htop"
+idle()
+m.tick()
+m.press("a")
+check(f"A while one of Linux's own is on: it's yours, still on ({m.prog_name}, {stopped})",
+      m.attract is None and m.prog is not None and m.prog_name == "htop" and not stopped)
+m.press("b")
+check(f"...its buttons its keys from there: B stops it, as ever ({stopped})", m.prog is None and stopped == ["htop"])
+m.open_app(mi)
+m.sels[mi] = 2
+want[0] = "cmatrix"
+idle()
+m.tick()
+on = m.prog_name
+m.press("b")
+check(f"B while it's bored with one on ({on}): stopped, and back where you were ({stopped}, "
+      f"{g.LIBRARY[m.tab]['name']})", on == "cmatrix" and m.attract is None and m.prog is None
+      and stopped[-1] == "cmatrix" and m.tab == mi and m.view == "list" and m.sels.get(mi) == 2)
+want[0] = "cacafire"
+idle()
+m.tick()
+on = m.prog_name
+m.prog.code = 1                                       # (it stops at once: it never really started)
+refused.add("htop")
+want[0] = "htop"
+m.msg = None
+m.tick()
+m.tick()
+a = m.attract
+check(f"one that stops by itself at once ({on}), and one that won't start (htop): on to something else each time "
+      f"({a and (a['which'] or a['kind'])}), nothing said of either ({m.msg!r}), and neither's put on again while it's "
+      f"bored ({sorted(x for x in a['bad'])})", on == "cacafire" and a is not None and a["kind"] != "toy"
+      and m.prog is None and m.msg is None and a["bad"] == {"cacafire", "htop"}
+      and [t for t in m.bored_things() if t[0] == "toy"] == [("toy", "cmatrix")])
+m.press("b")
+refused.clear()
+INSTALLED.remove("cmatrix")
+INSTALLED.remove("cacafire")
+INSTALLED.remove("htop")
+want[0] = "toy"
+idle()
+m.tick()
+check(f"none of Linux's own installed: none on its list ({[k for k, _ in picks[-1]]})",
+      m.attract is not None and m.attract["kind"] != "toy" and not any(k == "toy" for k, _ in picks[-1])
+      and len(picks[-1]) == len(EVERYTHING) - 3)
+m.press("b")
+INSTALLED.extend(["cmatrix", "cacafire", "htop"])
 
 # ---- a camera that doesn't turn; following you ------------------------------------------------------------------------
 STEERS[0] = False
@@ -357,7 +507,7 @@ m.set_setting("attract", "Games only")
 picks.clear()
 idle()
 m.tick()
-check(f"Games only: just games ({picks})", picks == [["game"]] and m.attract["kind"] == "game")
+check(f"Games only: just games ({picks})", picks == [[("game", None)]] and m.attract["kind"] == "game")
 m.press("b")
 check("...B: back where you were", m.attract is None and m.tab == mi and m.view == "list")
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}", flush=True)

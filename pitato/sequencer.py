@@ -187,13 +187,15 @@ def lit_tile(cw, ch, colour, head, back):
 
 
 def draw_top(d, x0, y0, w, view, fonts, top):
-    """Its line: the key and scale at the left (SELECT: the next scale), the tempo between ◀ and ▶ (L and R), and at
-    the right whether it's playing."""
+    """Its line: its name between ◀ and ▶ (L and R: the Soundboard's other pages); the key and scale at the left
+    (SELECT: the next scale), the tempo after them; and at the right whether it's playing."""
     from .theme import MUTED, TEXT
     mid = y0 + top // 2 - 2
     f, small = fonts["bold"], fonts["small"]
-    d.text((x0 + 14, mid), f"{view['key']} {view['scale'].lower()}", font=small, fill=TEXT, anchor="lm")
-    words = f"{view['bpm']} BPM"
+    key = f"{view['key']} {view['scale'].lower()}"
+    d.text((x0 + 14, mid), key, font=small, fill=TEXT, anchor="lm")
+    d.text((x0 + 14 + small.getlength(key) + 12, mid), f"{view['bpm']} BPM", font=small, fill=MUTED, anchor="lm")
+    words = "Sequencer"
     cx = x0 + w / 2
     d.text((cx, mid), words, font=f, fill=TEXT, anchor="mm")
     nw, a = f.getlength(words), fonts["arrow"]

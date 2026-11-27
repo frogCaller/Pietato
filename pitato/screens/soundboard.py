@@ -6,24 +6,25 @@ Settings > Sound says, as it changes; and whether there's a microphone is known,
 only when there's one to record with. Your LEDs (Apps > LED backlight, an ESP32 board: screens/glow.py) are lit by its
 sounds as they are by music: a pulse in the button's colour as each is heard, and that colour while it plays.
 
-Its buttons: the d-pad's four, A, B, X and Y play what's on them; L and R go through the banks; START, tapped, has its
-card (the bank, the volume, the loop's tempo and length, snapping to the beat, the click, the notes' scale, its reverb,
-Record a sound), where A, B or START goes on; HOME goes back to Apps from anywhere on it (screens/sims.py's
-sim_home). Recording a sound: A keeps it, B drops it; kept (its silence
+Its buttons: the d-pad's four, A, B, X and Y play what's on them; SELECT goes on to the next bank; START, tapped, has
+its card (Record a loop, the bank, Record a sound, the volume, the loop's tempo and length, snapping to the beat, the
+click, the notes' scale, its reverb), where A, B or START goes on; HOME goes back to Apps from anywhere on it
+(screens/sims.py's sim_home). Recording a sound: A keeps it, B drops it; kept (its silence
 trimmed, a file in your Soundboard folder), the next button pressed is the one it goes on (L and R: in another bank;
 SELECT: hear it first; START: leave it where it is, record it again, or delete it).
 
-The loop: SELECT starts recording a layer, and stops it; what's pressed meanwhile is played back round and round where
-it was pressed (to the nearest sixteenth, unless snapping's off), over the layers before it, a quiet click on each beat
-while it records. SELECT held drops the last layer (the one being recorded, if one is); START held clears the loop and
-stops every sound. Its player plays the loop itself, each sound at its very frame (soundplay.py). The beat: a tempo,
-and which beat's heard when, shared with your other Pietatos that have their Soundboard open (beatlink.py), so their
-loops keep time with this one's. Notes: A, B, X or Y held, and the d-pad plays its sound up and down a scale (▲ a note
-higher, ▼ lower, ▶ the same again, ◀ back to its own), the note on its tile; recording, they go in the loop.
+Its three pages: L and R go round them (board_cycle): these buttons, the Sequencer (screens/sequencer.py) and Bounce
+(screens/bounce.py), each of those two on this page in place of the buttons, with this player and this beat: the
+Sequencer's cells are in the loop its player's told, with the layers recorded here.
 
-Its card also opens Bounce (screens/bounce.py) and the Sequencer (screens/sequencer.py), each on this page in place of
-the buttons, with this player and this beat: the Sequencer's cells are in the loop its player's told, with the layers
-recorded here."""
+The loop: its card's first row (START, then A) starts recording a layer, and stops it; what's pressed meanwhile is
+played back round and round where it was pressed (to the nearest sixteenth, unless snapping's off), over the layers
+before it, a quiet click on each beat while it records. Its card's last row drops the last layer (the one being
+recorded, if one is); START held clears the loop and stops every sound. Its player plays the loop itself, each sound at
+its very frame (soundplay.py). The beat: a tempo, and which beat's heard when, shared with your other Pietatos that
+have their Soundboard open (beatlink.py), so their loops keep time with this one's. Notes: A, B, X or Y held, and the
+d-pad plays its sound up and down a scale (▲ a note higher, ▼ lower, ▶ the same again, ◀ back to its own), the note on
+its tile; recording, they go in the loop."""
 import json
 import math
 import os
@@ -68,7 +69,8 @@ BPM_RANGE = (40, 240)            # the loop's tempo: the slowest and fastest
 BARS = (1, 2, 4)                 # how long a loop can be (bars of BAR beats)
 BAR = 4
 SNAP = 0.25                      # beats: what's pressed while recording goes to the nearest sixteenth
-HOLD = 0.5                       # seconds SELECT or START is held for its other job (drop the last layer; clear it all)
+HOLD = 0.8                       # seconds START is held for its other job (the loop cleared, every sound stopped:
+                                 # longer than a slow press of it, now that its card's where a loop's recorded)
 NOTE_HOLD = 0.25                 # seconds A, B, X or Y is held before the d-pad plays its sound as notes (pressed
                                  # together sooner, as drums are, each plays its own)
 LAYERS_MOST = 32                 # layers in a loop, at most
@@ -77,8 +79,9 @@ SCALES = {"Major": (0, 2, 4, 5, 7, 9, 11), "Minor": (0, 2, 3, 5, 7, 8, 10), "Pen
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")   # (a sound's own note: C)
 NOTE_PADS = ("a", "b", "x", "y")  # held, the d-pad plays its sound as notes
 DPAD = ("up", "down", "left", "right")
-BOARD_HOW = ("SELECT records a loop: held, it drops the last layer. START held clears it. A, B, X or Y held, the "
-             "d-pad plays its sound as notes.")    # (START's card, under its title)
+BOARD_HOW = ("L and R: the Sequencer and Bounce. SELECT: the next bank. START held clears the loop. A, B, X or Y "
+             "held, the d-pad plays its sound as notes.")    # (START's card, under its title)
+BOARD_PAGES = ("pads", "seq", "bounce")   # its three pages, as R goes round them (L: the other way)
 
 
 class Board:
@@ -112,8 +115,7 @@ class Board:
         self.take = None               # ...the layer being recorded
         self.clock = None              # the beat (beatlink.py's Clock): a tempo, and when a beat's heard
         self.held = {}                 # buttons held down on its page: name -> when it went down
-        self.held_done = set()         # ...those whose holding has done its job (SELECT: dropped; START: cleared)
-        self.select_did = None         # what SELECT going down did: "start" (recording), "kept" (a layer), "stop"
+        self.held_done = set()         # ...those whose holding has done its job (START: the loop cleared)
         self.note_pad = None           # A, B, X or Y whose sound the d-pad's playing as notes, while it's held
         self.note = 0                  # ...the note it's on: steps of the scale from the sound's own
         self.loop_told = None          # what its player was last told of the loop
@@ -130,7 +132,6 @@ class Board:
         self.bounce_bpm = None         # ...the tempo its echo was told
         self.pitch = {}                # a sound -> its own note, as its player could tell (None: it hasn't one)
         self.seq = None                # the Sequencer's tune (sequencer.py: [its grid, the lead's notes]), once had
-        self.seq_was = None            # ...as it was before the last change to all of it (to take that back)
         self.seq_up = False            # ...its page is up (screens/sequencer.py)
         self.seq_on = False            # ...it's playing: its cells are in the loop
         self.seq_at = (0, 0)           # ...the cell ◀▶▲▼ have moved to (row, step)
@@ -299,7 +300,7 @@ class SoundboardScreen:
             self.board_rec_over()
         b.placing = b.card = None
         b.pitch = {}
-        b.held, b.held_done, b.select_did, b.note_pad = {}, set(), None, None
+        b.held, b.held_done, b.note_pad = {}, set(), None
         if b.link is not None:
             b.link.close()
             b.link = None
@@ -531,15 +532,12 @@ class SoundboardScreen:
                 return
         if b.out:
             self.board_send()
-        for name, down in list(b.held.items()):        # (SELECT or START held: their other job)
-            if name in ("select", "start") and now - down >= HOLD and name not in b.held_done:
-                b.held_done.add(name)
-                if name == "select":
-                    self.board_undo()
-                else:
-                    if self.sim_opts is not None and b.card is not None:
-                        self.board_card_shut()         # (the card it opened as it went down: gone again)
-                    self.board_clear()
+        down = b.held.get("start")                     # (START held: its other job)
+        if down is not None and now - down >= HOLD and "start" not in b.held_done:
+            b.held_done.add("start")
+            if self.sim_opts is not None and b.card is not None:
+                self.board_card_shut()                 # (the card it opened as it went down: gone again)
+            self.board_clear()
         self.bounce_tick(now)                          # (Bounce, if it's up: its balls moved on, their notes played)
         if b.note_pad is None and b.placing is None and self.board_note_pad(now) is not None:
             b.note_pad = self.board_note_pad(now)      # (A, B, X or Y held a moment: its note on its tile, the d-pad's
@@ -650,17 +648,14 @@ class SoundboardScreen:
             s.placing = (B.title(b.placing), next((pad for pad, sid in pads.items() if sid == b.placing), None))
         else:
             s.placing = None
-        many = [("L R", "Bank")] if len(b.banks) > 1 else []
+        many = len(b.banks) > 1
         if b.rec is not None:
             s.own_hints = [("A", "Keep it"), ("B", "Cancel")]
-        elif b.placing is not None:
-            s.own_hints = many + [("SELECT", "Hear it"), ("START", "More")]
-        elif b.take is not None:
-            s.own_hints = many + [("SELECT", "Keep it"), ("START", "More"), ("HOME", "Back")]
-        elif b.layers:
-            s.own_hints = many + [("SELECT", "Add to the loop"), ("START", "More"), ("HOME", "Back")]
+        elif b.placing is not None:                    # (a sound waiting for its button: L and R, another bank)
+            s.own_hints = ([("L R", "Bank")] if many else []) + [("SELECT", "Hear it"), ("START", "More")]
         else:
-            s.own_hints = many + [("SELECT", "Record a loop"), ("START", "More"), ("HOME", "Back")]
+            s.own_hints = ([("L R", "Sequencer, Bounce")] + ([("SELECT", "Bank")] if many else [])
+                           + [("START", "More"), ("HOME", "Back")])
         now = time.monotonic()
         if b.take is not None or b.layers or b.seq_on:   # (the loop: recording or playing, where it is, how fast;
             c = self.board_clock()                       # the Sequencer playing under these buttons, as one: a bar)
@@ -683,12 +678,40 @@ class SoundboardScreen:
         return "something else has it" if "busy" in why else "it won't open"
 
     def board_step(self, way):
-        """L or R: the bank before or after (round and round)."""
+        """SELECT: the next bank, round and round (its card's Bank, and L and R with a sound waiting for its button:
+        the one before, too)."""
         b = self.board
         if len(b.banks) < 2:
             return
         b.at = (b.at + way) % len(b.banks)
         self.board_load()
+        self.dirty = True
+
+    def board_mode(self):
+        """Which of its three pages is up: "pads" (its buttons), "seq" (the Sequencer) or "bounce"."""
+        b = self.board
+        return "bounce" if b.bounce is not None else "seq" if b.seq_up else "pads"
+
+    def board_cycle(self, way):
+        """L or R, on any of its three pages: the one after (R) or before (L), round and round: its buttons, the
+        Sequencer, Bounce. A layer being recorded is kept first (it's from its buttons that one's stopped). The
+        Sequencer's tune plays on under the others, as it does left with HOME."""
+        b = self.board
+        now = time.monotonic()
+        to = BOARD_PAGES[(BOARD_PAGES.index(self.board_mode()) + way) % len(BOARD_PAGES)]
+        if b.take is not None:
+            self.board_commit()
+            self.board_loop_tell()
+        b.note_pad = None
+        if to == "seq":
+            self.seq_start(now)                        # (Bounce, if it's up: left)
+        elif to == "bounce":
+            self.bounce_start(now)                     # (the Sequencer's page, if it's up: left)
+        else:
+            if b.bounce is not None:
+                self.bounce_leave()
+            if b.seq_up:
+                self.seq_leave()
         self.dirty = True
 
     def board_play(self, pad):
@@ -762,13 +785,18 @@ class SoundboardScreen:
                         self.dirty = True              #  no frame of its own for it, drums played quickly)
                     b.note_pad, b.note = None, 0
         elif name in ("l", "r", "l2", "r2"):
-            self.board_step(-1 if name in ("l", "l2") else 1)
+            way = -1 if name in ("l", "l2") else 1
+            if b.placing is not None:
+                self.board_step(way)                   # (a sound waiting for its button: in another bank)
+            else:
+                b.held.pop(name, None)
+                self.board_cycle(way)                  # (the Sequencer, or Bounce)
         elif name == "select":
             if b.placing is not None:
                 b.held.pop(name, None)
                 self.board_sound(b.placing)
             else:
-                self.board_loop_button(now)
+                self.board_step(1)
         elif name == "start":                          # (its card; held, the card goes and the loop's cleared)
             b.card = "kept" if b.placing is not None else "more"
             self.sim_opts = 0
@@ -856,20 +884,18 @@ class SoundboardScreen:
         """The beat heard at that moment (counting from when the clock began: 3.5, half way through the fourth)."""
         return self.board_clock().beat(now)
 
-    def board_loop_button(self, now):
-        """SELECT: a layer starts recording, or the one recording stops (kept); held, it's dropped (board_undo)."""
+    def board_loop_button(self):
+        """Its card's first row (Record a loop, Add to the loop, Stop recording): a layer starts recording, or the one
+        recording stops (kept, if anything was played in it)."""
         b = self.board
         if b.take is None:
             if len(b.layers) >= LAYERS_MOST:
                 self.toast("That's as many layers as a loop can have", 3)
-                b.held.pop("select", None)
                 return
             b.take = [BAR * self.board_bars(), []]
-            b.select_did = "start"
         else:
-            b.select_did = "kept" if self.board_commit() else "stop"
+            self.board_commit()
         self.board_loop_tell()
-        self.sim_next = min(self.sim_next, now + HOLD)   # (a look then: held, it drops the last layer)
         self.dirty = True
 
     def board_commit(self):
@@ -882,12 +908,12 @@ class SoundboardScreen:
         return False
 
     def board_undo(self):
-        """SELECT held: the last layer dropped (one just started recording, with it). One was recording: that one
-        (nothing, if nothing was played in it)."""
+        """Its card's last row: the last layer dropped; one's being recorded: that one, with what was played in it."""
         b = self.board
-        if b.select_did == "start":
+        if b.take is not None:
             b.take = None
-        if b.layers and b.select_did != "stop":
+            self.toast("That layer's gone", 2)
+        elif b.layers:
             b.layers.pop()
             self.toast("The last layer's gone" if b.layers else "The loop's gone", 2)
         else:
@@ -1012,16 +1038,20 @@ class SoundboardScreen:
             return [("stay", stay, None), ("again", "Record it again", None), ("delete", "Delete it", None)]
         bank = b.bank()
         bars = self.board_bars()
-        rows = [("bank", "Bank", bank["name"] if bank is not None else ""), ("volume", "Volume", str(self.volume))]
+        loop = "Stop recording" if b.take is not None else "Add to the loop" if b.layers else "Record a loop"
+        rows = [("loop", loop, None),                  # (first: START, then A, records a layer, and stops it)
+                ("bank", "Bank", bank["name"] if bank is not None else "")]
         if b.mic is not None and b.proc is not None:
             rows.append(("rec", "Record a sound", None))   # (where it's always been: START, ▼▼, A records)
-        rows += [("tempo", "Tempo", f"{round(self.board_clock().bpm)} BPM"),
+        rows += [("volume", "Volume", str(self.volume)),
+                 ("tempo", "Tempo", f"{round(self.board_clock().bpm)} BPM"),
                  ("bars", "Loop", f"{bars} bar" + ("s" if bars > 1 else "")),
                  ("snap", "Snap to the beat", "Off" if self.setting("board_snap") == "Off" else "On"),
                  ("click", "Click while recording", "Off" if self.setting("board_click") == "Off" else "On"),
                  ("scale", "Notes", self.setting("board_scale") if self.setting("board_scale") in SCALES else "Major"),
-                 ("space", "Reverb", str(self.board_space()) if self.board_space() else "Off"),
-                 ("seq", "Sequencer", None), ("bounce", "Bounce", None)]
+                 ("space", "Reverb", str(self.board_space()) if self.board_space() else "Off")]
+        if b.take is not None or b.layers:             # (last: START, ▲, then A)
+            rows.append(("drop", "Drop this layer" if b.take is not None else "Drop the last layer", None))
         return rows
 
     def board_card_shut(self):
@@ -1029,8 +1059,9 @@ class SoundboardScreen:
         self.sim_close()
 
     def press_board_card(self, s, name, repeat):
-        """START's card: ▲▼ pick a row, ◀▶ change it; A, B or START goes on with the Soundboard (HOME goes back to
-        Apps). A recording's card: A does the row, B or START shuts it."""
+        """START's card: ▲▼ pick a row, ◀▶ change it, A does one that does something (Record a loop, Record a sound,
+        Drop the last layer); A, B or START goes on with the Soundboard (HOME goes back to Apps). A recording's card:
+        A does the row, B or START shuts it."""
         b = self.board_open()
         b.held.pop("start", None)                      # (anything pressed on the card: START wasn't being held)
         if b.card == "bounce":
@@ -1063,15 +1094,15 @@ class SoundboardScreen:
                 return None
         elif name in ("left", "right") and key == "bank":
             self.board_step(1 if name == "right" else -1)
-        elif name in ("l", "r", "l2", "r2"):
-            self.board_step(-1 if name in ("l", "l2") else 1)
+        elif name == "a" and key == "loop":
+            self.board_card_shut()
+            self.board_loop_button()
+        elif name == "a" and key == "drop":
+            self.board_card_shut()
+            self.board_undo()
         elif name == "a" and key == "rec":
             self.board_card_shut()
             self.board_rec_start()
-        elif name == "a" and key == "bounce":
-            self.bounce_start(time.monotonic())
-        elif name == "a" and key == "seq":
-            self.seq_start(time.monotonic())
         elif name in ("a", "b", "start"):              # (B too: HOME's the way back to Apps, not B)
             self.board_card_shut()
         elif name == "select":
@@ -1114,8 +1145,8 @@ class SoundboardScreen:
         if b.card == "seq":
             return self.seq_card_hints()
         if value is None:
-            return [("▲▼", "Choose"), ("A", "Record" if key == "rec" else "Open"), ("START", "Done"),
-                    ("HOME", "Back to Apps")]
+            does = "Stop" if key == "loop" and b.take is not None else "Drop it" if key == "drop" else "Record"
+            return [("▲▼", "Choose"), ("A", does), ("START", "Done"), ("HOME", "Back to Apps")]
         return [("▲▼", "Choose"), ("◀▶", "Change"), ("A", "Done"), ("HOME", "Back to Apps")]
 
     def board_card_key(self):
@@ -1125,8 +1156,8 @@ class SoundboardScreen:
         return ("opts", "sound", b.card, self.sim_opts % len(rows), tuple(rows), b.placing, self.sim_box(), ACCENT)
 
     def board_opts_card(self, s):
-        """START on its page: the bank, the volume, and Record a sound when there's a microphone. Or a recording's:
-        where it stays, again, or gone."""
+        """START on its page: Record a loop, the bank, Record a sound when there's a microphone, the volume and the
+        rest. Or a recording's: where it stays, again, or gone. Or Bounce's, or the Sequencer's."""
         from ..fine import Image, ImageDraw
         b = self.board_open()
         rows = self.board_rows()

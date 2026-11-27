@@ -10,7 +10,11 @@ One that goes quiet (its beacon stops) is missed: the others wonder where it wen
 weather, what another's doing, where you are, who's bigger: teasing, boasting, helping, learning, teaming up), and
 others may answer, in their own words (their Bot's model, Settings > Bot) or, without one, words of their own. You can
 say something too, on any of them. Quiet (on any of them) stops them talking among themselves, on all of them; they
-still answer you."""
+still answer you.
+
+A party (party mode) has a bouncer: one in it with a camera of its own, looking (screens/group.py's bouncer_on). When
+its camera sees someone come in, it says what a bouncer at the door would (bouncer: now and then, BOUNCER_GAP), and
+the others may answer: all of it in words of their own (no Bot's model is asked for any of it)."""
 import json
 import math
 import os
@@ -44,12 +48,13 @@ REMARK_EVERY = 30            # minutes between remarks of its own (its Bot's How
 CHAT_QUIET = 300             # ...not while they've been talking this lately
 NIGHT = (23, 7)              # ...nor at night (these hours)
 MOVED_GAP = 1800             # where you are, said no more often than this
+BOUNCER_GAP = 300            # someone come in at a party, said by its bouncer (any of them) no more often than this
 CATCH_UP = 6 * 3600          # what one missed, asked of the others: this far back
 CATCH_UP_TRIES = (30, 3)     # ...asked again this many seconds after, this many times, if it didn't answer
 SYNC_EVERY = (300, 600)      # ...and of one of them now and then anyway (a line that didn't get through)
 JOB_STALE = 600              # a line due this long ago and not said (another took long): not said
 KINDS = ("chat", "quiet", "ask", "answer", "back", "bye", "wait", "talk", "moved")
-TOPICS = ("weather", "doing", "self", "where", "brag", "tease", "help", "learn", "envy", "team", "even")
+TOPICS = ("weather", "doing", "self", "where", "brag", "tease", "help", "learn", "envy", "team", "even", "bouncer")
 RIVAL_TOPICS = ("tease", "help", "learn", "envy", "team", "even")   # (sizing each other up)
 TOPIC_GAP = 90 * 60          # a remark's topic not again this soon (two of sizing each other up, at most)
 CHOICES = ("Yes", "No")      # your answers to "Will it come back?"
@@ -259,6 +264,11 @@ LINES = {
     "unhush": ["Yay! We can talk again.", "Finally. I had so much to say.", "Thank you!"],
     "moved": ["Hi! You're with me now.", "Look who's here!", "Welcome! {prev} had you before."],
     "moved_re": ["Say hi for me!", "Lucky {speaker}.", "Have fun, you two."],
+    "bouncer": ["Someone's at the door. Name?", "Hold it. Are you on the list?", "You're on the list. Go on in.",
+                "New face at the party. I'm watching you.", "One more for the party. Behave.",
+                "Door check. You look like trouble. Come in."],
+    "bouncer_re": ["Let them in, {speaker}!", "Is their name on the list?", "No list, no party.",
+                   "Good eye, {speaker}.", "Keep an eye on that one."],
 }
 REMARK_WEIGHTS = (("weather", 2.0), ("doing", 2.0), ("self", 1.0), ("where", 1.5), ("rival", 3.0), ("brag", 1.0))
 YOU_SAID = ((r"\b(good ?night|night night|bye|see (you|ya)|later)\b", "you_bye"),   # what you said, roughly: which
@@ -309,6 +319,8 @@ def reply_pool(ctx):
         return kind + "_re"
     if ctx.get("target_re"):
         return "ack"                                   # (an answer to an answer)
+    if topic == "bouncer":
+        return "bouncer_re"                            # (a party's bouncer, of someone at its door)
     if topic == "doing" and ctx.get("me_about"):
         return "doing_me"
     if topic in ("tease", "help", "learn", "envy"):
@@ -604,6 +616,23 @@ class Circle:
                       {"re": msg["id"], "about": ask.get("about"), "aurl": ask.get("aurl")})
         return msg
 
+    def bouncer(self):
+        """Someone's come in where this one's camera looks, at a party it's the bouncer of: it says so, in a moment
+        (run: not if the door's been spoken for just lately, by it or another; nor while they're quiet), in words of
+        its own (make)."""
+        self.schedule(self.rng.uniform(1, 4), "bouncer")
+
+    def about_door(self, msg):
+        """msg is a bouncer's line about someone at its door, or an answer to one (however far back)."""
+        with self.lock:
+            by_id = {m["id"]: m for m in self.log}
+        cur, n = msg, 0
+        while cur is not None and n < 10:
+            if cur.get("topic") == "bouncer":
+                return True
+            cur, n = by_id.get(cur.get("re")), n + 1
+        return False
+
     def set_quiet(self, quiet):
         """Quiet (said on any of them): they stop talking among themselves, on all of them. This one says okay."""
         msg = self.new("Quiet, please." if quiet else "You can talk again.", kind="talk", who="you", on=not quiet)
@@ -861,6 +890,10 @@ class Circle:
         with self.lock:
             return any(m["kind"] in kinds and m.get("about") == about and m["t"] >= since for m in self.log)
 
+    def topic_lately(self, topic, since):
+        with self.lock:
+            return any(m.get("topic") == topic and m["t"] >= since for m in self.log)
+
     def back_now(self, data, now):
         return any(m["url"] == data.get("aurl") or m["name"] == data.get("about") for m in self.on_now(now))
 
@@ -895,6 +928,8 @@ class Circle:
             return
         if how == "moved" and self.said_lately(("moved",), None, now - MOVED_GAP):
             return
+        if how == "bouncer" and self.topic_lately("bouncer", now - BOUNCER_GAP):
+            return                                    # (the door's been spoken for just lately)
         with self.lock:
             if self.busy:
                 self.jobs.append((now + 5, how, data))
@@ -918,7 +953,9 @@ class Circle:
                 elif how == "reply" and reply_pool(ctx) == "self_back":
                     say = "self_back"                 # ("Den is back!", and this is Den)
                     data = dict(data, about=ctx["own"])
-                text = clean_text(self.words(say, ctx))
+                # (a party's bouncer's words, and the answers to them: their own, never a model's)
+                door = how == "bouncer" or (target is not None and self.about_door(target))
+                text = clean_text(builtin_line(say, ctx, self.rng) if door else self.words(say, ctx))
                 how = say if say == "self_back" else how
             if not text:
                 return
@@ -926,9 +963,10 @@ class Circle:
                     "moved": "moved"}.get(how, "chat")
             about = data.get("about") if kind in ("quiet", "ask", "back", "bye", "wait") else ctx.get("about_named")
             to = ctx.get("to")
+            topic = ctx.get("topic") if how == "remark" else "bouncer" if how == "bouncer" else None
             msg = self.new(text, kind=kind, re=target["id"] if target else None, about=about,
                            aurl=data.get("aurl") if kind in ("quiet", "ask", "back", "bye", "wait") else None,
-                           to=to, topic=ctx.get("topic") if how == "remark" else None)
+                           to=to, topic=topic)
             self.add(msg)
         except Exception as ex:
             print(f"group chat: {how}: {ex!r}", flush=True)

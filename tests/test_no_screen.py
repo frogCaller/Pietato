@@ -324,7 +324,8 @@ check(f"...and media mode again: it starts, where it once said there's no screen
 out = post("play", {"items": [{"src": f"{H}/Videos/film.mp4"}], "index": 0, "where": "Videos"})
 check(f"a video from the page: told why not ({out})", out == {"error": "There's no screen to play it on"})
 check("nobody at the page for a while: resting", wait_for(lambda: m.resting, 5))
-n = m.fb.frames
+time.sleep(0.3)                                       # (its dark frame's shown as it starts to rest: the frames
+n = m.fb.frames                                       #  asked for come after that one)
 got = []
 threading.Thread(target=lambda: got.append(get(f"screen?after={n}&wait=5")), daemon=True).start()
 check("the page asks for the screen's picture: awake, and it gets the menus",

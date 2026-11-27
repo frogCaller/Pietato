@@ -686,8 +686,9 @@ async def browse():
         got = await pg.evaluate(LOOP)
         sets = {"Length": "2 bars", "Snap to the beat": "On", "Click while recording": "On"}
         check(f"the loop, over the banks: none yet ({got['say']!r}), its tempo ({got['bpm']}), length, snapping and "
-              f"click as the Pi has them ({got['sets']})", got["above"] and got["say"] == "None yet: SELECT records one"
-              and got["bpm"] == "126" and got["sets"] == sets and "on" not in got["dot"].split())
+              f"click as the Pi has them ({got['sets']})", got["above"]
+              and got["say"] == "None yet: START, then Record a loop" and got["bpm"] == "126" and got["sets"] == sets
+              and "on" not in got["dot"].split())
         rev = b.clock.rev
         await pg.evaluate("""() => { const q = (s) => document.querySelector('.sb-bpm button[aria-label=' + s + ']');
           q('Faster').click(); q('Faster').click(); q('Faster').click(); q('Slower').click(); }""")
@@ -711,7 +712,8 @@ async def browse():
         loop_set = lambda: (m.setting("board_bars"), m.setting("board_snap"), m.setting("board_click"))   # noqa: E731
         check("...4 bars, no snapping, no click: the Pi's", until(lambda: loop_set() == ("4", "Off", "Off"), 3))
         ask(do="loop", bpm=100, bars=2, snap="On", click="On")
-        c.post("/api/pi/press", json={"button": "select"}, headers=H)   # (SELECT on the Pi: a layer recorded)
+        for name in ("start", "a"):                     # (START, then A, on the Pi: Record a loop, on its card)
+            c.post("/api/pi/press", json={"button": name}, headers=H)
         try:
             await pg.wait_for_function("document.querySelector('.sb-loop-say').textContent === 'Recording a layer'",
                                        timeout=6000)
@@ -720,15 +722,16 @@ async def browse():
             rec = await pg.evaluate(LOOP)
         pad = next(p for p, s in b.bank()["pads"].items() if s and s in b.ready)   # (a button with a sound on it)
         c.post("/api/pi/press", json={"button": pad}, headers=H)
-        c.post("/api/pi/press", json={"button": "select"}, headers=H)
+        for name in ("start", "a"):                     # (...and again: Stop recording)
+            c.post("/api/pi/press", json={"button": name}, headers=H)
         try:
             await pg.wait_for_function("document.querySelector('.sb-loop-say').textContent === 'Playing, 1 layer'",
                                        timeout=6000)
             play = await pg.evaluate(LOOP)
         except Exception:
             play = await pg.evaluate(LOOP)
-        check(f"...SELECT on the Pi: here in a moment, a layer recording ({rec['say']!r}, {rec['dot']}), then playing "
-              f"({play['say']!r}, {play['dot']}); what was changed on the Pi shows here too ({play['bpm']}, "
+        check(f"...START, then A, on the Pi: here in a moment, a layer recording ({rec['say']!r}, {rec['dot']}), then "
+              f"playing ({play['say']!r}, {play['dot']}); what was changed on the Pi shows here too ({play['bpm']}, "
               f"{play['sets']})",
               rec["say"] == "Recording a layer" and "rec" in rec["dot"].split() and play["say"] == "Playing, 1 layer"
               and "on" in play["dot"].split() and play["bpm"] == "100" and play["sets"]["Length"] == "2 bars"

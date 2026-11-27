@@ -1,13 +1,15 @@
 """Apps' Soundboard: a sound on every button. The d-pad's four and A, B, X and Y each play the sound that's on them,
-as many at once as you like (pressed again while it plays, a sound starts again); SELECT stops them all; L and R go
-through the banks of eight. START has the rest: the bank, the volume, a new sound recorded with a USB microphone and
-put on a button. HOME goes back (B is a button like the others here).
+as many at once as you like (pressed again while it plays, a sound starts again); SELECT goes through the banks of
+eight; L and R go round its three pages (these buttons, the Sequencer, Bounce). START has the rest: a loop recorded,
+the bank, the volume, a new sound recorded with a USB microphone and put on a button. HOME goes back (B is a button
+like the others here).
 
 The sounds: a starter pack that comes with Pietato (pitato/sounds, public domain), and your own, wav, mp3 or ogg files
 in the Soundboard folder of your home folder. A new file there is on a button a moment later (My sounds' first free
 one). The web page's Soundboard adds, records, renames and deletes them, and puts them on the buttons.
 
-This draws the page: the bank's name (and a dot for each bank), and the buttons laid out as they are on a controller,
+This draws the page: its name between ◀ and ▶ (L and R: its other pages), the bank's name (and a dot for each bank),
+and the buttons laid out as they are on a controller,
 each with its sound's name, lit from behind in its button's colour, brightly while it plays; the loop, recording or
 playing, with the beat it's on, how far round it is and the tempo; and a note played with A, B, X or Y held, on that
 button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py). Or the
@@ -28,7 +30,8 @@ PAD_COLOUR = {"up": _HUES["Blue"], "left": _HUES["Teal"], "right": _HUES["Green"
 PAD_NAME = {"up": "▲", "left": "◀", "right": "▶", "down": "▼", "x": "X", "y": "Y", "a": "A", "b": "B"}
 PAD_PLACE = {"up": (0, 0.5, 0), "left": (0, 0, 1), "right": (0, 1, 1), "down": (0, 0.5, 2),     # (which side, how far
              "x": (1, 0.5, 0), "y": (1, 0, 1), "a": (1, 1, 1), "b": (1, 0.5, 2)}                # across it, which row)
-TOP = 40                         # px for the bank's line
+TOP = 40                         # px for its line (the page's name, the bank, the loop)
+PAGE_NAME = "Soundboard"         # its buttons' page, as its line names it (the others: Sequencer, Bounce)
 EDGE, GAP, MIDDLE = 12, 8, 24    # px round the buttons, between them, between the d-pad's and the letters'
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
@@ -207,23 +210,26 @@ class Soundboard(Sim):
         return tile
 
     def top(self, d, x0, y0):
-        """The bank's line: its name between ◀ and ▶ (L and R), and at the right a dot for each bank, this one's lit
-        (a lot of them: which it is, of how many); putting a sound on a button, what to do. A few words at the left if
-        the sound can't be heard. The loop: at the left, its tempo at the right, and how far round it is under them."""
+        """Its line: this page's name between ◀ and ▶ (L and R: the Sequencer, and Bounce); at the right the bank's
+        name (SELECT: the next) and a dot for each bank, this one's lit (a lot of them: which it is, of how many). A
+        few words at the left if the sound can't be heard. The loop: at the left, its tempo before the bank's name,
+        and how far round it is under them. Putting a sound on a button: the bank's name between ◀ and ▶ instead
+        (L and R go through the banks, then), and what to do at the left."""
         i, n, name = self.bank
         W, mid = self.w, y0 + TOP // 2 - 2
         big = W >= 960                                 # (a bigger screen than the GPi Case's)
         f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
-        name = name or "Soundboard"
-        while len(name) > 4 and f.getlength(name) > W * 0.42:
-            name = name[:-2].rstrip() + "…"
-        nw = f.getlength(name)
+        placing = self.placing is not None
+        title = (name or PAGE_NAME) if placing else PAGE_NAME
+        while len(title) > 4 and f.getlength(title) > W * 0.42:
+            title = title[:-2].rstrip() + "…"
+        nw = f.getlength(title)
         cx = x0 + W / 2
-        d.text((cx, mid), name, font=f, fill=TEXT, anchor="mm")
-        if n > 1:
+        d.text((cx, mid), title, font=f, fill=TEXT, anchor="mm")
+        if n > 1 or not placing:
             self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
             self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
-        if self.placing is not None:
+        if placing:
             words = f"Press a button for {self.placing[0]}"
             room = W / 2 - nw / 2 - 44 - EDGE
             while len(words) > 8 and small.getlength(words) > room:
@@ -243,8 +249,16 @@ class Soundboard(Sim):
         elif n > 1:
             x -= small.getlength(f"{i + 1} of {n}") + 14
             d.text((x + 14, mid), f"{i + 1} of {n}", font=small, fill=MUTED, anchor="lm")
-        if self.loop is not None:
-            d.text((x, mid), f"{self.loop['bpm']} BPM", font=small, fill=MUTED, anchor="rm")
+        tempo = f"{self.loop['bpm']} BPM" if self.loop is not None else ""
+        if name and not placing:                       # (the bank that's up: before its dots)
+            bold = self.font(15 if big else 13, bold=True)
+            room = x - (cx + nw / 2 + 44) - (small.getlength(tempo) + 14 if tempo else 0)
+            while len(name) > 3 and bold.getlength(name) > room:
+                name = name[:-2].rstrip() + "…"
+            d.text((x, mid), name, font=bold, fill=TEXT, anchor="rm")
+            x -= bold.getlength(name) + 14
+        if tempo:
+            d.text((x, mid), tempo, font=small, fill=MUTED, anchor="rm")
             self.loop_track(d, x0 + EDGE, x0 + W - EDGE, y0 + TOP - 7)
         self.taps.append(((x0, y0, x0 + W // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + W // 2, y0, x0 + W, y0 + TOP - 4), "r"))
@@ -301,20 +315,21 @@ class Soundboard(Sim):
         img.paste(card, (x0 + (self.w - w) // 2, y0 + (self.h - h) // 2), card)
 
     def bounce_top(self, d, x0, y0, w):
-        """Bounce's line, over its shape (w wide): the shape between ◀ and ▶ (L and R), its key and scale at the left
-        (SELECT: the next scale), how many balls at the right."""
+        """Bounce's line, over its shape (w wide): its name between ◀ and ▶ (L and R: the Soundboard's other pages),
+        its key and scale at the left, its shape (SELECT: the next) and how many balls at the right."""
         v = self.bounce
         mid = y0 + TOP // 2 - 2
         big = self.w >= 960
         f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
         cx = x0 + w / 2
-        d.text((cx, mid), v["shape"], font=f, fill=TEXT, anchor="mm")
-        nw = f.getlength(v["shape"])
+        d.text((cx, mid), "Bounce", font=f, fill=TEXT, anchor="mm")
+        nw = f.getlength("Bounce")
         self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
         self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
         n = v["count"]
         d.text((x0 + EDGE + 2, mid), f"{v['key']} {v['scale'].lower()}", font=small, fill=TEXT, anchor="lm")
-        d.text((x0 + w - EDGE - 2, mid), f"{n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED, anchor="rm")
+        d.text((x0 + w - EDGE - 2, mid), f"{v['shape']}, {n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED,
+               anchor="rm")
         self.taps.append(((x0, y0, x0 + w // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + w // 2, y0, x0 + w, y0 + TOP - 4), "r"))
 
