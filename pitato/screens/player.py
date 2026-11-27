@@ -383,6 +383,7 @@ class PlayerScreen:
         if you:
             nice_now(self.proc, PLAYER_NICE)
         self.proc.said = collections.deque(maxlen=PLAYER_SAID)
+        self.proc.shares_sound = any(str(a).startswith("export=") for a in args)   # (a station's: for its bars)
         threading.Thread(target=self.reader, args=(self.proc,), daemon=True).start()
         threading.Thread(target=self.errors, args=(self.proc,), daemon=True).start()
         if paused:                                     # (paused as soon as it'll listen: settle_tick)
@@ -497,7 +498,7 @@ class PlayerScreen:
         net = "://" in target
         args = list(AUDIO_PLAYER if kind in LISTEN_KINDS else self.video_args())
         if kind == "radio":
-            args += RADIO_CACHE
+            args += RADIO_CACHE + self.sound_share_args()   # (its sound shared, for Now playing's bars: music.py)
         elif plexlive:
             args += PLEX_CACHE
         else:

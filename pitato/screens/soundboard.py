@@ -13,7 +13,7 @@ click, the notes' scale, its reverb), where A, B or START goes on; HOME goes bac
 trimmed, a file in your Soundboard folder), the next button pressed is the one it goes on (L and R: in another bank;
 SELECT: hear it first; START: leave it where it is, record it again, or delete it).
 
-Its three pages: L and R go round them (board_cycle): the Sequencer (screens/sequencer.py), these buttons and Bounce
+Its three pages: L and R go round them (board_cycle): these buttons, the Sequencer (screens/sequencer.py) and Bounce
 (screens/bounce.py), each of those two on this page in place of the buttons, with this player and this beat: the
 Sequencer's cells are in the loop its player's told, with the layers recorded here.
 
@@ -79,11 +79,10 @@ SCALES = {"Major": (0, 2, 4, 5, 7, 9, 11), "Minor": (0, 2, 3, 5, 7, 8, 10), "Pen
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")   # (a sound's own note: C)
 NOTE_PADS = ("a", "b", "x", "y")  # held, the d-pad plays its sound as notes
 DPAD = ("up", "down", "left", "right")
-BOARD_HOW = ("L and R: the Sequencer and Bounce. SELECT: the next bank. START held clears the loop. A, B, X or Y "
-             "held, the d-pad plays its sound as notes.")    # (START's card, under its title)
-BOARD_PAGES = ("seq", "pads", "bounce")   # its three pages, as R goes round them (L: the other way): its buttons in
-                                          # the middle (it opens on them), the Sequencer at their left, Bounce at
-                                          # their right
+BOARD_HOW = ("R: the Sequencer, then Bounce. SELECT: the next bank. START held clears the loop. A, B, X or Y "
+             "held, the d-pad plays its sound as notes.")    # (START's card, under its title: three lines at most)
+BOARD_PAGES = ("pads", "seq", "bounce")   # its three pages, as R goes round them (L: the other way): its buttons
+                                          # first (it opens on them), then the Sequencer, then Bounce
 
 
 class Board:
@@ -659,7 +658,7 @@ class SoundboardScreen:
         elif b.placing is not None:                    # (a sound waiting for its button: L and R, another bank)
             s.own_hints = ([("L R", "Bank")] if many else []) + [("SELECT", "Hear it"), ("START", "More")]
         else:
-            s.own_hints = ([("L", "Sequencer"), ("R", "Bounce")] + ([("SELECT", "Bank")] if many else [])
+            s.own_hints = ([("L", "Bounce"), ("R", "Sequencer")] + ([("SELECT", "Bank")] if many else [])
                            + [("START", "More"), ("HOME", "Back")])
         now = time.monotonic()
         if b.take is not None or b.layers or b.seq_on:   # (the loop: recording or playing, where it is, how fast;

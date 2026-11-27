@@ -14,8 +14,7 @@ its sliders (▲▼ pick one, ◀▶ move it); X its next sound, Y its next scal
 balls not shaken); START, its card (paused: nothing moves, nothing's drawn); its shape, sound, key, scale and snapping
 there (snapped: each note on an eighth of the Soundboard's tempo), and no row to leave it by; drawn frame by frame
 while it plays, and the page as it is, all in
-the accent colour; L back to the Soundboard's buttons, R on to it again; HOME: out to Apps at once, and its page
-again when the
+the accent colour; R on to the Soundboard's buttons, L back; HOME: out to Apps at once, and its page again when the
 Soundboard's opened."""
 import json, math, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
@@ -541,12 +540,12 @@ if not ONLY or "app" in ONLY:
     rows = m.board_rows()
     tap("start")
     hints = m.sim_hints(m.sim_game())
-    tap("r")
+    tap("l")
     s = m.sim_game()
-    check(f"R from the Soundboard's buttons ({hints[:2]}; START's card has no row for it now: {[r[0] for r in rows]}): "
+    check(f"L from the Soundboard's buttons ({hints[:2]}; START's card has no row for it now: {[r[0] for r in rows]}): "
           f"the shape, {BN.BALLS_FIRST} balls in it ({s.bounce and (s.bounce['shape'], s.bounce['count'])}); its "
           f"buttons along the bottom ({m.sim_hints(s)})", not any(r[0] in ("seq", "bounce") for r in rows)
-          and hints[:2] == [("L", "Sequencer"), ("R", "Bounce")] and m.board_mode() == "bounce"
+          and hints[:2] == [("L", "Bounce"), ("R", "Sequencer")] and m.board_mode() == "bounce"
           and b.bounce is not None and len(b.bounce.balls) == BN.BALLS_FIRST and b.card is None and m.sim_opts is None
           and s.bounce["shape"] == "Hexagon" and m.sim_hints(s)[:2] == [("A B", "Balls"), ("SELECT", "Key")]
           and m.sim_hints(s)[-2:] == [("START", "Pause"), ("HOME", "Back")])
@@ -701,7 +700,7 @@ if not ONLY or "app" in ONLY:
     how = m.wrap(probe, SBN.BOUNCE_HOW, m.fonts["small"], 404 - 44, lines=3)
     check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
           and not how[-1].endswith("…") and "Y: the scale. SELECT: the key." in " ".join(how)
-          and " ".join(how).endswith("L and R: the Soundboard, the Sequencer."))
+          and " ".join(how).endswith("L and R: the Sequencer, the Soundboard."))
     tap("right")                                       # (shape: Triangle, the first again after the last)
     one = (b.bounce.sides, m.setting("bounce_shape"))
     tap("left")
@@ -757,11 +756,11 @@ if not ONLY or "app" in ONLY:
     labels = [r[1] for r in m.board_rows()]
     hints = m.board_card_hints()
     tap("start")
-    tap("l", repeat=True)
+    tap("r", repeat=True)
     held = m.board_mode()
-    tap("l")
+    tap("r")
     s = m.sim_game()
-    check(f"L from Bounce (its card has no row to leave it by: {labels}; {hints}): the Soundboard's buttons again, "
+    check(f"R from Bounce (its card has no row to leave it by: {labels}; {hints}): the Soundboard's buttons again, "
           f"its effects and drone off ({[c for _, c in told[-2:]]}), its sliders kept ({m.sim_hints(s)}); held: "
           f"once is once", labels == ["Shape", "Sound", "Key", "Scale", "Snap to the tempo"]
           and hints == [("▲▼", "Choose"), ("◀▶", "Change"), ("START", "Play on")] and held == "bounce"
@@ -773,7 +772,7 @@ if not ONLY or "app" in ONLY:
           and m.setting("bounce_drone") == "1")
     tap("up")
     check("...and its buttons play their sounds as ever", spin(1.0, lambda: b.bank()["pads"]["up"] in b.playing))
-    tap("r")
+    tap("l")
     was = b.bounce is not None and m.board_mode() == "bounce"
     proc, balls = b.proc, len(b.bounce.balls)
     home = m.sim_home()

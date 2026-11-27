@@ -7,7 +7,10 @@ the cover on the left with its glow, a wash of it behind, the words, the line in
 (each tappable); a note for a song with no cover, a sign for a station; the glow following the beat with the battery
 saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off the page; and the
 bars under the words (just their box drawn as they move, falling back, flat with nothing to show; none with no room
-for them, the battery saver on, or a station). Music's grid: every song a square with its cover (made small once and
+for them; there with the battery saver on too, the glow still); a station's from its sound as MPlayer shares it (its
+export filter's file, read: the bars when it's heard, the same at any volume, flat silenced, paused or with nothing
+new; MPlayer told so for a station only, and played again without it when it stops over its file; for real too, an
+MPlayer sharing a low note). Music's grid: every song a square with its cover (made small once and
 kept on disk, a folder's shared
 by its songs), its name under it, the picked one bigger with a glow all round it, the D-pad moving about it (off
 either end, round to the other: right on the last song is the first; a held D-pad stops at the ends), A
@@ -482,8 +485,12 @@ class PretendEar:
 
 M.Ear = PretendEar
 m.tick()
-check("the battery saver on: no ear for the beat, the glow still, the loop waiting as it does",
-      not m.pulse_wanted() and m.ear is None and made == [] and m.tick_limit() == 0.25)
+made[0].lit = 1.0
+check(f"the battery saver on: an ear all the same (for the bars: they move on a battery too), the glow still with a "
+      f"beat heard ({m.pulse_step()}), the loop looking again for the bars' next frame ({m.tick_limit():.3f} s)",
+      not m.pulse_wanted() and m.bars_wanted() and len(made) == 1 and m.ear is made[0] and m.pulse_step() == 0
+      and 0 < m.tick_limit() <= 1 / 15 + 1e-6)
+made[0].lit = 0.0
 m.state["settings"]["battery"] = "Off"
 m.tick()
 check("the battery saver off: an ear for the song that's playing", m.pulse_wanted() and len(made) == 1
@@ -614,12 +621,138 @@ check("a name that takes three lines: no room left for them, none", m.now_bars i
 playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
 m.state["settings"]["battery"] = "On"
 shot(m)
-off_saver = m.now_bars
+on_saver = m.now_bars
 m.state["settings"]["battery"] = "Off"
 m.kind, m.cur = "radio", station
 shot(m)
-check("...the battery saver on, or a station: none", off_saver is None and m.now_bars is None)
+check(f"...the battery saver on: there all the same ({on_saver and on_saver[0]}); a station MPlayer isn't sharing the "
+      f"sound of: none", on_saver is not None and on_saver[0] == nb[0] and m.now_bars is None)
 m.tick()
+
+# ---- a station's bars: its sound as MPlayer shares it (ear.py's Tap) -----------------------------------------------
+import collections, struct  # noqa: E401, E402
+TAPF = f"{SP}/bars-tap"
+
+
+def shared(count, hz, amp, path=TAPF, nch=2):
+    """A lot of a station's sound as MPlayer's export filter leaves it: how many channels, how many bytes, the count,
+    then each channel's samples in turn."""
+    n = E.EXPORT_SIZE
+    s = np.rint(amp * 32767 * np.sin(2 * np.pi * hz * np.arange(n) / E.EXPORT_RATE)).astype("=i2")
+    with open(path, "wb") as f:
+        f.write(struct.pack("=iiQ", nch, 2 * n * nch, count) + np.tile(s, nch).tobytes())
+
+
+bands = E.bars_bands(win=E.EXPORT_SIZE, rate=E.EXPORT_RATE)[0]
+note_bar = int(np.argmax(bands > 90 * E.EXPORT_SIZE / E.EXPORT_RATE)) - 1   # (the bar a 90 Hz note's in)
+plain_proc = m.proc
+m.proc = types.SimpleNamespace(poll=lambda: None, stdin=io.StringIO(), shares_sound=True)
+m.sound_tap, m.volume, m.muted = E.Tap(TAPF), 50, False
+shared(1, 90, 0.25 * 0.5 * E.SOFTVOL_TOP)           # (a low note, as loud as half volume plays it)
+shot(m)
+first = m.now_bars
+fake[0] += E.EXPORT_LEAD
+m.pulse_next = 0.0
+m.tick()
+half = m.now_bars[1] if m.now_bars else None
+check(f"a station MPlayer shares the sound of: its bars too, flat as it starts ({first and max(first[1])}), then "
+      f"up with what it played half a second before, as it's heard now: its low note's bar "
+      f"({half and half[note_bar]}), "
+      f"the loop looking again for the next frame ({m.tick_limit():.3f} s)", first is not None
+      and max(first[1]) == 0.0 and half is not None and half[note_bar] > 0.5
+      and max(half[note_bar + 6:]) < 0.05 and 0 < m.tick_limit() <= 1 / 15 + 1e-6)
+at_half = m.sound_tap.kept[-1][1]
+m.volume = 100
+shared(2, 90, 0.25 * E.SOFTVOL_TOP)                 # (...and as loud as full volume plays it)
+fake[0] += 0.1
+m.now_heard()
+at_full = m.sound_tap.kept[-1][1]
+check(f"...the same at full volume as at half ({at_full[note_bar]}, {at_half[note_bar]})", len(m.sound_tap.kept) == 2
+      and max(abs(a_ - b_) for a_, b_ in zip(at_full, at_half)) < 0.01)
+fake[0] += E.EXPORT_LEAD
+m.muted = True
+silenced = m.now_heard()
+m.muted, m.paused = False, True
+paused = m.now_heard()
+m.paused = False
+heard = m.now_heard()
+fake[0] += 1.0
+check("...silenced (it starts silent and paused), or paused: flat; nothing new from it for a moment: flat too",
+      silenced is None and paused is None and heard is not None and m.now_heard() is None)
+
+E.EXPORTS[:] = [True]                                 # (an MPlayer that can share its sound: told to, for a station)
+real_tap_file = M.tap_file
+M.tap_file = lambda uid=None: f"{SP}/bars-{uid}"
+spawned = []
+m.spawn = lambda args, target: spawned.append((list(args), target))
+m.proc = None
+m.play([station], 0)
+told = spawned[-1][0] if spawned else []
+there = M.tap_file(M.as_you()[1].get("user"))
+m.play(m.items[MUSIC], 2)
+check(f"a station played: MPlayer told to share its sound in a file that's ready for it ({told[-6:]}); a song: not "
+      f"(the ear hears that)", told[-4:] == ["-af-add", f"export={there}:{E.EXPORT_SIZE}", "-volume", str(m.volume)]
+      and os.path.isfile(there) and m.sound_tap.path == there and "-af-add" not in spawned[-1][0])
+E.EXPORTS[:] = [False]
+m.play([station], 0)
+check("...an MPlayer that can't: not told", "-af-add" not in spawned[-1][0])
+E.EXPORTS[:] = [True]
+p = types.SimpleNamespace(args=told[:-2] + ["http://10.0.0.9/live"], said=["Exiting... (End of file)"])
+not_it = m.sound_share_again(p)
+p.said = collections.deque(["[export] Exporting to file: " + there, "[export] Could not open/create file: " + there,
+                            "[libaf] Reinitialization did not work, audio filter 'export' returned error code -2",
+                            "Error at audio filter chain pre-init!", "Exiting... (Fatal error)"])
+spawned.clear()
+again = m.sound_share_again(p)
+check(f"a station that stopped at once over that file: played again straight away without it ({spawned[-1:]}), and "
+      f"MPlayer not told to after that; one that stopped for something else: left to what's done then",
+      not not_it and again and spawned == [(told[:-4], "http://10.0.0.9/live")] and m.sound_share_off
+      and m.sound_share_args() == [])
+m.sound_share_off = False
+del m.spawn
+p = None
+m.kind = "radio"
+m.spawn(["true", "-af-add", f"export={there}:{E.EXPORT_SIZE}"], "x")
+shares = getattr(m.proc, "shares_sound", None)
+m.spawn(["true"], "x")
+check("...what it was told is kept with the player (so the bars know)", shares is True
+      and getattr(m.proc, "shares_sound", None) is False)
+m.stop()
+if shutil.which("mplayer"):                            # (for real: an MPlayer sharing a low note)
+    low_note = f"{SP}/low-note.mp3"                    # (FFmpeg's sine is an eighth as loud as can be: half, then)
+    real_run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+              "sine=frequency=90:duration=6", "-af", "volume=4", "-ar", "44100", "-ac", "2", low_note], check=True)
+    args = m.sound_share_args()
+    mp = subprocess.Popen(["mplayer", "-slave", "-quiet", "-novideo", "-softvol", "-ao", "null", "-volume", "50"]
+                          + args + [low_note], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, text=True)
+    t0, looks = real_clock(), []
+    while real_clock() - t0 < 2.5:
+        look = m.sound_tap.levels(real_clock(), 0.5 * E.SOFTVOL_TOP)
+        if look is not None:
+            looks.append(look)
+        real_sleep(1 / 15)
+    mp.stdin.write("quit\n")
+    mp.stdin.flush()
+    mp.wait(10)
+    best = max(looks, key=lambda v: v[note_bar]) if looks else None
+    check(f"for real: MPlayer told as a station is shares what it plays ({len(looks)} looks in 2.5 s), its low note's "
+          f"bar up ({best and best[note_bar]}), the high ones low ({best and max(best[16:])})", len(looks) >= 15
+          and best[note_bar] > 0.5 and max(best[16:]) < best[note_bar] / 3)
+    r = real_run(["mplayer", "-slave", "-quiet", "-novideo", "-softvol", "-ao", "null", "-af-add",
+                  f"export={SP}/no-such-folder/bars:{E.EXPORT_SIZE}", low_note], stdin=subprocess.DEVNULL,
+                 capture_output=True, text=True, timeout=30)
+    said = collections.deque((ln.strip() for ln in (r.stdout + r.stderr).splitlines() if ln.strip()), maxlen=12)
+    m.spawn = lambda args, target: spawned.append((list(args), target))
+    spawned.clear()
+    again = m.sound_share_again(types.SimpleNamespace(
+        args=["mplayer", "-af-add", f"export={SP}/no-such-folder/bars:2048", "http://10.0.0.9/live"], said=said))
+    del m.spawn
+    check(f"...and one that can't make its file stops at once, saying so ({list(said)[-2:]}): played again without",
+          r.returncode != 0 and again and spawned == [(["mplayer"], "http://10.0.0.9/live")])
+    m.sound_share_off = False
+M.tap_file = real_tap_file
+m.proc = plain_proc
 
 # ---- Music's grid --------------------------------------------------------------------------------------------
 def ready(m, secs=10.0):

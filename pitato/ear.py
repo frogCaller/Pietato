@@ -2,10 +2,16 @@
 as bars (Looks), for its bars. FFmpeg decodes the song a second time, quietly and only as fast as it's played; Beats
 (glow.py: an LED backlight's) finds the kick drums. Each beat and each look is kept by its place in the song, so
 pausing is nothing to it; a jump to another place in the song (a seek) starts it again from there. The song itself
-plays as it always has: if this fails, the glow keeps still and the bars lie flat."""
+plays as it always has: if this fails, the glow keeps still and the bars lie flat.
+A station can't be listened to twice (it's live), so its bars are MPlayer's own sound (Tap): its export filter shares
+the last of what it played in a file, read as it changes."""
 import collections
 import math
+import os
+import stat
+import struct
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -29,11 +35,66 @@ BARS_HZ = (40.0, 12000.0)        # ...from the lowest bar's notes to the highest
 BARS_DB = (-54.0, -6.0)          # ...a bar at nothing and at its top: this far under as loud as a sound can be
 BARS_KEPT = 64                   # looks remembered (more than EAR_AHEAD's worth)
 BARS_OLD = 0.25                  # ...one this much before where the song is: too old to show (none since: flat)
+EXPORT_SIZE = 1024               # a station's bars: MPlayer's export filter shares this many samples a channel at once
+                                 # (less than it plays at a time, so each lot's whole: a bigger one comes in pieces)
+EXPORT_LEAD = 0.5                # ...that long before they're heard (the half second it keeps ahead in the sound card)
+EXPORT_RATE = 44100              # ...samples a second, as most stations send them
+EXPORT_EVERY = 1 / 30            # ...looked at no more often than this
+SOFTVOL_TOP = 1.1                # MPlayer's volume at 100 (its -softvol-max, as it comes): what it shares is this loud
 
 
 def ear_args(src, pos):
     return ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", f"{max(0.0, pos):.3f}", "-i", src,
             "-vn", "-ac", "2", "-ar", str(EAR_RATE), "-f", "s16le", "-"]
+
+
+def tap_file(uid=None):
+    """Where MPlayer shares a station's sound (Tap): in memory (/dev/shm) where there's that, one file for each of
+    you it runs as."""
+    base = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+    return os.path.join(base, f"pietato-bars-{os.geteuid() if uid is None else uid}")
+
+
+def tap_ready(path, uid=None, gid=None):
+    """That file there and MPlayer's to write (it runs as you, uid): made so, or kept as it was made before. False
+    when it can't be (someone else's, no room): MPlayer stops at once when it can't make it, so it isn't asked to."""
+    mine = os.geteuid() if uid is None else uid
+    try:
+        st = os.lstat(path)
+        if stat.S_ISREG(st.st_mode) and st.st_uid == mine:
+            return True
+        os.unlink(path)                                # (a link, or another's: made again)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o640)
+    except OSError:
+        return False
+    try:
+        if mine != os.geteuid():
+            os.fchown(fd, mine, -1 if gid is None else gid)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
+EXPORTS = []                     # whether this MPlayer has its export filter: asked once
+
+
+def mplayer_exports(run=subprocess.run):
+    """Whether MPlayer here can share its sound (its export filter: Debian's and Ubuntu's have it)."""
+    if not EXPORTS:
+        try:
+            said = run(["mplayer", "-af", "help"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, text=True, timeout=10).stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            said = ""
+        EXPORTS.append(any(line.split()[:1] == ["export"] for line in said.splitlines()))
+    return EXPORTS[0]
 
 
 def bars_bands(n=BARS, win=BARS_WIN, rate=EAR_RATE, hz=BARS_HZ):
@@ -54,12 +115,12 @@ class Looks:
     place): s16le stereo samples, the first at that place (seconds into the song); at(place): the look there (each
     bar 0 to 1, low notes first), or None (none near enough)."""
 
-    def __init__(self):
+    def __init__(self, rate=EAR_RATE, win=BARS_WIN):
         self.looks = collections.deque(maxlen=BARS_KEPT)
         self.lock = threading.Lock()
-        self.window = np.hanning(BARS_WIN).astype(np.float32)
-        self.starts, self.end = bars_bands()
-        self.full = (32767.0 * 2 * BARS_WIN / 4) ** 2   # (a sound as loud as can be, in both channels: its power)
+        self.window = np.hanning(win).astype(np.float32)
+        self.starts, self.end = bars_bands(win=win, rate=rate)
+        self.full = (32767.0 * 2 * win / 4) ** 2       # (a sound as loud as can be, in both channels: its power)
         self.clear()
 
     def clear(self):
@@ -99,6 +160,54 @@ class Looks:
         for when, look in reversed(looks):
             if when <= place + 1e-6:
                 return look if place - when <= BARS_OLD else None
+        return None
+
+
+class Tap:
+    """A station's sound as MPlayer plays it, as bars: its export filter (mplayer -af export) shares the last samples
+    it played in a file, a count before them going up with each lot, and each new lot's a look (Looks'), kept for when
+    it's heard (EXPORT_LEAD on). levels(now, gain): the look heard now, or None (nothing new lately: paused, gone, or
+    silenced). gain: how loud the volume has made it (what's shared is as loud as it's played), so the bars are the
+    same at any volume. Read, not mapped: MPlayer makes the file afresh as it starts, and a mapping then would fault."""
+
+    def __init__(self, path, rate=EXPORT_RATE):
+        self.path = path
+        self.shape = Looks(rate, EXPORT_SIZE)          # (its look(): a lot of samples as bars)
+        self.kept = collections.deque(maxlen=BARS_KEPT)
+        self.count, self.read_at = None, None
+
+    def clear(self):
+        self.kept.clear()
+        self.count, self.read_at = None, None
+
+    def read(self, now, gain):
+        try:
+            with open(self.path, "rb") as f:
+                data = f.read(16 + 8 * 2 * EXPORT_SIZE)
+        except OSError:
+            return
+        if len(data) < 16:
+            return
+        nch, size = struct.unpack_from("=ii", data, 0)
+        count = struct.unpack_from("=Q", data, 8)[0]
+        if count == self.count or not 1 <= nch <= 8 or size <= 0 or size % (2 * nch) or len(data) < 16 + size:
+            return
+        self.count = count
+        a = np.frombuffer(data, dtype="=i2", count=size // 2, offset=16).reshape(nch, -1)[:2]
+        if a.shape[1] < EXPORT_SIZE:
+            return
+        mono = a[:, :EXPORT_SIZE].sum(axis=0, dtype=np.float32) * (2.0 / len(a) / gain)   # (one channel: as two)
+        self.kept.append((now + EXPORT_LEAD, self.shape.look(mono)))
+
+    def levels(self, now, gain=1.0):
+        if gain < 0.01:
+            return None
+        if self.read_at is None or now - self.read_at >= EXPORT_EVERY:
+            self.read_at = now
+            self.read(now, gain)
+        for when, look in reversed(self.kept):
+            if when <= now + 1e-6:
+                return look if now - when <= BARS_OLD else None
         return None
 
 

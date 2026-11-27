@@ -20,7 +20,7 @@ BOUNCE_SOFT = 0.45               # ...one that only grazes it: this much of that
 BOUNCE_PAN = 0.7                 # how far to the side a note's heard, hit at the side of the shape (1: all the way)
 BOUNCE_STEP_MOST = 0.25          # seconds of the balls moved on at most at a look (media mode busy: they don't jump)
 BOUNCE_HOW = ("A and B: balls. X: the sound. Y: the scale. SELECT: the key. ▲▼ pick a slider, ◀▶ move it. L and R: "
-              "the Soundboard, the Sequencer.")
+              "the Sequencer, the Soundboard.")
 BOUNCE_SAID = 1.5                # seconds its new sound, scale or key is said for, as X, Y or SELECT changes it
 ECHO_BEATS = 0.75                # its echo: a dotted eighth of the tempo after each note
 

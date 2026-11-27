@@ -1,8 +1,9 @@
 """Music's pages. Its songs: a grid of their covers, each with its name under it, the picked one raised a little with
 a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows
-the beat while the battery saver's off), what's playing beside it (and under that, while the glow follows the beat,
-the sound as bars, if there's room), how far through it is and the buttons under it, all on a soft wash of the
-cover. A song with no cover, or a station: a sign in its place, and the accent colour's glow.
+the beat while the battery saver's off), what's playing beside it (and under that, the sound as bars, if there's
+room: a song of yours as the ear hears it, ear.py, a station as MPlayer shares it, its Tap), how far through it is and
+the buttons under it, all on a soft wash of the cover. A song with no cover, or a station: a sign in its place, and
+the accent colour's glow.
 (SELECT on Now playing: lofi art on the whole screen instead, screens/player.py.)"""
 import collections
 import os
@@ -14,7 +15,8 @@ from ..config import CACHE_DIR
 from ..cover import (cover_at_hand, cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir,
                      found_file, GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded, tidy)
 from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
-from ..ear import BARS, Ear
+from ..asyou import as_you
+from ..ear import BARS, Ear, EXPORT_SIZE, mplayer_exports, SOFTVOL_TOP, Tap, tap_file, tap_ready
 from ..library import LIBRARY, LISTEN_KINDS
 from ..util import cache_name, clock, find_files
 
@@ -59,7 +61,9 @@ class MusicScreen:
     cover_finder = None          # finding covers for the songs with none (Y on the grid), once asked
     songs_named = None           # this one's songs by name and size, for another of yours that asks for covers:
                                  # (the list they were made from, {(name, size): path})
-    ear = None                   # listening to the song for its beats (ear.py), while the glow follows them
+    ear = None                   # listening to the song for its beats and its bars (ear.py), while they're shown
+    sound_tap = None             # ...a station's sound as MPlayer shares it (ear.py's Tap), for its bars
+    sound_share_off = False      # ...and that MPlayer here couldn't share it (it stopped at once): not asked again
     now_bars = None              # Now playing's bars: (their box, how high each is drawn), while they're on it
     pulse_next = 0.0             # when the glow's next frame is due
     pos_off, pos_off_at = None, 0.0   # where the song is, less the clock (as the player last said, and when)
@@ -168,13 +172,65 @@ class MusicScreen:
             return None
         return now + self.pos_off
 
-    # -- the glow, following the beat ------------------------------------------------------------------------------
+    # -- the glow, following the beat; the bars ---------------------------------------------------------------------
+    def bars_wanted(self):
+        """Now playing's bars move with the music, on its own page (not the lofi art, not resting): a song of yours
+        (a file, the ear hears it again), or a station MPlayer shares the sound of (its Tap). On a battery too."""
+        if not (self.active and self.view == "now" and self.proc is not None and self.setting("now_art") != "On"
+                and not self.resting and not self.proc_owns_screen()):
+            return False
+        if self.kind == "radio":
+            return bool(getattr(self.proc, "shares_sound", False))
+        return self.kind == "audio" and "://" not in ((self.cur or {}).get("src") or "")
+
     def pulse_wanted(self):
         """Now playing's glow follows the beat: a song of yours (a file) on it, the battery saver off."""
-        it = self.cur or {}
-        return bool(self.active and self.view == "now" and self.kind == "audio" and self.proc is not None
-                    and self.setting("now_art") != "On" and not self.resting and not self.saver_on()
-                    and "://" not in (it.get("src") or "") and not self.proc_owns_screen())
+        return self.kind == "audio" and self.bars_wanted() and not self.saver_on()
+
+    def now_moving(self):
+        """Now playing's glow or its bars have frames to draw (the main loop waits no longer than the next one)."""
+        return not self.paused and (self.ear is not None or self.bars_wanted())
+
+    def sound_share_args(self):
+        """What MPlayer's told for a station, so its bars can follow it (the sound it plays, shared: ear.py's Tap):
+        nothing where it can't (an MPlayer without the filter, a file it couldn't write, or it stopped for it)."""
+        if self.sound_share_off or not mplayer_exports():
+            return []
+        you = as_you()[1]
+        uid, gid = you.get("user"), you.get("group")
+        path = tap_file(uid)
+        if not tap_ready(path, uid, gid):
+            return []
+        if self.sound_tap is None or self.sound_tap.path != path:
+            self.sound_tap = Tap(path)
+        self.sound_tap.clear()
+        return ["-af-add", f"export={path}:{EXPORT_SIZE}"]
+
+    def sound_share_again(self, p):
+        """A station MPlayer stopped at once over the file it shares its sound in: played again straight away without
+        it (its bars lie still), and the stations after it too."""
+        cmd = list(getattr(p, "args", None) or ())
+        at = next((k for k, a in enumerate(cmd) if str(a).startswith("export=")), None)
+        said = getattr(p, "said", ())
+        if at is None or at < 1 or len(cmd) < 3 or not any("[export] Could not" in line or "filter 'export'" in line
+                                                            for line in said):
+            return False
+        self.sound_share_off = True
+        print("player: a station's bars won't move (MPlayer couldn't share its sound)", flush=True)
+        del cmd[at - 1:at + 1]
+        pre = as_you()[0]
+        if pre and cmd[:len(pre)] == pre:
+            cmd = cmd[len(pre):]
+        if self.retry:                                 # (its other way, as https: without it too)
+            args, target = self.retry
+            k = next((k for k, a in enumerate(args) if str(a).startswith("export=")), None)
+            self.retry = (args[:k - 1] + args[k + 1:] if k else args, target)
+        self.start_paused = self.muted                 # (paused and silent, as that one was)
+        try:
+            self.spawn(cmd[:-1], cmd[-1])
+        finally:
+            self.start_paused = False
+        return True
 
     def music_tick(self, now):
         """(Main loop.) Now playing's glow, and what the search for covers says when it's done."""
@@ -185,15 +241,19 @@ class MusicScreen:
         self.pulse_tick(now)
 
     def pulse_tick(self, now):
-        """The ear for the song on Now playing, kept or let go; the glow's next frame, when it's due."""
-        if not self.pulse_wanted():
+        """The ear for the song on Now playing (for its bars, and its glow), kept or let go; their next frame, when
+        it's due."""
+        if not self.bars_wanted():
             if self.ear is not None:
                 self.ear_stop()
             return
-        src = self.cur["src"]
-        if self.ear is None or self.ear.src != src:
-            self.ear_stop()
-            self.ear = Ear(src, self.heard_now)
+        if self.kind == "audio":
+            src = self.cur["src"]
+            if self.ear is None or self.ear.src != src:
+                self.ear_stop()
+                self.ear = Ear(src, self.heard_now)
+        elif self.ear is not None:
+            self.ear_stop()                            # (a station's: the player's own sound, its Tap)
         if self.paused:
             self.pos_off = None                        # (where it is, said afresh when it plays on)
         if now >= self.pulse_next:
@@ -210,13 +270,22 @@ class MusicScreen:
         ear = self.ear
         return glow_step(ear.level(self.heard_now())) if ear is not None and self.pulse_wanted() else 0
 
+    def now_heard(self):
+        """What Now playing's bars show now: the ear's look at the song where it's heard, or a station's sound as
+        MPlayer shares it (as loud as at full volume, whatever the volume); None while there's nothing to show."""
+        if self.paused or not self.bars_wanted():
+            return None
+        if self.kind == "radio":
+            tap = self.sound_tap
+            return tap.levels(time.monotonic(), 0.0 if self.muted else self.volume / 100 * SOFTVOL_TOP) \
+                if tap is not None else None
+        heard = getattr(self.ear, "levels", None)
+        return heard(self.heard_now()) if heard is not None else None
+
     def now_levels(self, was=None):
-        """Now playing's bars as they're drawn now: up at once to what the ear heard there, falling back a little
-        each frame (was: as they were drawn); flat while there's nothing to show (paused, a moment after a seek)."""
-        ear = self.ear
-        heard = getattr(ear, "levels", None) if ear is not None and self.pulse_wanted() else None
-        look = heard(self.heard_now()) if heard is not None else None
-        look = look or (0.0,) * BARS
+        """Now playing's bars as they're drawn now: up at once to what's heard there, falling back a little each
+        frame (was: as they were drawn); flat while there's nothing to show (paused, a moment after a seek)."""
+        look = self.now_heard() or (0.0,) * BARS
         if was is None:
             return tuple(look)
         return tuple(max(v, round(w * BARS_FALL, 3)) if w * BARS_FALL >= 0.01 else v for v, w in zip(look, was))
@@ -426,7 +495,7 @@ class MusicScreen:
         d.text((tx, foot), small, font=F["small"], fill=soft, anchor="lm")
         self.now_bars = None
         low, high = foot - 22, y + (22 if record else 6)   # (the bars: under the words, over the small ones, as far
-        if self.pulse_wanted() and low - high >= BARS_LEAST:   # from the cover and the screen's edge as the cover is
+        if self.bars_wanted() and low - high >= BARS_LEAST:   # from the cover and the screen's edge as the cover is
             box = (ax + side + ax, low - min(low - high, round(side * BARS_MOST)), W - ax, low)   # from its own edge)
             levels = self.now_levels()
             self.now_bars_draw(d, box, levels, colour)

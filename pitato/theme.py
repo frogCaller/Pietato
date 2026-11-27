@@ -10,6 +10,10 @@ ACCENTS = [("Blue", (96, 170, 228)), ("Teal", (64, 196, 180)), ("Green", (110, 2
 ACCENTS_LIGHT = {"Blue": (32, 108, 190), "Teal": (12, 132, 120), "Green": (38, 138, 60),   # ...as they are on a light
                  "Purple": (112, 80, 204), "Pink": (198, 56, 122), "Red": (202, 56, 56),   # page: darker, to read
                  "Gold": (160, 112, 8), "White": (58, 64, 78)}                             # against it (White: grey)
+CUSTOM = "Custom"                # Settings > Appearance > Accent color's last choice: your own colour, from its sliders
+CUSTOM_RGB = [ACCENTS[0][1]]     # ...that colour, as they're set (set_custom)
+LIGHT_INK = 100                  # ...on a light page, no lighter than this (how bright it looks, 0 to 255): darker,
+                                 # to read
 LOOKS = ("Dark", "Light")        # Settings > Appearance > App pages: the pages inside the apps (the home screen
                                  # keeps its own)
 OWN_LOOK = ("home", "screens.home")   # the modules that draw the home screen: its background's colours, whatever
@@ -23,10 +27,50 @@ def look():
 
 
 def accent_for(name, look_name=None):
-    """An accent colour by its name, as it is on the pages now (look_name: on a dark page, or a light one)."""
-    if (look_name or LOOK[0]) == "Light":
+    """An accent colour by its name, as it is on the pages now (look_name: on a dark page, or a light one). Custom:
+    your own (on a light page, darker if it's a light one, as the named ones are)."""
+    light = (look_name or LOOK[0]) == "Light"
+    if name == CUSTOM:
+        return light_of(CUSTOM_RGB[0]) if light else CUSTOM_RGB[0]
+    if light:
         return ACCENTS_LIGHT.get(name, ACCENTS_LIGHT[ACCENTS[0][0]])
     return dict(ACCENTS).get(name, ACCENTS[0][1])
+
+
+def light_of(rgb):
+    """A colour of your own as a light page has it: no brighter than LIGHT_INK, so it reads against the page."""
+    seen = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    k = min(1.0, LIGHT_INK / max(seen, 1.0))
+    return tuple(int(round(v * k)) for v in rgb)
+
+
+def rgb_of(text):
+    """Settings' "r,g,b" (your own accent: accent_rgb) as a colour, or None."""
+    try:
+        parts = [int(p) for p in str(text).split(",")]
+    except ValueError:
+        return None
+    return tuple(parts) if len(parts) == 3 and all(0 <= p <= 255 for p in parts) else None
+
+
+def rgb_text(rgb):
+    return ",".join(str(int(v)) for v in rgb)
+
+
+def custom_rgb():
+    return CUSTOM_RGB[0]
+
+
+def set_custom(rgb):
+    """Your own accent's colour, as its sliders have it: everything drawn with it from now, if it's the one picked."""
+    CUSTOM_RGB[0] = tuple(int(v) for v in rgb)
+    if ACCENT_NAME[0] == CUSTOM:
+        set_accent(CUSTOM)
+
+
+def nearest_accent(rgb):
+    """The named accent nearest a colour: your own, as your other Pietatos know it (by one of their names)."""
+    return min(ACCENTS, key=lambda a: sum((x - y) ** 2 for x, y in zip(a[1], rgb)))[0]
 
 
 def on_dark(key):

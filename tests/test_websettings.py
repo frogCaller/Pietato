@@ -151,6 +151,26 @@ check("error" not in do("ds_screens", "Top Only") and m.setting("ds_screens") ==
       and rows()["ds_screens"]["value"] == "Top Only" and "error" in do("ds_screens", "Sideways")
       and "error" not in do("ds_screens", "Left/Right"), "...just the top one: kept (one there isn't: not)")
 check("resolution" not in r, "no Resolution without a TV or monitor's sizes")
+m.set_setting("accent", "Custom")
+m.set_setting("accent_rgb", "10,200,30")
+s_c = m.web_settings_now()
+rows_c = {row["key"]: row for sec in s_c["sections"] for row in sec["rows"]}
+order_c = [row["key"] for sec in s_c["sections"] if sec["id"] == "appearance" for row in sec["rows"]]
+did = m.web_settings_do({"key": "accent_g", "value": 120})
+bad = [m.web_settings_do({"key": "accent_b", "value": v}) for v in (300, -1, "x", 2.5, True)]
+after = m.setting("accent_rgb")
+m.set_setting("accent", "Blue")
+named = m.web_settings_do({"key": "accent_r", "value": 5})
+check(order_c[:6] == ["wallpaper", "home_style", "accent", "accent_r", "accent_g", "accent_b"]
+      and [rows_c[k]["value"] for k in ("accent_r", "accent_g", "accent_b")] == [10, 200, 30]
+      and all(rows_c[k]["kind"] == "range" and (rows_c[k]["min"], rows_c[k]["max"]) == (0, 255)
+              for k in ("accent_r", "accent_g", "accent_b"))
+      and rows_c["accent"]["colours"]["Custom"] == "#0ac81e" and did == {"ok": True} and after == "10,120,30"
+      and all("error" in b_ for b_ in bad) and "error" in named and m.setting("accent_rgb") == "10,120,30"
+      and "accent_r" not in [row["key"] for sec in m.web_settings_now()["sections"] for row in sec["rows"]],
+      f"Accent color's Custom on the web page: its sliders under it, red, green and blue, 0 to 255, as they are "
+      f"({[rows_c.get(k, {}).get('value') for k in ('accent_r', 'accent_g', 'accent_b')]}); one moved there "
+      f"({did}, {after}); nothing outside 0 to 255 ({bad}); none with a named one picked ({named})")
 check(r["accent"]["colours"]["Blue"].startswith("#") and len(r["accent"]["colours"]) == len(r["accent"]["choices"]),
       "Accent: each with its colour")
 check(r["f_model"].get("list") is True and r["f_model"]["choices"] == [], "the Bot's model: a list, empty for now")

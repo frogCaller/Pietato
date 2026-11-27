@@ -575,7 +575,7 @@ if not ONLY or "app" in ONLY:
     tap("start")
     hints = m.sim_hints(m.sim_game())
     t_open = time.monotonic()
-    tap("l")
+    tap("r")
     spin(0.3)
     s = m.sim_game()
     where = []
@@ -601,10 +601,10 @@ if not ONLY or "app" in ONLY:
           and "Stopped" not in line and "Playing" not in line and steps == [str(k) for k in range(1, 17)]
           and marks == ["Kick", "Snare", "Hi-hat", "Pluck"])
     want = SQ.born(SQ.seed_of("Den"))
-    check(f"L from the Soundboard's buttons ({hints[:2]}; START's card has no row for it, nor for Bounce: "
+    check(f"R from the Soundboard's buttons ({hints[:2]}; START's card has no row for it, nor for Bounce: "
           f"{[r[0] for r in rows]}): its page: a grid of four sounds ({s.seq and s.seq['rows']}) and sixteen steps, "
           f"the tune this Pietato's name gives it, not playing yet; its buttons along the bottom ({m.sim_hints(s)})",
-          not any(r[0] in ("seq", "bounce") for r in rows) and hints[:2] == [("L", "Sequencer"), ("R", "Bounce")]
+          not any(r[0] in ("seq", "bounce") for r in rows) and hints[:2] == [("L", "Bounce"), ("R", "Sequencer")]
           and m.board_mode() == "seq"
           and b.seq_up and not b.seq_on and b.card is None and m.sim_opts is None and s.seq is not None
           and s.seq["grid"] == tuple(tuple(r) for r in want[0]) and b.seq == [want[0], want[1]]
@@ -994,13 +994,13 @@ if not ONLY or "app" in ONLY:
     tap("r", repeat=True)
     tap("l", repeat=True)
     bars_on = [c["on"] for c in said("bars", t1)]
-    check(f"R and L, as it plays: on round the Soundboard's three pages and back ({[w[0] for w in went]}: its "
-          f"buttons are at its right, Bounce after them), the tune "
+    check(f"L and R, as it plays: on round the Soundboard's three pages and back ({[w[0] for w in went]}: Bounce after "
+          f"it, then its buttons), the tune "
           f"playing on under each, its bars asked for only while its own page is up ({bars_on}); held: once is once; "
           f"and the tempo's left alone ({round(b.clock.bpm)}: it's on its card)",
-          [w[0] for w in went] == ["pads", "bounce", "seq", "bounce", "pads", "seq"] and all(w[1] for w in went)
+          [w[0] for w in went] == ["bounce", "pads", "seq", "pads", "bounce", "seq"] and all(w[1] for w in went)
           and [w[2] for w in went] == [False, False, True, False, False, True]
-          and [w[3] for w in went] == [False, True, False, True, False, False]
+          and [w[3] for w in went] == [True, False, False, False, True, False]
           and bars_on == [False, True, False, True] and m.board_mode() == "seq"
           and round(b.clock.bpm) == bpm == int(m.setting("board_bpm")))
     m.board_tempo(116)
@@ -1031,8 +1031,8 @@ if not ONLY or "app" in ONLY:
     probe = PILDraw.Draw(PILImage.new("RGB", (1, 1)))
     how = m.wrap(probe, SSQ.SEQ_HOW, m.fonts["small"], 404 - 44, lines=3)
     check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
-          and not how[-1].endswith("…") and " ".join(how).endswith("SELECT: the scale. L and R: Bounce and the "
-                                                                    "Soundboard."))
+          and not how[-1].endswith("…") and " ".join(how).endswith("SELECT: the scale. L and R: the Soundboard and "
+                                                                    "Bounce."))
     vol = m.volume
     tap("right")
     tap("down")
@@ -1061,10 +1061,10 @@ if not ONLY or "app" in ONLY:
           f"{last_hints[1]}", b.card is None and m.sim_opts is None and b.seq_up and going >= 14
           and last_hints[1] == ("A", "Do it"))
 
-    # R: the Soundboard's buttons, over it
+    # L: the Soundboard's buttons, over it
     t1 = time.monotonic()
     tune = SQ.dumps(*b.seq)
-    tap("r")
+    tap("l")
     spin(0.3)
     s = m.sim_game()
     lp = dict(s.loop or {})
@@ -1073,7 +1073,7 @@ if not ONLY or "app" in ONLY:
             tap("select")
     tap("up")
     over = spin(1.0, lambda: b.bank()["pads"].get("up") in b.playing)
-    check(f"R: the Soundboard's buttons again, the tune still playing under them (its loop still told: "
+    check(f"L: the Soundboard's buttons again, the tune still playing under them (its loop still told: "
           f"{len(loops()[-1].get('hits') or [])} cells; no more bars asked for: {said('bars', t1)}); its line says "
           f"so ({lp}); a button's sound over it; the tune kept",
           m.board_mode() == "pads" and not b.seq_up and b.seq_on and s.seq is None and m.board_shown()
@@ -1097,11 +1097,11 @@ if not ONLY or "app" in ONLY:
     tap("a")                                            # (another layer, recording)
     tap("down")
     taking = b.take is not None and len(b.take[1]) == 1
-    tap("l")
+    tap("r")
     spin(0.1)
     kept = (m.board_mode(), b.take, len(b.layers))
-    tap("r")
-    check(f"...another layer being recorded, and L: kept first (it's from its buttons that one's stopped), then on to "
+    tap("l")
+    check(f"...another layer being recorded, and R: kept first (it's from its buttons that one's stopped), then on to "
           f"the Sequencer ({kept[0]}, {kept[2]} layers)", taking and kept == ("seq", None, 2)
           and m.board_mode() == "pads" and len(loops()[-1]["hits"]) == 2 + sum(sum(r) for r in b.seq[0]))
     m.press("start")
@@ -1113,7 +1113,7 @@ if not ONLY or "app" in ONLY:
               "do": "loop"} and SQ.dumps(*b.seq) == tune and m.sim_game().loop is None)
 
     # Bounce with it
-    tap("l")
+    tap("r")
     tap("b")
     spin(0.2)
     up_again = b.seq_up and b.seq_on and m.sim_game().seq is not None
@@ -1123,8 +1123,8 @@ if not ONLY or "app" in ONLY:
     check(f"the Sequencer opened again and played (B); Bounce started from the web page meanwhile: Bounce's page, "
           f"the tune playing on with it ({why})", up_again and why is None and b.bounce is not None and not b.seq_up
           and b.seq_on and s.bounce is not None and s.seq is None and bool(loops()[-1].get("hits")))
-    tap("r")
-    check("...R from Bounce: its page again, still playing", m.board_mode() == "seq"
+    tap("l")
+    check("...L from Bounce: its page again, still playing", m.board_mode() == "seq"
           and b.bounce is None and b.seq_up and b.seq_on and m.sim_game().seq is not None
           and m.sim_game().seq["playing"])
 

@@ -1,6 +1,6 @@
 """Apps' Soundboard: a sound on every button. The d-pad's four and A, B, X and Y each play the sound that's on them,
 as many at once as you like (pressed again while it plays, a sound starts again); SELECT goes through the banks of
-eight; L and R go round its three pages (the Sequencer, these buttons, Bounce). START has the rest: a loop recorded,
+eight; L and R go round its three pages (these buttons, the Sequencer, Bounce). START has the rest: a loop recorded,
 the bank, the volume, a new sound recorded with a USB microphone and put on a button. HOME goes back (B is a button
 like the others here).
 

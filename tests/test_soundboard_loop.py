@@ -378,7 +378,7 @@ if not ONLY or "app" in ONLY:
     s = m.sim_game()
     check(f"Apps > Soundboard: its buttons along the bottom: SELECT's the banks' now, and the loop's on START's card "
           f"({m.sim_hints(s)})", m.board_shown()
-          and m.sim_hints(s) == [("L", "Sequencer"), ("R", "Bounce"), ("SELECT", "Bank"), ("START", "More"),
+          and m.sim_hints(s) == [("L", "Bounce"), ("R", "Sequencer"), ("SELECT", "Bank"), ("START", "More"),
                                  ("HOME", "Back")])
     tap("start")
     rows = m.board_rows()
@@ -392,7 +392,7 @@ if not ONLY or "app" in ONLY:
     probe = PILDraw.Draw(PILImage.new("RGB", (1, 1)))
     how = m.wrap(probe, SB.BOARD_HOW, m.fonts["small"], 404 - 44, lines=3)
     check(f"...and how its buttons go now, all of it in the card's three lines ({how})", len(how) <= 3
-          and not how[-1].endswith("…") and " ".join(how).startswith("L and R: the Sequencer and Bounce. SELECT: the "
+          and not how[-1].endswith("…") and " ".join(how).startswith("R: the Sequencer, then Bounce. SELECT: the "
                                                                       "next bank. START held clears the loop."))
     img, (cx, cy) = m.board_opts_card(s)
     (bx0, by0, bx1, by1), _ = m.sim_box()

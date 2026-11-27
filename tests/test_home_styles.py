@@ -8,6 +8,7 @@ import io, json, os, shutil, subprocess, sys, time
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
 import pietato_all as g
+import pitato.screens.home as HS
 from PIL import ImageDraw
 S = SP + "/t_home_styles"
 shutil.rmtree(S, ignore_errors=True)
@@ -137,7 +138,25 @@ for style in ["Bright", "Glass", "Cards"]:
               and not near(img.getpixel((5, 480 - m.FOOTER + 4)), g.LINE, 4))
     else:
         check("...an accent line by the time", near(img.getpixel((18, 60)), g.ACCENT))
-        check("...cards: the picked one edged in the accent", near(img.getpixel((int((x0 + x1) / 2), int(y0))), g.ACCENT, 30))
+        lift = getattr(HS, "CARD_LIFT", 0)
+        inside = img.getpixel((int(x0) + 6, int((y0 + y1) / 2)))
+        check(f"...cards: the picked one a little bigger ({lift} px each way), ringed in the accent "
+              f"({img.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1))}), a little of it in the card ({inside})",
+              lift >= 3 and near(img.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1)), g.ACCENT, 30)
+              and near(inside, g.co_mix(g.CARD, g.ACCENT, HS.CARD_TINT[1]), 6))
+        m.set_setting("wallpaper", "Lemon")
+        drawn(m)
+        pale = FB.last.convert("RGB")
+        ring_p = pale.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1))
+        mid_y = int((y0 + y1) / 2)
+        in_p, other = pale.getpixel((int(x0) + 6, mid_y)), pale.getpixel((int(x0) + 6 - 122, mid_y))
+        ring_want = m.home_accent()
+        m.set_setting("wallpaper", "Midnight")
+        drawn(m)
+        check(f"...over a pale background (Lemon), its white card tinted with the accent ({in_p}; another: {other}), "
+              f"ringed in a darker one of it, to stand out ({ring_p})", near(ring_p, ring_want, 30)
+              and sum(ring_p) < 400 and near(in_p, g.co_mix(g.PALE_CARD, g.ACCENT, HS.CARD_TINT[0]), 8)
+              and sum(abs(a_ - b_) for a_, b_ in zip(in_p, other)) > 40)
         check(f"...as wide as fit ({x1 - x0:.0f} x {y1 - y0:.0f})", x1 - x0 == 108 and y1 - y0 == 92)
         check("...Home on its card", "Home" in texts)
         a_x = next(xy for t, f, xy in said if t == "A")[0]
@@ -312,12 +331,12 @@ texts = drawn(m)
 check(f"Settings: Appearance on its first page (the background in use beside it), and Screen (its size); A opens the "
       f"one picked ({[t for t in texts if t in ('Appearance', 'Screen', 'Midnight', m.res_here(), 'Open', 'Home')]})",
       all(t in texts for t in ("Appearance", "Screen", "Midnight", m.res_here(), "Open", "Home"))
-      and not any(t in texts for t in ("Background", "Accent colour", "Video size", "Change", "Back")))
+      and not any(t in texts for t in ("Background", "Accent color", "Video size", "Change", "Back")))
 m.press("a")
 texts = drawn(m)
 check("...A: its page, Settings › Appearance, with the five of them; ◀▶ change one, B goes back",
       m.set_page == "appearance" and "Settings  ›  Appearance" in texts and "Change" in texts and "Back" in texts
-      and all(t in texts for t in ("Background", "Home screen style", "Accent colour", "App pages", "Full screen apps"))
+      and all(t in texts for t in ("Background", "Home screen style", "Accent color", "App pages", "Full screen apps"))
       and not any(t in texts for t in ("WiFi", "Clock", "Video size", "Open")))
 m.press("b"); m.press("down"); m.press("a")
 texts = drawn(m)

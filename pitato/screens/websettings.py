@@ -8,7 +8,9 @@ import threading
 import time
 import urllib.parse
 
-from ..config import ACCENTS, ATTRACT_CHOICES, WALLPAPERS, clean_name, edit_config, home_dir, read_config, settings_glob
+from ..config import (ACCENT_PARTS, ACCENTS, ATTRACT_CHOICES, WALLPAPERS, clean_name, edit_config, home_dir,
+                      read_config, settings_glob)
+from ..theme import CUSTOM, custom_rgb, rgb_text
 from ..homeassistant import ha_typed_url, ha_url, save_ha
 from ..pihole import dns_guess
 from ..screen import boot_resolution, res_name
@@ -89,11 +91,14 @@ class WebSettingsScreen:
             return {"status": words, "tone": "busy" if ok == "busy" else "ok" if ok else "bad"}
 
         # Appearance and Screen, as the Pi's Settings has them (its two pages of settings), and the rest of its own
+        own = [{"key": k, "label": name, "kind": "range", "value": custom_rgb()[i], "min": 0, "max": 255}
+               for i, (k, name) in enumerate(ACCENT_PARTS)] if self.setting("accent") == CUSTOM else []
         sec("appearance", "Appearance", [
             choice("wallpaper", choices=WALLPAPERS, picture=os.path.basename(self.setting("picture") or ""),
                    walls=True),                   # (the page shows a little picture of each: web.py's web_wall)
             choice("home_style"),
-            choice("accent", colours={a: hex_of(rgb) for a, rgb in ACCENTS}),
+            choice("accent", colours=dict({a: hex_of(rgb) for a, rgb in ACCENTS}, **{CUSTOM: hex_of(custom_rgb())}))]
+            + own + [                             # (your own colour: its sliders, red, green and blue)
             choice("look"),                       # (the pages inside the apps: dark, or light)
             choice("app_full")])
         rows = [choice("screen")]                  # (Video size)
@@ -403,6 +408,29 @@ class WebSettingsScreen:
         if not key.isidentifier() or handler is None:
             return {"error": "No such setting"}
         return handler(value, cmd)
+
+    def web_set_accent_r(self, value, cmd):
+        return self.web_accent_part("accent_r", value)
+
+    def web_set_accent_g(self, value, cmd):
+        return self.web_accent_part("accent_g", value)
+
+    def web_set_accent_b(self, value, cmd):
+        return self.web_accent_part("accent_b", value)
+
+    def web_accent_part(self, key, value):
+        """One of your own accent's sliders, set on the web page: its red, green or blue, 0 to 255."""
+        if self.setting("accent") != CUSTOM:
+            return {"error": "Pick Custom for Accent color first"}
+        whole = isinstance(value, int) or isinstance(value, float) and value.is_integer() \
+            or isinstance(value, str) and value.strip().isdigit()
+        if isinstance(value, bool) or not whole or not 0 <= int(float(value)) <= 255:
+            return {"error": "From 0 to 255"}
+        rgb = list(custom_rgb())
+        rgb[[k for k, _ in ACCENT_PARTS].index(key)] = int(float(value))
+        self.set_setting("accent_rgb", rgb_text(rgb))
+        self.dirty = True
+        return {"ok": True}
 
     def web_choices(self, key):
         """What a setting may be, as web_settings says (the LED backlight's: as the web page's Library has them)."""

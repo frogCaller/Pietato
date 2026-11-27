@@ -72,7 +72,7 @@ class FishScreen:
     def fish_prefs(self):
         """Its name, colour, fish and light, as they are now (START's card on its Fish Tank sets them)."""
         aq = self.aquarium
-        aq.me, aq.accent = self.own_name(), self.setting("accent") or ""
+        aq.me, aq.accent = self.own_name(), self.accent_shared()
         aq.kind = self.sim_value(FishTank, "kind")
         aq.light = self.sim_value(FishTank, "light") or "Day"
 

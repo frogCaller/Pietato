@@ -14,7 +14,8 @@ from .draw import FOOT_NOTE
 
 LABEL = (214, 219, 226)      # Glass: an app's name under its tile
 DATE = (222, 226, 232)       # ...the date, and the weather in words
-CARD_PICKED = (36, 42, 52)   # Cards: the picked card
+CARD_LIFT = 4                # Cards: the picked card this much bigger each way, a little of the accent in it, ringed
+CARD_TINT = (0.24, 0.3)      # ...how much of the accent: on a white card (a pale background), on a dark one
 KEY_RING = (150, 158, 170)   # ...a button's ring, along the bottom
 INK = {    # the home screen's words over its background (home.py's WALLS say which): light, as ever (a dark one, a
            # picture of yours); white, with a soft shadow, over a strong colour; dark over a pale one. text: the time,
@@ -174,8 +175,9 @@ class HomeScreen:
         """Icons across, for n of them: as home_cols() has it, or Cards' two rows on an ultrawide."""
         return -(-n // 2) if self.cards_two_rows(n) else home_cols(n)
 
-    def home_icon(self, name, lit=False):
-        style, s, pale = self.home_style(), scale(), self.home_pale()
+    def home_icon(self, name, lit=False, pale=None):
+        style, s = self.home_style(), scale()
+        pale = self.home_pale() if pale is None else pale   # (Cards' picked one: for the other card, the other way)
         face = self.games_face() if name == "Games" else None
         key = (style, name, lit, s, face, pale and style != "Bright")
         if key not in self.icons:                      # (as finely as the screen's drawn: fine.py)
@@ -336,16 +338,19 @@ class HomeScreen:
         room = pitch - 8
         if style == "Cards":                         # its glyph on the card, its name at the card's foot
             pale = self.home_pale()
+            flip = pale                              # (a white card's glyph, on a pale background)
             if picked:
-                d.rounded_rectangle((x0 - 1, y0 - 1, x1 + 1, y1 + 1), radius=self.CARD_R + 1,
-                                    fill=(255, 255, 255) if pale else CARD_PICKED,
-                                    outline=self.home_accent(ink) if pale else ACCENT, width=2)
-            glyph = self.home_icon(name)
+                g, ring = CARD_LIFT, self.home_accent(ink) if pale else ACCENT
+                tint = mix(PALE_CARD, ACCENT, CARD_TINT[0]) if pale else mix(CARD, ACCENT, CARD_TINT[1])
+                d.rounded_rectangle((x0 - g, y0 - g, x1 + g, y1 + g), radius=self.CARD_R + 2, width=3, outline=ring,
+                                    fill=tint)
+            glyph = self.home_icon(name, pale=flip)
             lift = (y1 - y0 - self.HOME_GEOMETRY["Cards"][0]) // 2   # (a taller card: its glyph lower, its name
             img.paste(glyph, (int((x0 + x1 - self.GLYPH) / 2), int(y0 + 11 + lift)), glyph)   # higher: in the middle)
             label = self.fit(d, HOME_LABELS.get(name, name), F["home4_label"], x1 - x0 - 6)
             d.text(((x0 + x1) / 2, y1 + dy), label, font=F["home4_label"],
-                   fill=(ink["text"] if picked else ink["label"]) if pale else TEXT if picked else LABEL, anchor="mm")
+                   fill=(INK["dark"]["text"] if picked else ink["label"]) if flip else TEXT if picked else LABEL,
+                   anchor="mm")
             return
         if picked:                                     # (its name, as drawn on the grid unpicked: gone)
             cx, ly = (x0 + x1) / 2, y1 + dy

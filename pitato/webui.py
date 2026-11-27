@@ -159,11 +159,17 @@ def private(name):
 
 
 def accent():
+    """This Pietato's accent colour (Settings > Appearance > Accent color), as the page has it: "#rrggbb"."""
     try:
         with open(STATE_FILE) as f:
-            name = (json.load(f).get("settings") or {}).get("accent")
-    except (OSError, ValueError):
-        name = None
+            got = json.load(f).get("settings") or {}
+    except (OSError, ValueError, AttributeError):
+        got = {}
+    name = got.get("accent") if isinstance(got, dict) else None
+    if name == "Custom":                              # (your own: its sliders' red, green and blue)
+        parts = str(got.get("accent_rgb") or "").split(",")
+        if len(parts) == 3 and all(p.strip().isdigit() and int(p) <= 255 for p in parts):
+            return "#" + "".join(f"{int(p):02x}" for p in parts)
     return ACCENTS.get(name, ACCENTS["Blue"])
 
 

@@ -87,7 +87,7 @@ class GroupScreen:
 
     # -- the group's hooks ---------------------------------------------------------------------------------------
     def group_own(self):
-        return {"id": self.share_id, "name": self.own_name(), "accent": self.setting("accent") or "",
+        return {"id": self.share_id, "name": self.own_name(), "accent": self.accent_shared(),
                 "hw": self.group_hardware(), "doing": self.group_doing(), "you": self.you_at}
 
     def group_hardware(self):

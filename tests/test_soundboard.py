@@ -1017,7 +1017,7 @@ check(f"...the Band's page, which has less room for them: close together, as eve
                                           "x": (408, 112, 144, 70), "y": (332, 190, 144, 70),
                                           "a": (484, 190, 144, 70), "b": (408, 268, 144, 70)})
 hints = m.sim_hints(s)
-check(f"...its buttons along the bottom: {hints}", hints == [("L", "Sequencer"), ("R", "Bounce"), ("SELECT", "Bank"),
+check(f"...its buttons along the bottom: {hints}", hints == [("L", "Bounce"), ("R", "Sequencer"), ("SELECT", "Bank"),
                                                              ("START", "More"), ("HOME", "Back")])
 from PIL import ImageDraw as PILDraw  # noqa: E402
 texts = []
@@ -1238,11 +1238,11 @@ for name in ("r", "r", "r", "l", "l2", "r2", "r"):
     m.release(name)
     spin(0.1)
     went.append((name, m.board_mode(), m.sim_hints(m.sim_game())[0]))
-check(f"L and R: round its three pages, R on (Bounce is at its buttons' right, the Sequencer at their left) and L "
-      f"back (L2 and R2 too): {[(n, p) for n, p, _ in went]}; each with "
+check(f"L and R: round its three pages, R on (its buttons, the Sequencer, Bounce) and L back (L2 and R2 too): "
+      f"{[(n, p) for n, p, _ in went]}; each with "
       f"its own buttons ({went[0][2]}, {went[1][2]}), and the bank as it was ({m.sim_game().bank})",
-      [p for _, p, _ in went] == ["bounce", "seq", "pads", "seq", "bounce", "seq", "pads"]
-      and [h for _, _, h in went[:3]] == [("A B", "Balls"), ("A", "On/off"), ("L", "Sequencer")]
+      [p for _, p, _ in went] == ["seq", "bounce", "pads", "bounce", "seq", "bounce", "pads"]
+      and [h for _, _, h in went[:3]] == [("A", "On/off"), ("A B", "Balls"), ("L", "Bounce")]
       and m.sim_game().bank[0] == 0 and b.bounce is None and not b.seq_up)
 m.press("r", repeat=True)
 check("...held: once is once (it doesn't run on through them)", m.board_mode() == "pads")

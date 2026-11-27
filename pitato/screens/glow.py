@@ -29,7 +29,7 @@ from ..library import LISTEN_KINDS
 from ..party import PartyProc, RelayServer
 from ..screen import web_late
 from ..system import is_pc, read_file, run_out
-from ..theme import ACCENT, ACCENTS, BODY, co_mix, LINE, MUTED, ROW, TEXT
+from ..theme import ACCENT, accent_for, BODY, co_mix, LINE, MUTED, ROW, TEXT
 
 GLOW_BRIGHT = ["10%", "25%", "50%", "100%"]
 GLOW_SHAPES = ["8x8 grid", "Strip"]
@@ -797,7 +797,7 @@ class GlowScreen:
                 self.glow_out = GlowOut()
                 self.glow_out.aim(self.glow_to, self.glow_to_lamps)
             self.glow_music_at = now
-            self.glow_out.music(dict(ACCENTS).get(self.setting("accent"), ACCENTS[0][1]), lamps=not self.glow_party)
+            self.glow_out.music(accent_for(self.setting("accent"), "Dark"), lamps=not self.glow_party)
         st = self.glow_station
         if st is not None:
             relay = st.get("relay")

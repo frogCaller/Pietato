@@ -13,7 +13,8 @@ Pietato starts on a home screen of apps:
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
 - **Music** and **Radio**. Music is a grid of your songs' covers; going right from the last song takes you back
   to the first. Now playing shows the cover big, with a glow in its colour that follows the beat while the
-  battery saver is off, and bars beside it that move with the music (where there's room under the song's name).
+  battery saver is off, and bars beside it that move with the music, on a battery too, and with a station
+  (where there's room under the name).
   A song's cover is a `cover.jpg` or `folder.jpg` in its folder, or the picture inside its
   file. For songs with neither, press Y on Music. Covers your other Pietatos have for the same songs (the same
   file name and size) are copied from them. The rest are looked up in the iTunes Store's search, then on
@@ -55,7 +56,8 @@ Pietato starts on a home screen of apps:
   shows it as a list instead, with Update software, Reboot and Shut down
 - **Settings**: WiFi (with a [Hotspot](#hotspot) for away from home), Bluetooth, the clock, battery saver, sound
   and controller, plus two pages that A opens and B closes. Appearance has the home screen's background and
-  style, the accent colour, the apps' pages and full screen apps. Screen has the video size, a TV or monitor's
+  style, the accent color (one of eight, or Custom: your own, from its red, green and blue sliders), the apps'
+  pages and full screen apps. Screen has the video size, a TV or monitor's
   resolution, turning the picture and what an OLED or e-ink HAT shows
 - Settings > Appearance > Background changes the home screen's background: dark ones, colourful ones like
   Sunset, Candy and Arcade, pale ones like Sky, Peach and Mint, or a picture of yours. ◀▶ go through them, and
@@ -296,8 +298,8 @@ stops them all. B is a button like the others there, so HOME is the way back. ST
 card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
 sounds play wherever Settings > Sound sends them.
 
-The Soundboard has three pages: its buttons, the Sequencer and Bounce. From the buttons, L is the Sequencer and
-R is Bounce, and L and R go on round the three. The name of the page you're on is at the top left, and what it's
+The Soundboard has three pages: its buttons, the Sequencer and Bounce. R goes from the buttons to the Sequencer,
+then to Bounce, and L goes back (round the three). The name of the page you're on is at the top left, and what it's
 set to is at the right: the bank, or the key, the scale and the tempo. HOME goes back to Apps from any of them,
 and the Soundboard opens again on the page you left.
 

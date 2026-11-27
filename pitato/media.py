@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 
-from .theme import MUTED, set_accent, set_look, TEXT
+from .theme import CUSTOM, custom_rgb, MUTED, nearest_accent, rgb_of, set_accent, set_custom, set_look, TEXT
 from .config import (clean_name, home_dir, HOME_STYLE_WAS, SCREEN_MODES, SETTINGS_DEFAULT, SETTINGS_GONE, STATE_FILE,
                      TURN_DEGREES, WEB_PORT, web_private)
 from .util import classify, clock, FILE_KINDS, find_files, IMAGE_EXTS, item, looks_like_text, title_of
@@ -482,6 +482,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.boot_song = (time.monotonic() + BOOT_SONG_WAIT if self.setting("start_song") == "On" and not self.boot_game
                           else 0.0)                    # (a game to start: it has the speaker)
         set_look(self.setting("look"))                 # (Settings > Appearance > App pages: the pages dark, or light)
+        if rgb_of(self.setting("accent_rgb")):         # (your own accent's colour: Custom's)
+            set_custom(rgb_of(self.setting("accent_rgb")))
         set_accent(self.setting("accent"))
         turn = TURN_DEGREES.get(self.setting("turn"), 0)
         screen_out.set_turn(turn)                      # (Settings > Screen > Rotate screen: everything drawn turned)
@@ -505,10 +507,19 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return SETTINGS_DEFAULT.get(key)                        # (its desktop's gone since: the home screen)
         return SETTINGS_DEFAULT.get(key) if v is None else v
 
+    def accent_shared(self):
+        """This Pietato's accent as your others know it: its name (your own colour, Custom: the named one nearest
+        it)."""
+        name = self.setting("accent") or ""
+        return nearest_accent(custom_rgb()) if name == CUSTOM else name
+
     def set_setting(self, key, value):
         self.state["settings"][key] = value
         if key == "accent":
             set_accent(value)
+            self.icons.clear()
+        if key == "accent_rgb":                        # (your own accent's colour: drawn with now, if it's picked)
+            set_custom(rgb_of(value) or custom_rgb())
             self.icons.clear()
         if key == "look":
             self.look_changed()
@@ -657,7 +668,7 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return max(0.0, min(0.25, self.update_next - time.monotonic()))   # (its dots' next step)
         if self.now_art():
             return max(0.0, min(0.25, self.lofi_next - time.monotonic()))   # (the lofi art's next frame)
-        if self.ear is not None and not self.paused:   # (Now playing's glow, following the beat: its next frame)
+        if self.now_moving():                          # (Now playing's glow and its bars: their next frame)
             return max(0.0, min(0.25, self.pulse_next - time.monotonic()))
         if self.on_sim_page() and self.sim_opts is None:      # (its next frame; the Clock's: a second or so off)
             return max(0.0, min(0.25 if self.sim_paced() is not None else 0.05, self.sim_next - time.monotonic()))
@@ -1671,11 +1682,11 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
 
     def share_beacon(self, host, full=False):
         """What this Pietato's beacon says: that it's one, which (this run of it), where its web page is, its name and its
-        colour (Settings > Appearance > Accent colour: a dot in it beside its name on your other Pietatos, to tell
+        colour (Settings > Appearance > Accent color: a dot in it beside its name on your other Pietatos, to tell
         apart two of the same name). full: the one told straight to each of yours (not to everyone on the network),
         for the group chat too: what it's doing, what it's made of, and how long ago you were last noticed here; and
         the game it's playing, for their home screens' lobby (screens/lobby.py)."""
-        beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.setting("accent")}
+        beacon = {"pietato": 1, "id": self.share_id, "port": WEB_PORT, "host": host, "accent": self.accent_shared()}
         if full:
             beacon.update(doing=self.group_doing(), hw=self.group_hardware())
             you = self.you_at
@@ -2008,6 +2019,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             if quick or was == "live":                 # (a live channel: why it stopped, whenever it did)
                 self.player_report(p, f"a {was or 'player'}")
             self.proc = None
+            if quick and was == "radio" and self.sound_share_again(p):
+                return                                 # (it couldn't share its sound for the bars: played without)
             if quick and self.retry:              # try the backup way once
                 args, target = self.retry
                 self.retry = None

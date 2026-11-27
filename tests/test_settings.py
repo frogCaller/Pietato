@@ -123,7 +123,7 @@ m.press("right"); m.press("left")                        # (◀▶ on a page's r
 assert m.set_page == "root" and keys()[m.set_sel] == "appearance" and m.setting("wallpaper") == "Midnight"
 m.press("a")                                             # A: its page, on the first of its settings
 assert (m.set_page, m.set_sel) == ("appearance", 0), (m.set_page, m.set_sel)
-assert [label for _, label, _ in m.settings_rows()] == ["Background", "Home screen style", "Accent colour", "App pages",
+assert [label for _, label, _ in m.settings_rows()] == ["Background", "Home screen style", "Accent color", "App pages",
                                                         "Full screen apps"], m.settings_rows()
 snap("settings_appearance")
 m.press("right"); print("background:", m.setting("wallpaper"))      # Dusk
@@ -131,6 +131,45 @@ assert m.setting("wallpaper") == "Dusk"
 m.press("down"); m.press("down"); assert keys()[m.set_sel] == "accent"
 m.press("right"); print("accent:", m.setting("accent"), g.ACCENT)
 assert m.setting("accent") == [a for a, _ in g.ACCENTS][1]
+# Accent color's last choice, Custom: your own colour, from three sliders under it (red, green, blue)
+import pitato.theme as TH
+m.press("left"); m.press("left")                         # (Blue, then round to the last: Custom)
+labels = [label for _, label, _ in m.settings_rows()]
+print("custom:", m.setting("accent"), m.setting("accent_rgb"), TH.ACCENT, labels)
+assert m.setting("accent") == "Custom" and m.setting("accent_rgb") == "96,170,228" and TH.ACCENT == (96, 170, 228)
+assert labels == ["Background", "Home screen style", "Accent color", "Red", "Green", "Blue", "App pages",
+                  "Full screen apps"], labels             # (it starts as the one you had: Blue's red, green and blue)
+m.press("down"); assert keys()[m.set_sel] == "accent_r"
+m.press("right"); m.press("right"); m.press("right", repeat=True)   # (◀▶ move it; held, on and on)
+assert m.setting("accent_rgb") == "111,170,228" and TH.ACCENT == (111, 170, 228), m.setting("accent_rgb")
+for _ in range(30):
+    m.press("left", repeat=True)
+assert m.setting("accent_rgb") == "0,170,228", m.setting("accent_rgb")   # (and no further than 0)
+m.press("down"); m.press("down")
+for _ in range(10):
+    m.press("right", repeat=True)
+assert m.setting("accent_rgb") == "0,170,255" and TH.ACCENT == (0, 170, 255), m.setting("accent_rgb")   # (nor 255)
+m.press("a")                                             # (A on a slider: nothing)
+assert m.setting("accent_rgb") == "0,170,255"
+snap("settings_custom")
+TH.set_custom((255, 240, 120))                           # (a light one, on a light page: darker, to read)
+light = TH.accent_for("Custom", "Light")
+seen = 0.299 * light[0] + 0.587 * light[1] + 0.114 * light[2]
+assert seen <= TH.LIGHT_INK + 0.5 and light[0] > light[1] > light[2] and TH.accent_for("Custom", "Dark") == (255, 240,
+                                                                                                             120), light
+assert TH.accent_for("Custom", "Light") != TH.accent_for("Blue", "Light")
+TH.set_custom((0, 170, 255))
+assert m.accent_shared() == "Blue", m.accent_shared()    # (your others: the named one nearest it)
+m.set_setting("accent_rgb", "150,120,225")
+assert m.accent_shared() == "Purple" and TH.ACCENT == (150, 120, 225)
+m.set_sel = keys().index("accent")
+m.press("left")                                          # (back to a named one: no sliders, Custom's colour kept)
+assert m.setting("accent") == "White" and "accent_r" not in keys() and m.setting("accent_rgb") == "150,120,225"
+assert m.accent_shared() == "White"
+m.press("right")
+assert m.setting("accent") == "Custom" and TH.ACCENT == (150, 120, 225)   # (Custom again: as it was left)
+m.settings_pick("accent", [a for a, _ in g.ACCENTS][1])
+assert m.setting("accent") == [a for a, _ in g.ACCENTS][1] and "accent_r" not in keys()
 m.press("up"); m.press("up"); m.press("up")              # (round the top: the last of them)
 assert keys()[m.set_sel] == "app_full"
 m.press("b")                                             # B: Settings' first page again, on Appearance

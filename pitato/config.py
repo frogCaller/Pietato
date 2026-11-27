@@ -6,7 +6,7 @@ import re
 import stat
 import tempfile
 
-from .theme import ACCENTS, LOOKS
+from .theme import ACCENTS, CUSTOM, LOOKS
 
 
 CONTROL_PORT = 5480        # the web page (webui.py) works media mode through this, on this Pi only
@@ -87,7 +87,7 @@ SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on 
     "appearance": [
         ("wallpaper", "Background", WALLPAPERS),
         ("home_style", "Home screen style", ["Bright", "Glass", "Cards"]),
-        ("accent", "Accent colour", [a for a, _ in ACCENTS]),
+        ("accent", "Accent color", [a for a, _ in ACCENTS] + [CUSTOM]),   # (Custom: your own, its sliders under it)
         ("look", "App pages", list(LOOKS)),   # the pages inside the apps, dark (as ever) or light; the home screen
                                               # keeps its background (theme.py's set_look)
         ("app_full", "Full screen apps", ["Off", "On"]),   # the apps without the bars along the top and bottom
@@ -106,6 +106,8 @@ SETTINGS_PAGES = {   # Settings' pages of settings, each opened from its row on 
                                                                     # sits the other way up (while one of them is)
     ],
 }
+ACCENT_PARTS = (("accent_r", "Red"), ("accent_g", "Green"), ("accent_b", "Blue"))   # your own accent's sliders
+ACCENT_STEP = 5                  # ...how far ◀▶ move one, 0 to 255 (held: on and on)
 SETTINGS_DEFAULT = {"wallpaper": "Midnight", "picture": "", "accent": "Blue", "look": "Dark", "clock": "12-hour",
                     "units": "°F", "start": "Home screen", "location": None,
                     "screen": "Fit", "sound": "Auto", "sim_full": "Off", "bot_mode": "chat",

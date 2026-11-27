@@ -6,8 +6,8 @@ import subprocess
 import threading
 import time
 
-from ..theme import ACCENT, BG, BODY, DONE, LINE, MUTED, ROW, TEXT, WARN
-from ..config import ATTRACT_CHOICES, SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
+from ..theme import ACCENT, accent_for, BG, BODY, CUSTOM, custom_rgb, DONE, LINE, MUTED, rgb_text, ROW, TEXT, WARN
+from ..config import ACCENT_PARTS, ACCENT_STEP, ATTRACT_CHOICES, SETTINGS, SETTINGS_PAGES, TURN_DEGREES, WALLPAPERS
 from .oled import HAT_FLIP
 from ..system import has_desktop, is_pc, nm, nm_why, run_out, wifi_dev, wifi_saved, wifi_scan
 from ..screen import (SQUARE_SIZES, boot_resolution, bt_output_name, bt_outputs, hdmi_screens, res_name,
@@ -24,6 +24,7 @@ from ..inputs import HALT_WAIT
 RES_KEEP = 20          # Settings > Screen > Resolution: seconds to keep a new size, or the Pi goes back (it may show
                        # nothing)
 RES_START = 40         # ...and before that, how long the Pi may take to start and ask
+SLIDER_HUES = ((236, 90, 90), (96, 200, 120), (90, 150, 240))   # Accent color's sliders (Custom): red, green, blue
 
 
 class SettingsScreen:
@@ -106,6 +107,8 @@ class SettingsScreen:
                     continue
                 label = self.hat_flip_label()
             here.append((key, label, choices))
+            if key == "accent" and self.setting("accent") == CUSTOM:   # (your own colour: its sliders, under it)
+                here += [(k, name, None) for k, name in ACCENT_PARTS]
         return here
 
     def settings_root_rows(self):
@@ -190,6 +193,9 @@ class SettingsScreen:
             self.eink_pick(value)                      # (the e-Paper HAT: drawn on, or white and off)
         elif key == HAT_FLIP:
             self.hat_flip_pick(value)                  # (...whichever's on, which way up)
+        elif key == "accent" and value == CUSTOM and not self.setting("accent_rgb"):   # (your own, the first time:
+            self.set_setting("accent_rgb", rgb_text(accent_for(self.setting("accent"), "Dark")))   # the one you had)
+            self.set_setting(key, value)
         else:
             self.set_setting(key, value)
             if (key, value) == ("start", "Desktop"):   # (how to come back, said as it's picked)
@@ -238,6 +244,8 @@ class SettingsScreen:
         elif key == "pad_swap" and name in ("left", "right", "a"):
             if not repeat:
                 self.pad_swap()
+        elif key in dict(ACCENT_PARTS) and name in ("left", "right"):   # (your own accent's sliders: held, on and on)
+            self.accent_nudge(key, ACCENT_STEP if name == "right" else -ACCENT_STEP)
         elif name in ("left", "right") and extra and not repeat:
             cur = self.settings_now(key)
             i = extra.index(cur) if cur in extra else 0
@@ -278,6 +286,31 @@ class SettingsScreen:
             self.toast("Back to each controller's standard buttons", 3)
         self.dirty = True
         return None
+
+    def accent_nudge(self, key, by):
+        """One of your own accent's sliders moved: its red, green or blue, from 0 to 255."""
+        rgb = list(custom_rgb())
+        i = [k for k, _ in ACCENT_PARTS].index(key)
+        rgb[i] = max(0, min(255, rgb[i] + by))
+        self.set_setting("accent_rgb", rgb_text(rgb))
+
+    def accent_slider(self, d, key, label, y, rh, mid, on):
+        """One of your own accent's sliders: its name (a little in, under Accent color's), the line it slides along
+        (lit in its own colour as far as it's up), its knob, and the number."""
+        F, W = self.fonts, self.fb.w
+        i = [k for k, _ in ACCENT_PARTS].index(key)
+        v = custom_rgb()[i]
+        d.text((48, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
+        x1 = W - 28 - 46
+        x0 = x1 - min(280, int(W * 0.42))
+        hue = SLIDER_HUES[i]
+        at = x0 + (x1 - x0) * v / 255
+        d.rounded_rectangle((x0, mid - 3, x1, mid + 3), radius=3, fill=LINE)
+        d.rounded_rectangle((x0, mid - 3, max(x0 + 6, at), mid + 3), radius=3, fill=hue)
+        d.ellipse((at - 8, mid - 8, at + 8, mid + 8), fill=TEXT if on else BODY, outline=hue, width=2)
+        d.text((W - 28, mid), str(v), font=F["row"], fill=ACCENT if on else MUTED, anchor="rm")
+        if on:
+            self.tap_arrows(y, y + rh, x0, W - 28)
 
     # -- Background: every one of them on a page, each a little picture -------------------------------------------
     WALL_PIC = (104, 56)       # a background's picture on the page (the GPi Case's screen; a bigger one's are bigger)
@@ -846,6 +879,9 @@ class SettingsScreen:
                     face, back = face_colours(self.bot_colour(), self.bot_back())
                     d.ellipse((x0 - 30, mid - 9, x0 - 12, mid + 9), fill=face if key == "f_colour" else back,
                               outline=LINE)
+                continue
+            if key in dict(ACCENT_PARTS):              # (your own accent's sliders)
+                self.accent_slider(d, key, label, y, rh, mid, on)
                 continue
             d.text((30, mid), label, font=F["row"], fill=TEXT if on else BODY, anchor="lm")
             value = (("Hotspot" if self.hotspot_on() else self.current_ssid() or "Not connected") if key == "wifi" else

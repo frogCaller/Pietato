@@ -95,7 +95,12 @@ a.set_setting("accent", "Purple")
 b.camera.heard("192.168.1.77", json.dumps(a.share_beacon("kitchen")).encode())
 check(f"...heard: its colour, for a dot beside its name ({b.pie.peer_accent(A_URL)})",
       b.pie.peer_accent(A_URL) == dict(g.ACCENTS)["Purple"])
+a.set_setting("accent", "Custom")
+a.set_setting("accent_rgb", "236,110,96")
+said_c = a.share_beacon("kitchen")
 a.set_setting("accent", "Blue")
+check(f"...your own colour (Custom) said as the named one nearest it ({said_c.get('accent')}): your others know "
+      f"those", said_c.get("accent") == "Red")
 b.camera.heard("192.168.1.78", json.dumps({"pietato": 1, "id": "other1", "port": 5432, "host": "kitchen",
                                            "accent": "Chartreuse"}).encode())
 check("...not one of the colours: none", b.pie.peer_accent("http://192.168.1.78:5432") is None)
