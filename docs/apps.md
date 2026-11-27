@@ -13,7 +13,8 @@ Pietato starts on a home screen of apps:
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
 - **Music** and **Radio**. Music is a grid of your songs' covers; going right from the last song takes you back
   to the first. Now playing shows the cover big, with a glow in its colour that follows the beat while the
-  battery saver is off. A song's cover is a `cover.jpg` or `folder.jpg` in its folder, or the picture inside its
+  battery saver is off, and bars beside it that move with the music (where there's room under the song's name).
+  A song's cover is a `cover.jpg` or `folder.jpg` in its folder, or the picture inside its
   file. For songs with neither, press Y on Music. Covers your other Pietatos have for the same songs (the same
   file name and size) are copied from them. The rest are looked up in the iTunes Store's search, then on
   [MusicBrainz](https://musicbrainz.org) and the Cover Art Archive (free, no account), by the song's name and
@@ -338,7 +339,9 @@ d-pad moves from cell to cell, A turns one on or off, and B starts the tune and 
 has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
 Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like, and SELECT changes
 the scale. Each row has its own colour, the steps are numbered over the grid, and the column that's playing is
-lit. Under the grid, bars show the sound as it plays, low notes at the left.
+lit. Under the grid, when the screen has room (the GPi Case's has), are four buttons: Tempo, Key, Scale and Lead
+(the lead's sound). Press ▼ from the bottom row to reach them, ◀▶ to go from one to the next, and A to change it;
+tapping one does the same. Under them, bars show the sound as it plays, low notes at the left.
 
 The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
 the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new

@@ -1,7 +1,8 @@
 """Music's pages. Its songs: a grid of their covers, each with its name under it, the picked one raised a little with
 a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows
-the beat while the battery saver's off), what's playing beside it, how far through it is and the buttons under it, all
-on a soft wash of the cover. A song with no cover, or a station: a sign in its place, and the accent colour's glow.
+the beat while the battery saver's off), what's playing beside it (and under that, while the glow follows the beat,
+the sound as bars, if there's room), how far through it is and the buttons under it, all on a soft wash of the
+cover. A song with no cover, or a station: a sign in its place, and the accent colour's glow.
 (SELECT on Now playing: lofi art on the whole screen instead, screens/player.py.)"""
 import collections
 import os
@@ -13,7 +14,7 @@ from ..config import CACHE_DIR
 from ..cover import (cover_at_hand, cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir,
                      found_file, GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded, tidy)
 from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
-from ..ear import Ear
+from ..ear import BARS, Ear
 from ..library import LIBRARY, LISTEN_KINDS
 from ..util import cache_name, clock, find_files
 
@@ -23,6 +24,9 @@ POS_NEAR = 0.3                   # the player's word on where the song is, this 
                                  # run of it (its tenths of a second evened out); further: a jump, taken as said
 POS_KEPT = 3.0                   # ...and how long its word's good for (seconds)
 GLOW_MOST = 0.68                 # how much of the glow's colour shows at its strongest (on a beat)
+BARS_LEAST, BARS_MOST = 36, 0.36  # Now playing's bars: no shorter than this (the menus' pixels), no taller than so
+                                 # much of the cover's side: under what's playing, where there's room
+BARS_FALL = 0.6                  # ...what a bar keeps of its height each frame as it falls
 GRID_LIT = 0.75                  # ...and round the picked cover in Music's grid
 COVERS_KEPT = 12                 # songs' covers kept ready for Now playing (each COVER_SIDE a side at most)
 GRID_GAP = 16                    # Music's grid: the least between two covers (the menus' pixels)...
@@ -56,6 +60,7 @@ class MusicScreen:
     songs_named = None           # this one's songs by name and size, for another of yours that asks for covers:
                                  # (the list they were made from, {(name, size): path})
     ear = None                   # listening to the song for its beats (ear.py), while the glow follows them
+    now_bars = None              # Now playing's bars: (their box, how high each is drawn), while they're on it
     pulse_next = 0.0             # when the glow's next frame is due
     pos_off, pos_off_at = None, 0.0   # where the song is, less the clock (as the player last said, and when)
 
@@ -205,6 +210,17 @@ class MusicScreen:
         ear = self.ear
         return glow_step(ear.level(self.heard_now())) if ear is not None and self.pulse_wanted() else 0
 
+    def now_levels(self, was=None):
+        """Now playing's bars as they're drawn now: up at once to what the ear heard there, falling back a little
+        each frame (was: as they were drawn); flat while there's nothing to show (paused, a moment after a seek)."""
+        ear = self.ear
+        heard = getattr(ear, "levels", None) if ear is not None and self.pulse_wanted() else None
+        look = heard(self.heard_now()) if heard is not None else None
+        look = look or (0.0,) * BARS
+        if was is None:
+            return tuple(look)
+        return tuple(max(v, round(w * BARS_FALL, 3)) if w * BARS_FALL >= 0.01 else v for v, w in zip(look, was))
+
     def pulse_frame(self):
         """The glow a frame on: just the cover and its glow go to the screen, the rest as the page was drawn. (The
         whole page again if something else has been on the screen since; none while a notice or a bubble's up.)"""
@@ -216,11 +232,21 @@ class MusicScreen:
             return
         img, pics, was, shown = shot
         step = self.pulse_step()
-        if step == was:
+        bars = self.now_bars
+        levels = self.now_levels(bars[1]) if bars is not None else None
+        if step == was and (bars is None or levels == bars[1]):
             return
-        box = pics["box"]
-        img.paste(self.now_lit(pics, step), (box[0], box[1]))
-        fb.show_part(img, box)
+        if step != was:
+            box = pics["box"]
+            img.paste(self.now_lit(pics, step), (box[0], box[1]))
+            fb.show_part(img, box)
+        if bars is not None and levels != bars[1]:   # (the bars: their box, the wash behind them again)
+            from ..fine import ImageDraw
+            box = bars[0]
+            img.paste(pics["wash"].crop(box), (box[0], box[1]))
+            self.now_bars_draw(ImageDraw.Draw(img), box, levels, pics["colour"])
+            fb.show_part(img, box)
+            self.now_bars = (box, levels)
         self.now_shot = (img, pics, step, getattr(fb, "frames", None))
         self.taps_kept(shown)                          # (its buttons are where they were, for a tap on the web page's
                                                        #  copy of the screen)
@@ -281,6 +307,19 @@ class MusicScreen:
             self.cover_sign(ImageDraw.Draw(part), reach + tile.width / 2, reach + tile.height / 2, pics["sign"])
         pics["lit"][step] = part
         return part
+
+    def now_bars_draw(self, d, box, levels, colour):
+        """Now playing's bars in their box (levels: each 0 to 1, low notes at the left), in the glow's colour: the
+        louder, the brighter."""
+        lit, _, empty = self.now_inks(colour)
+        x0, y0, x1, y1 = box
+        bw = (x1 - x0) / max(1, len(levels))
+        gap = max(1, round(bw * 0.3))
+        for k, v in enumerate(levels):
+            h = max(2, round(v * (y1 - y0)))
+            bx = x0 + k * bw
+            d.rounded_rectangle((bx, y1 - h, bx + bw - gap, y1), radius=min(2, h // 2),
+                                fill=mixed(empty, lit, 0.45 + 0.55 * v))
 
     def cover_sign(self, d, x, y, sign):
         """What stands in for a cover, in the middle of its square: a note, or a station's little broadcast sign."""
@@ -385,6 +424,13 @@ class MusicScreen:
             d.text((tx, foot), self.fit(d, "Next: " + nxt, F["small"], tw), font=F["small"], fill=soft, anchor="lm")
             foot -= 22
         d.text((tx, foot), small, font=F["small"], fill=soft, anchor="lm")
+        self.now_bars = None
+        low, high = foot - 22, y + (22 if record else 6)   # (the bars: under the words, over the small ones, as far
+        if self.pulse_wanted() and low - high >= BARS_LEAST:   # from the cover and the screen's edge as the cover is
+            box = (ax + side + ax, low - min(low - high, round(side * BARS_MOST)), W - ax, low)   # from its own edge)
+            levels = self.now_levels()
+            self.now_bars_draw(d, box, levels, colour)
+            self.now_bars = (box, levels)
 
         bar = lay["bar"]
         if not radio:

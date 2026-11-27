@@ -8,7 +8,8 @@ with its own; Y changes a little of it (mutated: a few cells, a few notes), as o
 is as likely to be on as it is in a tune made afresh, so however often, it's still a tune.
 This is the tune itself, and how its page is drawn: its line (the key, the tempo, playing or not), the grid in one
 colour (the accent: a cell that's on, lit; the column the bar's on, outlined; the cell ◀▶▲▼ have moved to, ringed),
-and under it the sound as bars, low notes at the left. screens/sequencer.py has its buttons, and what it tells the
+under it, when the page has room, four buttons (its tempo, its key, its scale and the lead's sound: A on one, its
+next), and the sound as bars, low notes at the left. screens/sequencer.py has its buttons, and what it tells the
 Soundboard's player (its cells as part of the loop, so they're heard at their very moments)."""
 import math
 import random
@@ -24,6 +25,11 @@ DRUMS = ("Starter/Kick.wav", "Starter/Snare.wav", "Starter/Hi-hat.wav")   # the 
 LEAD = "Tones/Pluck"             # ...and the lead's sound (one of the player's own: Bounce's Tones)
 ROW_HUES = ("Red", "Gold", "Teal", "Purple")   # each row's own colour on the page (theme.py's): its mark, its cells
 HEAD_BAND = 0.07                 # the column the bar's on: this much lighter than the page, from its number down
+KNOBS = ("Tempo", "Key", "Scale", "Lead")   # its buttons under the grid, one under each beat: A on one, its next
+TEMPOS = (60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)   # ...the Tempo one's, round and round (START's card:
+                                 # any tempo)
+BARS_LEAST = 48                  # px the bars keep at least, under the buttons: a page with less room has no buttons
+BARS_MOST = 0.6                  # ...and at most, of the grid's height: a taller page has the rest above and below
 GAINS = (0.6, 0.5, 0.4, 0.85)    # how loud each row's played, of its sound as it is: a mix (the starter kick and
 #                                  snare are as loud as a sound can be: three sounds at once that loud are too much)
 NOTES = 8                        # the lead's notes: the scale's first so many, from the key up (0: the key's own)
@@ -153,7 +159,9 @@ def next_step_in(clock, now):
 # ---- its page ------------------------------------------------------------------------------------------------------
 def layout(box, big):
     """Where its parts go in box (the page under its top line): the steps' numbers' row, the grid's cells' corners
-    and size, the rows' names' left and right edges, and the bars' box."""
+    and size, the rows' names' left and right edges, its buttons' boxes (one under each beat; none on a page without
+    room for them), and the bars' box: no taller than so much of the grid, a taller page's room left above and below
+    it all."""
     x0, y0, x1, y1 = box
     edge = 12
     label = 124 if big else 74
@@ -161,16 +169,28 @@ def layout(box, big):
     cw = int((x1 - x0 - 2 * edge - label - 12 * gap - 3 * beat_gap) // STEPS)
     ch = cw                                            # (square, and as far apart down as across: as a beat's are)
     pitch = ch + gap
-    nums = y0 + (14 if big else 10)
-    gx, gy = x0 + edge + label, nums + (14 if big else 10)
+    num = 14 if big else 10                            # (the steps' numbers this far down, the grid as far again)
+    under = 16 if big else 8                           # (between the grid, the buttons and the bars)
+    kh = max(52 if big else 40, round(ch * 0.6))       # (a button's height)
+    grid_h = ROWS * pitch - gap
+    room = y1 - 8 - (y0 + 2 * num + grid_h + under)    # (the bars', and the buttons' if there are any)
+    knobs = room - kh - under >= BARS_LEAST
+    bars_h = room - (kh + under if knobs else 0)
+    spare = max(0, bars_h - round(grid_h * BARS_MOST))
+    y0 += spare // 2
+    nums = y0 + num
+    gx, gy = x0 + edge + label, nums + num
     xs, x = [], gx
     for c in range(STEPS):
         xs.append(x)
         x += cw + (beat_gap if c % 4 == 3 else gap)
     ys = [gy + r * pitch for r in range(ROWS)]
-    bars = (x0 + edge, ys[-1] + ch + (16 if big else 8), x1 - edge, y1 - 8)
+    ky = ys[-1] + ch + under
+    keys = [(xs[4 * k], ky, xs[4 * k + 3] + cw, ky + kh) for k in range(len(KNOBS))] if knobs else []
+    top = ky + kh + under if knobs else ky
+    bars = (x0 + edge, top, x1 - edge, top + bars_h - spare)
     return {"xs": xs, "ys": ys, "cw": cw, "ch": ch, "left": x0 + edge, "label": gx - (16 if big else 12),
-            "bars": bars, "nums": nums}
+            "bars": bars, "nums": nums, "knobs": keys}
 
 
 def lit_tile(cw, ch, colour, head, back):
@@ -241,6 +261,24 @@ def draw_grid(img, d, lay, view, fonts, tiles):
                                     fill=dark if c // 4 % 2 == 0 else dark2)
             if view["cursor"] == (r, c):
                 d.rounded_rectangle((x - 4, y - 4, x + cw + 3, y + ch + 3), radius=radius + 3, outline=TEXT, width=2)
+
+
+def draw_knobs(d, lay, view, fonts):
+    """Its buttons under the grid (the page has room for them): each its name over what it's set to, and a ring
+    round the one ◀▶▲▼ have moved to."""
+    from .theme import BG, BODY, co_mix, MUTED, ROW, TEXT
+    values = (f"{view['bpm']} BPM", view["key"], view["scale"], view["rows"][LEAD_ROW])
+    here = view["cursor"][1] // 4 if view["cursor"][0] == ROWS else None
+    for k, ((x0, y0, x1, y1), name, value) in enumerate(zip(lay["knobs"], KNOBS, values)):
+        h = y1 - y0
+        radius = max(8, h // 5)
+        d.rounded_rectangle((x0, y0, x1 - 1, y1 - 1), radius=radius, fill=co_mix(BG, ROW, 0.9),
+                            outline=co_mix(ROW, MUTED, 0.35))
+        cx = (x0 + x1) / 2
+        d.text((cx, y0 + h * 0.31), name, font=fonts["knob"], fill=BODY if k == here else MUTED, anchor="mm")
+        d.text((cx, y0 + h * 0.68), value, font=fonts["knob_b"], fill=TEXT, anchor="mm")
+        if k == here:
+            d.rounded_rectangle((x0 - 4, y0 - 4, x1 + 3, y1 + 3), radius=radius + 3, outline=TEXT, width=2)
 
 
 def draw_head(img, d, lay, view, fonts, tiles, step):

@@ -527,7 +527,8 @@ class Soundboard(Sim):
         return {"bold": self.font(22 if big else 18, bold=True), "small": self.font(15 if big else 13),
                 "row": self.font(19 if big else 14), "row_b": self.font(19 if big else 14, bold=True),
                 "note": self.font(15 if big else 11, bold=True), "arrow": 6 if big else 5,
-                "step": self.font(13 if big else 10), "step_b": self.font(13 if big else 10, bold=True)}
+                "step": self.font(13 if big else 10), "step_b": self.font(13 if big else 10, bold=True),
+                "knob": self.font(13 if big else 11), "knob_b": self.font(17 if big else 14, bold=True)}
 
     def seq_cells(self, cw, ch):
         """A cell that's on, as it's drawn (and as it is while the bar's on it), in each row's own colour: pictures
@@ -557,6 +558,7 @@ class Soundboard(Sim):
                        [("dot", _HUES["Green"] if v["playing"] else co_mix(BG, MUTED, 0.8)),
                         ("text", f"{v['bpm']} BPM", True, TEXT)]])
             SQ.draw_grid(tile, d, lay, v, fonts, tiles)
+            SQ.draw_knobs(d, lay, v, fonts)
             for k in [k for k in self.tiles if k[0] == "seq"]:
                 del self.tiles[k]                      # (the one before: not wanted again soon)
             self.tiles[key] = tile
@@ -592,6 +594,8 @@ class Soundboard(Sim):
         for r, y in enumerate(lay["ys"]):              # (a tap on a cell: on or off, as A there)
             for c, x in enumerate(lay["xs"]):
                 self.taps.append(((x0 + x, y0 + y, x0 + x + cw, y0 + y + ch), ("seq", r, c)))
+        for k, (kx0, ky0, kx1, ky1) in enumerate(lay["knobs"]):   # (on a button under it: its next, as A there)
+            self.taps.append(((x0 + kx0, y0 + ky0, x0 + kx1, y0 + ky1), ("seq", SQ.ROWS, 4 * k)))
 
     @staticmethod
     def cross_marks(d, x0, y0, boxes):

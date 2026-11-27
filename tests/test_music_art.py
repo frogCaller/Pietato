@@ -2,10 +2,13 @@
 it out once, kept in the cache, and a song with none isn't looked into twice), else the only picture in its folder;
 the colour its glow takes (the one there's most of, not a stir of them all; none from a grey cover). The ear: beats
 found a moment ahead of what's heard, kept by their place in the song, a jump starting it again, the glow dying away
-after each. Now playing: the cover on the left with its glow, a wash of it behind, the words, the line in the cover's
-colour, the buttons (each tappable); a note for a song with no cover, a sign for a station; the glow following the
-beat with the battery saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off
-the page. Music's grid: every song a square with its cover (made small once and kept on disk, a folder's shared
+after each; and the sound as bars, a look every twentieth of a second, by its place in the song too. Now playing:
+the cover on the left with its glow, a wash of it behind, the words, the line in the cover's colour, the buttons
+(each tappable); a note for a song with no cover, a sign for a station; the glow following the beat with the battery
+saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off the page; and the
+bars under the words (just their box drawn as they move, falling back, flat with nothing to show; none with no room
+for them, the battery saver on, or a station). Music's grid: every song a square with its cover (made small once and
+kept on disk, a folder's shared
 by its songs), its name under it, the picked one bigger with a glow all round it, the D-pad moving about it (off
 either end, round to the other: right on the last song is the first; a held D-pad stops at the ends), A
 playing as before, only the covers near the screen looked at, another tab still a list. Covers from the internet
@@ -206,14 +209,27 @@ beat = max(p for p in found if p <= 4.01)
 lv = [ear.level(beat - 0.02), ear.level(beat + 0.03), ear.level(beat + 0.2), ear.level(beat + 0.45)]
 check(f"the glow at a beat: little left of the one before, lit on it, dying away after "
       f"({[round(v, 2) for v in lv]})", lv[0] < 0.2 and lv[1] > 0.45 and lv[1] > lv[2] > lv[3] and lv[3] < 0.15)
+low = int(np.argmax(E.bars_bands()[0] > 60 * E.BARS_WIN / RATE)) - 1   # (the bar the kick's 60 Hz is in)
+mid = int(np.argmax(E.bars_bands()[0] > 440 * E.BARS_WIN / RATE)) - 1  # (...and the note's 440)
+on, off = ear.levels(beat + 0.1), ear.levels(beat + 0.45)     # (a look: what's heard the 43 ms before it)
+whens = [round(w, 3) for w, _ in ear.looks.looks]
+check(f"its bars, a look every {E.BARS_EVERY} s of the song ({whens[-3:]}), {E.BARS} of them: just after a kick, the "
+      f"kick's bar high ({on and on[low]}), all but gone before the next ({off and off[low]}); the note's steady "
+      f"({on and on[mid]}, {off and off[mid]}); nothing at the top ({on and on[-1]})",
+      on is not None and off is not None and len(on) == E.BARS and on[low] > 0.7 and off[low] < 0.35
+      and abs(on[mid] - off[mid]) < 0.12 and 0.35 < on[mid] < 0.8 and on[-1] == 0.0 == off[-1]
+      and all(abs(b_ - a_ - E.BARS_EVERY) < 1e-6 for a_, b_ in zip(whens, whens[1:])))
+check("...and none for where it doesn't know (paused), nor where it hasn't listened yet",
+      ear.levels(None) is None and ear.levels(ear.at + 1.0) is None)
 place[0] = 3.2
 check("a little way back, in what it's listened to already: no need to start again", not ear.step()
       and started == [2.0])
 first = ear.proc
 place[0] = 20.0
 ear.step()
-check("a jump on: the first FFmpeg stopped, another from there, the old beats let go", started == [2.0, 20.0]
-      and first.killed and all(p >= 20.0 for p, _ in ear.beats))
+check("a jump on: the first FFmpeg stopped, another from there, the old beats and bars let go",
+      started == [2.0, 20.0] and first.killed and all(p >= 20.0 for p, _ in ear.beats)
+      and all(w >= 20.0 for w, _ in ear.looks.looks) and ear.levels(3.9) is None)
 place[0] = 1.0
 ear.step()
 check("...and a jump back past where it began", started == [2.0, 20.0, 1.0])
@@ -451,11 +467,14 @@ made = []
 
 class PretendEar:
     def __init__(self, src, where):
-        self.src, self.where, self.closed, self.lit = src, where, False, 0.0
+        self.src, self.where, self.closed, self.lit, self.bars = src, where, False, 0.0, None
         made.append(self)
 
     def level(self, place):
         return self.lit if place is not None else 0.0
+
+    def levels(self, place):
+        return self.bars if place is not None else None
 
     def close(self):
         self.closed = True
@@ -548,6 +567,59 @@ m.tick()
 m.kind, m.cur = "radio", station
 m.tick()
 check("a station on it: no ear", m.ear is None and made[2].closed and len(made) == 3)
+
+# ---- Now playing's bars --------------------------------------------------------------------------------------------
+playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
+m.tick()
+bear = made[-1]
+m.pos_said(84.0)
+ramp = tuple(round(k / (M.BARS - 1), 3) for k in range(M.BARS))
+bear.bars = ramp
+p0 = shot(m)
+lay = m.now_layout()
+nb = m.now_bars
+lit_ink, _, empty_ink = m.now_inks(m.now_made[1]["colour"])
+bx0, by0, bx1, by1 = nb[0] if nb else (0, 0, 1, 1)
+bw = (bx1 - bx0) / M.BARS
+top_bar = p0[by0 + 3, int(bx0 + (M.BARS - 1) * bw + bw * 0.35)]
+check(f"the bars on Now playing, the battery saver off: under the words, over the small ones ({nb and nb[0]}), as "
+      f"far from the cover and from the screen's edge as the cover is from its own ({lay['ax']} px), {M.BARS} of them "
+      f"across, the loudest up to their top in the glow's colour ({tuple(top_bar)}, {lit_ink}), the quietest a line",
+      nb is not None and nb[1] == ramp and bx0 == 2 * lay["ax"] + lay["side"] and bx1 == lay["W"] - lay["ax"]
+      and M.BARS_LEAST <= by1 - by0 <= round(lay["side"] * M.BARS_MOST) + 1 and by0 >= lay["ay"] + 90
+      and by1 <= lay["ay"] + lay["side"] - 52 and near(top_bar, lit_ink, 10)
+      and not near(p0[by1 - 8, int(bx0 + bw * 0.35)], lit_ink, 30))
+m.fb.parts.clear(); m.fb.shows = 0
+bear.bars = tuple(reversed(ramp))
+fake[0] += 0.07
+m.tick()
+want = tuple(max(v, round(w * M.BARS_FALL, 3)) if w * M.BARS_FALL >= 0.01 else v
+             for v, w in zip(reversed(ramp), ramp))
+check(f"the next frame, the sound changed: just their box goes to the screen ({m.fb.parts}), each bar up at once "
+      f"to what's heard, or falling back a little ({m.now_bars[1][-3:]})", m.fb.parts == [nb[0]]
+      and m.fb.shows == 0 and m.now_bars[1] == want)
+bear.bars = None
+for _ in range(14):
+    fake[0] += 0.07
+    m.tick()
+n_parts = len(m.fb.parts)
+fake[0] += 0.07
+m.tick()
+check(f"nothing to show (a moment after a seek): they fall back, then lie flat, and aren't drawn again "
+      f"({n_parts} frames)", all(v == 0.0 for v in m.now_bars[1]) and 3 <= n_parts <= 15
+      and len(m.fb.parts) == n_parts)
+playing(m, 2, "Harbour Lights Over the Water at the End of the Long Summer Night", "The Night Ferries", "Low Tide")
+shot(m)
+check("a name that takes three lines: no room left for them, none", m.now_bars is None)
+playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
+m.state["settings"]["battery"] = "On"
+shot(m)
+off_saver = m.now_bars
+m.state["settings"]["battery"] = "Off"
+m.kind, m.cur = "radio", station
+shot(m)
+check("...the battery saver on, or a station: none", off_saver is None and m.now_bars is None)
+m.tick()
 
 # ---- Music's grid --------------------------------------------------------------------------------------------
 def ready(m, secs=10.0):
@@ -1228,9 +1300,11 @@ while time.time() < end and len(ear.beats) < 4:
     time.sleep(0.05)
 got = [round(p, 2) for p, _ in ear.beats]
 ahead = ear.at - (time.monotonic() - t0 + 2.0)
+here = ear.levels(time.monotonic() - t0 + 2.0)
 check(f"FFmpeg and a song with a kick every half second: its beats found on the half seconds ({got}), "
-      f"{ahead:.1f} s ahead of what's heard", len(got) >= 4 and all(abs(p * 2 - round(p * 2)) < 0.1 for p in got)
-      and -0.5 < ahead <= E.EAR_AHEAD + 0.3)
+      f"{ahead:.1f} s ahead of what's heard, and its bars there ({here and len(here)})", len(got) >= 4
+      and all(abs(p * 2 - round(p * 2)) < 0.1 for p in got) and -0.5 < ahead <= E.EAR_AHEAD + 0.3
+      and here is not None and len(here) == E.BARS and max(here) > 0.3)
 ear.close()
 time.sleep(0.3)
 check("...closed: its FFmpeg gone", ear.proc is None or ear.proc.poll() is not None)
