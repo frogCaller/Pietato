@@ -10,7 +10,10 @@ button of which bank, kept in static/soundboard.txt:
     [My sounds]
     up = Laugh.mp3
 
-A bank has eight buttons (PADS). A sound is on one button at most. Media mode reads all this
+A bank has eight buttons (PADS). A sound is on one button at most. The starter pack has grown since the first one: a
+bank of it that the file's never been offered (its "packs" line says which it has; none: the first three) is added to
+it once, by itself, so an update's new sounds are there without anything being done; taken off again, they stay off.
+Media mode reads all this
 (screens/soundboard.py), its player plays the files (soundplay.py), and the web page changes it (webui.py). Each of
 those loads this file on its own, so there's nothing in it but Python's own (and numpy, where sound itself is looked
 at: a recording's silence trimmed)."""
@@ -36,10 +39,14 @@ STARTER_BANKS = (
                "x": "Clap", "y": "Cowbell", "a": "Snare", "b": "Kick"}),
     ("Arcade", {"up": "Jump", "left": "Laser", "right": "Pickup", "down": "Boing",
                 "x": "Power up", "y": "Explosion", "a": "Siren", "b": "Game over"}),
+    ("Calm", {"up": "Chime", "left": "Glass", "right": "Pad", "down": "Bowl",       # (soft ones, all in one key; the
+              "x": "Bell", "y": "Pluck", "a": "Kalimba", "b": "Marimba"}),          #  letters' play well as notes)
 )
+PACK_FIRST = ("Starter", "Drums", "Arcade")   # the pack's banks before a banks file said which it had been offered
 HEAD = ("# The Soundboard's banks (Apps > Soundboard): a bank's name in [brackets], then the sound on each of its\n"
         "# buttons (up, left, right, down, x, y, a, b). A sound is a file in your Soundboard folder, or one that came\n"
         "# with Pietato (Starter/...). \"off\" is one taken off its button: a new file goes on a button by itself.\n"
+        "# \"packs\" is which of Pietato's own banks this file has been offered (a new one is added to it, once).\n"
         "# The web page's Soundboard keeps this file for you.\n")
 
 
@@ -161,9 +168,23 @@ def parse(text):
     return banks, off
 
 
+def packs_seen(text):
+    """The starter pack's banks a banks file has been offered already (its "packs" line; a file from before there
+    was one: the first three)."""
+    for line in (text or "").splitlines():
+        key, eq, value = line.partition("=")
+        if eq and key.strip().lower() == "packs":
+            return {clean_bank(name) for name in value.split(",")} - {""}
+        if line.strip().startswith("["):
+            break                                      # (it's before the banks, or it isn't there)
+    return set(PACK_FIRST)
+
+
 def dumps(banks, off=()):
-    """...and written: the banks as they are, and what's off its button."""
+    """...and written: the banks as they are, what's off its button, and the pack's banks it's been offered (all
+    there are now: arrange has added any that were new)."""
     lines = [HEAD]
+    lines.append("packs = " + ", ".join(name for name, _ in STARTER_BANKS))
     lines += [f"off = {name}" for name in off]
     for b in banks:
         lines.append(f"[{b['name']}]")
@@ -185,8 +206,9 @@ def arrange(text, yours, starters):
     what static/soundboard.txt says (None: there's none yet, and the starter pack is on its three banks). A sound
     that isn't there any more is on no button; a sound on two buttons keeps the first. Each of yours that's on no
     button, and wasn't taken off one, goes on the first free button of My sounds (My sounds 2... as each fills):
-    placed, the ones this put there just now (something to write the file for). No banks at all: an empty My
-    sounds."""
+    placed, the ones this put there just now (something to write the file for). A bank of the starter pack that the
+    file's never been offered (packs_seen: one that came with an update) is added, after the pack's others: its
+    sounds are among placed too. No banks at all: an empty My sounds."""
     yours = [n for n in yours if sound_name(n)]
     have = set(starters) | set(yours)
     if text is None:
@@ -207,6 +229,8 @@ def arrange(text, yours, starters):
     mine = set(yours)
     off = [n for n in dict.fromkeys(off) if n in mine and n not in seen]
     gone, placed = set(off), []
+    if text is not None:
+        placed += pack_new(banks, starters, packs_seen(text))
     for name in yours:
         if name in seen or name in gone:
             continue
@@ -217,6 +241,28 @@ def arrange(text, yours, starters):
     if not banks:
         banks.append({"name": MINE, "pads": dict.fromkeys(PADS)})
     return banks, off, placed
+
+
+def pack_new(banks, starters, seen):
+    """The starter pack's banks that aren't among `seen` (new with an update), added: each with its sounds on their
+    own buttons (those that are there, and on no button yet), after the last of the pack's banks that's still
+    here (none: at the end). The sounds this put on buttons."""
+    on = {sid for b in banks for sid in b["pads"].values() if sid}
+    have, placed = set(starters), []
+    for name, pads in STARTER_BANKS:
+        if name in seen or len(banks) >= BANKS_MOST:
+            continue
+        row = {pad: f"{STARTER}{s}.wav" for pad, s in pads.items()}
+        row = {pad: sid for pad, sid in row.items() if sid in have and sid not in on}
+        if not row:
+            continue
+        own = {n for n, _ in STARTER_BANKS}
+        at = max((k for k, b in enumerate(banks) if b["name"] in own), default=len(banks) - 1) + 1
+        banks.insert(at, {"name": free_name([b["name"] for b in banks], name, ""),
+                          "pads": {pad: row.get(pad) for pad in PADS}})
+        placed += [row[pad] for pad in PADS if pad in row]
+        on |= set(row.values())
+    return placed
 
 
 def place(banks, sid):

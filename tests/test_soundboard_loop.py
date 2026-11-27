@@ -372,7 +372,7 @@ if not ONLY or "app" in ONLY:
     m.open_app(ai)
     m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
     m.press("a")
-    spin(4, lambda: m.board is not None and len(m.board.ready) == 24 and m.board.sound_ok)
+    spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
     s = m.sim_game()
     check(f"Apps > Soundboard: its buttons along the bottom: SELECT's the banks' now, and the loop's on START's card "
@@ -478,7 +478,8 @@ if not ONLY or "app" in ONLY:
     check(f"SELECT held: the next bank, once, and nothing dropped ({b.bank()['name']}, {len(b.layers)} layers)",
           b.at == 2 and len(b.layers) == 2 and b.take is None and toasts[-1:] != ["The last layer's gone"])
     tap("select")
-    tap("select")                                       # (Drums again)
+    tap("select")
+    tap("select")                                       # (Calm, Starter, and Drums again)
     label = drop()
     spin(0.1)
     check(f"its card's last row, {label!r} (START, ▲, A): the last layer's gone, the card too ({len(b.layers)} layer, "
@@ -622,7 +623,7 @@ if not ONLY or "app" in ONLY:
     spin(0.5)
     left = not m.board_shown() and b.proc is None
     m.press("a")
-    spin(3, lambda: b.proc is not None and len(b.ready) == 24)
+    spin(3, lambda: b.proc is not None and len(b.ready) == 32)
     spin(0.3)
     check("back in Apps and in again: the loop's as it was, and its player's told it again",
           left and [list(x) for x in b.layers] == had and loops() and loops()[-1].get("hits"))

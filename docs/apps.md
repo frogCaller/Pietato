@@ -296,7 +296,8 @@ card also has the bank, the volume, the loop's settings and Reverb, which plays 
 sounds play wherever Settings > Sound sends them.
 
 The Soundboard has three pages, and L and R go round them: its buttons, the Sequencer and Bounce. The name of
-the one you're on is at the top, between ◀ and ▶.
+the one you're on is at the top, between ◀ and ▶. HOME goes back to Apps from any of them, and the Soundboard
+opens again on the page you left.
 
 START's card records a loop. Record a loop is its first row, so it's START, then A. Play some buttons, then
 press START and A again (the row says Stop recording now): what you played goes round and round, each hit moved
@@ -327,8 +328,8 @@ Spin turns the shape either way, Speed is how fast the balls go, Reverb puts the
 plays each note again, from side to side, in time with the tempo, Tone makes them darker (◀) or brighter (▶), and
 Drone holds a soft note in the key under them. START pauses it, and its card has the sound (a bell, a marimba, a
 kalimba, glass, a pluck, a pad, or any sound on your Soundboard, played at each wall's note), the key, the scale
-(major, minor, pentatonic or blues) and Snap to the tempo (each note on the loop's beat). HOME goes back to the
-buttons. Your LEDs, if you have them, flash in the same colour.
+(major, minor, pentatonic or blues) and Snap to the tempo (each note on the loop's beat). Your LEDs, if you have
+them, flash in the same colour.
 
 The Sequencer is a grid of four sounds, a kick, a snare, a hi-hat and a lead, across the sixteen
 steps of a bar. A cell that's on plays its row's sound as the bar comes round to it, at the Soundboard's tempo. The
@@ -339,17 +340,18 @@ the scale. Under the grid, bars show the sound as it plays, low notes at the lef
 
 The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
 the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new
-tune and Clear all. HOME goes back to the buttons. The tune plays on under the Soundboard's buttons and under
-Bounce, in time with a loop you record there, and holding START on the buttons' page stops it with the rest. It's
-kept for next time.
+tune and Clear all. The tune plays on under the Soundboard's buttons and under Bounce, in time with a loop you
+record there, and holding START on the buttons' page stops it with the rest. It's kept for next time.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
 turns that off too.
 
-It comes with three banks of starter sounds: Starter, Drums and Arcade. Your own are wav, mp3 or ogg files in the
-`Soundboard` folder of your home folder. Put one there and a moment later it's on the first free button of a bank
-called My sounds.
+It comes with four banks of starter sounds: Starter, Drums, Arcade and Calm. Calm is the soft one: a kalimba, a
+marimba, a bell, a glass, a plucked string, a pad, a singing bowl and wind chimes, all in one key, so any of them
+sound right together. A bank that comes with an update is added to yours by itself, once, and the Soundboard says
+so; delete it and it stays away. Your own are wav, mp3 or ogg files in the `Soundboard` folder of your home folder.
+Put one there and a moment later it's on the first free button of a bank called My sounds.
 
 With a USB microphone plugged in, START's card has Record a sound. Press A when you're done, and the silence
 before and after is trimmed. Then press the button it should go on: L and R pick another bank first, SELECT

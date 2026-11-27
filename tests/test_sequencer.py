@@ -9,8 +9,9 @@ page (no row for it on START's card now), still till it plays; A turns a cell on
 lead cell's note or a drum's sound; a tap on a cell; B plays it: the loop told its cells, heard on their beats; the bar
 going along the grid, the sound's bars under it; Y; a new tune, Clear all (and nothing on its card that takes a change
 back, or leaves it); L and R round the Soundboard's three pages, the tune playing on under each; SELECT, its card;
-HOME, and the Soundboard's buttons over it; a layer being recorded there kept as L or R goes on; START held there;
-Bounce with it; the Soundboard left and opened again; the tune kept; a bigger screen, and drawn finely."""
+the Soundboard's buttons over it; a layer being recorded there kept as L or R goes on; START held there; Bounce with
+it; HOME on its page: out to Apps at once, and its page again when the Soundboard's opened; the tune kept; a bigger
+screen, and drawn finely."""
 import json, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -548,7 +549,7 @@ if not ONLY or "app" in ONLY:
     m.open_app(ai)
     m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
     m.press("a")
-    spin(4, lambda: m.board is not None and len(m.board.ready) == 24 and m.board.sound_ok)
+    spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
     KICK, SNARE, HAT = SQ.DRUMS
     tap("start")
@@ -919,10 +920,10 @@ if not ONLY or "app" in ONLY:
           f"{last_hints[1]}", b.card is None and m.sim_opts is None and b.seq_up and going >= 14
           and last_hints[1] == ("A", "Do it"))
 
-    # HOME: the Soundboard's buttons, over it
+    # L: the Soundboard's buttons, over it
     t1 = time.monotonic()
     tune = SQ.dumps(*b.seq)
-    home = m.sim_home()
+    tap("l")
     spin(0.3)
     s = m.sim_game()
     lp = dict(s.loop or {})
@@ -931,10 +932,10 @@ if not ONLY or "app" in ONLY:
             tap("select")
     tap("up")
     over = spin(1.0, lambda: b.bank()["pads"].get("up") in b.playing)
-    check(f"HOME: the Soundboard's buttons again, the tune still playing under them (its loop still told: "
+    check(f"L: the Soundboard's buttons again, the tune still playing under them (its loop still told: "
           f"{len(loops()[-1].get('hits') or [])} cells; no more bars asked for: {said('bars', t1)}); its line says "
           f"so ({lp}); a button's sound over it; the tune kept",
-          home is True and not b.seq_up and b.seq_on and s.seq is None and m.board_shown()
+          m.board_mode() == "pads" and not b.seq_up and b.seq_on and s.seq is None and m.board_shown()
           and said("bars", t1) == [{"do": "bars", "on": False}] and bool(loops()[-1].get("hits"))
           and lp.get("seq") is True and lp.get("layers") == 0 and lp.get("bars") == 1 and lp.get("rec") is False
           and m.sim_hints(s)[-3:] == [("SELECT", "Bank"), ("START", "More"), ("HOME", "Back")] and over
@@ -981,15 +982,16 @@ if not ONLY or "app" in ONLY:
     check(f"the Sequencer opened again and played (B); Bounce started from the web page meanwhile: Bounce's page, "
           f"the tune playing on with it ({why})", up_again and why is None and b.bounce is not None and not b.seq_up
           and b.seq_on and s.bounce is not None and s.seq is None and bool(loops()[-1].get("hits")))
-    home = m.sim_home()
-    tap("r")
-    check("...HOME leaves Bounce; R: its page again, still playing", home is True
+    tap("l")
+    check("...L from Bounce: its page again, still playing", m.board_mode() == "seq"
           and b.bounce is None and b.seq_up and b.seq_on and m.sim_game().seq is not None
           and m.sim_game().seq["playing"])
 
-    # the Soundboard left with it up, and opened again
+    # HOME on its page: out of the Soundboard at once; and the Soundboard opened again
     proc = b.proc
-    m.go_home()
+    home = m.sim_home()
+    out = (home is True and m.tab == ai and m.view == "list" and not m.board_shown()
+           and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
     spin(0.5)
     gone = b.proc is None and until(lambda: proc.poll() is not None, 5)
     kept = m.setting("seq_tune")
@@ -999,10 +1001,11 @@ if not ONLY or "app" in ONLY:
     m.press("a")
     spin(4, lambda: m.board.proc is not None and len(m.board.ready) >= 24 and m.board.sound_ok)
     spin(0.3)
-    check(f"the Soundboard left with it up and playing: its player gone, the tune kept ({kept == tune}); opened "
+    check(f"HOME on its page, playing: back to Apps at once, the Soundboard picked there (not its buttons' page "
+          f"first: {out}); its player gone, the tune kept ({kept == tune}); opened "
           f"again: its page as it was, playing: its new player told the lead's sound, the bars and the loop "
           f"({[c['do'] for c in said('tone', t1) + said('bars', t1)]}, {len(loops()[-1].get('hits') or [])} cells)",
-          gone and kept == tune and b.proc is not None and b.proc is not proc and b.seq_up and b.seq_on
+          out and gone and kept == tune and b.proc is not None and b.proc is not proc and b.seq_up and b.seq_on
           and m.sim_game().seq is not None and {"do": "tone", "id": "Tones/Pad"} in said("tone", t1)
           and {"do": "bars", "on": True} in said("bars", t1) and bool(loops()[-1].get("hits")))
     tap("b")
@@ -1057,7 +1060,8 @@ if not ONLY or "app" in ONLY:
     m.fine_scale()
     flush()
     home = m.sim_home()
-    check("HOME, and HOME again: back to Apps, the Soundboard picked", home is True and m.sim_home() is True
+    check("HOME: back to Apps, the Soundboard picked (HOME again there isn't its)", home is True
+          and m.sim_home() is False
           and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
     m.press("b")
     spin(0.2)

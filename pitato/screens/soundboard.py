@@ -429,6 +429,9 @@ class SoundboardScreen:
         if placed:
             self.board_keep()
         b.at = next((i for i, bank in enumerate(banks) if bank["name"] == was), min(b.at, len(banks) - 1))
+        fresh = next((B.where(banks, sid) for sid in placed if B.is_starter(sid)), None)
+        if fresh is not None and self.sim_opts is None:    # (a bank that came with an update: said, the once)
+            self.toast(f"New sounds: the {banks[fresh[0]]['name']} bank. SELECT goes through the banks", 5)
         new = [name for name, _, _ in files if name not in had] if had is not None else []
         if new and b.rec is None and b.placing is None and self.sim_opts is None:
             at = B.where(banks, new[-1])               # (a file just put in the folder: where it is, shown and said)

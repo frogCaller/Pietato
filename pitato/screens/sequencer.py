@@ -132,8 +132,8 @@ class SequencerScreen:
         self.seq_going()
 
     def seq_leave(self):
-        """L or R on to another page, or HOME: its page is left (the Soundboard's buttons again, or Bounce). Its tune
-        plays on, if it was."""
+        """L or R on to another page: its page is left (the Soundboard's buttons again, or Bounce). Its tune plays
+        on, if it was. (HOME leaves the Soundboard altogether, its page up for the next time: sims.py's sim_home.)"""
         b = self.board
         self.seq_keep()
         b.seq_up = False

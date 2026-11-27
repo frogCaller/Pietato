@@ -10,6 +10,7 @@ Use them for anything, changed or not, without asking and without saying where t
   Starter   Air horn, Rimshot, Sad horn, Ta-da, Applause, Crickets, Ding, Buzzer
   Drums     Kick, Snare, Hi-hat, Open hat, Clap, Tom, Cowbell, Crash
   Arcade    Laser, Pickup, Jump, Power up, Explosion, Boing, Siren, Game over
+  Calm      Kalimba, Marimba, Bell, Glass, Pluck, Pad, Bowl, Chime
 
 Each is a 48 kHz, 16-bit, one-channel WAV file named for its sound.
 

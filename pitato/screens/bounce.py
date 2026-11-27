@@ -122,8 +122,9 @@ class BounceScreen:
         self.bounce_going()
 
     def bounce_leave(self):
-        """L or R on to another page, HOME, or the web page's Leave Bounce: its page is left (the Soundboard's buttons
-        again, or the Sequencer), and its sound's effects are gone."""
+        """L or R on to another page, or the web page's Leave Bounce: its page is left (the Soundboard's buttons
+        again, or the Sequencer), and its sound's effects are gone. (HOME leaves the Soundboard altogether, its page up
+        for the next time: sims.py's sim_home.)"""
         b = self.board
         self.bounce_keep()
         b.bounce = None

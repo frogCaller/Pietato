@@ -9,7 +9,7 @@ in the Soundboard folder of your home folder. A new file there is on a button a 
 one). The web page's Soundboard adds, records, renames and deletes them, and puts them on the buttons.
 
 This draws the page: its name between ◀ and ▶ (L and R: its other pages), the bank's name (and a dot for each bank),
-and the buttons laid out as they are on a controller,
+and the buttons laid out as they are on a controller (each one's button and its sound's name in its tile's middle),
 each with its sound's name, lit from behind in its button's colour, brightly while it plays; the loop, recording or
 playing, with the beat it's on, how far round it is and the tempo; and a note played with A, B, X or Y held, on that
 button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py). Or the
@@ -32,10 +32,16 @@ PAD_PLACE = {"up": (0, 0.5, 0), "left": (0, 0, 1), "right": (0, 1, 1), "down": (
              "x": (1, 0.5, 0), "y": (1, 0, 1), "a": (1, 1, 1), "b": (1, 0.5, 2)}                # across it, which row)
 TOP = 40                         # px for its line (the page's name, the bank, the loop)
 PAGE_NAME = "Soundboard"         # its buttons' page, as its line names it (the others: Sequencer, Bounce)
-EDGE, GAP, MIDDLE = 12, 8, 24    # px round the buttons, between them, between the d-pad's and the letters'
+EDGE, GAP, MIDDLE = 12, 8, 24    # px round the page's own things and between them (the Band's page: its buttons')
+SPACE = (0.14, 0.34, 0.17)       # its buttons have room to breathe. Of a button's width: between two of them, between
+                                 # the d-pad's and the letters', and at the page's sides
+TILE_TALL = 0.85                 # ...a button's no taller than this much of its width (a tall screen)
+TILE_MOST = (240, 160)           # ...nor bigger than this, px (a big one): as big as what's on it needs, no more
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
 INK = (16, 19, 23)               # the words on a lit tile: dark, whatever the page is
+SHADE = (0.07, 0.05)             # a tile, lit a little from above: this much more of its colour at its top, less at
+LIT_SHADE = (0.12, 0.10)         # its bottom; one whose sound's playing: this much lighter at its top, darker below
 BANK_DOTS = 8                    # banks shown as a dot each, at most (more: which, of how many)
 
 
@@ -47,6 +53,7 @@ class Soundboard(Sim):
     bare = True                         # on the page itself: no box, and nothing beside it
     paced = True                        # drawn again when something changes, not frame by frame
     top_px = TOP                        # px above its buttons (the Band's page, made from this one, has more there)
+    spaced = True                       # its buttons a little apart, in the page's middle (boxes)
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
@@ -110,13 +117,26 @@ class Soundboard(Sim):
 
     def boxes(self):
         """Where each button's tile is on the page (x, y, w, h): the d-pad's four on the left as they are on a
-        controller (up, left and right, down), the letters' on the right (X, Y and A, B)."""
-        tw = (self.w - 2 * EDGE - MIDDLE - 2 * GAP) // 4
-        th = max(40, (self.h - self.top_px - 2 * GAP - EDGE // 2) // 3)
+        controller (up, left and right, down), the letters' on the right (X, Y and A, B). They don't fill the page:
+        there's room between them and round them (SPACE), and all of them together are in its middle. (Close
+        together, filling it: the Band's page, which has less room for them.)"""
+        room = self.h - self.top_px - EDGE // 2
+        if self.spaced:
+            between, apart, sides = SPACE
+            tw = min(TILE_MOST[0], self.w / (4 + 2 * between + apart + 2 * sides))
+            gap = round(tw * between)
+            th = max(40, int(min(TILE_MOST[1], TILE_TALL * tw, (room - 3 * gap) / 3)))
+            tw, middle = int(tw), round(tw * apart)
+            left = (self.w - (4 * tw + 2 * gap + middle)) // 2
+            top = self.top_px + max(0, (room - (3 * th + 2 * gap)) // 2)
+        else:
+            gap, middle, left, top = GAP, MIDDLE, EDGE, self.top_px
+            tw = (self.w - 2 * EDGE - MIDDLE - 2 * GAP) // 4
+            th = max(40, (room - 2 * GAP) // 3)
         out = {}
         for pad, (side, across, row) in PAD_PLACE.items():
-            x = EDGE + side * (2 * tw + GAP + MIDDLE) + round(across * (tw + GAP))
-            out[pad] = (x, self.top_px + row * (th + GAP), tw, th)
+            x = left + side * (2 * tw + gap + middle) + round(across * (tw + gap))
+            out[pad] = (x, top + row * (th + gap), tw, th)
         return out
 
     @staticmethod
@@ -151,9 +171,24 @@ class Soundboard(Sim):
                "right": [(cx + r, cy), (cx - r * 0.8, cy - r), (cx - r * 0.8, cy + r)]}[pad]
         d.polygon(pts, fill=fill)
 
+    @staticmethod
+    def shaded(w, h, top, bottom, radius):
+        """A tile with round corners, its colour going evenly from `top` to `bottom` (a pad lit a little from
+        above), on the page's own."""
+        from .fine import Image, ImageDraw
+        body = Image.new("RGB", (w, h), bottom)
+        bd = ImageDraw.Draw(body)
+        for y in range(h - 1):
+            bd.rectangle((0, y, w - 1, y), fill=co_mix(top, bottom, y / (h - 1)))
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=255)
+        tile = Image.new("RGB", (w, h), BG)
+        tile.paste(body, (0, 0), mask)
+        return tile
+
     def tile(self, pad, w, h):
         """A button's tile, a pad lit from behind in its button's colour: dimly, and brightly while its sound plays;
-        its button, and its sound's name. Nothing on it: an outline. Kept."""
+        its button and its sound's name, one over the other in its middle. Nothing on it: an outline. Kept."""
         from .fine import Image, ImageDraw, scale
         got = self.pads.get(pad)
         lit = pad in self.lit and got is not None
@@ -165,44 +200,50 @@ class Soundboard(Sim):
         if tile is not None:
             return tile
         colour = PAD_COLOUR[pad]
-        tile = Image.new("RGB", (w, h), BG)
-        d = ImageDraw.Draw(tile)
         size = max(16, min(28, round(h * 0.17)))       # (a bigger screen than the GPi Case's: bigger words to match)
         f, small = self.font(size, bold=True), self.font(size - 3)
-        r, step = max(12, min(20, round(h * 0.125))), round(size * 1.25)
+        r, step = max(13, min(24, round(h * 0.15))), round(size * 1.22)
         edge = 14 if h >= 104 else 12
         if got is None:                                # nothing on it
+            tile = Image.new("RGB", (w, h), BG)
+            d = ImageDraw.Draw(tile)
             d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=BG, outline=co_mix(BG, LINE, 1.0), width=2)
             cap, ink, words = co_mix(BG, colour, 0.22), BG, [("Empty", MUTED)]
         else:
             name, state = got
             if lit:                                    # (dark words on it, on a light page too)
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=colour)
+                tile = self.shaded(w, h, co_mix(colour, (255, 255, 255), LIT_SHADE[0]),
+                                   co_mix(colour, INK, LIT_SHADE[1]), edge)
+                d = ImageDraw.Draw(tile)
                 cap, ink, text = co_mix(colour, INK, 0.82), colour, co_mix(colour, INK, 0.9)
             else:
                 glow = 0.18 if state == "ready" else 0.05
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=co_mix(ROW, colour, glow),
-                                    outline=TEXT if here else co_mix(ROW, colour, glow + 0.14), width=2 if here else 1)
+                tile = self.shaded(w, h, co_mix(ROW, colour, glow + SHADE[0]),
+                                   co_mix(ROW, colour, max(0.0, glow - SHADE[1])), edge)
+                d = ImageDraw.Draw(tile)
+                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, width=2 if here else 1,
+                                    outline=TEXT if here else co_mix(ROW, colour, glow + 0.14))
                 cap = colour if state == "ready" else co_mix(ROW, colour, 0.45)
                 ink = co_mix(colour, BG, 0.85)
                 text = TEXT if state == "ready" else MUTED
             words = [(line, text) for line in self.fitted(name, f, w - 2 * edge)]
             if state == "bad" and not lit:
                 words = words[:1] + [("Can't play it", co_mix(WARN, ROW, 0.25))]
-        top = edge - 2
-        d.ellipse((edge - 2, top, edge - 2 + 2 * r, top + 2 * r), fill=cap)
+        gap = round(h * 0.07)                          # (its button, a gap, its name: together, in its middle)
+        top = max(edge - 4, (h - (2 * r + gap + step * len(words))) // 2)
+        cx = w // 2
+        d.ellipse((cx - r, top, cx + r, top + 2 * r), fill=cap)
         if pad in ("up", "down", "left", "right"):
-            self.arrow(d, pad, edge - 2 + r, top + r, r * 0.46, ink)
+            self.arrow(d, pad, cx, top + r, r * 0.46, ink)
         else:
-            d.text((edge - 2 + r, top + r), PAD_NAME[pad], font=self.font(max(14, r + 2), bold=True), fill=ink,
-                   anchor="mm")
+            d.text((cx, top + r), PAD_NAME[pad], font=self.font(max(14, r + 2), bold=True), fill=ink, anchor="mm")
         if note is not None:                           # (a note being played on it: which, at its top right)
-            d.text((w - edge, top + r), note, font=self.font(size + 1, bold=True),
+            d.text((w - edge, edge + 6), note, font=self.font(size + 1, bold=True),
                    fill=co_mix(colour, BG, 0.85) if lit else colour, anchor="rm")
-        y = max(top + 2 * r + 10, h - edge - step * len(words)) + step // 2
+        y = top + 2 * r + gap + step // 2
         for k, (line, fill) in enumerate(words):
             plain = got is None or (k and got[1] == "bad" and not lit)
-            d.text((edge, y), line, font=small if plain else f, fill=fill, anchor="lm")
+            d.text((cx, y), line, font=small if plain else f, fill=fill, anchor="mm")
             y += step
         if len(self.tiles) > 300:
             self.tiles.clear()

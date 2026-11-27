@@ -2,6 +2,8 @@
 each shape, turning slowly or as fast as it goes either way, eight balls going as fast as they go, for a minute: every
 ball inside it all the while, every wall hit, and no wall heard twice at once from one ball; how straight on each hit
 was, and where; its walls' notes, a scale's from its key up; a sound's own note found (and none in a drum's). Its
+picture: the walls one outline, as thick all the way round, pointed at its corners (no dot there), a wall that's hit
+brighter and no bigger. Its
 player, against a pretend sound card: its own sounds, at middle C; a note heard when it's told, exactly; only a few
 at a time, each no longer than it should be; from the left or the right; its echo, at its distance, from side to
 side, and none with it off; its space, dying away; its tone; its drone; the Soundboard's own sounds in a space too;
@@ -11,7 +13,8 @@ wall's its own, BOUNCE_LATE after, louder straight on, from the side they hit; i
 its sliders (▲▼ pick one, ◀▶ move it); X its sound, Y the balls off another way; SELECT its shape; START, its card
 (paused: nothing moves, nothing's drawn); its sound, key, scale and snapping there (snapped: each note on an eighth of
 the Soundboard's tempo), and no row to leave it by; drawn frame by frame while it plays, and the page as it is, all in
-the accent colour; R on to the Soundboard's buttons, L back; HOME, back to the Soundboard, then to Apps."""
+the accent colour; R on to the Soundboard's buttons, L back; HOME: out to Apps at once, and its page again when the
+Soundboard's opened."""
 import json, math, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -236,6 +239,61 @@ if not ONLY or "world" in ONLY:
              SPL.pitch_of((np.random.default_rng(3).standard_normal(20000) * 9000).astype(np.int16)))
     check(f"a sound's own note: its own sounds' (middle C, 60), an A below it (57), and none in a noise ({found})",
           all(abs(x - 60) < 0.3 for x in found[0]) and abs(found[1] - 57) < 0.1 and found[2] is None)
+
+    # its picture: the walls one outline, nothing at the corners, a wall that's hit brighter and no bigger
+    from PIL import Image, ImageDraw
+    from pitato.theme import BG, co_mix
+    INK, SIDE = (86, 156, 214), 400
+    R = SIDE / 2 - 12                                  # (its corners, from its middle: as bounce.draw has them)
+    THICK = getattr(BN, "WALL", (5, 8))[0]             # (px: its walls, on a screen this size)
+
+    def picture(sides, turned, lit, now=100.0):
+        """(its pixels; which are its walls'; each pixel's place from its middle, x and y up; its walls' ways out)."""
+        w = BN.World(sides)
+        w.angle = turned
+        im = Image.new("RGB", (SIDE, SIDE), BG)
+        BN.draw(ImageDraw.Draw(im), (0, 0, SIDE, SIDE), {"corners": w.corners(), "lit": lit, "colour": INK,
+                                                         "balls": [(0.0, 0.0)], "paused": False}, {}, now)
+        a = np.asarray(im).astype(int)
+        yy, xx = np.mgrid[0:SIDE, 0:SIDE]
+        x, y = xx - SIDE / 2, SIDE / 2 - yy
+        walls = (np.abs(a - np.array(BG)).max(axis=2) > 0) & (np.hypot(x, y) > 60)   # (not the ball in its middle)
+        return a, walls, x, y, w
+
+    bands, tips, areas = [], [], []
+    for name, sides in BN.SHAPES:
+        a, walls, x, y, w = picture(sides, 0.35, [0.0] * sides)
+        across = np.max([x * ux + y * uy for ux, uy in w.walls()], axis=0)   # (how far out, across the nearest wall)
+        bands.append(float(np.abs(across[walls] - R * math.cos(math.pi / sides)).max()))
+        tip = R + THICK / 2 / math.cos(math.pi / sides)    # (where two walls' outer edges meet: its corner's point)
+        tips.append(max(abs(float((x * cx + y * cy)[walls].max()) - tip) for cx, cy in w.corners()))
+        areas.append(int(walls.sum()) / (sides * 2 * R * math.sin(math.pi / sides) * THICK))
+    check(f"its picture, each shape: its walls one outline, as thick all the way round ({THICK} px: no pixel more than "
+          f"{max(bands):.1f} px from a wall's middle line; {min(areas):.2f} to {max(areas):.2f} of the pixels that "
+          f"makes), and pointed at each corner (the outline ends within {max(tips):.1f} px of where two walls' outer "
+          f"edges meet: no dot there, and no notch)", max(bands) <= THICK / 2 + 2.0 and max(tips) <= 1.8
+          and all(0.9 <= v <= 1.15 for v in areas))   # (a pixel or two either way: how a slanting edge is drawn)
+    a0, plain, x, y, w = picture(6, 0.2, [0.0] * 6)
+    a1, hit, _, _, _ = picture(6, 0.2, [0.0, 100.0, 0.0, 0.0, 0.0, 0.0])
+    dim = np.array(co_mix(BG, INK, BN.DIM))
+    outs = np.array([x * ux + y * uy for ux, uy in w.walls()])
+    nearest = outs.argmax(axis=0)
+    clear = np.sort(outs, axis=0)[-1] - np.sort(outs, axis=0)[-2] > 2.0     # (not on the line between two walls)
+    bright = (np.abs(a1 - np.array(INK)).max(axis=2) == 0) & hit
+    check(f"...a wall that's hit: brighter from corner to corner (the accent itself, {int(bright.sum())} px, all of "
+          f"them that wall's), the others as they were, and nothing bigger: the very same pixels are drawn "
+          f"({int((plain != hit).sum())} differ), so nothing shows at its two ends",
+          bool((plain == hit).all()) and 0.85 <= int(bright.sum()) / (2 * R * math.sin(math.pi / 6) * THICK) <= 1.15
+          and bool((nearest[bright & clear] == 1).all()) and bool((bright | ~clear)[hit & (nearest == 1)].all())
+          and bool((np.abs(a1 - dim).max(axis=2) == 0)[hit & clear & (nearest != 1)].all())
+          and bool((np.abs(a0 - dim).max(axis=2) == 0)[plain].all()))
+    half = picture(6, 0.2, [0.0, 100.0, 0.0, 0.0, 0.0, 0.0], now=100.0 + BN.LIT / 2)[0]
+    over = picture(6, 0.2, [0.0, 100.0, 0.0, 0.0, 0.0, 0.0], now=100.0 + BN.LIT + 0.01)[0]
+    spot = hit & clear & (nearest == 1)
+    fade = half[spot].mean(axis=0)
+    check(f"...dying away: half-way, between the two ({[round(float(v)) for v in fade]}); after {BN.LIT} s, as dim as "
+          f"the rest", all(min(d, i) < v < max(d, i) for v, d, i in zip(fade, dim, INK) if d != i)
+          and bool((np.abs(over - dim).max(axis=2) == 0)[plain].all()))
 
 
 # ---- its player --------------------------------------------------------------------------------------------------
@@ -475,7 +533,7 @@ if not ONLY or "app" in ONLY:
     m.open_app(ai)
     m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
     m.press("a")
-    spin(4, lambda: m.board is not None and len(m.board.ready) == 24 and m.board.sound_ok)
+    spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
     tap("start")
     rows = m.board_rows()
@@ -689,11 +747,26 @@ if not ONLY or "app" in ONLY:
     check("...and its buttons play their sounds as ever", spin(1.0, lambda: b.bank()["pads"]["up"] in b.playing))
     tap("l")
     was = b.bounce is not None and m.board_mode() == "bounce"
+    proc, balls = b.proc, len(b.bounce.balls)
     home = m.sim_home()
-    check("HOME in Bounce: the Soundboard's own buttons again (Bounce left, its page still up)", was and home is True
-          and b.bounce is None and m.board_shown() and m.sim_opts is None)
-    check("...HOME again: back to Apps, the Soundboard picked", m.sim_home() is True and m.tab == ai
-          and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+    out = (m.tab == ai and m.view == "list" and not m.board_shown()
+           and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+    spin(0.5)
+    check(f"HOME in Bounce: back to Apps at once, the Soundboard picked (not its buttons' page first: {out}); its "
+          f"player gone; HOME again there isn't its", was and home is True and out and m.sim_opts is None
+          and b.proc is None and until(lambda: proc.poll() is not None, 5) and m.sim_home() is False)
+    t1 = time.monotonic()
+    m.press("a")
+    spin(4, lambda: m.board.proc is not None and m.board.sound_ok)
+    spin(0.3)
+    s = m.sim_game()
+    fx = [c for at, c in told if at >= t1 and c.get("do") == "fx"]
+    check(f"...the Soundboard opened again: Bounce's page, as it was left ({balls} balls), its effects told its new "
+          f"player ({fx[:1]})", m.board_shown() and m.board_mode() == "bounce" and b.proc is not None
+          and b.proc is not proc and s.bounce is not None and s.bounce["count"] == balls and bool(fx)
+          and m.sim_hints(s)[-2:] == [("START", "Pause"), ("HOME", "Back")])
+    check("...and HOME from there: Apps again", m.sim_home() is True and m.tab == ai and m.view == "list"
+          and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
     m.press("b")
     spin(0.2)
     m.leave()

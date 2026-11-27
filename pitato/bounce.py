@@ -30,6 +30,7 @@ STEP = 1 / 120                         # seconds of each step of the balls
 AGAIN = 0.06                           # seconds before a ball's heard on the same wall again (a corner: one note)
 LIT = 0.3                              # seconds a wall stays lit after a ball hits it
 DIM = 0.55                             # a wall's colour, not lit: this much of it (the rest the page's)
+WALL = (5, 7)                          # px thick, its walls: on the GPi Case's screen, and a bigger one
 SLIDERS = (("spin", "Spin", -10, 10, 2), ("speed", "Speed", 1, 12, 4), ("space", "Reverb", 0, 10, 4),
            ("echo", "Echo", 0, 10, 3), ("tone", "Tone", 0, 10, 5), ("drone", "Drone", 0, 10, 0))
 SAYS = {"spin": "Which way it turns, how fast", "speed": "How fast the balls go", "space": "A small room to a big hall",
@@ -254,28 +255,33 @@ def draw_panel(d, box, view, fonts):
         d.ellipse((kx - k, ty - k, kx + k, ty + k), fill=TEXT if on else co_mix(BG, TEXT, 0.6))
 
 
+def wall_shapes(corners, cx, cy, r, width):
+    """Each wall as the page draws it: a four-cornered piece of the shape's outline, `width` thick, cut along the
+    line from the shape's middle through each of its corners, so two walls meet exactly, in a point (corners: the
+    shape's, 1 from its middle; r: that 1 in px). Wall k: between corners k and k + 1."""
+    n = len(corners)
+    half = (width - 0.5) / 2 / math.cos(math.pi / n)      # (along a corner's line: further than across a wall. A
+                                                          #  piece's edge is drawn too: a little less, to be as thick)
+    out = [(cx + (r + half) * x, cy - (r + half) * y) for x, y in corners]   # (the page's y goes down)
+    inn = [(cx + (r - half) * x, cy - (r - half) * y) for x, y in corners]
+    return [[out[k], out[(k + 1) % n], inn[(k + 1) % n], inn[k]] for k in range(n)]
+
+
 def draw(d, box, view, fonts, now):
     """The shape and its balls, in one colour (the accent: its walls dim, lit a moment when hit), as big as fits in box
-    (the page under its top line). view: what screens/soundboard.py says of it (soundboard.py's Soundboard.bounce)."""
+    (the page under its top line). Its walls are one outline, as thick all the way round: a wall that's hit is
+    brighter from corner to corner, and nothing shows where two walls meet. view: what screens/soundboard.py says of
+    it (soundboard.py's Soundboard.bounce)."""
     from .theme import BG, co_mix, TEXT
     x0, y0, x1, y1 = box
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     r = min(x1 - x0, y1 - y0) / 2 - 12
-    big = r > 220                                         # (a bigger screen: thicker walls)
-    thin, thick = (7, 12) if big else (5, 8)
-    pts = [(cx + r * x, cy - r * y) for x, y in view["corners"]]   # (the page's y goes down)
-    n = len(pts)
     lit = view["lit"]
-    order = sorted(range(n), key=lambda k: lit[k])        # (the lit ones drawn last, over their corners)
     colour = view["colour"]
-    for k in order:
+    dim = co_mix(BG, colour, DIM)
+    for k, shape in enumerate(wall_shapes(view["corners"], cx, cy, r, WALL[r > 220])):
         glow = max(0.0, 1.0 - (now - lit[k]) / LIT) if lit[k] else 0.0
-        width = round(thin + (thick - thin) * glow)
-        fill = co_mix(co_mix(BG, colour, DIM), colour, glow)
-        a, b = pts[k], pts[(k + 1) % n]
-        d.line((a, b), fill=fill, width=width)
-        for px, py in (a, b):                             # (round corners: no notch where two walls meet)
-            d.ellipse((px - width / 2, py - width / 2, px + width / 2, py + width / 2), fill=fill)
+        d.polygon(shape, fill=co_mix(dim, colour, glow) if glow else dim)
     br = max(4, r * RADIUS)
     for x, y in view["balls"]:
         bx, by = cx + r * x, cy - r * y

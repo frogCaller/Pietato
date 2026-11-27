@@ -21,6 +21,7 @@ class BandStage(Soundboard):
     key = "band"
     blurb = "Your Pietatos play together, each its own instrument. Play along on the buttons."
     top_px = 112
+    spaced = False                      # (its buttons fill what room there is under its seats: close together)
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)

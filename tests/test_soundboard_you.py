@@ -127,7 +127,7 @@ def owner(path):
 
 si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Soundboard")
 m.open_app(si)
-spin(8, lambda: m.board is not None and len(m.board.ready) == 24 and "home=" in read(OUT + "/aplay.txt"))
+spin(8, lambda: m.board is not None and len(m.board.ready) == 32 and "home=" in read(OUT + "/aplay.txt"))
 b = m.board
 pid = b.proc.pid if b.proc is not None else 0
 st = status(pid)
@@ -135,7 +135,7 @@ nice = os.getpriority(os.PRIO_PROCESS, pid) if pid else None
 check(f"the Soundboard's player: as you ({st.get('Uid')}), in your group and the audio, video and render ones, no "
       f"others ({st.get('Groups')}); its sounds read ({len(b.ready)})", st.get("Uid") == [str(me.pw_uid)] * 4
       and st.get("Gid") == [str(me.pw_gid)] * 4 and sorted(int(x) for x in st.get("Groups", [])) == want_groups
-      and len(b.ready) == 24)
+      and len(b.ready) == 32)
 check(f"...no new privileges (sudo can't take it to root: {st.get('NoNewPrivs')}), a little ahead of the menus "
       f"({nice}), which only root could have given it", st.get("NoNewPrivs") == ["1"] and nice == g.BOARD_NICE and nice < 0)
 w = said(OUT + "/aplay.txt")
@@ -223,13 +223,13 @@ os.makedirs(ROOTS)
 g.home_dir = lambda: ROOTS
 m.board = None
 m.open_app(si)
-spin(8, lambda: m.board is not None and len(m.board.ready) == 24 and "home=" in read(OUT + "/aplay.txt"))
+spin(8, lambda: m.board is not None and len(m.board.ready) == 32 and "home=" in read(OUT + "/aplay.txt"))
 b = m.board
 pid = b.proc.pid if b.proc is not None else 0
 st = status(pid)
 check(f"your home folder root's: its player as root, as before ({st.get('Uid')}), still ahead of the menus "
       f"({os.getpriority(os.PRIO_PROCESS, pid) if pid else None})", st.get("Uid") == ["0"] * 4
-      and os.getpriority(os.PRIO_PROCESS, pid) == g.BOARD_NICE and len(b.ready) == 24)
+      and os.getpriority(os.PRIO_PROCESS, pid) == g.BOARD_NICE and len(b.ready) == 32)
 m.go_home()
 spin(0.5)
 m.leave()

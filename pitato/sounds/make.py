@@ -314,6 +314,97 @@ def game_over(rng):
     return after(parts)
 
 
+# ---- the calm bank ------------------------------------------------------------------------------------------------
+# Soft things, struck, plucked or held, and all in one key (C, its five-note scale: C D E G A), so any of them sound
+# right together. Each is a few overtones added up, every one dying away at its own pace: nothing in them is sharp.
+C3, G3, C4, E4, A4, D5, G5 = 130.81, 196.0, 261.63, 329.63, 440.0, 587.33, 783.99
+
+
+def rung(hz, n, parts, rise=0.002):
+    """Something struck or plucked, ringing for n seconds: its overtones (each: times the note or a list of them, how
+    loud, seconds to die away to a third or so), softer the higher they are, none above 9 kHz; in over `rise`."""
+    t = secs(n)
+    out = np.zeros(len(t))
+    for ratio, how, ring in parts:
+        if hz * ratio < 9000.0:
+            out += how / (1 + (hz * ratio / 5000.0) ** 2) * np.sin(TAU * hz * ratio * t) * np.exp(-t / ring)
+    a = min(len(t), int(rise * RATE))
+    out[:a] *= np.sin(np.linspace(0, np.pi / 2, a)) ** 2
+    return out
+
+
+def sooner(hz):
+    """How much sooner a higher note dies away than middle C (a lower one: later)."""
+    return (C4 / hz) ** 0.35
+
+
+def kalimba(rng, hz=A4, n=1.8):
+    """A metal tine: nearly pure, with a short high ting as it's let go."""
+    k = sooner(hz)
+    return rung(hz, n, ((1, 1.0, 0.8 * k), (2, 0.1, 0.35 * k), (3, 0.04, 0.2 * k), (6.27, 0.12, 0.06 * k)))
+
+
+def marimba(rng, hz=C4, n=1.3):
+    """A wooden bar: the note, and a knock two octaves up that's gone at once."""
+    k = sooner(hz)
+    return rung(hz, n, ((1, 1.0, 0.42 * k), (2, 0.04, 0.2 * k), (4, 0.22, 0.08 * k), (10, 0.05, 0.025 * k)))
+
+
+def soft_bell(rng, hz=G5, n=2.4):
+    """A small bell: its overtones a little out of tune, two pairs of them beating slowly."""
+    k = sooner(hz)
+    return rung(hz, n, ((1, 1.0, 1.0 * k), (1 + 0.6 / hz, 0.3, 1.0 * k), (2, 0.4, 0.55 * k),
+                        (2 + 0.9 / hz, 0.1, 0.55 * k), (2.76, 0.2, 0.32 * k), (4.07, 0.09, 0.2 * k),
+                        (5.4, 0.035, 0.12 * k)))
+
+
+def glass(rng, hz=D5, n=3.0):
+    """A wet finger round a glass's rim: slow to speak, long, shimmering."""
+    k = sooner(hz)
+    return rung(hz, n, ((1, 1.0, 1.3 * k), (1 + 0.4 / hz, 0.4, 1.3 * k), (2.003, 0.18, 0.8 * k), (3.01, 0.07, 0.5 * k),
+                        (4.2, 0.03, 0.2 * k)), rise=0.03)
+
+
+def pluck(rng, hz=E4, n=1.9):
+    """A string plucked a quarter of the way along: its higher overtones gone first."""
+    k = sooner(hz)
+    return rung(hz, n, [(j * np.sqrt(1 + 0.00025 * j * j), np.sin(j * np.pi * 0.28) / j ** 1.1,
+                         0.9 * k / (1 + 0.45 * j)) for j in range(1, 15)])
+
+
+def pad(rng, notes=(C3, G3, E4), n=3.6):
+    """A chord held softly: each note three times over, a few cents apart, coming up slowly and going as slowly."""
+    t = secs(n)
+    out = np.zeros(len(t))
+    for hz, how in zip(notes, (1.0, 0.8, 0.6)):
+        for cents in (-6.0, 0.0, 7.0):
+            f = hz * 2.0 ** (cents / 1200.0)
+            out += how * sum(a * np.sin(TAU * f * j * t + j * cents)
+                             for j, a in ((1, 1.0), (2, 0.32), (3, 0.12), (4, 0.05)))
+    return out * swell(len(t), 0.35, 1.5) * np.exp(-t / 3.0)
+
+
+def bowl(rng, hz=G3, n=4.0):
+    """A singing bowl, struck with a soft stick: a deep note, and overtones that aren't its own as a string's are
+    (a bowl's: here an octave and a fourth up, and that again, so they're in the key too), each one two a hair
+    apart, so it swells and sinks as it rings."""
+    return rung(hz, n, ((1, 1.0, 2.6), (1 + 0.55 / hz, 0.6, 2.6), (8 / 3, 0.18, 1.7), (8 / 3 + 0.9 / hz, 0.1, 1.7),
+                        (16 / 3, 0.08, 0.9), (16 / 3 + 1.4 / hz, 0.04, 0.9), (8, 0.03, 0.45)), rise=0.012)
+
+
+def chime(rng, n=3.7):
+    """Wind chimes: a few tubes of the scale touched one after another, each when the wind likes, some harder."""
+    tubes = (1046.5, 1174.66, 1318.51, 1567.98, 1760.0, 2093.0)
+    at, parts = 0.0, []
+    for k in rng.permutation(len(tubes)):
+        hz = tubes[k]
+        ring = rung(hz, n - at, ((1, 1.0, 0.9), (1 + 1.1 / hz, 0.3, 0.9), (2.76, 0.3, 0.4), (5.4, 0.1, 0.18),
+                                 (8.93, 0.03, 0.09)), rise=0.001)
+        parts.append((at, rng.uniform(0.45, 1.0) * ring))
+        at += rng.uniform(0.14, 0.5)
+    return after(parts, int(n * RATE))
+
+
 # ---- all of them: the file each goes in, how it's made, how loud ---------------------------------------------------
 SOUNDS = (   # (a square wave is loud for its size: those are kept lower, so the bank's sounds are about as loud)
     ("Air horn", air_horn, 0.8), ("Rimshot", rimshot, 0.89), ("Sad horn", sad_horn, 0.8), ("Ta-da", ta_da, 0.85),
@@ -323,9 +414,12 @@ SOUNDS = (   # (a square wave is loud for its size: those are kept lower, so the
     ("Cowbell", cowbell, 0.8), ("Crash", crash, 0.8),
     ("Laser", laser, 0.55), ("Pickup", pickup, 0.5), ("Jump", jump, 0.5), ("Power up", power_up, 0.45),
     ("Explosion", explosion, 0.89), ("Boing", boing, 0.85), ("Siren", siren, 0.45), ("Game over", game_over, 0.45),
-)
+    ("Kalimba", kalimba, 0.47), ("Marimba", marimba, 0.8), ("Bell", soft_bell, 0.36), ("Glass", glass, 0.32),
+    ("Pluck", pluck, 0.72), ("Pad", pad, 0.65), ("Bowl", bowl, 0.72), ("Chime", chime, 0.34),
+)   # (the calm ones: each about as loud to the ear as the others, and softer than a horn or a siren)
 TAILS = {"Kick": 0.12, "Tom": 0.14, "Boing": 0.2, "Cowbell": 0.12, "Crash": 0.3, "Open hat": 0.12, "Ding": 0.25,
-         "Explosion": 0.3}                             # (the ones that ring on: their last moments die away this long)
+         "Explosion": 0.3, "Kalimba": 0.3, "Marimba": 0.15, "Bell": 0.5, "Glass": 0.6, "Pluck": 0.3, "Pad": 0.3,
+         "Bowl": 0.9, "Chime": 0.7}                    # (the ones that ring on: their last moments die away this long)
 
 
 def make(folder=HERE):

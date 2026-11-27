@@ -17,6 +17,8 @@ sys.path.insert(0, TESTS)
 import numpy as np
 import pietato_all as g
 import pitato.soundbank as SBK
+MY = len(SBK.STARTER_BANKS)                            # (which bank My sounds is, after the pack's own)
+PACK = [n for n, _ in SBK.STARTER_BANKS]               # (Starter, Drums, Arcade, Calm)
 from werkzeug.serving import make_server
 
 S = SP + "/t_web_soundboard"
@@ -82,8 +84,9 @@ r = c.get("/api/soundboard", headers=H)
 d = r.get_json()
 check(f"the page asks for the Soundboard: its banks ({[b['name'] for b in d['banks']]}), eight buttons each "
       f"({d['pads']}), every sound there is ({len(d['sounds'])}, the starter pack's marked so) with the button it's on; "
-      f"nothing written for that", r.status_code == 200 and [b["name"] for b in d["banks"]] == ["Starter", "Drums", "Arcade"]
-      and d["pads"] == list(SBK.PADS) and len(d["sounds"]) == 24 and all(s.get("starter") for s in d["sounds"])
+      f"nothing written for that", r.status_code == 200 and [b["name"] for b in d["banks"]] == PACK
+      and PACK == ["Starter", "Drums", "Arcade", "Calm"]
+      and d["pads"] == list(SBK.PADS) and len(d["sounds"]) == 32 and all(s.get("starter") for s in d["sounds"])
       and at(d, "Starter/Ding.wav") == [0, "a"] and d["starters_off"] == 0 and d["folder"] == "~/Soundboard"
       and not os.path.exists(FILED) and os.path.isdir(FOLDER))
 check("...only the page asks (its own word with each request, which another site can't add); not another site at all",
@@ -101,7 +104,8 @@ d = r.get_json()
 check(f"a sound added: a file in your Soundboard folder ({os.listdir(FOLDER)}), on My sounds' first free button "
       f"({at(d, 'Laugh.wav')}), first in the list, and the banks' file written",
       r.status_code == 200 and d["id"] == "Laugh.wav" and os.listdir(FOLDER) == ["Laugh.wav"]
-      and d["banks"][3]["name"] == "My sounds" and at(d, "Laugh.wav") == [3, "up"] and d["sounds"][0]["id"] == "Laugh.wav"
+      and d["banks"][MY]["name"] == "My sounds" and at(d, "Laugh.wav") == [MY, "up"]
+      and d["sounds"][0]["id"] == "Laugh.wav"
       and d["sounds"][0]["name"] == "Laugh" and "[My sounds]\nup = Laugh.wav\n" in open(FILED).read())
 r = c.put("/api/soundboard/sound?name=laugh.WAV", data=wav(), headers=H)
 check(f"...one of that name already (whatever its capitals): kept beside it ({r.get_json().get('id')})",
@@ -132,7 +136,7 @@ r = c.put("/api/soundboard/sound?name=Drop.ogg&bank=0&pad=a", data=b"OggS" + byt
 d = r.get_json()
 check(f"one dropped on a button: on it ({d['banks'][0]['pads']['a']}); what was there, on no button ({at(d, 'Starter/Ding.wav')})",
       d["banks"][0]["pads"]["a"] == "Drop.ogg" and at(d, "Starter/Ding.wav") is None and d["starters_off"] == 1
-      and not any(v == "Drop.ogg" for v in d["banks"][3]["pads"].values()))
+      and not any(v == "Drop.ogg" for v in d["banks"][MY]["pads"].values()))
 r = c.get("/api/soundboard/sound?id=Laugh.wav")
 r2 = c.get("/api/soundboard/sound?id=Starter/Kick.wav")
 r3 = c.get("/api/soundboard/sound?id=Drop.ogg")
@@ -157,7 +161,7 @@ r = ask(do="put", id="Laugh.wav", bank=1, pad="x")
 d = r.get_json()
 check(f"a sound put on a button with one on it: there ({d['banks'][1]['pads']['x']}); the one that was comes off "
       f"({at(d, 'Starter/Clap.wav')}), and the button it left is free", d["banks"][1]["pads"]["x"] == "Laugh.wav"
-      and at(d, "Starter/Clap.wav") is None and d["banks"][3]["pads"]["up"] is None)
+      and at(d, "Starter/Clap.wav") is None and d["banks"][MY]["pads"]["up"] is None)
 d = ask(do="put", id="Laugh.wav", bank=1, pad="y", swap=True).get_json()
 check(f"...from one button to another (the page says which): the two change places ({d['banks'][1]['pads']['x']}, "
       f"{d['banks'][1]['pads']['y']})", d["banks"][1]["pads"]["y"] == "Laugh.wav" and d["banks"][1]["pads"]["x"] == "Starter/Cowbell.wav")
@@ -165,10 +169,10 @@ d = ask(do="put", id="laugh 2.WAV", bank=1, pad="y").get_json()
 d2 = c.get("/api/soundboard", headers=H).get_json()
 check(f"...one of yours that comes off a button stays off (on no button: {at(d, 'Laugh.wav')}), at the next look too",
       at(d, "Laugh.wav") is None and at(d2, "Laugh.wav") is None and "off = Laugh.wav" in open(FILED).read())
-d = ask(do="bank_put", id="Laugh.wav", bank=3).get_json()
+d = ask(do="bank_put", id="Laugh.wav", bank=MY).get_json()
 r = ask(do="bank_put", id="Starter/Ding.wav", bank=2)
 check(f"onto a bank: its first free button ({at(d, 'Laugh.wav')}), and no longer among those taken off; a full bank "
-      f"says so ({r.status_code}: {r.get_json().get('error')})", at(d, "Laugh.wav") == [3, "up"]
+      f"says so ({r.status_code}: {r.get_json().get('error')})", at(d, "Laugh.wav") == [MY, "up"]
       and "off = Laugh.wav" not in open(FILED).read() and r.status_code == 409 and "full" in r.get_json()["error"])
 d = ask(do="lift", bank=1, pad="y").get_json()
 check(f"taken off its button: on none ({at(d, 'laugh 2.WAV')}), still in the list and the folder",
@@ -178,10 +182,10 @@ d = r.get_json()
 check(f"renamed: the file ({sorted(os.listdir(FOLDER))}), by its new name in the list, its ending kept",
       r.status_code == 200 and d["id"] == "Big laugh.WAV" and "Big laugh.WAV" in os.listdir(FOLDER)
       and "laugh 2.WAV" not in os.listdir(FOLDER) and at(d, "Big laugh.WAV") is None)
-d = ask(do="put", id="Big laugh.WAV", bank=3, pad="b").get_json()
+d = ask(do="put", id="Big laugh.WAV", bank=MY, pad="b").get_json()
 d = ask(do="rename", id="Big laugh.WAV", name="Ha ha.wav").get_json()
-check(f"...one on a button: on it still, by its new name ({d['banks'][3]['pads']['b']})",
-      d["id"] == "Ha ha.WAV" and d["banks"][3]["pads"]["b"] == "Ha ha.WAV")
+check(f"...one on a button: on it still, by its new name ({d['banks'][MY]['pads']['b']})",
+      d["id"] == "Ha ha.WAV" and d["banks"][MY]["pads"]["b"] == "Ha ha.WAV")
 codes = {k: ask(do="rename", id=i, name=n).status_code for k, (i, n) in {
     "to one there is": ("Ha ha.WAV", "LAUGH"), "a starter": ("Starter/Ding.wav", "Dong"), "no name": ("Ha ha.WAV", "  "),
     "a path": ("Ha ha.WAV", "../../x"), "one that isn't": ("Nope.wav", "x")}.items()}
@@ -204,17 +208,17 @@ n = d["bank"]
 d = ask(do="bank_rename", bank=n, name="Drums").get_json()
 d = ask(do="bank_move", bank=n, to=0).get_json()
 check(f"a bank added, renamed (to a name there is: told apart), moved first: {[b['name'] for b in d['banks']]}",
-      n == 4 and [b["name"] for b in d["banks"]] == ["Drums 2", "Starter", "Drums", "Arcade", "My sounds"] and d["bank"] == 0)
+      n == MY + 1 and [b["name"] for b in d["banks"]] == ["Drums 2"] + PACK + ["My sounds"] and d["bank"] == 0)
 d = ask(do="bank_delete", bank=1).get_json()
 check(f"a bank deleted: its sounds stay, on no button ({d['starters_off']} of the starter pack's now)",
-      [b["name"] for b in d["banks"]] == ["Drums 2", "Drums", "Arcade", "My sounds"] and d["starters_off"] == 9
+      [b["name"] for b in d["banks"]] == ["Drums 2"] + PACK[1:] + ["My sounds"] and d["starters_off"] == 9
       and at(d, "Drop.ogg") is None and "Drop.ogg" in os.listdir(FOLDER))
 r = ask(do="starter")
 d = r.get_json()
 check(f"the starter pack's put back on buttons: all of them ({[b['name'] for b in d['banks']]}, {d['starters_off']} on "
       f"none); again: nothing to do ({ask(do='starter').status_code})", d["starters_off"] == 0
       and [b["name"] for b in d["banks"]][-1] == "Starter" and at(d, "Starter/Clap.wav") == [1, "y"]
-      and at(d, "Starter/Ding.wav") == [4, "a"]
+      and at(d, "Starter/Ding.wav") == [MY + 1, "a"]
       and ask(do="starter").status_code == 409)
 r = c.put("/api/soundboard/sound?rec=1", data=wav(1.0, 44100, lead=0.7, amp=3000), headers=H)
 d = r.get_json()
@@ -264,8 +268,8 @@ if safe:
 check(f"installed as setup.sh does (the page's server on its own, pitato's folder beside it: {where}): the Soundboard "
       f"there too, the starter pack with its credits ({len(d2.get('sounds', []))} sounds of {len(files)} files), one "
       f"heard, one of yours kept", safe and where == "pitato/soundbank.py" and not os.path.exists(T + "/soundbank.py")
-      and len(d2.get("sounds", [])) == 24 and [b["name"] for b in d2.get("banks", [])] == ["Starter", "Drums", "Arcade"]
-      and "CREDITS.txt" in files and len([n for n in files if n.endswith(".wav")]) == 24
+      and len(d2.get("sounds", [])) == 32 and [b["name"] for b in d2.get("banks", [])] == PACK
+      and "CREDITS.txt" in files and len([n for n in files if n.endswith(".wav")]) == 32
       and heard.status_code == 200 and heard.data == open(ROOT + "/pitato/sounds/Ding.wav", "rb").read()
       and kept.status_code == 200 and os.listdir(S + "/home/installed/Soundboard") == ["Mine.wav"]
       and "up = Mine.wav" in open(S + "/static_installed/soundboard.txt").read())
@@ -327,7 +331,7 @@ threading.Thread(target=web.serve_forever, daemon=True).start()
 URL = f"http://127.0.0.1:{web.server_port}"
 opened = c.post("/api/pi/open", json={"app": "Soundboard"}, headers=H)
 check(f"media mode's Soundboard, opened ({opened.get_json()}): its player running, its sounds ready",
-      until(lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) == 24, 15))
+      until(lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) == 32, 15))
 b = m.board
 d = c.get("/api/soundboard", headers=H).get_json()
 lp = d.get("loop")
@@ -469,9 +473,9 @@ async def browse():
         got = await pg.evaluate(LOOK)
         check(f"the page: Soundboard in its Library ({'Soundboard' in tabs}); its banks ({got['banks']}), the first one's "
               f"eight buttons with their sounds ({got['pads']}), none of your own yet ({got['sub']!r}), the starter "
-              f"pack's listed under ({got['pack']})", "Soundboard" in tabs and got["banks"] == ["Starter", "Drums", "Arcade"]
+              f"pack's listed under ({got['pack']})", "Soundboard" in tabs and got["banks"] == PACK
               and got["bank"] == "Starter" == got["title"]
-              and got["pads"] == dict(SBK.STARTER_BANKS)["Starter"] and got["mine"] == [] and got["pack"] == 24
+              and got["pads"] == dict(SBK.STARTER_BANKS)["Starter"] and got["mine"] == [] and got["pack"] == 32
               and got["sub"] == "Yours go in ~/Soundboard")
         bx = got["boxes"]
         check("...the buttons laid out as on a controller: the d-pad's on the left (up, left and right, down), X, Y, A "
@@ -592,10 +596,12 @@ async def browse():
               got["banks"][-1] == "Party" and got["bank"] == "Party" and not any(got["pads"].values())
               and until(lambda: [x["name"] for x in b.banks][-1] == "Party", 1.5))
         await pg.click(".sb-move.back")
-        await pg.wait_for_function("[...document.querySelectorAll('.sb-bank:not(.plus)')].map((x) => x.textContent).indexOf('Party') === 3", timeout=6000)
+        await pg.wait_for_function("[...document.querySelectorAll('.sb-bank:not(.plus)')].map((x) => x.textContent)"
+                                   f".indexOf('Party') === {MY}", timeout=6000)
         got = await pg.evaluate(LOOK)
-        check(f"...moved earlier ({got['banks']}), still the one shown", got["banks"].index("Party") == 3 and got["bank"] == "Party"
-              and until(lambda: [x["name"] for x in b.banks].index("Party") == 3, 1.5))
+        check(f"...moved earlier ({got['banks']}), still the one shown", got["banks"].index("Party") == MY
+              and got["bank"] == "Party"
+              and until(lambda: [x["name"] for x in b.banks].index("Party") == MY, 1.5))
         await pg.click(".sb-tools .linkbtn:has-text('Rename')")
         await pg.fill(".sb-board-h .sb-in", "Jingles")
         await pg.keyboard.press("Enter")

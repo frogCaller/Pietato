@@ -1,7 +1,8 @@
 """The Soundboard, in Apps (pitato/soundbank.py, soundplay.py, soundboard.py, screens/soundboard.py). Its starter pack:
-two dozen sounds, each just what pitato/sounds/make.py makes (nobody's recording), with their credits (public domain,
-CC0). Its banks' file: read, written and kept in order (a sound on one button at most, a new one of yours on My
-sounds' first free one, one that's gone off its button). Its player, on its own, against a pretend sound card (aplay
+thirty-two sounds, each just what pitato/sounds/make.py makes (nobody's recording), with their credits (public domain,
+CC0); the Calm bank's soft, and all in one key. Its banks' file: read, written and kept in order (a sound on one
+button at most, a new one of yours on My sounds' first free one, one that's gone off its button; a bank of the pack's
+that came with an update added to it, the once). Its player, on its own, against a pretend sound card (aplay
 here takes the sound as ALSA would, a period at a time, and logs when each is heard): a sound's heard a moment after
 it's asked for; two at once are both heard; one asked for again starts again; stopping stops them; the volume; too loud
 together, turned down rather than left to crackle; where the sound goes; the sound card let go of and taken up again,
@@ -226,8 +227,8 @@ pack = sorted(n for n in os.listdir(SOUNDS) if n.endswith(".wav"))
 shapes = {n: wav_of(f"{SOUNDS}/{n}") for n in pack}
 check(f"the starter pack: {len(pack)} sounds, each 48 kHz, 16-bit, one channel, a few seconds at most "
       f"({sum(os.path.getsize(f'{SOUNDS}/{n}') for n in pack) >> 10} KB in all)",
-      len(pack) == 24 and all(s[1:4] == (48000, 1, 2) and 0.05 < s[0] <= 4.0 for s in shapes.values())
-      and sum(os.path.getsize(f"{SOUNDS}/{n}") for n in pack) < 3 << 20)
+      len(pack) == 32 and all(s[1:4] == (48000, 1, 2) and 0.05 < s[0] <= 4.0 for s in shapes.values())
+      and sum(os.path.getsize(f"{SOUNDS}/{n}") for n in pack) < 5 << 20)
 check("...none silent, none clipped, each starting and ending quietly (no click)",
       all(3000 < int(np.abs(s[4]).max()) < 32000 and abs(int(s[4][0, 0])) < 1500 and abs(int(s[4][-1, 0])) < 400
           for s in shapes.values()))
@@ -260,21 +261,34 @@ check("...in THIRD-PARTY-LICENSES.md, in the README (a line or two), in what set
       and 'install -m 644 "$f" /usr/local/share/pitato/pitato/sounds/' in open(ROOT + "/setup.sh").read()
       and "pitato/sounds/CREDITS.txt" in open(ROOT + "/image/licenses.py").read())
 starters = B.starter_sounds()
-check(f"...the banks it comes on: Starter, Drums and Arcade, eight sounds each, every sound of the pack on one button "
-      f"({len(starters)})", [n for n, _ in B.STARTER_BANKS] == ["Starter", "Drums", "Arcade"]
+check(f"...the banks it comes on: Starter, Drums, Arcade and Calm, eight sounds each, every sound of the pack on one "
+      f"button ({len(starters)})", [n for n, _ in B.STARTER_BANKS] == ["Starter", "Drums", "Arcade", "Calm"]
       and all(sorted(p) == sorted(B.PADS) for _, p in B.STARTER_BANKS)
       and sorted(f"{B.STARTER}{s}.wav" for _, p in B.STARTER_BANKS for s in p.values()) == starters
       and starters == [B.STARTER + n for n in pack])
+sys.path.insert(0, ROOT + "/pitato")
+import soundplay as SPLAY  # noqa: E402
+calm = {s: wav_of(f"{SOUNDS}/{s}.wav") for s in dict(B.STARTER_BANKS)["Calm"].values()}
+notes = {s: SPLAY.pitch_of(v[4]) for s, v in calm.items()}
+rest = [int(np.abs(shapes[n][4]).max()) for n in pack if n[:-4] not in calm]
+check(f"...the Calm bank's: soft ones (none as loud at its loudest as the loudest of the rest: "
+      f"{max(int(np.abs(v[4]).max()) for v in calm.values())} of {max(rest)}), ringing on a while (the shortest "
+      f"{min(v[0] for v in calm.values()):.1f} s), each a note of one key's five (C, D, E, G or A: {notes}), so any of "
+      f"them sound right together",
+      all(v is not None and min(abs((v - k + 6) % 12 - 6) for k in (0, 2, 4, 7, 9)) < 0.15 for v in notes.values())
+      and max(int(np.abs(v[4]).max()) for v in calm.values()) < max(rest) and min(v[0] for v in calm.values()) >= 1.2
+      and len(calm) == 8)
+MY = len(B.STARTER_BANKS)                              # (which bank My sounds is, after the pack's)
 
 # ---- the banks' file ----------------------------------------------------------------------------------------------
 banks, off, placed = B.arrange(None, [], starters)
-check("no file yet, no sounds of yours: the starter pack's three banks, nothing to write",
-      [b["name"] for b in banks] == ["Starter", "Drums", "Arcade"] and not off and not placed
+check("no file yet, no sounds of yours: the starter pack's four banks, nothing to write",
+      [b["name"] for b in banks] == ["Starter", "Drums", "Arcade", "Calm"] and not off and not placed
       and banks[0]["pads"]["up"] == "Starter/Air horn.wav" and banks[1]["pads"]["b"] == "Starter/Kick.wav")
 banks, off, placed = B.arrange(None, ["Laugh.mp3", "boo.OGG", "notes.txt", ".hidden.wav", "a/b.wav"], starters)
 check(f"...with sounds of yours: each on My sounds' first free button, in the order they came ({placed}); what isn't "
-      f"a sound's name left out", placed == ["Laugh.mp3", "boo.OGG"] and banks[3]["name"] == "My sounds"
-      and banks[3]["pads"]["up"] == "Laugh.mp3" and banks[3]["pads"]["left"] == "boo.OGG")
+      f"a sound's name left out", placed == ["Laugh.mp3", "boo.OGG"] and banks[MY]["name"] == "My sounds"
+      and banks[MY]["pads"]["up"] == "Laugh.mp3" and banks[MY]["pads"]["left"] == "boo.OGG")
 text = B.dumps(banks, off)
 again = B.arrange(text, ["Laugh.mp3", "boo.OGG"], starters)
 check("...written and read back: the same, with nothing new to write; a file you can read (its banks in brackets, a "
@@ -282,36 +296,38 @@ check("...written and read back: the same, with nothing new to write; a file you
       and "[Starter]\nup = Starter/Air horn.wav\n" in text and text.startswith("#"))
 many = [f"s{k:02d}.wav" for k in range(11)]
 b2, o2, p2 = B.arrange(text, ["Laugh.mp3", "boo.OGG"] + many, starters)
-check(f"...more of yours than My sounds has buttons: on into My sounds 2 ({[b['name'] for b in b2][3:]})",
-      [b["name"] for b in b2][3:] == ["My sounds", "My sounds 2"] and p2 == many
-      and sum(1 for v in b2[3]["pads"].values() if v) == 8 and sum(1 for v in b2[4]["pads"].values() if v) == 5)
+check(f"...more of yours than My sounds has buttons: on into My sounds 2 ({[b['name'] for b in b2][MY:]})",
+      [b["name"] for b in b2][MY:] == ["My sounds", "My sounds 2"] and p2 == many
+      and sum(1 for v in b2[MY]["pads"].values() if v) == 8 and sum(1 for v in b2[MY + 1]["pads"].values() if v) == 5)
 b3, o3, p3 = B.arrange(text, ["boo.OGG"], starters)
 check("...one of yours gone from the folder: off its button (the others stay where they were), not written for that "
-      "alone", b3[3]["pads"]["up"] is None and b3[3]["pads"]["left"] == "boo.OGG" and not p3 and not o3)
+      "alone", b3[MY]["pads"]["up"] is None and b3[MY]["pads"]["left"] == "boo.OGG" and not p3 and not o3)
 odd = ("# mine\n[A]\nup = Laugh.mp3\nleft = Laugh.mp3\nsideways = boo.OGG\nx = Nowhere.wav\n\n[A]\ndown=Starter/Ding.wav\n"
        "[]\n[ ]\nup = Starter/Kick.wav\noff = Starter/Ding.wav\noff = boo.OGG\njunk\n")
 b4, o4, p4 = B.arrange(odd, ["Laugh.mp3", "boo.OGG", "new.wav"], starters)
 check(f"...a file written by hand, with mistakes in it: a sound on two buttons keeps the first, a button that isn't one "
       f"and a sound that isn't there are left out, two banks of a name told apart ({[b['name'] for b in b4]}), a bank "
       f"with no name isn't one; one of yours taken off its button stays off ({o4}), and a new one still goes on My "
-      f"sounds", [b["name"] for b in b4] == ["A", "A 2", "My sounds"]
+      f"sounds (the pack's newest bank, which it hasn't had, before that)",
+      [b["name"] for b in b4] == ["A", "A 2", "Calm", "My sounds"]
       and b4[0]["pads"] == dict(dict.fromkeys(B.PADS), up="Laugh.mp3")
       and b4[1]["pads"] == dict(dict.fromkeys(B.PADS), down="Starter/Ding.wav")
-      and o4 == ["boo.OGG"] and p4 == ["new.wav"] and b4[2]["pads"]["up"] == "new.wav")
+      and o4 == ["boo.OGG"] and p4[-1:] == ["new.wav"] and len(p4) == 9 and all(B.is_starter(s) for s in p4[:8])
+      and b4[3]["pads"]["up"] == "new.wav")
 bb, oo, _ = B.arrange(text, ["Laugh.mp3", "boo.OGG"], starters)
 B.put(bb, oo, "Laugh.mp3", 0, "a")
 check("a sound put on a button that has one, from a button of its own: the two change places",
-      bb[0]["pads"]["a"] == "Laugh.mp3" and bb[3]["pads"]["up"] == "Starter/Ding.wav")
+      bb[0]["pads"]["a"] == "Laugh.mp3" and bb[MY]["pads"]["up"] == "Starter/Ding.wav")
 B.put(bb, oo, "boo.OGG", 0, "b", swap=False)
 check("...or it just moves there: what was on that button comes off it, and the one it left is free",
-      bb[0]["pads"]["b"] == "boo.OGG" and bb[3]["pads"]["left"] is None and B.where(bb, "Starter/Buzzer.wav") is None)
+      bb[0]["pads"]["b"] == "boo.OGG" and bb[MY]["pads"]["left"] is None and B.where(bb, "Starter/Buzzer.wav") is None)
 B.put(bb, oo, "Laugh.mp3", 1, "x", swap=False)
 B.put(bb, oo, "boo.OGG", 1, "x", swap=False)
 check(f"...one of yours that comes off a button is kept as taken off ({oo}): not put back on one by itself",
       oo == ["Laugh.mp3"] and B.arrange(B.dumps(bb, oo), ["Laugh.mp3", "boo.OGG"], starters)[2] == []
       and B.where(B.arrange(B.dumps(bb, oo), ["Laugh.mp3", "boo.OGG"], starters)[0], "Laugh.mp3") is None)
-B.put(bb, oo, "Laugh.mp3", 3, "y")
-B.lift(bb, oo, 3, "y")
+B.put(bb, oo, "Laugh.mp3", MY, "y")
+B.lift(bb, oo, MY, "y")
 B.renamed(bb, oo, "Laugh.mp3", "Ha.mp3")
 B.renamed(bb, oo, "boo.OGG", "Boo.ogg")
 check("...put back, taken off again, renamed: still off, by its new name; one on a button, on it by its new name",
@@ -323,28 +339,67 @@ n = B.bank_add(bb, "  Party [time]\n ")
 B.bank_rename(bb, n, "Drums")
 B.bank_move(bb, n, 0)
 check(f"a bank added (its name tidied: on one line, no brackets), renamed to a name there is (told apart), moved "
-      f"first ({[b['name'] for b in bb]})", [b["name"] for b in bb] == ["Drums 2", "Starter", "Drums", "Arcade", "My sounds"])
+      f"first ({[b['name'] for b in bb]})",
+      [b["name"] for b in bb] == ["Drums 2", "Starter", "Drums", "Arcade", "Calm", "My sounds"])
 left = B.starters_off(bb, starters)
 back = B.starter_back(bb, starters)
 check(f"the starter pack's sounds that are on no button ({[x.split('/')[1][:-4] for x in left]}), put back: each on its "
       f"own button in its own bank where that's free ({back})", sorted(left) == ["Starter/Buzzer.wav", "Starter/Clap.wav"]
       and back == (2, 1) and bb[1]["pads"]["b"] == "Starter/Buzzer.wav"
-      and bb[2]["pads"]["x"] == "Starter/Clap.wav" and not B.starters_off(bb, starters) and len(bb) == 5)
+      and bb[2]["pads"]["x"] == "Starter/Clap.wav" and not B.starters_off(bb, starters) and len(bb) == 6)
 B.put(bb, oo, "Starter/Kick.wav", 0, "a")
 B.bank_drop(bb, oo, 1)
 left = B.starters_off(bb, starters)
 back = B.starter_back(bb, starters)
 check(f"...a bank deleted: its sounds on no button ({len(left)} of the starter pack's); put back: in a bank of that "
-      f"name again ({[b['name'] for b in bb]}, {back})", len(left) == 7 and back == (7, 4) and bb[-1]["name"] == "Starter"
+      f"name again ({[b['name'] for b in bb]}, {back})", len(left) == 7 and back == (7, 5)
+      and bb[-1]["name"] == "Starter"
       and not B.starters_off(bb, starters) and bb[-1]["pads"]["up"] == "Starter/Air horn.wav"
       and bb[-1]["pads"]["a"] is None and B.starter_back(bb, starters) == (0, None))
 taken = [{"name": "Starter", "pads": {pad: "Mine.wav" if pad != "y" else None for pad in B.PADS}}]
-back = B.starter_back(taken, starters[:3] + ["Starter/Crickets.wav"])
+back = B.starter_back(taken, ["Starter/Air horn.wav", "Starter/Applause.wav", "Starter/Boing.wav",
+                              "Starter/Crickets.wav"])
 check(f"...their own buttons taken: its own if it's free, the bank's first free one, and the rest in a new bank "
       f"({[b['name'] for b in taken]}, {back})", back[0] == 4 and taken[0]["pads"]["y"] == "Starter/Crickets.wav"
       and [b["name"] for b in taken] == ["Starter", "Starter 2", "Arcade"] and taken[1]["pads"]["up"] == "Starter/Air horn.wav")
 full = [{"name": f"B{k}", "pads": dict.fromkeys(B.PADS)} for k in range(B.BANKS_MOST)]
 check(f"...no more than {B.BANKS_MOST} banks", B.bank_add(full) is None and len(full) == B.BANKS_MOST)
+
+# a bank of the pack's that came with an update: added to a banks file that's there, the once
+was = ("# The Soundboard's banks\noff = Old.wav\n[Starter]\nup = Starter/Air horn.wav\na = Starter/Ding.wav\n[Drums]\n"
+       "b = Starter/Kick.wav\n[My sounds]\nup = Laugh.mp3\n[Arcade]\nup = Starter/Jump.wav\n[More of mine]\n")
+nb, no, placed = B.arrange(was, ["Laugh.mp3", "Old.wav"], starters)
+calm_row = {pad: f"{B.STARTER}{s}.wav" for pad, s in dict(B.STARTER_BANKS)["Calm"].items()}
+check(f"a banks file from before there was a Calm bank (no line in it says which of the pack's it's been offered): "
+      f"Calm added to it, after the last of the pack's that's there ({[b['name'] for b in nb]}), its eight sounds on "
+      f"their own buttons, something to write the file for ({len(placed)}); the pack's others as you left them (only "
+      f"the sounds you kept on them), your own banks and what you took off too ({no})",
+      [b["name"] for b in nb] == ["Starter", "Drums", "My sounds", "Arcade", "Calm", "More of mine"]
+      and nb[4]["pads"] == calm_row and sorted(placed) == sorted(calm_row.values())
+      and sum(1 for v in nb[0]["pads"].values() if v) == 2 and sum(1 for v in nb[3]["pads"].values() if v) == 1
+      and nb[2]["pads"]["up"] == "Laugh.mp3" and no == ["Old.wav"] and len(B.starters_off(nb, starters)) == 20)
+kept = B.dumps(nb, no)
+again = B.arrange(kept, ["Laugh.mp3", "Old.wav"], starters)
+said_packs = [x for x in kept.splitlines() if x.startswith("packs")]
+check(f"...written, the file says which of the pack's banks it's had ({said_packs}), "
+      f"before its banks; read again: the same, nothing new", "\npacks = Starter, Drums, Arcade, Calm\n" in kept
+      and kept.index("packs = ") < kept.index("[Starter]") and again == (nb, no, [])
+      and B.packs_seen(kept) == {"Starter", "Drums", "Arcade", "Calm"} and B.packs_seen(was) == set(B.PACK_FIRST))
+B.bank_drop(nb, no, 4)
+gone = B.arrange(B.dumps(nb, no), ["Laugh.mp3", "Old.wav"], starters)
+check(f"...the Calm bank deleted: it stays away (its sounds on no button, {len(B.starters_off(gone[0], starters))} "
+      f"with the rest; put back by hand, a bank of that name again)", "Calm" not in [b["name"] for b in gone[0]]
+      and gone[2] == [] and len(B.starters_off(gone[0], starters)) == 28
+      and B.starter_back(gone[0], starters)[0] == 28 and "Calm" in [b["name"] for b in gone[0]])
+own = B.arrange("[Calm]\nup = Laugh.mp3\n", ["Laugh.mp3"], starters)
+full = B.arrange("".join(f"[Bank {k}]\n" for k in range(B.BANKS_MOST)), [], starters)
+less = B.arrange(was, ["Laugh.mp3"], [s for s in starters if "Kalimba" not in s and "Bowl" not in s])
+check(f"...a bank of your own called Calm already: the pack's beside it ({[b['name'] for b in own[0]]}); as many "
+      f"banks as there can be: not added ({len(full[0])}, {full[2]}); two of its sounds not there (a Pietato put "
+      f"together by hand): the six that are ({len(less[2])})", [b["name"] for b in own[0]] == ["Calm", "Calm 2"]
+      and own[0][0]["pads"]["up"] == "Laugh.mp3" and len(own[2]) == 8 and len(full[0]) == B.BANKS_MOST and full[2] == []
+      and len(less[2]) == 6 and less[0][4]["pads"]["a"] is None and less[0][4]["pads"]["x"] == "Starter/Bell.wav")
+full = [{"name": f"B{k}", "pads": dict.fromkeys(B.PADS)} for k in range(B.BANKS_MOST)]
 check("names that won't do as a sound's: a path, a hidden file, another kind of file, a name with a line break",
       all(B.sound_name(x) is None for x in ("../x.wav", "a/b.wav", ".x.wav", "x.txt", "x.wav\n", "x\ny.wav", ".wav", "", None, 5))
       and all(B.sound_name(x) == x for x in ("x.wav", "My Laugh (2).MP3", "été.ogg")))
@@ -419,10 +474,10 @@ every = [[s, B.path_of(s, HOME + "/Soundboard")] for s in starters]
 p = Player()
 t0 = time.monotonic()
 p.tell(do="load", sounds=every)
-until(lambda: len(p.got("ready")) == 24, 15)
+until(lambda: len(p.got("ready")) == 32, 15)
 secs = {m["id"]: m["secs"] for m in p.got("ready")}
 check(f"the player: the starter pack read and ready in {time.monotonic() - t0:.2f} s, each as long as its file "
-      f"(a silent start aside), none it can't play", len(secs) == 24 and not p.got("bad")
+      f"(a silent start aside), none it can't play", len(secs) == 32 and not p.got("bad")
       and all(shapes[s[len(B.STARTER):]][0] - 0.06 <= secs[s] <= shapes[s[len(B.STARTER):]][0] + 0.01 for s in secs))
 check("...the sound card's left alone till it's wanted", log_lines() == 0 and p.sound() is None)
 p.tell(do="volume", v=80)
@@ -581,7 +636,7 @@ os.remove(ALOG)
 p = Player(PITATO_SOUNDBOARD_PACED="0")
 p.tell(do="load", sounds=every)
 p.tell(do="warm")
-until(lambda: p.sound() is not None and len(p.got("ready")) == 24, 10)
+until(lambda: p.sound() is not None and len(p.got("ready")) == 32, 10)
 time.sleep(0.5)
 lates = []
 for k in range(5):
@@ -864,15 +919,16 @@ m.open_app(ai)
 m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
 m.press("a")
 check("A on it in Apps opens it", m.tab == si and m.view == "list" and m.board_shown())
-spin(3, lambda: m.board is not None and len(m.board.ready) == 24 and m.board.sound_ok)
+spin(3, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
 b = m.board
 pids = players()
 check(f"...its player's started with it (one process, of its own), has read the starter pack ({len(b.ready)} ready) "
       f"and has the sound card open, where Settings > Sound says ({alog()[1][0].split('args')[1].strip()})",
-      len(pids) == 1 and b.proc is not None and b.proc.pid in pids + [os.getppid()] + [b.proc.pid] and len(b.ready) == 24
+      len(pids) == 1 and b.proc is not None and b.proc.pid in pids + [os.getppid()] + [b.proc.pid]
+      and len(b.ready) == 32
       and not b.bad and b.sound_ok is True and len(alog()[1]) >= 1)
 check(f"...its banks: {[x['name'] for x in b.banks]}, the first on the page; your Soundboard folder made, nothing "
-      f"written yet", [x["name"] for x in b.banks] == ["Starter", "Drums", "Arcade"] and b.at == 0
+      f"written yet", [x["name"] for x in b.banks] == ["Starter", "Drums", "Arcade", "Calm"] and b.at == 0
       and os.path.isdir(HOME + "/Soundboard") and not os.path.exists(S + "/static/soundboard.txt"))
 page = flush()
 s = m.sim_game()
@@ -880,17 +936,70 @@ boxes = {pad: (x, 78 + y, x + w, 78 + y + h) for pad, (x, y, w, h) in s.boxes().
 check(f"its page, on the GPi Case's screen: the bank's name and which it is ({s.bank}), a tile for each of the eight "
       f"buttons, laid out as on a controller (the d-pad's on the left, up above left and right above down; X, Y, A and "
       f"B on the right), all on the screen, none over another",
-      s.bank == (0, 3, "Starter") and sorted(boxes) == sorted(B.PADS)
+      s.bank == (0, 4, "Starter") and sorted(boxes) == sorted(B.PADS)
       and all(0 <= x0 < x1 <= 640 and 78 + SBD.TOP <= y0 < y1 <= 432 for x0, y0, x1, y1 in boxes.values())
       and boxes["up"][3] < boxes["left"][1] < boxes["left"][3] < boxes["down"][1] and boxes["left"][2] < boxes["right"][0]
       and boxes["right"][2] < boxes["y"][0] and boxes["x"][3] < boxes["y"][1] and boxes["y"][2] < boxes["a"][0]
       and boxes["a"][3] < boxes["b"][1] and boxes["up"][0] == boxes["down"][0] and boxes["x"][0] == boxes["b"][0])
 check(f"...each with its sound's name ({ {k: v[0] for k, v in s.pads.items()} })",
       {k: v for k, v in s.pads.items()} == {pad: (name, "ready") for pad, name in dict(B.STARTER_BANKS)["Starter"].items()})
-caps = {pad: near(page, (boxes[pad][0] + 8, boxes[pad][1] + 8, boxes[pad][0] + 40, boxes[pad][1] + 38), SBD.PAD_COLOUR[pad])
-        for pad in B.PADS}
-check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.PAD_COLOUR.values()))} colours: "
-      f"{min(caps.values())} pixels of it or more)", min(caps.values()) > 150 and len(set(SBD.PAD_COLOUR.values())) == 8)
+
+
+def mark_of(pad):
+    """A button's own colour on its tile: how many pixels of it round the tile's middle, above its name (its mark's
+    there), and how many at its top left corner (where it isn't)."""
+    x0, y0, x1, y1 = boxes[pad]
+    cx = (x0 + x1) // 2
+    return (near(page, (cx - 16, y0 + 4, cx + 16, y0 + (y1 - y0) // 2 + 8), SBD.PAD_COLOUR[pad]),
+            near(page, (x0 + 4, y0 + 4, x0 + 30, y0 + 30), SBD.PAD_COLOUR[pad]))
+
+
+def name_middle(pad):
+    """Where the middle of a button's name is on the page, left to right (its words' pixels, in its tile's lower
+    half)."""
+    x0, y0, x1, y1 = boxes[pad]
+    part = page[y0 + (y1 - y0) // 2 + 8:y1 - 3, x0 + 2:x1 - 2]
+    cols = np.where((np.abs(part - np.array(g.TEXT)).max(axis=2) <= 40).any(axis=0))[0]
+    return (cols[0] + cols[-1]) / 2 + x0 + 2 if len(cols) else None
+
+
+marks = {pad: mark_of(pad) for pad in B.PADS}
+names = {pad: name_middle(pad) for pad in B.PADS}
+off = {pad: None if names[pad] is None else round(float(names[pad] - (boxes[pad][0] + boxes[pad][2] - 1) / 2), 1)
+       for pad in B.PADS}
+check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.PAD_COLOUR.values()))} colours), in "
+      f"the middle of its tile ({min(v[0] for v in marks.values())} pixels of it or more there; at its corner, "
+      f"{max(v[1] for v in marks.values())} at most), its sound's name under it, in the middle too (px off it: {off})",
+      min(v[0] for v in marks.values()) > 150 and max(v[1] for v in marks.values()) < 30
+      and len(set(SBD.PAD_COLOUR.values())) == 8 and all(v is not None and abs(v) <= 2.5 for v in off.values()))
+tw, th = boxes["up"][2] - boxes["up"][0], boxes["up"][3] - boxes["up"][1]
+gaps = (boxes["right"][0] - boxes["left"][2], boxes["left"][1] - boxes["up"][3], boxes["y"][0] - boxes["right"][2],
+        boxes["left"][0], 640 - boxes["a"][2])
+check(f"...its buttons don't fill the page ({tw} by {th} px): there's room between two of them ({gaps[0]} px across, "
+      f"{gaps[1]} down), more between the d-pad's and the letters' ({gaps[2]}), and as much at the page's left as at "
+      f"its right ({gaps[3]}, {gaps[4]})", 14 <= gaps[0] == gaps[1] and gaps[2] >= 2 * gaps[0]
+      and abs(gaps[3] - gaps[4]) <= 1 and gaps[3] >= gaps[0] and tw <= 132 and th <= 90)
+sizes = {}
+MOST, TALL = getattr(SBD, "TILE_MOST", (10 ** 6, 10 ** 6)), getattr(SBD, "TILE_TALL", 10 ** 6)
+for size in ((720, 586), (1280, 586), (1920, 946)):
+    bx = SBD.Soundboard(*size).boxes()
+    w_, h_ = bx["up"][2:]
+    left, right = min(v[0] for v in bx.values()), size[0] - max(v[0] + v[2] for v in bx.values())
+    above, below = min(v[1] for v in bx.values()) - SBD.TOP, size[1] - max(v[1] + v[3] for v in bx.values())
+    sizes[size] = (w_, h_, bx["right"][0] - bx["left"][0] - w_, left, right, above, below)
+check(f"...on other screens (a button's width and height, the gap, the room left, right, above and below: {sizes}): "
+      f"a tall one, no button much taller than it's wide; a big one, none bigger than {MOST}; the gap "
+      f"growing with them; all of them together in the page's middle",
+      all(h_ <= TALL * w_ + 1 and w_ <= MOST[0] and h_ <= MOST[1] and gap >= 0.12 * w_
+          and abs(left - right) <= 1 and left >= gap and above >= 0 and below >= 0 and abs(above - below) <= 8
+          for w_, h_, gap, left, right, above, below in sizes.values())
+      and sizes[(720, 586)][5] > 40 and sizes[(1920, 946)][3] > 300)
+import pitato.bandstage as BST  # noqa: E402
+check(f"...the Band's page, which has less room for them: close together, as ever ({BST.BandStage(640, 346).boxes()})",
+      BST.BandStage(640, 346).boxes() == {"up": (88, 112, 144, 70), "left": (12, 190, 144, 70),
+                                          "right": (164, 190, 144, 70), "down": (88, 268, 144, 70),
+                                          "x": (408, 112, 144, 70), "y": (332, 190, 144, 70),
+                                          "a": (484, 190, 144, 70), "b": (408, 268, 144, 70)})
 hints = m.sim_hints(s)
 check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Sequencer, Bounce"), ("SELECT", "Bank"),
                                                              ("START", "More"), ("HOME", "Back")])
@@ -1059,7 +1168,7 @@ m.release("select")
 spin(0.3)
 s = m.sim_game()
 check(f"SELECT: the next bank ({s.bank}), its sounds on the buttons ({s.pads['b'][0]}, {s.pads['a'][0]}...), and "
-      f"nothing recording", s.bank == (1, 3, "Drums") and s.pads["b"] == ("Kick", "ready") and b.at == 1
+      f"nothing recording", s.bank == (1, 4, "Drums") and s.pads["b"] == ("Kick", "ready") and b.at == 1
       and b.take is None and not b.layers and s.loop is None)
 m.press("b")
 check("...and its buttons play them", spin(1.0, lambda: sid("Kick") in b.playing))
@@ -1068,8 +1177,11 @@ m.press("select")
 held = (m.press("select", repeat=True), spin(SSB.HOLD + 0.2), m.sim_game().bank[0])[2]
 m.release("select")
 m.press("select"); m.release("select")
-check(f"...round and round: SELECT past the last is the first; held, once is once, and nothing's said or dropped "
-      f"({toasts[n_toasts:]})", held == 2 and m.sim_game().bank[0] == 0 and toasts[n_toasts:] == [])
+last = m.sim_game().bank
+m.press("select"); m.release("select")
+check(f"...round and round: SELECT past the last ({last}) is the first; held, once is once, and nothing's said or "
+      f"dropped ({toasts[n_toasts:]})", held == 2 and last == (3, 4, "Calm") and m.sim_game().bank[0] == 0
+      and toasts[n_toasts:] == [])
 quiet()
 went = []
 for name in ("r", "r", "r", "l", "l2", "r2", "r"):
@@ -1147,23 +1259,23 @@ check("...and its player's gone with its page (and aplay with it: nothing holds 
       and log_lines() == mark)
 check("...the bank you were on is kept for next time", m.setting("board_bank") == "Drums")
 m.press("a")
-spin(3, lambda: len(b.ready) == 24 and b.sound_ok)
+spin(3, lambda: len(b.ready) == 32 and b.sound_ok)
 check("opened again: its player again, the bank you were on", m.board_shown() and len(players()) == 1
-      and players() != [pid] and m.sim_game().bank == (1, 3, "Drums"))
+      and players() != [pid] and m.sim_game().bank == (1, 4, "Drums"))
 home = m.sim_home()
 spin(0.3)
 check("HOME: back to Apps at once (B's a button of its own here), the Soundboard picked, its player gone", home is True
       and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard"
       and until(lambda: players() == [], 4) and m.sim_home() is False)
 m.press("a")
-spin(3, lambda: len(b.ready) == 24 and b.sound_ok)
+spin(3, lambda: len(b.ready) == 32 and b.sound_ok)
 m.press("start")
 home = m.sim_home()
 spin(0.3)
 check("...from START's card too, the card gone with it", home is True and m.tab == ai and m.sim_opts is None
       and b.card is None)
 m.press("a")
-spin(3, lambda: len(b.ready) == 24 and b.sound_ok and len(players()) == 1)
+spin(3, lambda: len(b.ready) == 32 and b.sound_ok and len(players()) == 1)
 
 # your own sounds: a file put in the folder
 tone(S + "/laugh.wav", 0.6)
@@ -1174,7 +1286,7 @@ took = time.monotonic() - t0
 s = m.sim_game()
 check(f"a file put in your Soundboard folder: on a button {took:.1f} s later, nothing started again (the same player): "
       f"My sounds' first ({s.bank}, {s.pads}), shown and said ({toasts[-1:]})",
-      took < 2.5 and players() != [] and s.bank == (3, 4, "My sounds") and s.pads == {"up": ("Laugh", "ready")}
+      took < 2.5 and players() != [] and s.bank == (4, 5, "My sounds") and s.pads == {"up": ("Laugh", "ready")}
       and toasts[-1:] == ["Laugh is on Up in My sounds"])
 filed = open(S + "/static/soundboard.txt").read()
 check("...and written to the banks' file, yours, with the starter pack's banks as they are",
@@ -1219,7 +1331,7 @@ spin(0.2, lambda: m.sim_game().pads == {"b": ("Laugh", "ready")})
 check(f"the web page's Soundboard moves a sound, adds a bank, and says so: here at once "
       f"({(time.monotonic() - t0) * 1000:.0f} ms; {m.sim_game().pads}, {[x['name'] for x in b.banks]}), the bank on "
       f"the page still the one you're on ({said})", m.sim_game().pads == {"b": ("Laugh", "ready")}
-      and [x["name"] for x in b.banks][-2:] == ["My sounds", "Party"] and m.sim_game().bank == (3, 5, "My sounds")
+      and [x["name"] for x in b.banks][-2:] == ["My sounds", "Party"] and m.sim_game().bank == (4, 6, "My sounds")
       and said == {"ok": True, "open": True} and time.monotonic() - t0 < 0.25)
 text = open(S + "/static/soundboard.txt").read().replace("[Party]\nx = One.wav", "[Party]\ny = One.wav")
 open(tmp, "w").write(text)
@@ -1292,7 +1404,7 @@ s = m.sim_game()
 wide = {pad: (x, 78 + y, x + w, 78 + y + h) for pad, (x, y, w, h) in s.boxes().items()}
 check(f"a bigger screen: its tiles bigger, still all on it between the bars ({wide['up'][2] - wide['up'][0]} by "
       f"{wide['up'][3] - wide['up'][1]})", all(0 <= x0 < x1 <= 960 and 118 <= y0 < y1 <= 492 for x0, y0, x1, y1 in wide.values())
-      and wide["up"][2] - wide["up"][0] > 200 and page.shape[:2] == (540, 960))
+      and wide["up"][2] - wide["up"][0] > tw + 40 and page.shape[:2] == (540, 960))
 FB.w, FB.h, FB.real_w, FB.real_h = 640, 480, 640, 480
 m.fb = FB()
 m.forget_drawn()
@@ -1364,7 +1476,7 @@ check(f"...on My sounds' next free button meanwhile, like any new sound ({s.pads
 m.press("select")
 check("...SELECT: heard first", spin(1.5, lambda: "Recording 1.wav" in b.playing))
 spin(2, lambda: not b.playing)
-m.press("l"); m.press("l"); m.press("l")               # (My sounds, Arcade, Drums, Starter)
+m.press("l"); m.press("l"); m.press("l"); m.press("l")   # (My sounds, Calm, Arcade, Drums, Starter)
 check("...L and R: another bank", m.sim_game().bank[2] == "Starter" and b.placing == "Recording 1.wav")
 n_toasts = len(toasts)
 m.press("a")
@@ -1374,7 +1486,7 @@ filed = open(S + "/static/soundboard.txt").read()
 check(f"...the button pressed is the one it goes on ({s.pads['a']}; {toasts[n_toasts:]}); what was there is where it "
       f"was (nothing's lost: {B.where(b.banks, sid('Ding'))}); written to the banks' file",
       s.pads["a"] == ("Recording 1", "ready") and toasts[n_toasts:] == ["Recording 1 is on A in Starter"]
-      and b.placing is None and B.where(b.banks, sid("Ding")) == (3, "up") and "a = Recording 1.wav" in filed
+      and b.placing is None and B.where(b.banks, sid("Ding")) == (4, "up") and "a = Recording 1.wav" in filed
       and "[My sounds]\nup = Starter/Ding.wav\nb = Laugh.wav" in filed)
 m.press("a")
 check("...and plays there, now", spin(1.5, lambda: "Recording 1.wav" in b.playing) and not b.placing)
@@ -1428,7 +1540,7 @@ m.press("a")
 spin(4, lambda: b.placing is not None)
 m.press("start"); m.press("a")
 check(f"...Leave it where it is: there it stays ({B.where(b.banks, 'Recording 2.wav')})", b.placing is None
-      and m.sim_opts is None and B.where(b.banks, "Recording 2.wav") == (3, "left"))
+      and m.sim_opts is None and B.where(b.banks, "Recording 2.wav") == (4, "left"))
 open(AREC, "w").write("busy")
 m.press("start"); m.press("down"); m.press("down")
 n_toasts = len(toasts)
@@ -1444,6 +1556,46 @@ spin(0.5)
 check("leaving in the middle of a recording (HOME): dropped, its player gone, the Bot listening again",
       until(lambda: players() == [], 4) and b.rec is None and b.proc is None and listened[-1] is True
       and sorted(os.listdir(HOME + "/Soundboard")) == ["Laugh.wav", "One.wav", "Recording 1.wav", "Recording 2.wav"])
+
+# a Pietato from before the Calm bank (its banks' file doesn't say which of the pack's it's had), updated: opened,
+# the bank's there, after the pack's others, and it's said, the once
+open(S + "/static/soundboard.txt", "w").write(
+    "# The Soundboard's banks\n[Starter]\nup = Starter/Air horn.wav\n[Drums]\nb = Starter/Kick.wav\n[Arcade]\n"
+    "up = Starter/Jump.wav\n[My sounds]\nup = Laugh.wav\n")
+m.set_setting("board_bank", "Drums")
+m.board = None                                         # (as it is after the Pi's restarted with the update)
+m.open_app(ai)
+m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+n_toasts = len(toasts)
+m.press("a")
+spin(4, lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) >= 12 and m.board.sound_ok)
+b = m.board
+s = m.sim_game()
+filed = open(S + "/static/soundboard.txt").read()
+check(f"a banks' file from before the Calm bank, the Soundboard opened after the update: the bank's there, after the "
+      f"pack's others ({[x['name'] for x in b.banks]}), and it's said ({toasts[n_toasts:]}); the bank you were on is "
+      f"still the one that's up ({s.bank}); the file says it's had it now",
+      [x["name"] for x in b.banks] == ["Starter", "Drums", "Arcade", "Calm", "My sounds", "My sounds 2"][:len(b.banks)]
+      and b.banks[3]["pads"]["a"] == "Starter/Kalimba.wav" and s.bank[0] == 1 and s.bank[2] == "Drums"
+      and toasts[n_toasts:n_toasts + 1] == ["New sounds: the Calm bank. SELECT goes through the banks"]
+      and "packs = Starter, Drums, Arcade, Calm\n" in filed and "[Calm]\nup = Starter/Chime.wav\n" in filed)
+m.press("select"); m.release("select"); m.press("select"); m.release("select")
+spin(0.3)
+m.press("a")
+check(f"...SELECT to it: its sounds on the buttons ({m.sim_game().pads.get('a')}), and they play",
+      m.sim_game().bank[2] == "Calm" and m.sim_game().pads.get("a") == ("Kalimba", "ready")
+      and spin(1.5, lambda: sid("Kalimba") in b.playing))
+m.release("a")
+n_toasts = len(toasts)
+m.sim_home()
+spin(0.5)
+m.press("a")
+spin(4, lambda: m.board.proc is not None and m.board.sound_ok)
+spin(1.5)
+check(f"...opened again: not said again ({toasts[n_toasts:]}), and the bank's there once",
+      not any("New sounds" in t for t in toasts[n_toasts:]) and [x["name"] for x in b.banks].count("Calm") == 1)
+m.go_home()
+spin(0.5)
 m.leave()
 
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}", flush=True)

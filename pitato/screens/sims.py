@@ -121,19 +121,13 @@ class SimScreen:
             self.toast("Full screen. SELECT again to leave it", 3)
 
     def sim_home(self):
-        """HOME on the Soundboard's page or the Band's, where B is a button of theirs: back, as START's card and B go
-        (Bounce, or the Sequencer: the Soundboard's own buttons again). False: not on either."""
+        """HOME on the Soundboard's page or the Band's, where B is a button of theirs: back to Apps, as START's card
+        and B go elsewhere. From any of the Soundboard's pages (its buttons, the Sequencer, Bounce): the one it's left
+        on is the one it opens on the next time. False: not on either."""
         if not (self.on_sim_page() and (self.board_tab() or self.band_tab())):
             return False
         if self.board_tab():
-            b = self.board_open()
-            if b.bounce is not None and b.rec is None and b.placing is None:
-                self.bounce_leave()
-                return True
-            if b.seq_up and b.rec is None and b.placing is None:
-                self.seq_leave()
-                return True
-            b.card = None
+            self.board_open().card = None
         else:
             self.band_open().card = None
         self.sim_close()
