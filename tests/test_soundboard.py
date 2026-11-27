@@ -951,7 +951,7 @@ def mark_of(pad):
     x0, y0, x1, y1 = boxes[pad]
     cx = (x0 + x1) // 2
     return (near(page, (cx - 16, y0 + 4, cx + 16, y0 + (y1 - y0) // 2 + 8), SBD.PAD_COLOUR[pad]),
-            near(page, (x0 + 4, y0 + 4, x0 + 30, y0 + 30), SBD.PAD_COLOUR[pad]))
+            near(page, (x0 + 3, y0 + 3, x0 + 22, y0 + 22), SBD.PAD_COLOUR[pad]))
 
 
 def name_middle(pad):
@@ -973,27 +973,43 @@ check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.
       min(v[0] for v in marks.values()) > 150 and max(v[1] for v in marks.values()) < 30
       and len(set(SBD.PAD_COLOUR.values())) == 8 and all(v is not None and abs(v) <= 2.5 for v in off.values()))
 tw, th = boxes["up"][2] - boxes["up"][0], boxes["up"][3] - boxes["up"][1]
-gaps = (boxes["right"][0] - boxes["left"][2], boxes["left"][1] - boxes["up"][3], boxes["y"][0] - boxes["right"][2],
+gap = boxes["left"][1] - boxes["up"][3]                 # (between a button and the one under it)
+gaps = (boxes["right"][0] - boxes["left"][2], boxes["a"][0] - boxes["y"][2], boxes["y"][0] - boxes["right"][2],
         boxes["left"][0], 640 - boxes["a"][2])
-check(f"...its buttons don't fill the page ({tw} by {th} px): there's room between two of them ({gaps[0]} px across, "
-      f"{gaps[1]} down), more between the d-pad's and the letters' ({gaps[2]}), and as much at the page's left as at "
-      f"its right ({gaps[3]}, {gaps[4]})", 14 <= gaps[0] == gaps[1] and gaps[2] >= 2 * gaps[0]
-      and abs(gaps[3] - gaps[4]) <= 1 and gaps[3] >= gaps[0] and tw <= 132 and th <= 90)
+check(f"...its buttons are square and don't fill the page ({tw} by {th} px, {gap} px between one and the next): each "
+      f"four a cross, left and right a button apart ({gaps[0]} px, {gaps[1]} for Y and A), up and down between "
+      f"them, so it's as wide as it's tall; about as far between the d-pad's and the letters' ({gaps[2]}); and as "
+      f"much at the page's left as at its right ({gaps[3]}, {gaps[4]})",
+      tw == th and 74 <= tw <= 84 and gap >= 10 and gaps[0] == gaps[1] == tw + 2 * gap
+      and boxes["up"][0] == boxes["left"][2] + gap == boxes["down"][0] and boxes["x"][0] == boxes["y"][2] + gap
+      and boxes["right"][2] - boxes["left"][0] == boxes["down"][3] - boxes["up"][1]
+      and boxes["down"][1] - boxes["left"][3] == gap and gaps[2] >= 0.9 * tw
+      and abs(gaps[3] - gaps[4]) <= 1 and gaps[3] >= gap)
+fits = {}
+for bank, pads in B.STARTER_BANKS:
+    for name in pads.values():
+        fits[name] = SBD.Soundboard.fitted(name, s.font(max(13, min(16, round(tw * 0.165))), bold=True),
+                                           tw - 2 * max(7, round(tw * 0.09)))
+check(f"...and every sound of the pack's has its whole name on one that size, on a line or two (none cut short: "
+      f"{[v for v in fits.values() if len(v) > 1][:3]}...)",
+      all(1 <= len(v) <= 2 and not any(x.endswith("…") for x in v) for v in fits.values()))
 sizes = {}
-MOST, TALL = getattr(SBD, "TILE_MOST", (10 ** 6, 10 ** 6)), getattr(SBD, "TILE_TALL", 10 ** 6)
+MOST = getattr(SBD, "TILE_MOST", 10 ** 6)
+MOST = MOST if isinstance(MOST, int) else 10 ** 6
 for size in ((720, 586), (1280, 586), (1920, 946)):
     bx = SBD.Soundboard(*size).boxes()
     w_, h_ = bx["up"][2:]
     left, right = min(v[0] for v in bx.values()), size[0] - max(v[0] + v[2] for v in bx.values())
     above, below = min(v[1] for v in bx.values()) - SBD.TOP, size[1] - max(v[1] + v[3] for v in bx.values())
-    sizes[size] = (w_, h_, bx["right"][0] - bx["left"][0] - w_, left, right, above, below)
+    sizes[size] = (w_, h_, bx["left"][1] - bx["up"][1] - h_, left, right, above, below)
 check(f"...on other screens (a button's width and height, the gap, the room left, right, above and below: {sizes}): "
-      f"a tall one, no button much taller than it's wide; a big one, none bigger than {MOST}; the gap "
+      f"square on each; a big one, none bigger than {MOST}; the gap "
       f"growing with them; all of them together in the page's middle",
-      all(h_ <= TALL * w_ + 1 and w_ <= MOST[0] and h_ <= MOST[1] and gap >= 0.12 * w_
-          and abs(left - right) <= 1 and left >= gap and above >= 0 and below >= 0 and abs(above - below) <= 8
-          for w_, h_, gap, left, right, above, below in sizes.values())
-      and sizes[(720, 586)][5] > 40 and sizes[(1920, 946)][3] > 300)
+      all(h_ == w_ <= MOST and gap_ >= 0.12 * w_
+          and abs(left - right) <= 1 and left >= gap_ and above >= 0 and below >= 0 and abs(above - below) <= 8
+          for w_, h_, gap_, left, right, above, below in sizes.values())
+      and sizes[(720, 586)][5] > 40 and sizes[(1920, 946)][3] > 250
+      and sizes[(720, 586)][0] > tw and sizes[(1280, 586)][0] > sizes[(720, 586)][0])
 import pitato.bandstage as BST  # noqa: E402
 check(f"...the Band's page, which has less room for them: close together, as ever ({BST.BandStage(640, 346).boxes()})",
       BST.BandStage(640, 346).boxes() == {"up": (88, 112, 144, 70), "left": (12, 190, 144, 70),
@@ -1404,7 +1420,7 @@ s = m.sim_game()
 wide = {pad: (x, 78 + y, x + w, 78 + y + h) for pad, (x, y, w, h) in s.boxes().items()}
 check(f"a bigger screen: its tiles bigger, still all on it between the bars ({wide['up'][2] - wide['up'][0]} by "
       f"{wide['up'][3] - wide['up'][1]})", all(0 <= x0 < x1 <= 960 and 118 <= y0 < y1 <= 492 for x0, y0, x1, y1 in wide.values())
-      and wide["up"][2] - wide["up"][0] > tw + 40 and page.shape[:2] == (540, 960))
+      and wide["up"][2] - wide["up"][0] > tw + 15 and page.shape[:2] == (540, 960))
 FB.w, FB.h, FB.real_w, FB.real_h = 640, 480, 640, 480
 m.fb = FB()
 m.forget_drawn()

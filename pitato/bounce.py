@@ -101,12 +101,6 @@ class World:
         self.last = {k: t for k, t in self.last.items() if k[0] != gone}
         return True
 
-    def shake(self):
-        """Every ball off another way, as fast as ever (Y): a flurry of new notes."""
-        for b in self.balls:
-            a = self.rng.uniform(0, 2 * math.pi)
-            b[3], b[4] = math.cos(a), math.sin(a)
-
     def reshape(self, sides):
         """Another shape: the balls stay where they are, pushed inside it if they're out."""
         self.sides = sides
@@ -195,8 +189,9 @@ def slider_words(key, v):
 
 
 def draw_panel(d, box, view, fonts):
-    """Its sliders, at the right of the page: X and Y at the top (its sound; Y shakes the balls), then each slider,
-    the one ▲▼ picked lit, its value at its right (◀▶ move it), and under them a few words on what it does."""
+    """Its sliders, at the right of the page: X and Y at the top (its sound, its scale: each button's the next),
+    then each slider, the one ▲▼ picked lit, its value at its right (◀▶ move it), and under them a few words on what
+    it does."""
     from .theme import ACCENT, ACCENTS, BG, BODY, co_mix, MUTED, ROW, TEXT
     x0, y0, x1, y1 = box
     hues = dict(ACCENTS)
@@ -209,7 +204,7 @@ def draw_panel(d, box, view, fonts):
         says = says[:-2].rstrip() + "…"
     d.text((x0 + 12, y1 - ih * 0.4), says, font=f, fill=MUTED, anchor="lm")
     y1 -= ih * 0.8
-    for (letter, colour), words in ((("X", hues["Pink"]), view["sound"]), (("Y", hues["Gold"]), "Shake the balls")):
+    for (letter, colour), words in ((("X", hues["Pink"]), view["sound"]), (("Y", hues["Gold"]), view["scale"])):
         mid = y0 + ih / 2
         d.ellipse((x0 + 6, mid - r, x0 + 6 + 2 * r, mid + r), fill=colour)
         d.text((x0 + 6 + r, mid), letter, font=fonts["badge"], fill=co_mix(colour, (16, 19, 23), 0.85), anchor="mm")

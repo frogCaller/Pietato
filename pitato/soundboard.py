@@ -33,10 +33,11 @@ PAD_PLACE = {"up": (0, 0.5, 0), "left": (0, 0, 1), "right": (0, 1, 1), "down": (
 TOP = 40                         # px for its line (the page's name, the bank, the loop)
 PAGE_NAME = "Soundboard"         # its buttons' page, as its line names it (the others: Sequencer, Bounce)
 EDGE, GAP, MIDDLE = 12, 8, 24    # px round the page's own things and between them (the Band's page: its buttons')
-SPACE = (0.14, 0.34, 0.17)       # its buttons have room to breathe. Of a button's width: between two of them, between
-                                 # the d-pad's and the letters', and at the page's sides
-TILE_TALL = 0.85                 # ...a button's no taller than this much of its width (a tall screen)
-TILE_MOST = (240, 160)           # ...nor bigger than this, px (a big one): as big as what's on it needs, no more
+SPACE = (0.15, 1.15, 0.2, 0.05)  # its buttons are square, with room to breathe. Of a button's side: between two of
+                                 # them, between the d-pad's and the letters' (about as far as a cross's left button
+                                 # is from its right: two crosses, apart), at the page's sides at least, and above and
+                                 # under them at least
+TILE_MOST = 170                  # ...and no bigger than this, px (a big screen): as big as what's on it needs, no more
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
 INK = (16, 19, 23)               # the words on a lit tile: dark, whatever the page is
@@ -53,7 +54,7 @@ class Soundboard(Sim):
     bare = True                         # on the page itself: no box, and nothing beside it
     paced = True                        # drawn again when something changes, not frame by frame
     top_px = TOP                        # px above its buttons (the Band's page, made from this one, has more there)
-    spaced = True                       # its buttons a little apart, in the page's middle (boxes)
+    spaced = True                       # its buttons square and apart, in the page's middle (boxes)
 
     def __init__(self, w, h, rng=None, values=None):
         super().__init__(w, h, rng, values)
@@ -117,25 +118,29 @@ class Soundboard(Sim):
 
     def boxes(self):
         """Where each button's tile is on the page (x, y, w, h): the d-pad's four on the left as they are on a
-        controller (up, left and right, down), the letters' on the right (X, Y and A, B). They don't fill the page:
-        there's room between them and round them (SPACE), and all of them together are in its middle. (Close
-        together, filling it: the Band's page, which has less room for them.)"""
+        controller (up, left and right, down), the letters' on the right (X, Y and A, B). They're square, and each
+        four a cross: left and right a button apart, up and down between them, so it's as wide as it's tall. They
+        don't fill the page: as big as its height or its width lets three rows of them and six across be, with room
+        between them and round them (SPACE), all of them together in its middle. (Wider than tall, close together,
+        left and right side by side, filling it: the Band's page, which has less room for them.)"""
         room = self.h - self.top_px - EDGE // 2
         if self.spaced:
-            between, apart, sides = SPACE
-            tw = min(TILE_MOST[0], self.w / (4 + 2 * between + apart + 2 * sides))
-            gap = round(tw * between)
-            th = max(40, int(min(TILE_MOST[1], TILE_TALL * tw, (room - 3 * gap) / 3)))
-            tw, middle = int(tw), round(tw * apart)
-            left = (self.w - (4 * tw + 2 * gap + middle)) // 2
+            between, apart, sides, above = SPACE
+            side = max(40, int(min(TILE_MOST, room / (3 + 2 * between + 2 * above),
+                                   self.w / (6 + 4 * between + apart + 2 * sides))))
+            tw = th = side
+            gap, middle = round(side * between), round(side * apart)
+            wide, along = 3 * tw + 2 * gap, 2 * (tw + gap)     # (a cross's width; from its left button to its right)
+            left = (self.w - (2 * wide + middle)) // 2
             top = self.top_px + max(0, (room - (3 * th + 2 * gap)) // 2)
         else:
             gap, middle, left, top = GAP, MIDDLE, EDGE, self.top_px
             tw = (self.w - 2 * EDGE - MIDDLE - 2 * GAP) // 4
             th = max(40, (room - 2 * GAP) // 3)
+            wide, along = 2 * tw + gap, tw + gap
         out = {}
         for pad, (side, across, row) in PAD_PLACE.items():
-            x = left + side * (2 * tw + gap + middle) + round(across * (tw + gap))
+            x = left + side * (wide + middle) + round(across * along)
             out[pad] = (x, top + row * (th + gap), tw, th)
         return out
 
@@ -201,9 +206,11 @@ class Soundboard(Sim):
             return tile
         colour = PAD_COLOUR[pad]
         size = max(16, min(28, round(h * 0.17)))       # (a bigger screen than the GPi Case's: bigger words to match)
-        f, small = self.font(size, bold=True), self.font(size - 3)
+        size = max(13, min(size, round(w * 0.165)))    # (...a narrow tile, a square one on a small screen: smaller,
+        f, small = self.font(size, bold=True), self.font(max(11, size - 3))   # so a word like Explosion's all there)
         r, step = max(13, min(24, round(h * 0.15))), round(size * 1.22)
         edge = 14 if h >= 104 else 12
+        room = w - 2 * max(7, round(w * 0.09))         # (px its name has, across)
         if got is None:                                # nothing on it
             tile = Image.new("RGB", (w, h), BG)
             d = ImageDraw.Draw(tile)
@@ -226,7 +233,7 @@ class Soundboard(Sim):
                 cap = colour if state == "ready" else co_mix(ROW, colour, 0.45)
                 ink = co_mix(colour, BG, 0.85)
                 text = TEXT if state == "ready" else MUTED
-            words = [(line, text) for line in self.fitted(name, f, w - 2 * edge)]
+            words = [(line, text) for line in self.fitted(name, f, room)]
             if state == "bad" and not lit:
                 words = words[:1] + [("Can't play it", co_mix(WARN, ROW, 0.25))]
         gap = round(h * 0.07)                          # (its button, a gap, its name: together, in its middle)
@@ -237,8 +244,10 @@ class Soundboard(Sim):
             self.arrow(d, pad, cx, top + r, r * 0.46, ink)
         else:
             d.text((cx, top + r), PAD_NAME[pad], font=self.font(max(14, r + 2), bold=True), fill=ink, anchor="mm")
-        if note is not None:                           # (a note being played on it: which, at its top right)
-            d.text((w - edge, edge + 6), note, font=self.font(size + 1, bold=True),
+        if note is not None:                           # (a note being played on it: which, at its top right; small,
+            wide = w >= 110                            #  in the corner, on a narrow tile: clear of its button)
+            d.text((w - edge, edge + 6) if wide else (w - 7, 12), note,
+                   font=self.font(size + 1 if wide else size - 1, bold=True),
                    fill=co_mix(colour, BG, 0.85) if lit else colour, anchor="rm")
         y = top + 2 * r + gap + step // 2
         for k, (line, fill) in enumerate(words):
@@ -357,7 +366,8 @@ class Soundboard(Sim):
 
     def bounce_top(self, d, x0, y0, w):
         """Bounce's line, over its shape (w wide): its name between ◀ and ▶ (L and R: the Soundboard's other pages),
-        its key and scale at the left, its shape (SELECT: the next) and how many balls at the right."""
+        its key and scale at the left (SELECT: the next key; Y: the next scale), its shape and how many balls at the
+        right."""
         v = self.bounce
         mid = y0 + TOP // 2 - 2
         big = self.w >= 960

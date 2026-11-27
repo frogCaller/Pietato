@@ -320,16 +320,16 @@ changes nothing for the others.
 Bounce is a shape turning slowly, with balls bouncing inside it, both in your accent colour.
 Each wall is a note of a scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note
 and lights it up. A ball that hits a wall straight on plays louder than one that only grazes it, and you hear it
-from the side it hits. A adds a ball and B takes one away (up to 8), X changes the sound, Y sends every ball off
-another way, and SELECT changes the shape (more sides, more notes).
+from the side it hits. A adds a ball and B takes one away (up to 8). X changes the sound, Y the scale (major,
+minor, pentatonic or blues) and SELECT the key, so what you hear is a button away.
 
 Its sliders are on the right: ▲▼ pick one and ◀▶ move it, and the line under them says what the one picked does.
 Spin turns the shape either way, Speed is how fast the balls go, Reverb puts the notes in a room or a big hall, Echo
 plays each note again, from side to side, in time with the tempo, Tone makes them darker (◀) or brighter (▶), and
-Drone holds a soft note in the key under them. START pauses it, and its card has the sound (a bell, a marimba, a
-kalimba, glass, a pluck, a pad, or any sound on your Soundboard, played at each wall's note), the key, the scale
-(major, minor, pentatonic or blues) and Snap to the tempo (each note on the loop's beat). Your LEDs, if you have
-them, flash in the same colour.
+Drone holds a soft note in the key under them. START pauses it, and its card has the shape (a triangle, a square,
+a pentagon or a hexagon: more sides, more notes), the sound (a bell, a marimba, a kalimba, glass, a pluck, a pad,
+or any sound on your Soundboard, played at each wall's note), the key, the scale and Snap to the tempo (each note
+on the loop's beat). Your LEDs, if you have them, flash in the same colour.
 
 The Sequencer is a grid of four sounds, a kick, a snare, a hi-hat and a lead, across the sixteen
 steps of a bar. A cell that's on plays its row's sound as the bar comes round to it, at the Soundboard's tempo. The
