@@ -248,7 +248,7 @@ if not ONLY or "tune" in ONLY:
           f"{SQ.step_at((120.0, 2.5, 100.0), 100.0)}), and how long till its next "
           f"({SQ.next_step_in(c120, 100.1):.3f} s)", steps == [0, 0, 1, 15, 0]
           and SQ.step_at((120.0, 2.5, 100.0), 100.0) == 10 and abs(SQ.next_step_in(c120, 100.1) - 0.025) < 1e-6)
-    fits = []
+    fits, even = [], []
     for box, big in (((0, 40, 640, 346), False), ((0, 40, 960, 406), True), ((0, 40, 1920, 946), True)):
         lay = SQ.layout(box, big)
         xs, ys, cw, ch = lay["xs"], lay["ys"], lay["cw"], lay["ch"]
@@ -260,9 +260,12 @@ if not ONLY or "tune" in ONLY:
                     and box[0] < lay["left"] < lay["label"] < xs[0] and xs[-1] + cw <= box[2] - 12
                     and ys[0] > box[1] and all(b_ - a > ch for a, b_ in zip(ys, ys[1:]))
                     and by0 > ys[-1] + ch and box[0] < bx0 < bx1 < box[2] and by1 <= box[3] and by1 - by0 >= 80)
+        even.append((cw, ch, gaps[0], ys[1] - ys[0] - ch))
     check(f"where its page's parts go, on the GPi Case's screen and on bigger ones: sixteen cells across in four "
           f"beats of four, four rows, the rows' names at their left, the bars' box under them, all of it on the page "
           f"({fits})", all(fits))
+    check(f"...its cells square, and as far apart down as across, as a beat's four are (wide, high, apart across, "
+          f"apart down: {even})", all(w_ == h_ and a_ == b_ for w_, h_, a_, b_ in even))
 
 # ---- its player ----------------------------------------------------------------------------------------------------
 if not ONLY or "player" in ONLY:
@@ -604,7 +607,8 @@ if not ONLY or "app" in ONLY:
         x0, y0 = where[-1]
         lay = SQ.layout((0, SB.TOP, s.w, s.h), s.w >= 960)
         cw = lay["cw"]
-        lit = [[int(page[y0 + y + 4, x0 + x + cw // 2].sum()) > 300 for x in lay["xs"]] for y in lay["ys"]]
+        lit = [[int(page[y0 + y + 4, x0 + x + cw // 4].sum()) > 300 for x in lay["xs"]]   # (clear of a note's
+               for y in lay["ys"]]                                                      # name and its dot)
         heads = [c for c, x in enumerate(lay["xs"])      # (the column the bar's on: lighter, from its number down)
                  if page[y0 + lay["nums"] - 8, x0 + x + cw // 2][0] > g.BG[0] + 8]
         return page, lit, heads, lay

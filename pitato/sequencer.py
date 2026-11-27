@@ -159,8 +159,8 @@ def layout(box, big):
     label = 124 if big else 74
     gap, beat_gap = (8, 14) if big else (4, 8)
     cw = int((x1 - x0 - 2 * edge - label - 12 * gap - 3 * beat_gap) // STEPS)
-    ch = cw + (6 if big else 4)
-    pitch = ch + (12 if big else 8)
+    ch = cw                                            # (square, and as far apart down as across: as a beat's are)
+    pitch = ch + gap
     nums = y0 + (14 if big else 10)
     gx, gy = x0 + edge + label, nums + (14 if big else 10)
     xs, x = [], gx
@@ -168,7 +168,7 @@ def layout(box, big):
         xs.append(x)
         x += cw + (beat_gap if c % 4 == 3 else gap)
     ys = [gy + r * pitch for r in range(ROWS)]
-    bars = (x0 + edge, ys[-1] + pitch + (4 if big else 0), x1 - edge, y1 - 8)
+    bars = (x0 + edge, ys[-1] + ch + (16 if big else 8), x1 - edge, y1 - 8)
     return {"xs": xs, "ys": ys, "cw": cw, "ch": ch, "left": x0 + edge, "label": gx - (16 if big else 12),
             "bars": bars, "nums": nums}
 
