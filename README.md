@@ -1,8 +1,6 @@
 # Pietato: Your Raspberry Pi Entertainment Hub
 
-Pietato turns a Raspberry Pi and a game controller into a media center for live TV, videos, music, radio,
-photos, smart home controls and the games you own. It also works on a PC with Ubuntu or Debian, and in a
-GPi Case 2W or GPi Case 2.
+Pietato turns a Raspberry Pi and a game controller into a media center for live TV, videos, music, radio, photos, smart home controls, security cameras and the games you own. With more than one Pi, they can play music together and sync ESP32 LED lights to the beat. It also works on a PC with Ubuntu or Debian, and in a GPi Case 2W or GPi Case 2.
 
 <p>
   <img src="docs/home-screen.png" height="260">
