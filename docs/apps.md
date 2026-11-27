@@ -295,9 +295,10 @@ stops them all. B is a button like the others there, so HOME is the way back. ST
 card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
 sounds play wherever Settings > Sound sends them.
 
-The Soundboard has three pages, and L and R go round them: its buttons, the Sequencer and Bounce. The name of
-the one you're on is at the top, between ◀ and ▶. HOME goes back to Apps from any of them, and the Soundboard
-opens again on the page you left.
+The Soundboard has three pages: its buttons, the Sequencer and Bounce. From the buttons, L is the Sequencer and
+R is Bounce, and L and R go on round the three. The name of the page you're on is at the top left, and what it's
+set to is at the right: the bank, or the key, the scale and the tempo. HOME goes back to Apps from any of them,
+and the Soundboard opens again on the page you left.
 
 START's card records a loop. Record a loop is its first row, so it's START, then A. Play some buttons, then
 press START and A again (the row says Stop recording now): what you played goes round and round, each hit moved
@@ -336,7 +337,8 @@ steps of a bar. A cell that's on plays its row's sound as the bar comes round to
 d-pad moves from cell to cell, A turns one on or off, and B starts the tune and stops it. Each of the lead's cells
 has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
 Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like, and SELECT changes
-the scale. Under the grid, bars show the sound as it plays, low notes at the left.
+the scale. Each row has its own colour, the steps are numbered over the grid, and the column that's playing is
+lit. Under the grid, bars show the sound as it plays, low notes at the left.
 
 The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
 the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new

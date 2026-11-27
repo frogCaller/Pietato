@@ -1,6 +1,6 @@
 """Apps' Soundboard: a sound on every button. The d-pad's four and A, B, X and Y each play the sound that's on them,
 as many at once as you like (pressed again while it plays, a sound starts again); SELECT goes through the banks of
-eight; L and R go round its three pages (these buttons, the Sequencer, Bounce). START has the rest: a loop recorded,
+eight; L and R go round its three pages (the Sequencer, these buttons, Bounce). START has the rest: a loop recorded,
 the bank, the volume, a new sound recorded with a USB microphone and put on a button. HOME goes back (B is a button
 like the others here).
 
@@ -8,8 +8,9 @@ The sounds: a starter pack that comes with Pietato (pitato/sounds, public domain
 in the Soundboard folder of your home folder. A new file there is on a button a moment later (My sounds' first free
 one). The web page's Soundboard adds, records, renames and deletes them, and puts them on the buttons.
 
-This draws the page: its name between ◀ and ▶ (L and R: its other pages), the bank's name (and a dot for each bank),
-and the buttons laid out as they are on a controller (each one's button and its sound's name in its tile's middle),
+This draws the page: its line (its picture and name, ‹ › for L and R, its other pages; at the right, in a pill, the
+bank's name and a dot for each bank), and the buttons laid out as they are on a controller, two crosses (each one's
+button and its sound's name in its tile's middle, the tile outlined in its button's colour),
 each with its sound's name, lit from behind in its button's colour, brightly while it plays; the loop, recording or
 playing, with the beat it's on, how far round it is and the tempo; and a note played with A, B, X or Y held, on that
 button's tile. Bounce instead, while it's up: its shape and balls, and its sliders beside them (bounce.py). Or the
@@ -22,7 +23,7 @@ import time
 from . import bounce as BN
 from . import sequencer as SQ
 from .sims import Sim
-from .theme import ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
+from .theme import accent_for, ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
 
 _HUES = dict(ACCENTS)
 PAD_COLOUR = {"up": _HUES["Blue"], "left": _HUES["Teal"], "right": _HUES["Green"], "down": _HUES["Purple"],
@@ -41,9 +42,11 @@ TILE_MOST = 170                  # ...and no bigger than this, px (a big screen)
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
 INK = (16, 19, 23)               # the words on a lit tile: dark, whatever the page is
-SHADE = (0.07, 0.05)             # a tile, lit a little from above: this much more of its colour at its top, less at
-LIT_SHADE = (0.12, 0.10)         # its bottom; one whose sound's playing: this much lighter at its top, darker below
+LIT_SHADE = (0.12, 0.10)         # a tile whose sound's playing: its colour, this much lighter at its top, darker below
 BANK_DOTS = 8                    # banks shown as a dot each, at most (more: which, of how many)
+RIM = (0.5, 0.22)                # a tile's outline: this much of its button's colour (one that can't play yet: this)
+FILL = (0.2, 0.11)               # ...and what it's filled with, of the page's own: this much of it at its top, at its
+                                 # bottom
 
 
 class Soundboard(Sim):
@@ -205,17 +208,20 @@ class Soundboard(Sim):
         if tile is not None:
             return tile
         colour = PAD_COLOUR[pad]
+        tint = colour                                  # (what its outline, its fill and its button take theirs from:
+        if max(abs(a - b) for a, b in zip(colour, BG)) < 48:   # its colour, but white on a light page, which wouldn't
+            tint = accent_for("White")                 # show: the grey a light page has for it)
         size = max(16, min(28, round(h * 0.17)))       # (a bigger screen than the GPi Case's: bigger words to match)
         size = max(13, min(size, round(w * 0.165)))    # (...a narrow tile, a square one on a small screen: smaller,
         f, small = self.font(size, bold=True), self.font(max(11, size - 3))   # so a word like Explosion's all there)
         r, step = max(13, min(24, round(h * 0.15))), round(size * 1.22)
-        edge = 14 if h >= 104 else 12
+        edge = max(12, min(22, round(min(w, h) * 0.17)))   # (its corners: round)
         room = w - 2 * max(7, round(w * 0.09))         # (px its name has, across)
         if got is None:                                # nothing on it
             tile = Image.new("RGB", (w, h), BG)
             d = ImageDraw.Draw(tile)
             d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, fill=BG, outline=co_mix(BG, LINE, 1.0), width=2)
-            cap, ink, words = co_mix(BG, colour, 0.22), BG, [("Empty", MUTED)]
+            cap, ink, words = co_mix(BG, tint, 0.22), BG, [("Empty", MUTED)]
         else:
             name, state = got
             if lit:                                    # (dark words on it, on a light page too)
@@ -224,14 +230,14 @@ class Soundboard(Sim):
                 d = ImageDraw.Draw(tile)
                 cap, ink, text = co_mix(colour, INK, 0.82), colour, co_mix(colour, INK, 0.9)
             else:
-                glow = 0.18 if state == "ready" else 0.05
-                tile = self.shaded(w, h, co_mix(ROW, colour, glow + SHADE[0]),
-                                   co_mix(ROW, colour, max(0.0, glow - SHADE[1])), edge)
+                ready = state == "ready"
+                dim = 1.0 if ready else 0.35
+                tile = self.shaded(w, h, co_mix(BG, tint, FILL[0] * dim), co_mix(BG, tint, FILL[1] * dim), edge)
                 d = ImageDraw.Draw(tile)
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, width=2 if here else 1,
-                                    outline=TEXT if here else co_mix(ROW, colour, glow + 0.14))
-                cap = colour if state == "ready" else co_mix(ROW, colour, 0.45)
-                ink = co_mix(colour, BG, 0.85)
+                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, width=2,
+                                    outline=TEXT if here else co_mix(BG, tint, RIM[0] if ready else RIM[1]))
+                cap = tint if state == "ready" else co_mix(ROW, tint, 0.45)
+                ink = co_mix(tint, BG, 0.85)
                 text = TEXT if state == "ready" else MUTED
             words = [(line, text) for line in self.fitted(name, f, room)]
             if state == "bad" and not lit:
@@ -248,7 +254,7 @@ class Soundboard(Sim):
             wide = w >= 110                            #  in the corner, on a narrow tile: clear of its button)
             d.text((w - edge, edge + 6) if wide else (w - 7, 12), note,
                    font=self.font(size + 1 if wide else size - 1, bold=True),
-                   fill=co_mix(colour, BG, 0.85) if lit else colour, anchor="rm")
+                   fill=co_mix(colour, BG, 0.85) if lit else tint, anchor="rm")
         y = top + 2 * r + gap + step // 2
         for k, (line, fill) in enumerate(words):
             plain = got is None or (k and got[1] == "bad" and not lit)
@@ -259,79 +265,184 @@ class Soundboard(Sim):
         self.tiles[key] = tile
         return tile
 
+    # -- a page's line: the same on its three pages ------------------------------------------------------------------
+    @staticmethod
+    def head_picture(d, which, cx, cy, r, colour):
+        """A page's own little picture, in a box r each way from its middle: the Soundboard's (a sound's wave), the
+        Sequencer's (a grid of steps), Bounce's (a ball in its shape)."""
+        low = co_mix(colour, BG, 0.5)
+        if which == "seq":
+            c, g = r * 0.42, r * 0.62
+            for k in range(9):
+                x, y = cx + (k % 3 - 1) * g, cy + (k // 3 - 1) * g
+                d.rounded_rectangle((x - c / 2, y - c / 2, x + c / 2, y + c / 2), radius=1,
+                                    fill=colour if k in (0, 4, 5, 7) else low)
+        elif which == "bounce":
+            pts = [(cx + r * 0.95 * math.cos(math.pi / 3 * k), cy + r * 0.95 * math.sin(math.pi / 3 * k))
+                   for k in range(6)]
+            d.line(pts + pts[:1], fill=colour, width=2)
+            d.ellipse((cx - r * 0.3, cy - r * 0.3, cx + r * 0.3, cy + r * 0.3), fill=colour)
+        else:
+            for k, tall in enumerate((0.35, 0.8, 1.0, 0.6, 0.3)):
+                x = cx + (k - 2) * r * 0.42
+                d.line((x, cy - r * tall, x, cy + r * tall), fill=colour if k in (1, 2, 3) else low, width=2)
+
+    def pill_parts(self, items, big):
+        """What's in a pill, measured: [(what, how wide)], and the pill's own width. A part: ("dot", colour),
+        ("text", words, bold, colour), ("dots", how many, which: the banks), ("beats", which, recording: the bar's
+        four), ("note", colour: a quaver), ("<",) or (">",): L or R goes on from it."""
+        f, fb = self.font(15 if big else 13), self.font(15 if big else 13, bold=True)
+        dot = 5 if big else 4
+        out = []
+        for it in items:
+            kind = it[0]
+            if kind == "text":
+                out.append((it, (fb if it[2] else f).getlength(it[1])))
+            elif kind == "dots":
+                out.append((it, (it[1] - 1) * (2 * dot + 4) + 4 * dot))
+            elif kind == "beats":
+                out.append((it, 4 * 2 * dot + 3 * 4))
+            elif kind == "dot":
+                out.append((it, 2 * dot))
+            elif kind == "note":
+                out.append((it, 2.6 * dot))
+            else:
+                out.append((it, 1.4 * dot))
+        pad, gap = (13, 9) if big else (11, 7)
+        return out, sum(w for _, w in out) + gap * max(0, len(out) - 1) + 2 * pad
+
+    def pill(self, d, left, mid, items, big):
+        """A pill at the right of a page's line (its left edge given): what the page is set to, in a few words."""
+        from .theme import ACCENT
+        f, fb = self.font(15 if big else 13), self.font(15 if big else 13, bold=True)
+        parts, w = self.pill_parts(items, big)
+        h, dot = (30, 5) if big else (26, 4)
+        pad, gap = (13, 9) if big else (11, 7)
+        d.rounded_rectangle((left, mid - h / 2, left + w, mid + h / 2), radius=h / 2, fill=co_mix(BG, ROW, 0.55),
+                            outline=co_mix(BG, LINE, 1.0))
+        x = left + pad
+        for it, wide in parts:
+            kind = it[0]
+            if kind == "text":
+                d.text((x, mid), it[1], font=fb if it[2] else f, fill=it[3], anchor="lm")
+            elif kind == "dot":
+                d.ellipse((x, mid - dot, x + 2 * dot, mid + dot), fill=it[1])
+            elif kind == "dots":                       # (the banks: a dot each, the one that's up a bar)
+                bx = x
+                for k in range(it[1]):
+                    here = k == it[2]
+                    bw = 4 * dot if here else 2 * dot
+                    d.rounded_rectangle((bx, mid - dot + 1, bx + bw, mid + dot - 1), radius=dot,
+                                        fill=ACCENT if here else co_mix(BG, MUTED, 0.6))
+                    bx += bw + 4
+            elif kind == "beats":
+                bx = x
+                for k in range(1, 5):
+                    on = k == it[1]
+                    d.rounded_rectangle((bx, mid - dot, bx + 2 * dot, mid + dot), radius=2,
+                                        fill=(_HUES["Red"] if it[2] else TEXT) if on else LINE)
+                    bx += 2 * dot + 4
+            elif kind == "note":                       # (two quavers, joined: drawn, a font may not have them)
+                c, a = it[1], dot * 0.55
+                for nx in (x + a, x + wide - a):
+                    d.ellipse((nx - a, mid + dot * 0.5, nx + a, mid + dot * 1.5), fill=c)
+                    d.line((nx + a - 1, mid + dot, nx + a - 1, mid - dot * 1.4), fill=c, width=2)
+                d.line((x + 2 * a - 1, mid - dot * 1.4, x + wide - 1, mid - dot * 1.4), fill=c, width=3)
+            else:                                      # (‹ or ›)
+                way = -1 if kind == "<" else 1
+                ax, half = x + wide / 2, way * dot * 0.5
+                d.line([(ax - half, mid - dot), (ax + half, mid), (ax - half, mid + dot)], fill=MUTED, width=2)
+            x += wide + gap
+        return w
+
+    def head(self, d, x0, y0, w, name, which, pills=(), arrows=True):
+        """A page's line, w wide: its picture and its name at the left, ‹ › after them (L and R: the Soundboard's
+        other pages; none while they do something else), what it's set to in pills at the right (the last given
+        furthest right; one marked optional, a (parts, True), left out when there isn't room), and a line across
+        under it all. Where its name's part ends."""
+        from .theme import ACCENT
+        big = self.w >= 960
+        mid = y0 + TOP // 2 - 2
+        side = 30 if big else 26
+        x = x0 + EDGE + 2
+        d.rounded_rectangle((x, mid - side / 2, x + side, mid + side / 2), radius=7, fill=co_mix(BG, ROW, 0.9),
+                            outline=co_mix(BG, LINE, 1.0))
+        self.head_picture(d, which, x + side / 2, mid, side * 0.3, ACCENT)
+        f = self.font(22 if big else 19, bold=True)
+        x += side + 10
+        d.text((x, mid), name, font=f, fill=TEXT, anchor="lm")
+        x += f.getlength(name) + (16 if big else 13)
+        if arrows:
+            a = 5 if big else 4
+            for way in (-1, 1):
+                d.line([(x - way * a * 0.5, mid - a), (x + way * a * 0.5, mid), (x - way * a * 0.5, mid + a)],
+                       fill=MUTED, width=2)
+                x += 3 * a + 2
+        end = x
+        right = x0 + w - EDGE - 2
+        sized = [(p[0], self.pill_parts(p[0], big)[1], True) if isinstance(p, tuple) and len(p) == 2
+                 and isinstance(p[1], bool) else (p, self.pill_parts(p, big)[1], False) for p in pills]
+        while sized and sum(pw for _, pw, _ in sized) + 8 * (len(sized) - 1) > right - end - 6 \
+                and any(opt for _, _, opt in sized):
+            sized.remove(next(p for p in sized if p[2]))
+        for items, pw, _ in reversed(sized):
+            self.pill(d, right - pw, mid, items, big)
+            right -= pw + 8
+        d.line((x0 + EDGE, y0 + TOP - 4, x0 + w - EDGE, y0 + TOP - 4), fill=co_mix(BG, LINE, 0.9))
+        return end
+
     def top(self, d, x0, y0):
-        """Its line: this page's name between ◀ and ▶ (L and R: the Sequencer, and Bounce); at the right the bank's
-        name (SELECT: the next) and a dot for each bank, this one's lit (a lot of them: which it is, of how many). A
-        few words at the left if the sound can't be heard. The loop: at the left, its tempo before the bank's name,
-        and how far round it is under them. Putting a sound on a button: the bank's name between ◀ and ▶ instead
-        (L and R go through the banks, then), and what to do at the left."""
+        """Its line (head): at the right, in a pill, the bank that's up (SELECT: the next) and a dot for each bank,
+        this one's a bar (a lot of them: which it is, of how many). Before it, a pill too: a few words if the sound
+        can't be heard; the loop (recording or playing, the beat it's on, its bar) and its tempo, and how far round
+        it is on the line under them; or, putting a sound on a button, what to do (the bank's between ‹ and › then:
+        L and R go through the banks)."""
+        from .theme import ACCENT
         i, n, name = self.bank
-        W, mid = self.w, y0 + TOP // 2 - 2
-        big = W >= 960                                 # (a bigger screen than the GPi Case's)
-        f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
+        W, big = self.w, self.w >= 960
         placing = self.placing is not None
-        title = (name or PAGE_NAME) if placing else PAGE_NAME
-        while len(title) > 4 and f.getlength(title) > W * 0.42:
-            title = title[:-2].rstrip() + "…"
-        nw = f.getlength(title)
-        cx = x0 + W / 2
-        d.text((cx, mid), title, font=f, fill=TEXT, anchor="mm")
-        if n > 1 or not placing:
-            self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
-            self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
+        f = self.font(15 if big else 13)
+        bank = [("dot", ACCENT)] + ([("<",)] if placing and n > 1 else [])
+        if name:
+            while len(name) > 3 and f.getlength(name) > W * 0.2:
+                name = name[:-2].rstrip() + "…"
+            bank.append(("text", name, True, TEXT))
+        if placing and n > 1:
+            bank.append((">",))
+        elif 1 < n <= BANK_DOTS:
+            bank.append(("dots", n, i))
+        elif n > 1:
+            bank.append(("text", f"{i + 1} of {n}", False, MUTED))
+        room = W - 2 * EDGE - self.pill_parts(bank, big)[1] - (f.getlength(PAGE_NAME) * 1.6 + 110)
+        pills = []
         if placing:
             words = f"Press a button for {self.placing[0]}"
-            room = W / 2 - nw / 2 - 44 - EDGE
-            while len(words) > 8 and small.getlength(words) > room:
+            while len(words) > 8 and f.getlength(words) > room - 30:
                 words = words[:-2].rstrip() + "…"
-            d.text((x0 + EDGE + 2, mid), words, font=small, fill=TEXT, anchor="lm")
+            pills.append([("text", words, False, TEXT)])
         elif self.trouble:
-            d.text((x0 + EDGE + 2, mid), self.trouble, font=small, fill=WARN, anchor="lm")
+            words = self.trouble
+            while len(words) > 8 and f.getlength(words) > room - 30:
+                words = words[:-2].rstrip() + "…"
+            pills.append([("text", words, False, WARN)])
         elif self.loop is not None:
-            self.loop_line(d, x0 + EDGE + 2, mid, big)
-        x = x0 + W - EDGE - 2
-        if 1 < n <= BANK_DOTS:                         # (the banks: a dot each)
-            r, step = (4, 14) if big else (3, 11)
-            for k in reversed(range(n)):
-                d.ellipse((x - 2 * r, mid - r, x, mid + r), fill=TEXT if k == i else co_mix(BG, MUTED, 0.55))
-                x -= step
-            x -= 8
-        elif n > 1:
-            x -= small.getlength(f"{i + 1} of {n}") + 14
-            d.text((x + 14, mid), f"{i + 1} of {n}", font=small, fill=MUTED, anchor="lm")
-        tempo = f"{self.loop['bpm']} BPM" if self.loop is not None else ""
-        if name and not placing:                       # (the bank that's up: before its dots)
-            bold = self.font(15 if big else 13, bold=True)
-            room = x - (cx + nw / 2 + 44) - (small.getlength(tempo) + 14 if tempo else 0)
-            while len(name) > 3 and bold.getlength(name) > room:
-                name = name[:-2].rstrip() + "…"
-            d.text((x, mid), name, font=bold, fill=TEXT, anchor="rm")
-            x -= bold.getlength(name) + 14
-        if tempo:
-            d.text((x, mid), tempo, font=small, fill=MUTED, anchor="rm")
-            self.loop_track(d, x0 + EDGE, x0 + W - EDGE, y0 + TOP - 7)
+            pills += self.loop_pills()
+        self.head(d, x0, y0, W, PAGE_NAME, "pads", pills + [bank], arrows=not placing)
+        if self.loop is not None:
+            self.loop_track(d, x0 + EDGE, x0 + W - EDGE, y0 + TOP - 5)
         self.taps.append(((x0, y0, x0 + W // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + W // 2, y0, x0 + W, y0 + TOP - 4), "r"))
 
-    def loop_line(self, d, x, mid, big=False):
-        """The loop, at the top left: recording (red) or playing, a mark for each beat of the bar (the one heard now,
-        lit), and which bar of the loop it's in."""
+    def loop_pills(self):
+        """The loop, in pills: recording (red) or playing, a mark for each beat of the bar (the one heard now, lit)
+        and which bar of the loop it's in; and its tempo (left out where there's no room for it)."""
         lp = self.loop
-        f = self.font(15 if big else 13, bold=True)
-        red, lit = _HUES["Red"], TEXT
-        r, b = (6, 5) if big else (5, 4)
-        d.ellipse((x, mid - r, x + 2 * r, mid + r), fill=red if lp["rec"] else _HUES["Green"])
-        words = "Recording" if lp["rec"] else ("Loop" if lp["layers"] == 1 else f"Loop, {lp['layers']} layers")
+        words = "Recording" if lp["rec"] else ("Loop" if lp["layers"] == 1 else f"{lp['layers']} layers")
         if lp.get("seq") and not lp["rec"] and not lp["layers"]:
             words = "Sequencer"                        # (its tune alone, playing under these buttons)
-        d.text((x + 2 * r + 7, mid), words, font=f, fill=TEXT, anchor="lm")
-        x += 2 * r + 7 + f.getlength(words) + 10
-        for k in range(1, 5):
-            on = k == lp["beat"]
-            d.rounded_rectangle((x, mid - b, x + 2 * b, mid + b), radius=2,
-                                fill=(red if lp["rec"] else lit) if on else co_mix(BG, ROW, 0.9))
-            x += 2 * b + 4
-        d.text((x + 4, mid), f"bar {lp['bar']}", font=self.font(15 if big else 13), fill=MUTED, anchor="lm")
+        return [[("dot", _HUES["Red"] if lp["rec"] else _HUES["Green"]), ("text", words, True, TEXT),
+                 ("beats", lp["beat"], lp["rec"]), ("text", f"bar {lp['bar']}", False, MUTED)],
+                ([("text", f"{lp['bpm']} BPM", False, BODY)], True)]
 
     def loop_track(self, d, x0, x1, y):
         """A line under the bank's: how far round the loop it is (to the beat), recording (red) or playing."""
@@ -365,22 +476,14 @@ class Soundboard(Sim):
         img.paste(card, (x0 + (self.w - w) // 2, y0 + (self.h - h) // 2), card)
 
     def bounce_top(self, d, x0, y0, w):
-        """Bounce's line, over its shape (w wide): its name between ◀ and ▶ (L and R: the Soundboard's other pages),
-        its key and scale at the left (SELECT: the next key; Y: the next scale), its shape and how many balls at the
-        right."""
+        """Bounce's line, over its shape (w wide: head): at the right, in pills, its key and scale (SELECT: the next
+        key; Y: the next scale) and how many balls there are."""
+        from .theme import ACCENT
         v = self.bounce
-        mid = y0 + TOP // 2 - 2
-        big = self.w >= 960
-        f, small = self.font(22 if big else 18, bold=True), self.font(15 if big else 13)
-        cx = x0 + w / 2
-        d.text((cx, mid), "Bounce", font=f, fill=TEXT, anchor="mm")
-        nw = f.getlength("Bounce")
-        self.arrow(d, "left", cx - nw / 2 - 20, mid, 6 if big else 5, MUTED)
-        self.arrow(d, "right", cx + nw / 2 + 20, mid, 6 if big else 5, MUTED)
         n = v["count"]
-        d.text((x0 + EDGE + 2, mid), f"{v['key']} {v['scale'].lower()}", font=small, fill=TEXT, anchor="lm")
-        d.text((x0 + w - EDGE - 2, mid), f"{v['shape']}, {n} ball" + ("" if n == 1 else "s"), font=small, fill=MUTED,
-               anchor="rm")
+        self.head(d, x0, y0, w, "Bounce", "bounce",
+                  [[("note", ACCENT), ("text", f"{v['key']} {v['scale'].lower()}", True, TEXT)],
+                   ([("text", f"{n} ball" + ("" if n == 1 else "s"), False, BODY)], True)])
         self.taps.append(((x0, y0, x0 + w // 2, y0 + TOP - 4), "l"))
         self.taps.append(((x0 + w // 2, y0, x0 + w, y0 + TOP - 4), "r"))
 
@@ -423,15 +526,18 @@ class Soundboard(Sim):
         big = self.w >= 960
         return {"bold": self.font(22 if big else 18, bold=True), "small": self.font(15 if big else 13),
                 "row": self.font(19 if big else 14), "row_b": self.font(19 if big else 14, bold=True),
-                "note": self.font(15 if big else 11, bold=True), "arrow": 6 if big else 5}
+                "note": self.font(15 if big else 11, bold=True), "arrow": 6 if big else 5,
+                "step": self.font(13 if big else 10), "step_b": self.font(13 if big else 10, bold=True)}
 
-    def seq_cells(self, cw, ch, colour):
-        """A cell that's on, as it's drawn (and as it is while the bar's on it): pictures kept."""
+    def seq_cells(self, cw, ch):
+        """A cell that's on, as it's drawn (and as it is while the bar's on it), in each row's own colour: pictures
+        kept. [row: {the bar's on it: (picture, shape)}]."""
         from .fine import scale
-        key = ("seqcell", cw, ch, colour, BG, scale())
+        key = ("seqcell", cw, ch, BG, scale())
         tiles = self.tiles.get(key)
         if tiles is None:
-            tiles = self.tiles[key] = {head: SQ.lit_tile(cw, ch, colour, head, BG) for head in (False, True)}
+            tiles = self.tiles[key] = [{head: SQ.lit_tile(cw, ch, _HUES[hue], head, BG) for head in (False, True)}
+                                       for hue in SQ.ROW_HUES]
         return tiles
 
     def seq_still(self, lay, fonts, tiles):
@@ -443,9 +549,13 @@ class Soundboard(Sim):
                v["bpm"], v["playing"], v["colour"], self.w, self.h, scale(), BG)
         tile = self.tiles.get(key)
         if tile is None:
+            from .theme import ACCENT
             tile = Image.new("RGB", (self.w, self.h), BG)
             d = ImageDraw.Draw(tile)
-            SQ.draw_top(d, 0, 0, self.w, v, fonts, TOP)
+            self.head(d, 0, 0, self.w, "Sequencer", "seq",
+                      [[("note", ACCENT), ("text", f"{v['key']} {v['scale'].lower()}", True, TEXT)],
+                       [("dot", _HUES["Green"] if v["playing"] else co_mix(BG, MUTED, 0.8)),
+                        ("text", f"{v['bpm']} BPM", True, TEXT)]])
             SQ.draw_grid(tile, d, lay, v, fonts, tiles)
             for k in [k for k in self.tiles if k[0] == "seq"]:
                 del self.tiles[k]                      # (the one before: not wanted again soon)
@@ -468,7 +578,7 @@ class Soundboard(Sim):
         v = self.seq
         fonts = self.seq_fonts()
         lay = SQ.layout((0, TOP, self.w, self.h), self.w >= 960)
-        tiles = self.seq_cells(lay["cw"], lay["ch"], v["colour"])
+        tiles = self.seq_cells(lay["cw"], lay["ch"])
         frame = self.seq_still(lay, fonts, tiles).copy()
         d = ImageDraw.Draw(frame)
         now = time.monotonic()
@@ -482,6 +592,25 @@ class Soundboard(Sim):
         for r, y in enumerate(lay["ys"]):              # (a tap on a cell: on or off, as A there)
             for c, x in enumerate(lay["xs"]):
                 self.taps.append(((x0 + x, y0 + y, x0 + x + cw, y0 + y + ch), ("seq", r, c)))
+
+    @staticmethod
+    def cross_marks(d, x0, y0, boxes):
+        """In the middle of each cross, faintly, what its four buttons are: a d-pad, and a controller's four round
+        ones."""
+        faint = co_mix(BG, ROW, 0.85)
+        side = boxes["up"][2]
+        for a, b, round_ones in (("left", "right", False), ("y", "a", True)):
+            cx = x0 + (boxes[a][0] + boxes[a][2] + boxes[b][0]) / 2
+            cy = y0 + boxes[a][1] + boxes[a][3] / 2
+            if round_ones:
+                r, far = side * 0.075, side * 0.16
+                for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1)):
+                    d.ellipse((cx + dx * far - r, cy + dy * far - r, cx + dx * far + r, cy + dy * far + r), fill=faint)
+            else:
+                arm, half = side * 0.24, side * 0.075
+                d.rounded_rectangle((cx - arm, cy - half, cx + arm, cy + half), radius=3, fill=faint)
+                d.rounded_rectangle((cx - half, cy - arm, cx + half, cy + arm), radius=3, fill=faint)
+                d.ellipse((cx - half * 0.5, cy - half * 0.5, cx + half * 0.5, cy + half * 0.5), fill=BG)
 
     def draw(self, img, x0, y0):
         from .fine import ImageDraw
@@ -499,10 +628,14 @@ class Soundboard(Sim):
             px, py = x0 + shape_w + EDGE, y0 + 6
             img.paste(self.bounce_panel(self.w - shape_w - 2 * EDGE, self.h - 12, fonts), (px, py))
             return
-        self.top(ImageDraw.Draw(img), x0, y0)
-        for pad, (x, y, w, h) in self.boxes().items():
+        d = ImageDraw.Draw(img)
+        self.top(d, x0, y0)
+        boxes = self.boxes()
+        for pad, (x, y, w, h) in boxes.items():
             img.paste(self.tile(pad, w, h), (x0 + x, y0 + y))
             self.taps.append(((x0 + x, y0 + y, x0 + x + w, y0 + y + h), pad))
+        if self.spaced:
+            self.cross_marks(d, x0, y0, boxes)
         if self.rec is not None:
             self.taps = []                             # (recording: its buttons are A and B, along the bottom)
             self.rec_card(img, x0, y0)

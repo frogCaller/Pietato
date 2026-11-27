@@ -1017,7 +1017,7 @@ check(f"...the Band's page, which has less room for them: close together, as eve
                                           "x": (408, 112, 144, 70), "y": (332, 190, 144, 70),
                                           "a": (484, 190, 144, 70), "b": (408, 268, 144, 70)})
 hints = m.sim_hints(s)
-check(f"...its buttons along the bottom: {hints}", hints == [("L R", "Sequencer, Bounce"), ("SELECT", "Bank"),
+check(f"...its buttons along the bottom: {hints}", hints == [("L", "Sequencer"), ("R", "Bounce"), ("SELECT", "Bank"),
                                                              ("START", "More"), ("HOME", "Back")])
 from PIL import ImageDraw as PILDraw  # noqa: E402
 texts = []
@@ -1028,9 +1028,42 @@ m.sim_game().tiles.clear()
 flush()
 PILDraw.ImageDraw.text = real_text
 line = {t: x for t, x in texts}
-check(f"...its line: its own name in the middle, between ◀ and ▶ (L and R), and the bank that's up at the right, "
-      f"before its dots ({ {t: round(x) for t, x in line.items() if t in ('Soundboard', 'Starter')} })",
-      line.get("Soundboard") == 320 and 520 < line.get("Starter", 0) < 610)
+page = flush()
+pill = page[78 + 6:78 + 30, 470:626]                     # (where the bank's pill is, at the right of its line)
+dots = int((np.abs(pill - np.array(SSB.ACCENT)).max(axis=2) <= 24).sum())
+check(f"...its line: its own name at the left, after its picture (‹ › after it: L and R), and at the right, in a "
+      f"pill, the bank that's up, a dot for each bank after it, this one's a bar "
+      f"({ {t: round(x) for t, x in line.items() if t in ('Soundboard', 'Starter')} }, {dots} px of the accent there)",
+      40 <= line.get("Soundboard", 0) <= 60 and 480 < line.get("Starter", 0) < 600 and dots > 60)
+rims = {}
+for pad in B.PADS:
+    x0_, y0_, x1_, y1_ = boxes[pad]
+    rim = g.co_mix(g.BG, SBD.PAD_COLOUR[pad], getattr(SBD, "RIM", (1.0,))[0])
+    rims[pad] = near(page, (x0_ + 20, y0_, x1_ - 20, y0_ + 2), rim, 10)
+mid_d = page[(boxes["left"][1] + boxes["left"][3]) // 2, (boxes["left"][2] + boxes["right"][0]) // 2]
+mid_l = page[(boxes["y"][1] + boxes["y"][3]) // 2 - round(tw * 0.16), (boxes["y"][2] + boxes["a"][0]) // 2]
+check(f"...each button outlined in its own colour ({min(rims.values())} px of it along its top edge, or more), and "
+      f"in the middle of each cross, faintly, what its buttons are: a d-pad ({mid_d.tolist()}), a controller's four "
+      f"round ones ({mid_l.tolist()}; the page's own: {list(g.BG)})", min(rims.values()) >= 2 * (tw - 44)
+      and int(np.abs(mid_l - np.array(g.BG)).max()) > 6 and int(np.abs(mid_l - np.array(g.BG)).max()) < 40
+      and int(np.abs(page[(boxes["left"][1] + boxes["left"][3]) // 2 - round(tw * 0.15),
+                          (boxes["left"][2] + boxes["right"][0]) // 2] - np.array(g.BG)).max()) > 6)
+import pitato.theme as THEME  # noqa: E402
+m.set_setting("look", "Light")
+pale = THEME.PALETTES["Light"]["BG"]
+lp = flush()
+bx0, by0, bx1, by1 = boxes["b"]
+b_rim = lp[by0 + 1, (bx0 + bx1) // 2]
+b_mark = int((np.abs(lp[by0 + 4:(by0 + by1) // 2 + 8, bx0 + 4:bx1 - 4] - np.array(pale)).max(axis=2) > 100).sum())
+a_rim = near(lp, (boxes["a"][0] + 20, boxes["a"][1], boxes["a"][2] - 20, boxes["a"][1] + 2),
+             g.co_mix(pale, SBD.PAD_COLOUR["a"], getattr(SBD, "RIM", (1.0,))[0]), 10)
+m.set_setting("look", "Dark")
+again = flush()
+check(f"...on a light page (Settings > Appearance > App pages): B's tile, white's, shows too: its outline grey "
+      f"({b_rim.tolist()}, on the page's {list(pale)}), its button dark enough to read ({b_mark} px of it), the "
+      f"others in their own colours as ever (A's outline: {a_rim} px); and Dark again, the page as it was",
+      int(np.abs(b_rim - np.array(pale)).max()) >= 40 and b_mark >= 200 and a_rim >= 2 * (tw - 44)
+      and (again == page).all())
 taps = {w[1]: box for box, w in m.taps_now() if w[0] == "keys"}
 check("...each tile tapped (the web page's copy of the screen, a touch screen) is its button pressed; the bank's "
       "name, L or R", all(tuple(taps.get(pad, ())) == boxes[pad] for pad in B.PADS) and "l" in taps and "r" in taps
@@ -1205,10 +1238,11 @@ for name in ("r", "r", "r", "l", "l2", "r2", "r"):
     m.release(name)
     spin(0.1)
     went.append((name, m.board_mode(), m.sim_hints(m.sim_game())[0]))
-check(f"L and R: round its three pages, R on and L back (L2 and R2 too): {[(n, p) for n, p, _ in went]}; each with "
+check(f"L and R: round its three pages, R on (Bounce is at its buttons' right, the Sequencer at their left) and L "
+      f"back (L2 and R2 too): {[(n, p) for n, p, _ in went]}; each with "
       f"its own buttons ({went[0][2]}, {went[1][2]}), and the bank as it was ({m.sim_game().bank})",
-      [p for _, p, _ in went] == ["seq", "bounce", "pads", "bounce", "seq", "bounce", "pads"]
-      and [h for _, _, h in went[:3]] == [("A", "On/off"), ("A B", "Balls"), ("L R", "Sequencer, Bounce")]
+      [p for _, p, _ in went] == ["bounce", "seq", "pads", "seq", "bounce", "seq", "pads"]
+      and [h for _, _, h in went[:3]] == [("A B", "Balls"), ("A", "On/off"), ("L", "Sequencer")]
       and m.sim_game().bank[0] == 0 and b.bounce is None and not b.seq_up)
 m.press("r", repeat=True)
 check("...held: once is once (it doesn't run on through them)", m.board_mode() == "pads")

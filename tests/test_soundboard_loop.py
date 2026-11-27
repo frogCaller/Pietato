@@ -278,6 +278,7 @@ if not ONLY or "app" in ONLY:
     import pitato.beatlink as BL
     import pitato.listen as L
     import pitato.screens.soundboard as SB
+    import pitato.soundboard as SBD
     HOME = S + "/home/u"
     os.makedirs(HOME, exist_ok=True)
     if os.path.exists(ALOG):
@@ -377,7 +378,8 @@ if not ONLY or "app" in ONLY:
     s = m.sim_game()
     check(f"Apps > Soundboard: its buttons along the bottom: SELECT's the banks' now, and the loop's on START's card "
           f"({m.sim_hints(s)})", m.board_shown()
-          and m.sim_hints(s) == [("L R", "Sequencer, Bounce"), ("SELECT", "Bank"), ("START", "More"), ("HOME", "Back")])
+          and m.sim_hints(s) == [("L", "Sequencer"), ("R", "Bounce"), ("SELECT", "Bank"), ("START", "More"),
+                                 ("HOME", "Back")])
     tap("start")
     rows = m.board_rows()
     check(f"START tapped: its card, Record a loop first ({m.sim_hints(m.sim_game())[1]}), then the bank, the volume, "
@@ -558,20 +560,27 @@ if not ONLY or "app" in ONLY:
     hue = dict(g.ACCENTS)
 
     def dot(pic, rgb):
-        """Pixels of that colour where the loop's mark is (the page's top left)."""
-        return int((np.abs(pic[78 + 6:78 + 34, 8:34] - np.array(rgb)).max(axis=2) <= 30).sum())
+        """Pixels of that colour where the loop's mark is: in its pill, on the page's line, right of its name; and
+        along the line under them, which fills as the loop goes round."""
+        top = SBD.TOP
+        return (int((np.abs(pic[78 + 6:78 + top - 8, 200:] - np.array(rgb)).max(axis=2) <= 30).sum()),
+                int((np.abs(pic[78 + top - 6:78 + top - 1, :] - np.array(rgb)).max(axis=2) <= 30).sum()))
 
-    red = dot(flush(), hue["Red"])
+    red, red_line = dot(flush(), hue["Red"])
     s = m.sim_game()
     rec_line = s.loop
     rec()
     spin(0.1)
-    green = dot(flush(), hue["Green"])
+    page = flush()
+    green, green_line = dot(page, hue["Green"])
+    was_at = int((np.abs(page[78 + 6:78 + 34, 8:34] - np.array(hue["Green"])).max(axis=2) <= 30).sum())
     s = m.sim_game()
-    check(f"the page: recording, a red mark ({red} px), the beat and the bar ({rec_line}); playing, a green one "
-          f"({green} px), how many layers ({s.loop}), the tempo at the right", rec_line["rec"] and not s.loop["rec"]
+    check(f"the page: recording, a red mark in a pill on its line ({red} px), the beat and the bar ({rec_line}), and "
+          f"the line under them red as far as the loop's gone ({red_line} px); playing, a green one ({green} px, and "
+          f"{green_line} along the line; none where the page's own picture is now: {was_at}), how many layers "
+          f"({s.loop}), the tempo at the right", rec_line["rec"] and not s.loop["rec"]
           and s.loop["layers"] == 2 and s.loop["bpm"] == 120 and 1 <= s.loop["beat"] <= 4 and 1 <= s.loop["bar"] <= 2
-          and red >= 40 and green >= 40)
+          and red >= 25 and green >= 25 and red_line >= 60 and green_line >= 60 and was_at == 0)
     n0 = FB.frames
     end = time.monotonic() + 2.0
     while time.monotonic() < end:                      # (media mode's own loop: a look, and drawn when that says so)

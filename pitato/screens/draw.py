@@ -3,8 +3,8 @@ import os
 import time
 
 from ..theme import (
-    ACCENT, BADGE, BG, BODY, DONE, FONT, FONT_BOLD, FONT_MONO, FONT_MONO_BOLD, FONT_THIN, FONT_UI, FONT_UI_BOLD,
-    KEY_FILL, KEY_TEXT, LINE, MUTED, on_dark, PILL, PILL_TEXT, ROW, TEXT, WARN)
+    ACCENT, accent_for, BADGE, BG, BODY, DONE, FONT, FONT_BOLD, FONT_MONO, FONT_MONO_BOLD, FONT_THIN, FONT_UI,
+    FONT_UI_BOLD, KEY_TEXT, LINE, MUTED, on_dark, PILL, PILL_TEXT, ROW, TEXT, WARN)
 from ..config import home_dir
 from ..util import clock, human_size, short_path
 from ..system import cpu_temp, HOT_C, LOW_BATTERY, on_pc, wifi_bars, wifi_quality
@@ -19,9 +19,55 @@ FOOT_NOTE = (206, 211, 218)  # the home screen's line about the app picked
 BASE_ROOM = 480 - 48 - 76    # the GPi Case's screen between its bars: what a page with a set layout is drawn for
 FULL_VIEWS = ("list", "now", "photo", "pdf", "text")   # what Full screen apps puts on the whole screen
 UPDATE_DOTS = 3              # the dots under Updating Pietato, lit one after another
+PAD_HUES = {"A": "Red", "B": "White", "X": "Pink", "Y": "Gold"}   # a hint's A, B, X or Y: a dot in the colour that
+                             # button has (the Soundboard's too), by its name in theme.py's ACCENTS
+KEY_GAP = 4                  # px between a hint's two buttons (A B, L R)
+HINT_GAPS = (18, 44)         # px between the hints along the bottom: at least, at most (spread over the room there is)
+TAB_PAD = 11                 # px of its pill either side of the name of the tab that's up
+WIFI_SIZE = (20, 16)         # the WiFi mark on the status bar: px across, down
+WIFI_MARKS = {}              # ...its shapes, kept: {(how strong, struck through, how fine): (lit, unlit)}
 TAP_KEYS = {"A": "a", "B": "b", "X": "x", "Y": "y", "L": "l", "R": "r", "L2": "l2", "R2": "r2", "START": "start",
             "ST": "start", "SELECT": "select", "SEL": "select", "HOME": "home", "ANY": "a",
             "▲": "up", "▼": "down", "◀": "left", "▶": "right"}   # a hint's button, as a tap on the web page presses it
+
+
+def key_parts(label):
+    """A hint's buttons, each drawn on its own: "A B" is two of them, and "L R"; a word (START), a pair of arrows
+    (◀▶) or two words (SEL ST) one."""
+    parts = label.split()
+    return parts if len(parts) > 1 and all(len(p) == 1 for p in parts) else [label]
+
+
+def wifi_marks(bars, struck, s):
+    """The WiFi mark's shapes, s times as fine as the menus' pixels: (what's lit, what isn't), each to draw through
+    (ImageDraw's bitmap). A dot and three arcs over it, as many of the four lit as the signal's strong (bars);
+    struck: all of it lit, a line through it (no WiFi). Drawn bigger and made smaller, so its curves are smooth."""
+    got = WIFI_MARKS.get((bars, struck, s))
+    if got is None:
+        from PIL import Image, ImageDraw
+        from ..fine import made_fine
+        w, h = WIFI_SIZE
+        k = 4 * s
+        cx, cy = w * k / 2, (h - 2.6) * k
+        got = []
+        for want in (True, False):
+            m = Image.new("L", (w * k, h * k), 0)
+            md = ImageDraw.Draw(m)
+            for n, r in enumerate((1.9, 5.6, 9.2, 12.8)):
+                if (struck or n < bars) != want:
+                    continue
+                box = (cx - r * k, cy - r * k, cx + r * k, cy + r * k)
+                if n == 0:
+                    md.ellipse(box, fill=255)
+                else:
+                    md.arc(box, 225, 315, fill=255, width=round(2.1 * k))
+            if struck and want:                        # (the line through it, clear of the arcs it crosses)
+                ends = ((3.2 * k, 0.8 * k), ((w - 3.2) * k, (h - 0.8) * k))
+                md.line(ends, fill=0, width=round(4.8 * k))
+                md.line(ends, fill=255, width=round(1.8 * k))
+            got.append(made_fine(m.resize((w * s, h * s), Image.LANCZOS), s))
+        WIFI_MARKS[(bars, struck, s)] = got = tuple(got)
+    return got
 
 
 def tap_buttons(label):
@@ -202,9 +248,11 @@ class DrawScreen:
         return [self.fit(d, l, font, width) for l in out]
 
     def key_w(self, d, label):
-        if len(label) == 1:
-            return 22
-        return max(d.textlength(label, font=self.fonts["key"]) + 14, 24)
+        """How wide a hint's buttons are, drawn (key): a letter's 22, a word's as long as it is, two letters' both."""
+        key = self.fonts["key"]
+        parts = key_parts(label)
+        return sum(22 if len(p) == 1 else max(d.textlength(p, font=key) + 14, 24) for p in parts) \
+            + KEY_GAP * (len(parts) - 1)
 
     def hints_room(self, hints, keep=()):
         """As many of the hints as fit along the bottom: those not kept left out, the last first, until they do."""
@@ -212,26 +260,41 @@ class DrawScreen:
         d = ImageDraw.Draw(Image.new("L", (1, 1)))
         W = self.fb.w if self.fb else 640
 
-        def width(hs):                                 # (as the footer lays them out)
-            return 2 + sum(self.key_w(d, h[0]) + 25 + d.textlength(h[1], font=self.fonts["small"]) for h in hs)
+        def width(hs):                                 # (as the footer lays them out, as close as they go)
+            return 2 + sum(self.key_w(d, h[0]) + 7 + HINT_GAPS[0] + d.textlength(h[1], font=self.fonts["small"])
+                           for h in hs)
         out = list(hints)
         while width(out) > W - 12 and any(h[0] not in keep for h in out):
             out.pop(max(i for i, h in enumerate(out) if h[0] not in keep))
         return out
 
-    def key(self, d, x, y, label, on=False, fill=None, text=None):
-        """Button icon (a dot round a letter, a pill round a word), vertically centred on y, lit when what it
-        turns on is on. Returns end x. (fill, text: its colour and its letter's, on the home screen's own
-        background.)"""
-        F = self.fonts
-        w = self.key_w(d, label)
-        box = (x, y - 11, x + w, y + 11)
-        if len(label) == 1:
-            d.ellipse(box, fill=ACCENT if on else fill or KEY_FILL)
-        else:
-            d.rounded_rectangle(box, radius=11, fill=ACCENT if on else fill or KEY_FILL)
-        d.text((x + w / 2, y), label, font=F["key"], fill=BG if on else text or KEY_TEXT, anchor="mm")
-        return x + w
+    def key(self, d, x, y, label, on=False, fill=None, text=None, dark=False):
+        """A hint's buttons, vertically centred on y: A, B, X or Y a dot in that button's own colour (PAD_HUES), L or
+        R a little square and a word (START) or arrows a pill, those outlined; two of them (A B), side by side. Lit
+        (the accent) when what it turns on is on. Returns end x. fill, text: all of them that colour instead, and
+        their letters this (the home screen's, over a background of its own). dark: as a dark page has them, whatever
+        the pages are (over black)."""
+        font = self.fonts["key"]
+        row, muted, ink, back = ((on_dark("ROW"), on_dark("MUTED"), on_dark("TEXT"), on_dark("BG")) if dark
+                                 else (ROW, MUTED, TEXT, BG))
+        for part in key_parts(label):
+            one = len(part) == 1
+            w = 22 if one else max(d.textlength(part, font=font) + 14, 24)
+            box = (x, y - 11, x + w, y + 11)
+            hue = PAD_HUES.get(part)
+            if on or fill:                             # (one colour, whichever it is)
+                colour, letter, rim = (ACCENT, BG, None) if on else (fill, text or KEY_TEXT, None)
+            elif hue:
+                colour, letter, rim = accent_for(hue, "Dark" if dark else None), back, None
+            else:
+                colour, letter, rim = row, ink, mix(row, muted, 0.45)
+            if one and (hue or on or fill):
+                d.ellipse(box, fill=colour)
+            else:
+                d.rounded_rectangle(box, radius=6 if one else 11, fill=colour, outline=rim)
+            d.text((x + w / 2, y), part, font=font, fill=letter, anchor="mm")
+            x += w + KEY_GAP
+        return x - KEY_GAP
 
     def footer(self, d, items, right=None, credit=None, plain=False, pill=True, always=False, ink=None):
         """Button hints along the bottom (key, label[, lit]) and a note on the right. A credit (where the numbers
@@ -263,24 +326,32 @@ class DrawScreen:
             d.line((0, H - fh, W, H - fh), fill=LINE)
         room = W - 20 - (d.textlength(credit, font=font) + 18 if credit else 0)
         x = 28 if plain else 20
+        tint = (ink["key"], ink.get("key_text")) if ink.get("key") else ()   # (a bright background's: its own)
+        dark = plain and not tint                      # (the home screen's, on a dark background: as a dark page's,
+        apart, gap = (9, 26) if plain else (7, HINT_GAPS[0])   # whatever the pages inside the apps are)
+        shown, at = [], x
         for it in items:
-            k, label, on = it[0], it[1], len(it) > 2 and bool(it[2])
-            if credit and x + self.key_w(d, k) + 7 + d.textlength(label, font=font) > room:
+            w = self.key_w(d, it[0]) + apart + d.textlength(it[1], font=font)
+            if credit and at + w > room:
                 break
+            shown.append((it[0], it[1], len(it) > 2 and bool(it[2]), w))
+            at += w + gap
+        end = W - 28 if plain else W - 20
+        note = bool(right) and not credit and at - (10 if plain else 0) + d.textlength(right, font=font) < end
+        if not plain and len(shown) > 1:               # (spread over the room there is, up to so far apart)
+            free = (room if credit else end - (d.textlength(right, font=font) + 16 if note else 0)) - x
+            gap = max(gap, min(HINT_GAPS[1], (free - sum(s[3] for s in shown)) / (len(shown) - 1)))
+        for n, (k, label, on, w) in enumerate(shown):
             x0 = x
-            tint = (ink["key"], ink.get("key_text")) if ink.get("key") else ()   # (a bright background's: its own)
-            if plain and not tint:                     # (the home screen's, on a dark background: as a dark page's,
-                tint = (on_dark("KEY_FILL"), on_dark("KEY_TEXT"))   # whatever the pages inside the apps are)
-            x = self.key(d, x, y, k, on, *tint) + (9 if plain else 7)
+            x = (self.key(d, x, y, k, on, dark=True) if dark else self.key(d, x, y, k, on, *tint)) + apart
             say((x, y), label, ink.get("text", TEXT) if plain else BODY, "lm")
-            x += d.textlength(label, font=font) + (26 if plain else 18)
-            self.tap_hint(x0 - 8, x - (17 if plain else 9), H - fh, H, k)   # (halfway to the next)
+            x += d.textlength(label, font=font)
+            self.tap_hint(x0 - (8 if plain or not n else gap / 2), x + (9 if plain else gap / 2), H - fh, H, k)
+            x += gap                                   # (each hint's own: halfway to the next)
         if credit:
             d.text((W - 20, y), credit, font=font, fill=BODY, anchor="rm")
-        elif right:
-            end = W - 28 if plain else W - 20
-            if x - (10 if plain else 0) + d.textlength(right, font=font) < end:   # (16 apart is enough, there)
-                say((end, y), right, ink.get("note", FOOT_NOTE) if plain else MUTED, "rm")
+        elif note:                                     # (16 apart is enough, there)
+            say((end, y), right, ink.get("note", FOOT_NOTE) if plain else MUTED, "rm")
         if pill:
             self.msg_pill(d)
 
@@ -322,15 +393,12 @@ class DrawScreen:
                 d.text((tx + 16, y), timer, font=F["status"], fill=ACCENT, anchor="lm")
         x = W - 20
         bars = wifi_bars(wifi_quality())
-        for k in range(4):                       # signal bars, weakest on the left
-            bx = x - (3 - k) * 6 - 4
-            h = 4 + k * 3
-            d.rectangle((bx, y + 6 - h, bx + 3, y + 6), fill=TEXT if k < bars else LINE)
-        x -= 34
+        up = self.hotspot_st["up"]
         if bars == 0:                                  # (making its own WiFi: that, not an empty one, in orange)
-            word = "Hotspot" if self.hotspot_st["up"] else "No WiFi"
-            d.text((x, y), word, font=F["status"], fill=MUTED if self.hotspot_st["up"] else WARN, anchor="rm")
-            x -= d.textlength(word, font=F["status"]) + 14
+            word, font = ("Hotspot", F["status"]) if up else ("No WiFi", F["status_b"])
+            d.text((x, y), word, font=font, fill=MUTED if up else WARN, anchor="rm")
+            x -= d.textlength(word, font=font) + 7
+        x = self.wifi_mark(d, x, y, bars, struck=bars == 0 and not up) - 14
         b = battery() if is_handheld() else None
         if b:                                          # (a handheld's battery: how full, and a bolt while it charges)
             x = self.battery_mark(d, x, y, *b)
@@ -343,6 +411,17 @@ class DrawScreen:
             what = self.meta.get("song") or self.meta.get("title") or self.cur["title"]
             txt = self.fit(d, "♪ " + what, F["status"], max(x - 120, 40))
             d.text((x, y), txt, font=F["status"], fill=ACCENT, anchor="rm")
+
+    def wifi_mark(self, d, x, y, bars, struck=False):
+        """The WiFi mark on the status bar, its right edge at x: a dot and three arcs over it, as many lit as the
+        signal's strong (bars, 0 to 4); struck: no WiFi, all of it in orange with a line through it. Where the next
+        thing goes, to its left."""
+        w, h = WIFI_SIZE
+        lit, unlit = wifi_marks(bars, struck, getattr(d, "s", 1))
+        at = (int(x - w), int(y - h / 2 - 1))
+        d.bitmap(at, unlit, fill=LINE)
+        d.bitmap(at, lit, fill=WARN if struck else TEXT)
+        return x - w
 
     def battery_mark(self, d, x, y, percent, charging):
         """The battery on the status bar, its right edge at x: a little battery filled as far as it's charged, and its
@@ -379,7 +458,8 @@ class DrawScreen:
                 name = "♪ " + name
             names.append(name)
         fonts = [F["tab_b"] if i == cur else F["tab"] for i in range(len(names))]
-        widths = [d.textlength(n, font=f) for n, f in zip(names, fonts)]
+        widths = [d.textlength(n, font=f) + (2 * TAB_PAD if i == cur else 0)   # (the one that's up: in a pill)
+                  for i, (n, f) in enumerate(zip(names, fonts))]
         gap, xs, x = 20, [], 0
         for w in widths:
             xs.append(x)
@@ -409,9 +489,10 @@ class DrawScreen:
             tx = xs[i] - off
             if tx < 0 or tx + w > avail:      # only whole tabs; arrows show the rest
                 continue
-            sd.text((tx, y), n, font=f, fill=TEXT if i == cur else MUTED, anchor="lm")
             if i == cur:
-                sd.rounded_rectangle((tx, strip_h - 7, tx + w, strip_h - 4), radius=1, fill=ACCENT)
+                sd.rounded_rectangle((tx, y - 14, tx + w - 1, y + 14), radius=14, fill=mix(BG, ROW, 0.85),
+                                     outline=mix(ROW, MUTED, 0.45))
+            sd.text((tx + (TAB_PAD if i == cur else 0), y), n, font=f, fill=TEXT if i == cur else MUTED, anchor="lm")
             self.tappable((20 + tx - gap / 2, self.STATUS_H, 20 + tx + w + gap / 2, self.HEADER), "tab", vis[i])
         img.paste(strip, (20, self.STATUS_H))
         cy = self.STATUS_H + y
@@ -1061,11 +1142,10 @@ class DrawScreen:
         full = self.setting("screen") != "Fit"
         hints = hints or [("A", "Pause"), ("▲▼", "Volume"), ("Y", "Whole picture" if full else "Full screen"),
                           ("B", "Back")]
-        widths = [max(d.textlength(k, font=F["key"]) + 14, 24) + 7 + d.textlength(t, font=F["small"])
-                  for k, t in hints]
+        widths = [self.key_w(d, k) + 7 + d.textlength(t, font=F["small"]) for k, t in hints]
         x, y = (W - sum(widths) - 18 * (len(hints) - 1)) / 2, H / 2 + 44
         for (k, t), w in zip(hints, widths):
-            end = self.key(d, x, y, k, fill=on_dark("KEY_FILL"), text=on_dark("KEY_TEXT")) + 7
+            end = self.key(d, x, y, k, dark=True) + 7
             d.text((end, y), t, font=F["small"], fill=on_dark("BODY"), anchor="lm")
             x += w + 18
         self.fb.show(img)

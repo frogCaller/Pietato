@@ -22,6 +22,8 @@ STEP = 0.25                      # beats to a step (a sixteenth)
 BAR = STEPS * STEP               # ...and to the whole of it (a bar)
 DRUMS = ("Starter/Kick.wav", "Starter/Snare.wav", "Starter/Hi-hat.wav")   # the three rows above the lead, to begin
 LEAD = "Tones/Pluck"             # ...and the lead's sound (one of the player's own: Bounce's Tones)
+ROW_HUES = ("Red", "Gold", "Teal", "Purple")   # each row's own colour on the page (theme.py's): its mark, its cells
+HEAD_BAND = 0.07                 # the column the bar's on: this much lighter than the page, from its number down
 GAINS = (0.6, 0.5, 0.4, 0.85)    # how loud each row's played, of its sound as it is: a mix (the starter kick and
 #                                  snare are as loud as a sound can be: three sounds at once that loud are too much)
 NOTES = 8                        # the lead's notes: the scale's first so many, from the key up (0: the key's own)
@@ -150,16 +152,17 @@ def next_step_in(clock, now):
 
 # ---- its page ------------------------------------------------------------------------------------------------------
 def layout(box, big):
-    """Where its parts go in box (the page under its top line): the grid's cells' corners and size, the rows'
-    names' right edge, and the bars' box."""
+    """Where its parts go in box (the page under its top line): the steps' numbers' row, the grid's cells' corners
+    and size, the rows' names' left and right edges, and the bars' box."""
     x0, y0, x1, y1 = box
     edge = 12
-    label = 110 if big else 62
+    label = 124 if big else 74
     gap, beat_gap = (8, 14) if big else (4, 8)
     cw = int((x1 - x0 - 2 * edge - label - 12 * gap - 3 * beat_gap) // STEPS)
     ch = cw + (6 if big else 4)
     pitch = ch + (12 if big else 8)
-    gx, gy = x0 + edge + label, y0 + (14 if big else 10)
+    nums = y0 + (14 if big else 10)
+    gx, gy = x0 + edge + label, nums + (14 if big else 10)
     xs, x = [], gx
     for c in range(STEPS):
         xs.append(x)
@@ -167,7 +170,7 @@ def layout(box, big):
     ys = [gy + r * pitch for r in range(ROWS)]
     bars = (x0 + edge, ys[-1] + pitch + (4 if big else 0), x1 - edge, y1 - 8)
     return {"xs": xs, "ys": ys, "cw": cw, "ch": ch, "left": x0 + edge, "label": gx - (16 if big else 12),
-            "bars": bars}
+            "bars": bars, "nums": nums}
 
 
 def lit_tile(cw, ch, colour, head, back):
@@ -186,34 +189,6 @@ def lit_tile(cw, ch, colour, head, back):
     return tile, mask.resize((cw, ch), Image.LANCZOS)
 
 
-def draw_top(d, x0, y0, w, view, fonts, top):
-    """Its line: its name between ◀ and ▶ (L and R: the Soundboard's other pages); the key and scale at the left
-    (SELECT: the next scale), the tempo after them; and at the right whether it's playing."""
-    from .theme import MUTED, TEXT
-    mid = y0 + top // 2 - 2
-    f, small = fonts["bold"], fonts["small"]
-    key = f"{view['key']} {view['scale'].lower()}"
-    d.text((x0 + 14, mid), key, font=small, fill=TEXT, anchor="lm")
-    d.text((x0 + 14 + small.getlength(key) + 12, mid), f"{view['bpm']} BPM", font=small, fill=MUTED, anchor="lm")
-    words = "Sequencer"
-    cx = x0 + w / 2
-    d.text((cx, mid), words, font=f, fill=TEXT, anchor="mm")
-    nw, a = f.getlength(words), fonts["arrow"]
-    for side in (-1, 1):
-        ax = cx + side * (nw / 2 + 20)
-        d.polygon([(ax + side * a, mid), (ax - side * a * 0.8, mid - a * 1.2), (ax - side * a * 0.8, mid + a * 1.2)],
-                  fill=MUTED)
-    state = "Playing" if view["playing"] else "Stopped"
-    right = x0 + w - 14
-    d.text((right, mid), state, font=small, fill=MUTED, anchor="rm")
-    r = fonts["arrow"] - 1
-    px = right - small.getlength(state) - 9 - r
-    if view["playing"]:
-        d.polygon([(px - r, mid - r - 1), (px - r, mid + r + 1), (px + r + 1, mid)], fill=view["colour"])
-    else:
-        d.rectangle((px - r, mid - r, px + r, mid + r), fill=MUTED)
-
-
 def draw_note(d, x, y, cw, ch, name, high, font):
     """A lead cell's note on it: its name, and a dot over it if it's in the octave above the key's."""
     ink = (16, 19, 23)
@@ -225,23 +200,39 @@ def draw_note(d, x, y, cw, ch, name, high, font):
         d.ellipse((cx - r, top - r, cx + r, top + r), fill=ink)
 
 
+def draw_steps(d, lay, fonts, lit=None):
+    """The steps' numbers over the grid, 1 to 16: each beat's first brighter, and the one the bar's on (lit)."""
+    from .theme import BODY, MUTED, TEXT
+    for c, x in enumerate(lay["xs"]):
+        beat = c % 4 == 0
+        d.text((x + lay["cw"] / 2, lay["nums"]), str(c + 1), font=fonts["step_b" if beat or c == lit else "step"],
+               fill=TEXT if c == lit else BODY if beat else MUTED, anchor="mm")
+
+
 def draw_grid(img, d, lay, view, fonts, tiles):
-    """The grid as it is with the bar nowhere on it: each row's name, its cells (on: lit, a lead's with its note's
-    name), and a ring round the one ◀▶▲▼ have moved to."""
-    from .theme import BG, BODY, co_mix, ROW, TEXT
+    """The grid as it is with the bar nowhere on it: the steps' numbers, each row's mark (its colour) and name, its
+    cells (on: lit in the row's colour, a lead's with its note's name), and a ring round the one ◀▶▲▼ have moved
+    to."""
+    from .theme import ACCENTS, BG, BODY, co_mix, ROW, TEXT
+    hues = dict(ACCENTS)
     cw, ch = lay["cw"], lay["ch"]
     dark, dark2 = co_mix(BG, ROW, 0.9), co_mix(BG, ROW, 0.6)
     radius = cw // 5
+    draw_steps(d, lay, fonts)
+    m = 4 if ch < 44 else 5                             # (half its mark's side)
     for r, y in enumerate(lay["ys"]):
         mine = view["cursor"][0] == r
         name = view["rows"][r]
         f = fonts["row_b" if mine else "row"]
-        while len(name) > 3 and f.getlength(name) > lay["label"] - lay["left"]:
+        left = lay["left"] + 2 * m + 9
+        while len(name) > 3 and f.getlength(name) > lay["label"] - left:
             name = name[:-2].rstrip() + "…"
-        d.text((lay["label"], y + ch / 2), name, font=f, fill=TEXT if mine else BODY, anchor="rm")
+        d.rounded_rectangle((lay["left"] + 2, y + ch / 2 - m, lay["left"] + 2 + 2 * m, y + ch / 2 + m), radius=2,
+                            fill=hues[ROW_HUES[r]])
+        d.text((left, y + ch / 2), name, font=f, fill=TEXT if mine else BODY, anchor="lm")
         for c, x in enumerate(lay["xs"]):
             if view["grid"][r][c]:
-                tile, mask = tiles[False]
+                tile, mask = tiles[r][False]
                 img.paste(tile, (x, y), mask)
                 if r == LEAD_ROW:
                     draw_note(d, x, y, cw, ch, view["names"][c], view["high"][c], fonts["note"])
@@ -249,26 +240,31 @@ def draw_grid(img, d, lay, view, fonts, tiles):
                 d.rounded_rectangle((x, y, x + cw - 1, y + ch - 1), radius=radius,
                                     fill=dark if c // 4 % 2 == 0 else dark2)
             if view["cursor"] == (r, c):
-                d.rounded_rectangle((x - 4, y - 4, x + cw + 3, y + ch + 3), radius=radius + 3,
-                                    outline=TEXT if view["grid"][r][c] else view["colour"], width=2)
+                d.rounded_rectangle((x - 4, y - 4, x + cw + 3, y + ch + 3), radius=radius + 3, outline=TEXT, width=2)
 
 
 def draw_head(img, d, lay, view, fonts, tiles, step):
-    """The column the bar's on: its cells outlined, the ones that are on whiter."""
+    """The column the bar's on: lighter behind it from its number down, its number lit, its cells that are on
+    whiter."""
     from .theme import BG, co_mix, ROW, TEXT
     cw, ch = lay["cw"], lay["ch"]
     x = lay["xs"][step]
     radius = cw // 5
+    band = co_mix(BG, TEXT, HEAD_BAND)
+    top = lay["nums"] - 9
+    d.rounded_rectangle((x - 3, top, x + cw + 2, lay["ys"][-1] + ch + 3), radius=radius + 2, fill=band)
+    d.text((x + cw / 2, lay["nums"]), str(step + 1), font=fonts["step_b"], fill=TEXT, anchor="mm")
     for r, y in enumerate(lay["ys"]):
         if view["grid"][r][step]:
-            tile, mask = tiles[True]
+            tile, mask = tiles[r][True]
             img.paste(tile, (x, y), mask)
             if r == LEAD_ROW:
                 draw_note(d, x, y, cw, ch, view["names"][step], view["high"][step], fonts["note"])
         else:
             d.rounded_rectangle((x, y, x + cw - 1, y + ch - 1), radius=radius,
-                                fill=co_mix(co_mix(BG, ROW, 0.9), TEXT, 0.12))
-        d.rounded_rectangle((x, y, x + cw - 1, y + ch - 1), radius=radius, outline=TEXT, width=2)
+                                fill=co_mix(co_mix(BG, ROW, 0.9), TEXT, 0.14))
+        if view["cursor"] == (r, step):
+            d.rounded_rectangle((x - 4, y - 4, x + cw + 3, y + ch + 3), radius=radius + 3, outline=TEXT, width=2)
 
 
 def draw_bars(d, box, levels, colour):

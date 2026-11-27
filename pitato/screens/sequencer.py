@@ -14,7 +14,7 @@ from ..library import VOLUME_STEP
 from ..theme import ACCENT
 
 SEQ_HOW = ("A: a cell on or off. X: its note (a drum's: its sound). Y changes the tune a little. SELECT: the scale. L "
-           "and R: the Soundboard and Bounce.")
+           "and R: Bounce and the Soundboard.")
 SEQ_ALWAYS = -1e12               # the beat a cell's heard from: any (a loop's layer waits for its next time round)
 DPAD = ("up", "down", "left", "right")
 
