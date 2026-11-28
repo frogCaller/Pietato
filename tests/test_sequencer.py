@@ -5,13 +5,14 @@ its page's parts go. Its player: one of its own sounds in a loop, at its note, a
 says; a row's sound starting again as its next cell comes, so never more sounds at once than rows; the sound as bars
 (low notes at the left, the same at any volume, said twenty times a second, silence said once), through the real
 player too, and nothing said of them till they're asked for. Then in media mode: R from the Soundboard's buttons, its
-page (no row for it on START's card now), still till it plays; A turns a cell on and off (heard at once, stopped), X a
-lead cell's note or a drum's sound; a tap on a cell; B plays it: the loop told its cells, heard on their beats; the bar
-going along the grid, the sound's bars under it; Y; a new tune, Clear all (and nothing on its card that takes a change
-back, or leaves it); L and R round the Soundboard's three pages, the tune playing on under each; SELECT, its card;
-the Soundboard's buttons over it; a layer being recorded there kept as L or R goes on; START held there; Bounce with
-it; HOME on its page: out to Apps at once, and its page again when the Soundboard's opened; the tune kept; a bigger
-screen, and drawn finely."""
+page (no row for it on START's card now; its four buttons on its line, no pills), still till it plays; its buttons
+(▲ from the first row, ▼ round from the last; A on one, its next; a tap on one); A turns a cell on and off (heard at
+once, stopped), X a lead cell's note or a drum's sound; a tap on a cell; B plays it: the loop told its cells, heard on
+their beats; the bar going along the grid, the sound's bars under it; Y; a new tune, Clear all (and nothing on its
+card that takes a change back, or leaves it); L and R round the Soundboard's three pages, the tune playing on under
+each; SELECT, its card; the Soundboard's buttons over it; a layer being recorded there kept as L or R goes on; START
+held there; Bounce with it; HOME on its page: out to Apps at once, and its page again when the Soundboard's opened;
+the tune kept; a bigger screen, and drawn finely."""
 import json, os, random, shutil, subprocess, sys, threading, time, wave
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 sys.path.insert(0, TESTS)
@@ -248,7 +249,7 @@ if not ONLY or "tune" in ONLY:
           f"{SQ.step_at((120.0, 2.5, 100.0), 100.0)}), and how long till its next "
           f"({SQ.next_step_in(c120, 100.1):.3f} s)", steps == [0, 0, 1, 15, 0]
           and SQ.step_at((120.0, 2.5, 100.0), 100.0) == 10 and abs(SQ.next_step_in(c120, 100.1) - 0.025) < 1e-6)
-    fits, even, knobs, middle = [], [], [], []
+    fits, even, middle = [], [], []
     for box, big in (((0, 40, 640, 346), False), ((0, 40, 960, 406), True), ((0, 40, 1920, 946), True)):
         lay = SQ.layout(box, big)
         xs, ys, cw, ch = lay["xs"], lay["ys"], lay["cw"], lay["ch"]
@@ -260,13 +261,9 @@ if not ONLY or "tune" in ONLY:
                     and len({g_ for k, g_ in enumerate(gaps) if k % 4 != 3}) == 1
                     and box[0] < lay["left"] < lay["label"] < xs[0] and xs[-1] + cw <= box[2] - 12
                     and ys[0] > box[1] and all(b_ - a > ch for a, b_ in zip(ys, ys[1:]))
-                    and by0 > ys[-1] + ch and box[0] < bx0 < bx1 < box[2] and by1 <= box[3]
-                    and SQ.BARS_LEAST <= by1 - by0 <= round(grid_h * SQ.BARS_MOST) + 1)
+                    and by0 == ys[-1] + ch + (16 if big else 8) and box[0] < bx0 < bx1 < box[2] and by1 <= box[3]
+                    and 40 <= by1 - by0 <= round(grid_h * SQ.BARS_MOST) + 1 and "knobs" not in lay)
         even.append((cw, ch, gaps[0], ys[1] - ys[0] - ch))
-        ks = lay["knobs"]
-        knobs.append(len(ks) == 4 and all(k[0] == xs[4 * n] and k[2] == xs[4 * n + 3] + cw and k[1] == ks[0][1]
-                                          and k[3] - k[1] >= 40 for n, k in enumerate(ks))
-                     and ys[-1] + ch < ks[0][1] < ks[0][3] < by0)
         middle.append((lay["nums"] - (14 if big else 10) - box[1], box[3] - 8 - by1))
     short = SQ.layout((0, 40, 800, 300), False)
     check(f"where its page's parts go, on the GPi Case's screen and on bigger ones: sixteen cells across in four "
@@ -274,13 +271,11 @@ if not ONLY or "tune" in ONLY:
           f"({fits})", all(fits))
     check(f"...its cells square, and as far apart down as across, as a beat's four are (wide, high, apart across, "
           f"apart down: {even})", all(w_ == h_ and a_ == b_ for w_, h_, a_, b_ in even))
-    check(f"...under the grid, its four buttons, one under each beat ({knobs}), then the bars: no taller than "
+    check(f"...right under the grid, the bars (its buttons aren't there: they're on its line): no taller than "
           f"{SQ.BARS_MOST} of the grid, a tall page's room left above and below it all, as much each way (over the "
-          f"numbers, under the bars: {middle}); a page too short for the buttons has none, the bars under the grid "
-          f"as before ({short['knobs']}, {short['bars']})", all(knobs) and all(abs(a_ - b_) <= 1 for a_, b_ in middle)
-          and middle[1] == (0, 0) and middle[2][0] > 20
-          and short["knobs"] == [] and short["bars"][1] == short["ys"][-1] + short["ch"] + 8
-          and short["bars"][3] == 292)
+          f"numbers, under the bars: {middle}); a short page's as tall as there's room ({short['bars']})",
+          all(abs(a_ - b_) <= 1 for a_, b_ in middle) and middle[2][0] > 20
+          and short["bars"][1] == short["ys"][-1] + short["ch"] + 8 and short["bars"][3] == 292)
 
 # ---- its player ----------------------------------------------------------------------------------------------------
 if not ONLY or "player" in ONLY:
@@ -584,22 +579,27 @@ if not ONLY or "app" in ONLY:
     from PIL import ImageDraw as PILDraw
     texts = []
     real_text = PILDraw.ImageDraw.text
-    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]))),
+    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]), round(xy[1]))),
                                                              real_text(self, xy, text, *a, **k))[1]
     s.tiles.clear()
     flush()
     PILDraw.ImageDraw.text = real_text
-    line = {t: x for t, x in reversed(texts)                # (the first of each: its line's, not a button's)
-            if t in ("Sequencer", "Stopped", "Playing") or t.endswith((" BPM", " pentatonic"))}
-    steps = [t for t, _ in texts if t.isdigit()]
-    marks = [t for t, x in texts if x < 60 and t in ("Kick", "Snare", "Hi-hat", "Pluck")]
+    on_line = sorted((x, t) for t, x, y in texts if y < SB.TOP and t in ("Sequencer", *SQ.knob_values(s.seq)))
+    pills = [t for t, *_ in texts if t.endswith((" pentatonic", " BPM"))]
+    knobs, named, _ = s.seq_knobs(s.seq)
+    kf = s.seq_fonts()["knob_b"]
+    steps = [t for t, *_ in texts if t.isdigit()]
+    marks = [t for t, x, _ in texts if x < 60 and t in ("Kick", "Snare", "Hi-hat", "Pluck")]
     check(f"...its line: its name at the left, after its picture (‹ › after it: L and R go on from it), and at the "
-          f"right, each in a pill, its key and scale and its tempo ({line}); no word for whether it's playing (the "
-          f"tempo's dot says); the steps numbered over the grid ({steps[0]} to {steps[-1]}), each row named at its "
-          f"left ({marks})", 40 <= line.get("Sequencer", 0) <= 60
-          and 380 < line.get("C pentatonic", 0) < line.get(f"{s.seq['bpm']} BPM", 0) < 610
-          and "Stopped" not in line and "Playing" not in line and steps == [str(k) for k in range(1, 17)]
-          and marks == ["Kick", "Snare", "Hi-hat", "Pluck"])
+          f"right its four buttons, what each is set to in its middle (this narrow a screen: no names), the last at "
+          f"the line's right end ({[t for _, t in on_line]}); no pills saying the same again ({pills}); "
+          f"the steps numbered over the grid ({steps[0]} to {steps[-1]}), each row named at its left ({marks})",
+          [t for _, t in on_line] == ["Sequencer", *SQ.knob_values(s.seq)] and 40 <= on_line[0][0] <= 60
+          and pills == [f"{s.seq['bpm']} BPM"]
+          and not named and len(knobs) == 4 and knobs[0][0] > s.head_end("Sequencer")
+          and knobs[-1][2] == s.w - SB.EDGE - 2 and all(k_[3] < SB.TOP - 4 for k_ in knobs)
+          and all(abs(x - (k_[0] + k_[2] - kf.getlength(t)) / 2) <= 1 for (x, t), k_ in zip(on_line[1:], knobs))
+          and steps == [str(k) for k in range(1, 17)] and marks == ["Kick", "Snare", "Hi-hat", "Pluck"])
     want = SQ.born(SQ.seed_of("Den"))
     check(f"R from the Soundboard's buttons ({hints[:2]}; START's card has no row for it, nor for Bounce: "
           f"{[r[0] for r in rows]}): its page: a grid of four sounds ({s.seq and s.seq['rows']}) and sixteen steps, "
@@ -704,12 +704,14 @@ if not ONLY or "app" in ONLY:
     tap("down")
     for _ in range(5):
         tap("right", repeat=True)
-    check(f"◀ from the first step: the last; ▼ from the last row: the buttons under the grid, then the first row "
-          f"({edge}, {wrap}); held, on and on ({b.seq_at})", edge == (3, 15) and wrap == (4, 15)
-          and b.seq_at == (0, 4))
+    check(f"◀ from the first step: the last; ▼ from the last row: round to its buttons (on its line, over the "
+          f"grid), then the first row ({edge}, {wrap}); held, on and on ({b.seq_at})", edge == (3, 15)
+          and wrap == (4, 15) and b.seq_at == (0, 4))
 
-    # its buttons under the grid: Tempo, Key, Scale, Lead
-    lay = SQ.layout((0, SB.TOP, s.w, s.h), s.w >= 960)
+    # its buttons on its line: Tempo, Key, Scale, Lead
+    go(0, 6)
+    tap("up")
+    from_top = b.seq_at
     go(3, 6)
     tap("down")
     at_knob, hints_k = b.seq_at, m.sim_hints(m.sim_game())
@@ -719,9 +721,10 @@ if not ONLY or "app" in ONLY:
     wrapped = b.seq_at
     tap("up")
     back = b.seq_at
-    check(f"▼ from the lead's row: its buttons under the grid, the one under that beat ({at_knob}: Key, under 5 to 8); "
-          f"what A does there along the bottom ({hints_k}); ▶ the next (a beat on: {right}), ◀ round the other way "
-          f"({wrapped}); ▲ back up to the cell under it ({back})", len(lay["knobs"]) == 4 and at_knob == (4, 6)
+    check(f"▲ from the first row: its buttons, the one for that beat ({from_top}: Key, for 5 to 8); ▼ from the "
+          f"lead's row round to them too ({at_knob}); what A does there along the bottom ({hints_k}); ▶ the next "
+          f"({right}), ◀ round the other way ({wrapped}); ▲ from them round to the lead's row ({back})",
+          from_top == (4, 6) and at_knob == (4, 6)
           and hints_k == [("A", "Change"), ("B", "Play"), ("Y", "Mutate"), ("START", "More"), ("HOME", "Back")]
           and right == (4, 10) and wrapped == (4, 14) and back == (3, 14))
     tap("down")
@@ -748,40 +751,36 @@ if not ONLY or "app" in ONLY:
     tap("x")
     x_did = (SQ.dumps(*b.seq), list(m.seq_sounds()), m.seq_key(), round(m.board_clock().bpm)) != was
     texts.clear()
-    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]))),
+    PILDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (texts.append((str(text), round(xy[0]), round(xy[1]))),
                                                              real_text(self, xy, text, *a, **k))[1]
     s.tiles.clear()
     page = flush()
     PILDraw.ImageDraw.text = real_text
     x0, y0 = where[-1]
-    centres = [round((k_[0] + k_[2]) / 2) for k_ in lay["knobs"]]
-    said_on = {t: x for t, x in texts if t in SQ.KNOBS or t in ("110 BPM", "C#", "Blues", "Pad")}
-    kx0, ky0, kx1, ky1 = lay["knobs"][2]
+    knobs = s.seq_knobs(s.seq)[0]
+    shown = sorted((x, t) for t, x, y in texts if y < SB.TOP and t in ("110 BPM", "C#", "Blues", "Pad"))
+    kx0, ky0, kx1, ky1 = knobs[2]
     ring = page[y0 + (ky0 + ky1) // 2, x0 + kx0 - 4:x0 + kx0 - 1]
     check(f"A on them: the Lead its next sound, heard at once at the key's own note ({lead_now}, {lead_heard}); "
           f"the Tempo up to the next of {SQ.TEMPOS[:3]}... from where it is, past the last round to the first "
           f"({tempos}); the Key the next, the lead heard in it ({key_now}, {key_heard}); the Scale the next, nothing "
-          f"heard ({scale_now}, {scale_heard}); X there: nothing ({x_did}). Each button says what it's set to, under "
-          f"its name, in the middle of its beat ({said_on}; {centres}), the one it's on ringed "
-          f"({ring.max(axis=1).tolist()})", lead_now == "Tones/Pad"
+          f"heard ({scale_now}, {scale_heard}); X there: nothing ({x_did}). Each button says what it's set to, in its "
+          f"middle ({shown}), the one it's on ringed ({ring.max(axis=1).tolist()})", lead_now == "Tones/Pad"
           and lead_heard == [{"do": "play", "id": "Tones/Pad", "gain": SQ.GAINS[SQ.LEAD_ROW]}]
           and tempos == [110, 60, 110] and key_now == ("C#", "Pentatonic")
           and key_heard == [{"do": "play", "id": "Tones/Pad", "semis": 1, "gain": SQ.GAINS[SQ.LEAD_ROW]}]
           and scale_now == "Blues" and scale_heard == [] and not x_did and b.seq_at == (4, 10)
-          and all(abs(said_on.get(t_, -99) - c_) <= 1 for t_, c_ in zip(SQ.KNOBS, centres))
-          and all(abs(said_on.get(t_, -99) - c_) <= 1 for t_, c_ in zip(("110 BPM", "C#", "Blues", "Pad"), centres))
+          and [t for _, t in shown] == ["110 BPM", "C#", "Blues", "Pad"]
+          and all(abs(x - (k_[0] + k_[2] - kf.getlength(t)) / 2) <= 1 for (x, t), k_ in zip(shown, knobs))
           and int(ring.max()) > 200 and s.seq["rows"][SQ.LEAD_ROW] == "Pad" and s.seq["scale"] == "Blues")
-    real_up = m.seq_knobs_up
-    m.seq_knobs_up = lambda s_=None: False
-    m.sim_game()
-    clamped = b.seq_at
-    tap("down")
-    wrap2 = b.seq_at
-    none_tap = m.tap_do(("seq", SQ.ROWS, 0))
-    m.seq_knobs_up = real_up
-    check(f"a page without room for its buttons (a short screen's): on a button, the lead's row instead ({clamped}); "
-          f"▼ from there round to the first, as ever ({wrap2}); a tap where one would be: nothing ({none_tap})",
-          clamped == (3, 10) and wrap2 == (0, 10) and none_tap == [])
+    real_w = s.w
+    s.w = 800
+    wide, wide_named, _ = s.seq_knobs(s.seq)
+    s.w = real_w
+    check(f"...on a screen a little wider (800 across): each one's name before what it's set to, the four as wide as "
+          f"the widest each can say, still at the line's right end ({[k_[2] - k_[0] for k_ in wide]})", wide_named
+          and wide[-1][2] == 800 - SB.EDGE - 2 and wide[0][0] > s.head_end("Sequencer")
+          and all(b_[2] - b_[0] > a_[2] - a_[0] for a_, b_ in zip(knobs, wide)))
     m.bounce_choose("key", -1)
     m.bounce_choose("scale", -1)
     m.seq_set_sound(SQ.LEAD_ROW, "Tones/Pluck")
@@ -806,7 +805,7 @@ if not ONLY or "app" in ONLY:
     fit = all(places.get((r, c)) == (x0 + x, y0 + y, x0 + x + lay["cw"], y0 + y + lay["ch"])
               for r, y in enumerate(lay["ys"]) for c, x in enumerate(lay["xs"]))
     fit_k = all(places.get((SQ.ROWS, 4 * k)) == (x0 + k_[0], y0 + k_[1], x0 + k_[2], y0 + k_[3])
-                for k, k_ in enumerate(lay["knobs"]))
+                for k, k_ in enumerate(s.seq_knobs(s.seq)[0]))
     t1 = time.monotonic()
     pressed = []
     for c in (0, 4, 8, 12):
@@ -822,7 +821,7 @@ if not ONLY or "app" in ONLY:
     m.bounce_choose("scale", -1)
     m.seq_changed()
     b.seq_at = (2, 12)
-    check(f"a tap on a button under the grid: moved to, and A pressed ({tapped}, {on_knob}): the Scale the next "
+    check(f"a tap on one of its buttons: moved to, and A pressed ({tapped}, {on_knob}): the Scale the next "
           f"({scale_tapped})", fit_k and tapped == ["a"] and on_knob == (SQ.ROWS, 8) and scale_tapped == "Blues")
     check(f"a tap on a cell (the web page's picture of this screen: {len(places)} places, each cell's own and each "
           f"button's): moved to, and A pressed ({pressed}): the hat on each beat, heard as each went on "

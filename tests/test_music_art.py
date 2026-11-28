@@ -7,7 +7,8 @@ the cover on the left with its glow, a wash of it behind, the words, the line in
 (each tappable); a note for a song with no cover, a sign for a station; the glow following the beat with the battery
 saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off the page; and the
 bars under the words (just their box drawn as they move, falling back, flat with nothing to show; none with no room
-for them; there with the battery saver on too, the glow still); a station's from its sound as MPlayer shares it (its
+for them; there with the battery saver on too, the glow still; none on a Pi Zero 2 W or a Pi 3, the glow as ever,
+its ear only for that); a station's from its sound as MPlayer shares it (its
 export filter's file, read: the bars when it's heard, the same at any volume, flat silenced, paused or with nothing
 new; MPlayer told so for a station only, and played again without it when it stops over its file; for real too, an
 MPlayer sharing a low note). Music's grid: every song a square with its cover (made small once and
@@ -753,6 +754,29 @@ if shutil.which("mplayer"):                            # (for real: an MPlayer s
     m.sound_share_off = False
 M.tap_file = real_tap_file
 m.proc = plain_proc
+
+# a Pi Zero 2 W or a Pi 3: no bars (they'd cost it too much), the glow as ever
+playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
+m.state["settings"]["battery"] = "On"
+m.ear_stop()
+m.bars_fit = None
+real_slow = M.slow_pi
+M.slow_pi = lambda: True
+shot(m)
+m.tick()
+saver_on = (m.now_bars, m.ear, m.bars_wanted())
+m.state["settings"]["battery"] = "Off"
+m.tick()
+glow_ear = m.ear is not None and m.pulse_wanted()
+shot(m)
+no_bars = m.now_bars
+check(f"a Pi Zero 2 W or a Pi 3: no bars, nor an ear for them with the battery saver on ({saver_on}); the glow as "
+      f"ever with it off, its ear for that ({glow_ear}), still no bars ({no_bars}); MPlayer not told to share a "
+      f"station's sound", saver_on == (None, None, False) and glow_ear and no_bars is None
+      and m.sound_share_args() == [])
+M.slow_pi = real_slow
+m.bars_fit = None
+m.ear_stop()
 
 # ---- Music's grid --------------------------------------------------------------------------------------------
 def ready(m, secs=10.0):

@@ -1,9 +1,9 @@
 """Music's pages. Its songs: a grid of their covers, each with its name under it, the picked one raised a little with
 a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows
 the beat while the battery saver's off), what's playing beside it (and under that, the sound as bars, if there's
-room: a song of yours as the ear hears it, ear.py, a station as MPlayer shares it, its Tap), how far through it is and
-the buttons under it, all on a soft wash of the cover. A song with no cover, or a station: a sign in its place, and
-the accent colour's glow.
+room and the machine's quick enough: a Pi 4 or 5, a PC; a song of yours as the ear hears it, ear.py, a station as
+MPlayer shares it, its Tap), how far through it is and the buttons under it, all on a soft wash of the cover. A song
+with no cover, or a station: a sign in its place, and the accent colour's glow.
 (SELECT on Now playing: lofi art on the whole screen instead, screens/player.py.)"""
 import collections
 import os
@@ -18,6 +18,7 @@ from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
 from ..asyou import as_you
 from ..ear import BARS, Ear, EXPORT_SIZE, mplayer_exports, SOFTVOL_TOP, Tap, tap_file, tap_ready
 from ..library import LIBRARY, LISTEN_KINDS
+from ..screen import slow_pi
 from ..util import cache_name, clock, find_files
 
 NOW_RADIUS = 12                  # the cover's corners
@@ -64,6 +65,7 @@ class MusicScreen:
     ear = None                   # listening to the song for its beats and its bars (ear.py), while they're shown
     sound_tap = None             # ...a station's sound as MPlayer shares it (ear.py's Tap), for its bars
     sound_share_off = False      # ...and that MPlayer here couldn't share it (it stopped at once): not asked again
+    bars_fit = None              # ...whether this machine draws the bars smoothly (asked once: bars_here)
     now_bars = None              # Now playing's bars: (their box, how high each is drawn), while they're on it
     pulse_next = 0.0             # when the glow's next frame is due
     pos_off, pos_off_at = None, 0.0   # where the song is, less the clock (as the player last said, and when)
@@ -173,9 +175,9 @@ class MusicScreen:
         return now + self.pos_off
 
     # -- the glow, following the beat; the bars ---------------------------------------------------------------------
-    def bars_wanted(self):
-        """Now playing's bars move with the music, on its own page (not the lofi art, not resting): a song of yours
-        (a file, the ear hears it again), or a station MPlayer shares the sound of (its Tap). On a battery too."""
+    def now_followed(self):
+        """What's on Now playing can be followed as it's heard, on its own page (not the lofi art, not resting): a
+        song of yours (a file, the ear hears it again), or a station MPlayer shares the sound of (its Tap)."""
         if not (self.active and self.view == "now" and self.proc is not None and self.setting("now_art") != "On"
                 and not self.resting and not self.proc_owns_screen()):
             return False
@@ -183,9 +185,21 @@ class MusicScreen:
             return bool(getattr(self.proc, "shares_sound", False))
         return self.kind == "audio" and "://" not in ((self.cur or {}).get("src") or "")
 
+    def bars_here(self):
+        """Now playing has its bars on this machine: a Pi 4 or 5 (a Compute Module 4 or 5 too), or a PC. A Pi Zero
+        2 W or a Pi 3 (or an RK3326 handheld) hasn't: they'd cost it too much. Asked once."""
+        if self.bars_fit is None:
+            self.bars_fit = not slow_pi()
+        return self.bars_fit
+
+    def bars_wanted(self):
+        """Now playing's bars move with the music: on a machine quick enough for them, whatever plays that can be
+        followed (now_followed); on a battery too."""
+        return self.bars_here() and self.now_followed()
+
     def pulse_wanted(self):
         """Now playing's glow follows the beat: a song of yours (a file) on it, the battery saver off."""
-        return self.kind == "audio" and self.bars_wanted() and not self.saver_on()
+        return self.kind == "audio" and self.now_followed() and not self.saver_on()
 
     def now_moving(self):
         """Now playing's glow or its bars have frames to draw (the main loop waits no longer than the next one)."""
@@ -193,8 +207,9 @@ class MusicScreen:
 
     def sound_share_args(self):
         """What MPlayer's told for a station, so its bars can follow it (the sound it plays, shared: ear.py's Tap):
-        nothing where it can't (an MPlayer without the filter, a file it couldn't write, or it stopped for it)."""
-        if self.sound_share_off or not mplayer_exports():
+        nothing where it can't (an MPlayer without the filter, a file it couldn't write, or it stopped for it), or
+        where there are no bars (bars_here)."""
+        if self.sound_share_off or not self.bars_here() or not mplayer_exports():
             return []
         you = as_you()[1]
         uid, gid = you.get("user"), you.get("group")
@@ -243,7 +258,7 @@ class MusicScreen:
     def pulse_tick(self, now):
         """The ear for the song on Now playing (for its bars, and its glow), kept or let go; their next frame, when
         it's due."""
-        if not self.bars_wanted():
+        if not (self.bars_wanted() or self.pulse_wanted()):
             if self.ear is not None:
                 self.ear_stop()
             return

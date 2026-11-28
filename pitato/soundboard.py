@@ -34,6 +34,7 @@ PAD_PLACE = {"up": (0, 0.5, 0), "left": (0, 0, 1), "right": (0, 1, 1), "down": (
 TOP = 40                         # px for its line (the page's name, the bank, the loop)
 PAGE_NAME = "Soundboard"         # its buttons' page, as its line names it (the others: Sequencer, Bounce)
 EDGE, GAP, MIDDLE = 12, 8, 24    # px round the page's own things and between them (the Band's page: its buttons')
+KNOB_GAP = 8                     # px between the Sequencer's buttons, on its line
 SPACE = (0.15, 1.15, 0.2, 0.05)  # its buttons are square, with room to breathe. Of a button's side: between two of
                                  # them, between the d-pad's and the letters' (about as far as a cross's left button
                                  # is from its right: two crosses, apart), at the page's sides at least, and above and
@@ -355,6 +356,13 @@ class Soundboard(Sim):
             x += wide + gap
         return w
 
+    def head_end(self, name, arrows=True):
+        """Where a page's line's own part ends (its picture, its name, ‹ ›), from its left edge: as head draws it."""
+        big = self.w >= 960
+        side, a = (30, 5) if big else (26, 4)
+        f = self.font(22 if big else 19, bold=True)
+        return EDGE + 2 + side + 10 + f.getlength(name) + (16 if big else 13) + (2 * (3 * a + 2) if arrows else 0)
+
     def head(self, d, x0, y0, w, name, which, pills=(), arrows=True):
         """A page's line, w wide: its picture and its name at the left, ‹ › after them (L and R: the Soundboard's
         other pages; none while they do something else), what it's set to in pills at the right (the last given
@@ -528,7 +536,29 @@ class Soundboard(Sim):
                 "row": self.font(19 if big else 14), "row_b": self.font(19 if big else 14, bold=True),
                 "note": self.font(15 if big else 11, bold=True), "arrow": 6 if big else 5,
                 "step": self.font(13 if big else 10), "step_b": self.font(13 if big else 10, bold=True),
-                "knob": self.font(13 if big else 11), "knob_b": self.font(17 if big else 14, bold=True)}
+                "knob": self.font(15 if big else 13), "knob_b": self.font(15 if big else 13, bold=True)}
+
+    def seq_knobs(self, view):
+        """Its buttons (SQ.KNOBS) on its line, right of its name and ‹ ›, the last at the line's right end, where the
+        pills are on its other pages: each as wide as the widest it can say, its name before that where there's room
+        for all four names (else what it's set to, alone). ([their boxes], whether they're named, the gap between a
+        name and what it's set to)."""
+        big = self.w >= 960
+        fonts = self.seq_fonts()
+        f, fb = fonts["knob"], fonts["knob_b"]
+        h, pad, gap = (30, 13, 9) if big else (26, 11, 7)
+        can = (tuple(f"{t} BPM" for t in SQ.TEMPOS), BN.KEYS, tuple(BN.SCALES), BN.TONES)
+        widest = [max(fb.getlength(v) for v in vs + (now,)) for vs, now in zip(can, SQ.knob_values(view))]
+        names = [f.getlength(n) + gap for n in SQ.KNOBS]
+        right = self.w - EDGE - 2
+        named = sum(names) + sum(widest) + 8 * pad + 3 * KNOB_GAP <= right - self.head_end("Sequencer") - 6
+        mid = TOP // 2 - 2
+        boxes, x = [], right
+        for n, v in zip(reversed(names), reversed(widest)):
+            w = (n if named else 0) + v + 2 * pad
+            boxes.insert(0, (round(x - w), mid - h // 2, round(x), mid + h // 2))
+            x -= w + KNOB_GAP
+        return boxes, named, gap
 
     def seq_cells(self, cw, ch):
         """A cell that's on, as it's drawn (and as it is while the bar's on it), in each row's own colour: pictures
@@ -550,15 +580,12 @@ class Soundboard(Sim):
                v["bpm"], v["playing"], v["colour"], self.w, self.h, scale(), BG)
         tile = self.tiles.get(key)
         if tile is None:
-            from .theme import ACCENT
             tile = Image.new("RGB", (self.w, self.h), BG)
             d = ImageDraw.Draw(tile)
-            self.head(d, 0, 0, self.w, "Sequencer", "seq",
-                      [[("note", ACCENT), ("text", f"{v['key']} {v['scale'].lower()}", True, TEXT)],
-                       [("dot", _HUES["Green"] if v["playing"] else co_mix(BG, MUTED, 0.8)),
-                        ("text", f"{v['bpm']} BPM", True, TEXT)]])
+            self.head(d, 0, 0, self.w, "Sequencer", "seq")
             SQ.draw_grid(tile, d, lay, v, fonts, tiles)
-            SQ.draw_knobs(d, lay, v, fonts)
+            boxes, named, gap = self.seq_knobs(v)
+            SQ.draw_knobs(d, boxes, v, fonts, named, gap)
             for k in [k for k in self.tiles if k[0] == "seq"]:
                 del self.tiles[k]                      # (the one before: not wanted again soon)
             self.tiles[key] = tile
@@ -594,8 +621,8 @@ class Soundboard(Sim):
         for r, y in enumerate(lay["ys"]):              # (a tap on a cell: on or off, as A there)
             for c, x in enumerate(lay["xs"]):
                 self.taps.append(((x0 + x, y0 + y, x0 + x + cw, y0 + y + ch), ("seq", r, c)))
-        for k, (kx0, ky0, kx1, ky1) in enumerate(lay["knobs"]):   # (on a button under it: its next, as A there)
-            self.taps.append(((x0 + kx0, y0 + ky0, x0 + kx1, y0 + ky1), ("seq", SQ.ROWS, 4 * k)))
+        for k, (kx0, ky0, kx1, ky1) in enumerate(self.seq_knobs(v)[0]):   # (on one of its buttons: its next, as
+            self.taps.append(((x0 + kx0, y0 + ky0, x0 + kx1, y0 + ky1), ("seq", SQ.ROWS, 4 * k)))   # A there)
 
     @staticmethod
     def cross_marks(d, x0, y0, boxes):

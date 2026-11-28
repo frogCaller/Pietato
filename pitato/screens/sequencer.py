@@ -11,7 +11,6 @@ from .. import bounce as BN
 from .. import sequencer as SQ
 from .. import soundbank as B
 from ..library import VOLUME_STEP
-from ..soundboard import TOP
 from ..theme import ACCENT
 
 SEQ_HOW = ("A: a cell on or off. X: its note (a drum's: its sound). Y changes the tune a little. SELECT: the scale. L "
@@ -168,19 +167,18 @@ class SequencerScreen:
 
     # -- its buttons ---------------------------------------------------------------------------------------------------
     def press_seq(self, name, repeat):
-        """◀▶▲▼ move from cell to cell (held: on and on; round the edges), and on to its buttons under the grid if
-        the page has room for them (◀▶ there: from one to the next); A a cell on or off, or a button's next; B stops
-        it, or starts it; X a drum's next sound, or a lead cell's next note; Y changes a little of the tune; SELECT
-        the scale; L and R the Soundboard's page before and after; START its card."""
+        """◀▶▲▼ move from cell to cell (held: on and on; round the edges), and on to its buttons on its line, over
+        the grid (▲ from its first row, ▼ round from its last; ◀▶ there: from one to the next); A a cell on or off,
+        or a button's next; B stops it, or starts it; X a drum's next sound, or a lead cell's next note; Y changes a
+        little of the tune; SELECT the scale; L and R the Soundboard's page before and after; START its card."""
         b = self.board
         grid, notes = self.seq_tune()
-        rows = SQ.ROWS + (1 if self.seq_knobs_up() else 0)
+        rows = SQ.ROWS + 1                             # (its buttons too: over the grid, ▼ round from its last row)
         r, c = b.seq_at
-        r = min(r, rows - 1)
         if name in DPAD:
             if name in ("up", "down"):
                 r = (r + (1 if name == "down" else -1)) % rows
-            elif r == SQ.ROWS:                         # (its buttons: one under each beat)
+            elif r == SQ.ROWS:                         # (its buttons: one for each beat's four)
                 c = (c + (4 if name == "right" else -4)) % SQ.STEPS
             else:
                 c = (c + (1 if name == "right" else -1)) % SQ.STEPS
@@ -189,7 +187,7 @@ class SequencerScreen:
             return None
         elif name in ("l", "r", "l2", "r2"):
             self.board_cycle(-1 if name in ("l", "l2") else 1)
-        elif r == SQ.ROWS and name in ("a", "x"):      # (a button under the grid: A, its next; X, nothing there)
+        elif r == SQ.ROWS and name in ("a", "x"):      # (one of its buttons: A, its next; X, nothing there)
             if name == "a":
                 self.seq_knob(c // 4)
         elif name == "a":
@@ -229,30 +227,19 @@ class SequencerScreen:
         return None
 
     def seq_tap(self, r, c):
-        """A cell tapped, or a button under the grid (the web page's picture of this screen): moved to, and A does
-        the rest."""
+        """A cell tapped, or one of its buttons (the web page's picture of this screen): moved to, and A does the
+        rest."""
         b = getattr(self, "board", None)
         if b is None or not b.seq_up or b.bounce is not None or b.rec is not None or b.placing is not None:
             return []
-        if not (type(r) is int and type(c) is int and 0 <= c < SQ.STEPS
-                and (0 <= r < SQ.ROWS or r == SQ.ROWS and self.seq_knobs_up())):
+        if not (type(r) is int and type(c) is int and 0 <= c < SQ.STEPS and 0 <= r <= SQ.ROWS):
             return []
         b.seq_at = (r, c)
         self.dirty = True
         return ["a"]
 
-    def seq_knobs_up(self, s=None):
-        """Whether its page has its buttons under the grid: room enough for them (s: the page, if it's to hand; its
-        size, if not, from its box: sim_game would ask its page again)."""
-        if s is None:
-            (x0, y0, x1, y1), inset = self.sim_box()
-            w, h = x1 - x0 - 2 * inset, y1 - y0 - 2 * inset
-        else:
-            w, h = s.w, s.h
-        return bool(SQ.layout((0, TOP, w, h), w >= 960)["knobs"])
-
     def seq_knob(self, k):
-        """A on a button under the grid (SQ.KNOBS): the tempo, the key, the scale or the lead's sound, the next one
+        """A on one of its buttons (SQ.KNOBS): the tempo, the key, the scale or the lead's sound, the next one
         (round and round); the lead's heard at the key's own note, the tune stopped."""
         b = self.board
         name = SQ.KNOBS[k]
@@ -395,8 +382,6 @@ class SequencerScreen:
         key, scale = self.seq_key()
         c = self.board_clock()
         sounds = self.seq_sounds()
-        if b.seq_at[0] >= SQ.ROWS and not self.seq_knobs_up(s):  # (on a button, and the page has none now)
-            b.seq_at = (SQ.ROWS - 1, b.seq_at[1])
         root = BN.root_of(key)
         s.seq = {"grid": tuple(tuple(row) for row in grid),
                  "names": tuple(BN.note_name(SQ.note_of(n, key, scale)) for n in notes),
@@ -404,7 +389,7 @@ class SequencerScreen:
                  "rows": [self.seq_sound_name(sid) for sid in sounds], "key": key, "scale": scale,
                  "bpm": round(c.bpm), "playing": b.seq_on, "clock": (c.bpm, c.b0, c.t0), "cursor": b.seq_at,
                  "colour": ACCENT, "bars": b.bars, "paused": b.card == "seq"}
-        if b.seq_at[0] == SQ.ROWS:                     # (a button under the grid)
+        if b.seq_at[0] == SQ.ROWS:                     # (one of its buttons)
             s.own_hints = [("A", "Change"), ("B", "Stop" if b.seq_on else "Play"), ("Y", "Mutate"),
                            ("START", "More"), ("HOME", "Back")]
             return
