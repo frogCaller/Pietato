@@ -242,6 +242,29 @@ def wallpaper(name, size, picture="", depth=8):
     return Image.fromarray(out, "RGB")
 
 
+def stepped(pic, depth, at=(0, 0)):
+    """A picture as a screen with few steps to a colour can show it (depth: (5, 6, 5) on a 16-bit one, the GPi
+    Case's and most Pis' screens; 8, as it is): each step's edge spread over the wallpapers' fine, even pattern, so a
+    soft sweep of colour doesn't turn into bands and blocks. at: where its top left corner is on the screen (the
+    pattern lined up with the rest of it there)."""
+    import numpy as np
+    from PIL import Image
+    bits = (depth,) * 3 if isinstance(depth, int) else tuple(depth)
+    if all(int(b) >= 8 for b in bits):
+        return pic
+    a = np.asarray(pic.convert("RGB"), np.float32)
+    h, w = a.shape[:2]
+    x0, y0 = at[0] % 8, at[1] % 8
+    grain = np.tile(bayer(8), (h // 8 + 2, w // 8 + 2))[y0:y0 + h, x0:x0 + w]
+    out = np.empty((h, w, 3), np.uint8)
+    for c, b in enumerate(bits):
+        steps = (1 << min(max(int(b), 1), 8)) - 1
+        ch = a[..., c] * (steps / 255.0) + grain
+        np.clip(np.rint(ch, out=ch), 0, steps, out=ch)
+        out[..., c] = np.rint(ch * (255.0 / steps))
+    return Image.fromarray(out, "RGB")
+
+
 # ---- the home screen: an icon for each tab ------------------------------------------
 HOME_COLS = (4, 5, 6)     # icons across: whichever fills the rows best (4 first, like a phone)
 

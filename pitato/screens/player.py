@@ -24,6 +24,7 @@ from ..library import (
     SCREEN_KINDS, video_player, video_scale)
 from ..plex import PLEX_CACHE
 from ..lofi import LofiArt, lofi_scene, SCENES
+from ..beatgame import BeatGame, STATION_LONG
 from ..fine import enlarged
 
 
@@ -657,6 +658,67 @@ class PlayerScreen:
         if not self.muted:                             # (paused and silent: it gets this volume as it plays on)
             self.cmd(f"pausing_keep volume {self.volume} 1")
         self.dirty = True
+
+    # -- Now playing's Game beat (SELECT there, after the lofi art) --------------------------------------------
+    def now_game(self):
+        """Music or radio's Now playing is on the screen as Game beat (SELECT, after the lofi art), on a machine
+        quick enough for it (screens/music.py's bars_here: a Pi 4 or 5, a PC)."""
+        return (self.active and self.view == "now" and self.kind in LISTEN_KINDS
+                and self.setting("now_art") == "Game" and self.bars_here())
+
+    def game_beats(self, now):
+        """The beats heard since Game beat's last frame: [(when, how hard: 0 to 1)], when on the clock its frames go
+        by. A song of yours: the ear's (it finds them ahead of what's heard: ear.py). A station: none here (its bars
+        are listened to for them: BeatGame.hear)."""
+        ear = self.ear
+        place = self.heard_now() if ear is not None and self.kind == "audio" else None
+        was, self.game_place = self.game_place, place
+        if place is None or was is None or not 0 <= place - was <= 1.0:   # (none yet, or a jump: from here)
+            return []
+        with ear.lock:
+            beats = list(ear.beats)
+        return [(now - (place - p), hard) for p, hard in beats if was < p <= place]
+
+    def render_game(self):
+        """Now playing as Game beat: the dance floor on the whole screen (beatgame.py), what's playing at its top,
+        how far through it is along its foot (with the zombies cleared), nothing else."""
+        from ..fine import ImageDraw
+        took = time.perf_counter()
+        W, H = self.fb.w, self.fb.h
+        now = time.monotonic()
+        it = self.cur or {"title": "", "src": ""}
+        song = it.get("src") or it.get("title")
+        g = self.beat_game
+        if g is None or g.song != song:
+            g = self.beat_game = BeatGame(song)
+            self.game_place = None
+        if g.born is None:
+            g.born = now
+        levels = self.now_heard() or ()
+        radio = self.kind == "radio"
+        if not self.paused:
+            if radio:
+                g.hear(levels, now)
+            for when, hard in self.game_beats(now):
+                g.beat(when, hard, now)
+        length = 0 if radio else (self.meta.get("length") or self.length(it) or 0)
+        progress = min(1.0, self.pos / length) if length else min(1.0, (now - g.born) / STATION_LONG)
+        img = enlarged(g.frame(W, H, now, levels, self.paused, on_dark("ACCENT"), progress, self.colour_depth()))
+        d = ImageDraw.Draw(img)
+        F = self.fonts
+        title, sub = self.lofi_words()
+        d.text((18, 22), self.fit(d, title, F["head"], W - 36), font=F["head"], fill=on_dark("TEXT"), anchor="lm")
+        d.text((18, 46), self.fit(d, sub, F["small"], W - 36), font=F["small"],
+               fill=on_dark("ACCENT" if self.paused else "BODY"), anchor="lm")
+        if length:                                     # how far through it is: a thin line along the foot
+            d.rectangle((0, H - 3, W, H), fill=on_dark("LINE"))
+            d.rectangle((0, H - 3, int(W * progress), H), fill=on_dark("ACCENT"))
+            d.text((16, H - 16), f"{clock(self.pos)} / {clock(length)}", font=F["small"], fill=on_dark("MUTED"),
+                   anchor="ls")
+        d.text((W - 16, H - 16), f"{g.kills} cleared", font=F["small"], fill=on_dark("MUTED"), anchor="rs")
+        self.msg_pill(d)                               # (a notice, over it)
+        self.fb.show(img)
+        self.game_took = time.perf_counter() - took
 
     # -- Now playing's lofi art (SELECT there) --------------------------------------------------------------
     def now_art(self):

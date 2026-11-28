@@ -563,6 +563,7 @@ m.press("select")
 m.tick()
 check("lofi art on: no ear", m.now_art() and m.ear is None and made[0].closed)
 m.press("select")
+m.press("select")                                      # (past Game beat, on a machine quick enough for it)
 m.msg = None
 m.tick()
 check("...off again: one again", m.ear is made[1] and not made[1].closed)

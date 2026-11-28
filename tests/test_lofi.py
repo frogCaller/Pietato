@@ -2,8 +2,9 @@
 too, what moves moving, the window's rain the same again every 6 seconds, quick enough for a Pi Zero), each song its
 own scene; then in media mode: SELECT puts it on (kept for next time), the whole screen the scene with what's playing
 in its corner and how far through it is, a frame now and then (not twenty a second), the loop waiting meanwhile,
-Paused when it is, radio too, SELECT again back to the usual page (its buttons fit, SELECT Art among them), L still the
-one before, and the battery saver leaving it on while a song plays."""
+Paused when it is, radio too, SELECT again Game beat (on a machine quick enough for it: test_game_beat.py), and again
+back to the usual page (its buttons fit, SELECT Art among them), L still the one before, and the battery saver
+leaving it on while a song plays."""
 import io, os, shutil, sys, time, types
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
@@ -147,6 +148,9 @@ m.press("r")
 m.press("l")
 m.press("select")
 check(f"R and L: the next song, the one before ({skipped}); SELECT no longer the one before", skipped == [1, -1])
+check(f"SELECT again: Game beat, on a machine quick enough for it ({m.msg!r})",
+      not m.now_art() and m.setting("now_art") == "Game" and m.now_game() and "Game beat" in (m.msg or ""))
+m.press("select")
 m.dirty = True
 m.flush()
 check("SELECT again: Now playing as it was", not m.now_art() and m.setting("now_art") == "Off"

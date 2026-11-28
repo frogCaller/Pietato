@@ -18,6 +18,7 @@ from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
 from ..asyou import as_you
 from ..ear import BARS, Ear, EXPORT_SIZE, mplayer_exports, SOFTVOL_TOP, Tap, tap_file, tap_ready
 from ..library import LIBRARY, LISTEN_KINDS
+from ..home import stepped
 from ..screen import slow_pi
 from ..util import cache_name, clock, find_files
 
@@ -176,8 +177,9 @@ class MusicScreen:
 
     # -- the glow, following the beat; the bars ---------------------------------------------------------------------
     def now_followed(self):
-        """What's on Now playing can be followed as it's heard, on its own page (not the lofi art, not resting): a
-        song of yours (a file, the ear hears it again), or a station MPlayer shares the sound of (its Tap)."""
+        """What's on Now playing can be followed as it's heard, on its own page or as Game beat (not the lofi art,
+        not resting): a song of yours (a file, the ear hears it again), or a station MPlayer shares the sound of (its
+        Tap)."""
         if not (self.active and self.view == "now" and self.proc is not None and self.setting("now_art") != "On"
                 and not self.resting and not self.proc_owns_screen()):
             return False
@@ -271,7 +273,7 @@ class MusicScreen:
             self.ear_stop()                            # (a station's: the player's own sound, its Tap)
         if self.paused:
             self.pos_off = None                        # (where it is, said afresh when it plays on)
-        if now >= self.pulse_next:
+        if now >= self.pulse_next and not self.now_game():   # (Game beat: its own frames, its own pace)
             self.pulse_next = now + 1.0 / PULSE_FPS
             self.pulse_frame()
 
@@ -348,24 +350,33 @@ class MusicScreen:
         return {"W": W, "H": H, "foot": H if self.full_app() else foot, "side": side, "ax": ax, "ay": ay,
                 "tx": ax + side + 30, "bar": ay + side + 30, "keys": ay + side + 92}
 
+    def colour_depth(self):
+        """The bits each colour has on this screen: (5, 6, 5) on a 16-bit one (the GPi Case's, and most Pis' at the
+        console), whose few steps a soft wash is spread over (home.py's stepped); 8 on the rest."""
+        fields = getattr(self.fb, "fields", None)
+        return tuple(ln for _, ln in fields) if getattr(self.fb, "bpp", 32) == 16 and fields else 8
+
     def now_pics(self, it, lay):
-        """What Now playing's made of for this song on this screen: the wash behind it, and the cover (or the sign in
-        its place) with its glow, lit as each step has it. Made once, and kept till the song or the screen changes."""
+        """What Now playing's made of for this song on this screen: the wash behind it (spread over a 16-bit screen's
+        few steps, its soft one kept to light), and the cover (or the sign in its place) with its glow, lit as each
+        step has it. Made once, and kept till the song or the screen changes."""
         from PIL import Image
         from ..fine import made_fine, scale
         im, colour = self.cover_for(it) or (None, None)
         radio = self.kind == "radio"
         colour = colour or ACCENT
         s = scale()
+        depth = self.colour_depth()
         key = (it.get("src"), im is not None, radio, lay["W"], lay["foot"], lay["side"], lay["ax"], lay["ay"], s, BG,
-               colour)
+               colour, depth)
         if self.now_made is not None and self.now_made[0] == key:
             return self.now_made[1]
         side, reach = lay["side"], GLOW_REACH             # (each picture: s of its pixels to one of the menus')
         tile = cover_tile(im, side * s, NOW_RADIUS * s) if im is not None else \
             rounded(Image.new("RGB", (side * s, side * s), ROW), NOW_RADIUS * s)
         box = (lay["ax"] - reach, lay["ay"] - reach, lay["ax"] + side + reach, lay["ay"] + side + reach)
-        pics = {"wash": made_fine(cover_wash(im, (lay["W"] * s, lay["foot"] * s), BG, colour), s),
+        soft = cover_wash(im, (lay["W"] * s, lay["foot"] * s), BG, colour)
+        pics = {"wash": made_fine(stepped(soft, depth), s), "soft": made_fine(soft, s), "depth": depth,
                 "tile": made_fine(tile, s), "colour": colour, "box": box, "reach": reach, "lit": {}, "s": s,
                 "mask": glow_mask(side * s, reach * s, NOW_RADIUS * s),
                 "sign": None if im is not None else ("radio" if radio else "note")}
@@ -382,10 +393,16 @@ class MusicScreen:
             return hit
         s, box, mask, tile, reach = pics["s"], pics["box"], pics["mask"], pics["tile"], pics["reach"]
         part = Image.new("RGB", (box[2] - box[0], box[3] - box[1]), BG)
-        part.paste(pics["wash"].crop(box), (0, 0))
+        part.paste(pics["soft"].crop(box), (0, 0))
         strength = glow_strength(step) * GLOW_MOST
         part.paste(made_fine(Plain.new("RGB", mask.size, pics["colour"]), s), (0, 0),
                    made_fine(mask.point(lambda v: int(v * strength)), s))
+        if pics["depth"] != 8:                         # (the glow on the wash, spread over the screen's few steps
+            fine = getattr(part, "pic", None)          # as the wash round it is)
+            if fine is not None:
+                part.pic = stepped(fine, pics["depth"], (box[0] * s, box[1] * s))
+            else:
+                part = stepped(part, pics["depth"], box[:2])
         part.paste(tile, (reach, reach), tile)
         if pics["sign"]:
             self.cover_sign(ImageDraw.Draw(part), reach + tile.width / 2, reach + tile.height / 2, pics["sign"])
@@ -470,6 +487,8 @@ class MusicScreen:
     def render_now(self):
         if self.setting("now_art") == "On":
             return self.render_lofi()
+        if self.now_game():
+            return self.render_game()
         F = self.fonts
         img, d = self.canvas()
         it = self.cur or {"title": "", "src": "", "sub": ""}

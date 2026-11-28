@@ -21,7 +21,8 @@ Pietato starts on a home screen of apps:
   [MusicBrainz](https://musicbrainz.org) and the Cover Art Archive (free, no account), by the song's name and
   who it's by: from its tags, or a file name like `Song - Artist.mp3` or `Artist - Song.mp3`. Only those names
   are sent, and the covers are kept on the Pi. On Now playing, Y goes round playing in order, shuffled, and
-  the one song on repeat; SELECT puts on lofi art (a quiet scene on the whole screen) and HOME has
+  the one song on repeat; SELECT puts on lofi art (a quiet scene on the whole screen), then on a Pi 4 or 5 or a
+  PC Game beat (a dancer throwing glowing notes at glowing balls, all to the beat), and HOME has
   [Party mode](#party-mode), **Photos** (filters, delete), **Videos** (picks up where you left off)
 - **Weather** (press START there to set where you are, and °F or °C), and **Finance**: stock and coin prices
   and charts. Press Y on Finance to look up more to add

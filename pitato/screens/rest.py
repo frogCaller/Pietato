@@ -93,7 +93,8 @@ class RestScreen:
             self.proc_owns_screen() or self.game is not None or self.prog is not None or self.chromium_shown()
             or self.view in ("keys", "sketch", "game", "gamemenu", "chromenu", "chromehow")
             or (self.view == "list" and (self.on_camera_page() or self.on_sim_page()))
-            or (self.view == "photo" and self.v.get("slideshow")) or (self.now_art() and not self.paused))
+            or (self.view == "photo" and self.v.get("slideshow"))
+            or ((self.now_art() or self.now_game()) and not self.paused))
 
     def rest_tick(self, now):
         """The main loop: the screen rests after a while with nothing happening (the battery saver on), and wakes when

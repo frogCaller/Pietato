@@ -41,6 +41,7 @@ from .pihole import Pihole
 from .plex import Plex, PLEX_TIMELINE_SECS
 from .jellyfin import Jellyfin
 from .sims import SIM_FPS, SIM_FPS_BIG
+from .beatgame import GAME_FPS
 from .snake import SnakeBrain
 from .shrink import Shrinker
 from .update import Updater
@@ -275,6 +276,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.lofi = None             # Now playing's lofi art (pitato/lofi.py), once it's been on
         self.lofi_card = (None, None)   # ...what's playing, in its corner: (what it says, its picture)
         self.lofi_next = 0.0         # ...when its next frame's due
+        self.beat_game = None        # Now playing's Game beat (pitato/beatgame.py), once it's been on
+        self.game_next = 0.0         # ...when its next frame's due
+        self.game_place = None       # ...where the song was heard at its last frame (the ear's beats since then)
+        self.game_took = 0.0         # ...how long its last frame took to draw (its next no sooner than twice that)
         self.sim_next = 0.0          # when its next frame is due
         self.sim_due = None          # ...for which sim, with which options (another, or them changed: one now)
         self.sim_base = (None, None, None)       # what doesn't move: (what it shows, it, the box's corners)
@@ -668,6 +673,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             return max(0.0, min(0.25, self.update_next - time.monotonic()))   # (its dots' next step)
         if self.now_art():
             return max(0.0, min(0.25, self.lofi_next - time.monotonic()))   # (the lofi art's next frame)
+        if self.now_game() and not self.paused:
+            return max(0.0, min(0.25, self.game_next - time.monotonic()))   # (Game beat's next frame)
         if self.now_moving():                          # (Now playing's glow and its bars: their next frame)
             return max(0.0, min(0.25, self.pulse_next - time.monotonic()))
         if self.on_sim_page() and self.sim_opts is None:      # (its next frame; the Clock's: a second or so off)
@@ -1942,6 +1949,10 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         if self.now_art() and not self.resting and now >= self.lofi_next:   # (Now playing's lofi art: its rain...)
             self.lofi_next = now + 1.0 / self.lofi_fps()
             self.dirty = True
+        if (self.now_game() and not self.paused and not self.resting   # (...or its Game beat: its dancer; still
+                and now >= self.game_next):                                 # while it's paused; on a big screen
+            self.game_next = now + max(1.0 / GAME_FPS, 2 * self.game_took)  # a Pi's slow to draw, half its time)
+            self.dirty = True
         self.music_tick(now)                           # (...and its cover's glow, following the beat)
         if (self.fin_auto and self.active and not self.resting and self.view == "list"
                 and self.tab_type() == "finance" and now >= self.fin_next):
@@ -2205,12 +2216,15 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             elif name in ("left", "right") and not radio:
                 self.cmd(f"seek {10 if name == 'right' else -10} 0")
                 self.paused = False
-            elif name == "select":                     # lofi art on the whole screen, or not (kept for next time)
-                on = self.setting("now_art") != "On"
-                self.set_setting("now_art", "On" if on else "Off")
-                self.lofi_next = 0.0
-                if on:
-                    self.toast("Lofi art. SELECT to leave it", 3)
+            elif name == "select":                     # lofi art on the whole screen, then Game beat (a Pi quick
+                art, game = self.setting("now_art"), self.bars_here()   # enough for it), then neither (kept)
+                nxt = "On" if art not in ("On", "Game") else "Game" if art == "On" and game else "Off"
+                self.set_setting("now_art", nxt)
+                self.lofi_next = self.game_next = 0.0
+                if nxt == "On":
+                    self.toast("Lofi art. SELECT for Game beat" if game else "Lofi art. SELECT to leave it", 3)
+                elif nxt == "Game":
+                    self.toast("Game beat. SELECT to leave it", 3)
             elif name == "l" or (radio and name == "left"):
                 self.skip(-1)
             elif name in ("r", "start") or (radio and name == "right"):
