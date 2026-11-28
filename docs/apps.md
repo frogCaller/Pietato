@@ -33,7 +33,7 @@ Pietato starts on a home screen of apps:
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice
 - **Apps**: [Group chat](#group-chat), the
-  [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a [Soundboard](#soundboard), a [Band](#band), a
+  [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a [Sequencer](#sequencer), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
   START has its seconds), Notes
@@ -148,7 +148,7 @@ web page's Settings > WiFi has it too.
 
 An 8x8 grid of WS2812B LEDs behind your TV, or a strip of them round its edges, can light up with the colours
 along the edges of the game you're playing, on whichever of your Pietatos it follows. It flashes red when you're
-hit, gold when you unlock an achievement, and pulses to music and to the [Soundboard](#soundboard)'s sounds. A hit
+hit, gold when you unlock an achievement, and pulses to music and to the [Soundboard](#sequencer)'s sounds. A hit
 is a game's lives or health going down in its RetroAchievements rich presence, or a game shaking the controller, so
 it shows in the games those cover.
 
@@ -256,7 +256,7 @@ alongside it.
 
 About the bars:
 
-- They follow songs and radio stations. Videos, games, the Soundboard and the Band don't move them.
+- They follow songs and radio stations. Videos, games, the Sequencer app and the Band don't move them.
 - When its own Pi isn't playing, they follow whichever of your other Pietatos is, as an LED backlight does. Both
   need Settings > Share with other Pietatos on. A song that was already playing when the OLED's Pi came on may
   not show: the next one does.
@@ -290,36 +290,26 @@ isn't on a Pi in a GPi Case, or on a PC or a handheld. The HAT uses the same pin
 and the pin an [LED backlight](#led-backlight)'s LEDs are wired to, so it's one of the three at a time: turning
 one on turns the others off.
 
-## Soundboard
+## Sequencer
 
-Apps > Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
-once as you like, and one pressed again starts again. SELECT goes through the banks of eight, and holding START
-stops them all. B is a button like the others there, so HOME is the way back. START's
-card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
-sounds play wherever Settings > Sound sends them.
+Apps > Sequencer has three pages: the Sequencer, Bounce and the Soundboard. It opens on the Sequencer. R goes on
+to the next (the Sequencer, then Bounce, then the Soundboard, round the three) and L goes back. The name of the page
+you're on is at the top left. HOME goes back to Apps from any of them, and it opens again on the page you left.
 
-The Soundboard has three pages: its buttons, the Sequencer and Bounce. R goes from the buttons to the Sequencer,
-then to Bounce, and L goes back (round the three). The name of the page you're on is at the top left, and what it's
-set to is at the right: the bank, or the key, the scale and the tempo. HOME goes back to Apps from any of them,
-and the Soundboard opens again on the page you left.
+The Sequencer is a grid of four sounds, a kick, a snare, a hi-hat and a lead, across the sixteen
+steps of a bar. A cell that's on plays its row's sound as the bar comes round to it, at its tempo. The
+d-pad moves from cell to cell, A turns one on or off, and B starts the tune and stops it. Each of the lead's cells
+has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
+Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like, and SELECT changes
+the scale. The cells that are on are lit in your accent colour, the steps are numbered over the grid, and the
+column that's playing is lit. Along the top are four buttons: Tempo, Key, Scale and Lead (the lead's sound). A
+narrow screen shows just what each is set to. Press ▲ from the top row to reach them, ◀▶ to go from one to the next, and A to change it;
+tapping one does the same. Under the grid, bars show the sound as it plays, low notes at the left.
 
-START's card records a loop. Record a loop is its first row, so it's START, then A. Play some buttons, then
-press START and A again (the row says Stop recording now): what you played goes round and round, each hit moved
-to the nearest sixteenth note. Add to the loop, in the same place, records another layer on top of it. Drop the
-last layer, at the end of the card (START, ▲, A), takes the last one back, and holding START clears the loop.
-While you record, a quiet click counts the beats. The card also has the tempo, the loop's length (1, 2 or 4
-bars), Snap to the beat and Click while recording. The loop plays while the Soundboard is open, and it's still
-there when you come back to it.
-
-Hold A, B, X or Y for a moment and the d-pad plays that button's sound as notes: ▲ a note higher, ▼ a note lower,
-▶ the same note again and ◀ the sound's own. The note shows on the button, and notes go into a loop like any
-other sound. They follow a scale, Major, Minor or Pentatonic (Notes, on START's card), up to an octave either way.
-Buttons pressed together quickly, as drums are, each play their own sound.
-
-With Settings > Share with other Pietatos on, your Pietatos that have the Soundboard open share one tempo and one
-beat, so their loops keep time together. A new tempo on one of them goes to all of them, and one that opens the
-Soundboard takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
-changes nothing for the others.
+The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
+the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new
+tune and Clear all. The tune plays on under the Soundboard's buttons and under Bounce, in time with a loop you
+record there, and holding START on the buttons' page stops it with the rest. It's kept for next time.
 
 Bounce is a shape turning slowly, with balls bouncing inside it, both in your accent colour.
 Each wall is a note of a scale, so whatever's hit sounds right together, and a ball that hits a wall plays its note
@@ -335,20 +325,29 @@ a pentagon or a hexagon: more sides, more notes), the sound (a bell, a marimba, 
 or any sound on your Soundboard, played at each wall's note), the key, the scale and Snap to the tempo (each note
 on the loop's beat). Your LEDs, if you have them, flash in the same colour.
 
-The Sequencer is a grid of four sounds, a kick, a snare, a hi-hat and a lead, across the sixteen
-steps of a bar. A cell that's on plays its row's sound as the bar comes round to it, at the Soundboard's tempo. The
-d-pad moves from cell to cell, A turns one on or off, and B starts the tune and stops it. Each of the lead's cells
-has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
-Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like, and SELECT changes
-the scale. The cells that are on are lit in your accent colour, the steps are numbered over the grid, and the
-column that's playing is lit. Along the top are four buttons: Tempo, Key, Scale and Lead (the lead's sound). A narrow screen shows just
-what each is set to. Press ▲ from the top row to reach them, ◀▶ to go from one to the next, and A to change it;
-tapping one does the same. Under the grid, bars show the sound as it plays, low notes at the left.
+The Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
+once as you like, and one pressed again starts again. SELECT goes through the banks of eight, and holding START
+stops them all. B is a button like the others there, so HOME is the way back. On this page,
+the bank is at the top right. START's card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
+sounds play wherever Settings > Sound sends them.
 
-The first tune a Pietato has is made from its name, so each of yours starts with its own. START's card there has
-the tempo, the volume, the key and scale (Bounce's too, so the two sound right together), the lead's sound, A new
-tune and Clear all. The tune plays on under the Soundboard's buttons and under Bounce, in time with a loop you
-record there, and holding START on the buttons' page stops it with the rest. It's kept for next time.
+START's card records a loop. Record a loop is its first row, so it's START, then A. Play some buttons, then
+press START and A again (the row says Stop recording now): what you played goes round and round, each hit moved
+to the nearest sixteenth note. Add to the loop, in the same place, records another layer on top of it. Drop the
+last layer, at the end of the card (START, ▲, A), takes the last one back, and holding START clears the loop.
+While you record, a quiet click counts the beats. The card also has the tempo, the loop's length (1, 2 or 4
+bars), Snap to the beat and Click while recording. The loop plays while the Sequencer app is open, and it's still
+there when you come back to it.
+
+Hold A, B, X or Y for a moment and the d-pad plays that button's sound as notes: ▲ a note higher, ▼ a note lower,
+▶ the same note again and ◀ the sound's own. The note shows on the button, and notes go into a loop like any
+other sound. They follow a scale, Major, Minor or Pentatonic (Notes, on START's card), up to an octave either way.
+Buttons pressed together quickly, as drums are, each play their own sound.
+
+With Settings > Share with other Pietatos on, your Pietatos that have the Sequencer app open share one tempo and one
+beat, so their loops keep time together. A new tempo on one of them goes to all of them, and one that opens the
+Sequencer app takes the beat of the ones already playing. A Pietato on its own keeps its own beat, and one leaving
+changes nothing for the others.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
 its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,

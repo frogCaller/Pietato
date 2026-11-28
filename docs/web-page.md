@@ -72,7 +72,7 @@ with a colour to tap, a brightness slider and effects for music for each, and wh
 same beat or each to its own. See
 [LED backlight](apps.md#led-backlight).
 
-**Soundboard**, in Library, has the Pi's [Soundboard](apps.md#soundboard): its banks' buttons, laid out as on
+**Soundboard**, in Library, has the Pi's [Soundboard](apps.md#sequencer): its banks' buttons, laid out as on
 a controller, and the sounds on them. Tap a button to hear its sound on your phone or computer. Add sounds (wav,
 mp3 or ogg) with the button or by dropping them on the page, record one with your microphone, and rename or
 delete them in the list. Drag a sound onto a button or a bank to put it there, or on a phone tap the sound, then

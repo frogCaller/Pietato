@@ -562,11 +562,13 @@ if not ONLY or "app" in ONLY:
     apps = next(t_ for t_ in g.LIBRARY if t_["name"] == "Apps")
     ai = g.LIBRARY.index(apps)
     m.open_app(ai)
-    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
     m.press("a")
     spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
     KICK, SNARE, HAT = SQ.DRUMS
+    first = (m.board_mode(), b.seq is not None and SQ.dumps(*b.seq) == DEN)
+    tap("l")                                           # (its buttons, the Soundboard: L from it)
     tap("start")
     rows = m.board_rows()
     tap("start")
@@ -603,10 +605,12 @@ if not ONLY or "app" in ONLY:
           and all(abs(x - (k_[0] + k_[2] - kf.getlength(t)) / 2) <= 1 for (x, t), k_ in zip(on_line[1:], knobs))
           and steps == [str(k) for k in range(1, 17)] and marks == ["Kick", "Snare", "Hi-hat", "Pluck"])
     want = SQ.born(SQ.seed_of("Den"))
-    check(f"R from the Soundboard's buttons ({hints[:2]}; START's card has no row for it, nor for Bounce: "
+    check(f"Apps > Sequencer opens on it, the first time, with this Pietato's tune ({first}). R from the "
+          f"Soundboard's buttons ({hints[:2]}; START's card has no row for it, nor for Bounce: "
           f"{[r[0] for r in rows]}): its page: a grid of four sounds ({s.seq and s.seq['rows']}) and sixteen steps, "
           f"the tune this Pietato's name gives it, not playing yet; its buttons along the bottom ({m.sim_hints(s)})",
-          not any(r[0] in ("seq", "bounce") for r in rows) and hints[:2] == [("L", "Bounce"), ("R", "Sequencer")]
+          first == ("seq", True)
+          and not any(r[0] in ("seq", "bounce") for r in rows) and hints[:2] == [("L", "Bounce"), ("R", "Sequencer")]
           and m.board_mode() == "seq"
           and b.seq_up and not b.seq_on and b.card is None and m.sim_opts is None and s.seq is not None
           and s.seq["grid"] == tuple(tuple(r) for r in want[0]) and b.seq == [want[0], want[1]]
@@ -658,6 +662,11 @@ if not ONLY or "app" in ONLY:
     check(f"...every row in the accent, one colour for all: its mark, before its name, and its cells that are on "
           f"(how far from the accent: marks {marks}, cells {cells})", all(f_ <= 12 for f_ in marks)
           and all(f_ <= 45 for f_ in cells))
+    first = [c for c in range(SQ.STEPS) if want[0][0][c]][0]
+    fx = x0 + lay["xs"][first] + cw // 2
+    flat = [far(page[y0 + lay["ys"][0] + dy, fx]) for dy in (3, ch // 2, ch - 4)]
+    check(f"...and flat: the accent itself, top to bottom (how far from it, at its top, middle, foot: {flat})",
+          max(flat) <= 3)
     dark_ink = SQ.note_ink((24, 28, 90))
     check(f"...a lead cell's note: dark on a light accent ({SQ.note_ink(g.ACCENT)}), light on a dark one (an accent of "
           f"your own can be: {dark_ink}), dark again while the bar's on it, whiter ({SQ.note_ink((24, 28, 90), True)})",
@@ -1133,17 +1142,17 @@ if not ONLY or "app" in ONLY:
     proc = b.proc
     home = m.sim_home()
     out = (home is True and m.tab == ai and m.view == "list" and not m.board_shown()
-           and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+           and m.tab_items()[m.sels[ai]]["title"] == "Sequencer")
     spin(0.5)
     gone = b.proc is None and until(lambda: proc.poll() is not None, 5)
     kept = m.setting("seq_tune")
     t1 = time.monotonic()
     m.open_app(ai)
-    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
     m.press("a")
     spin(4, lambda: m.board.proc is not None and len(m.board.ready) >= 24 and m.board.sound_ok)
     spin(0.3)
-    check(f"HOME on its page, playing: back to Apps at once, the Soundboard picked there (not its buttons' page "
+    check(f"HOME on its page, playing: back to Apps at once, the Sequencer picked there (not its buttons' page "
           f"first: {out}); its player gone, the tune kept ({kept == tune}); opened "
           f"again: its page as it was, playing: its new player told the lead's sound, the bars and the loop "
           f"({[c['do'] for c in said('tone', t1) + said('bars', t1)]}, {len(loops()[-1].get('hits') or [])} cells)",
@@ -1202,9 +1211,9 @@ if not ONLY or "app" in ONLY:
     m.fine_scale()
     flush()
     home = m.sim_home()
-    check("HOME: back to Apps, the Soundboard picked (HOME again there isn't its)", home is True
+    check("HOME: back to Apps, the Sequencer picked (HOME again there isn't its)", home is True
           and m.sim_home() is False
-          and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+          and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Sequencer")
     m.press("b")
     spin(0.2)
     m.leave()

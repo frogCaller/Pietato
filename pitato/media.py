@@ -805,6 +805,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.sim_t = None                          # (it waited while you were away)
             if tab.get("sim") == "snake":
                 self.snake_models()                    # (the decision models on your bot's computer, for its AI)
+            elif tab.get("sim") == "sound" and i == self.tab:   # (opened, not just loaded with the rest)
+                self.board_first()                     # (its Sequencer's page, the first time: screens/soundboard.py)
         elif tab["type"] == "system":
             self.items[i] = self.system_rows()
             self.updater.poke()                        # (a newer version? looked for again, if it's been a while)

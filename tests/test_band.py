@@ -588,8 +588,8 @@ def notes_told(since=0.0, seat=None):
 
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
 bi = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Band")
-check("Apps has the Band (after the Soundboard), and it's not one of the Bot's \"something cool\"",
-      apps["children"][apps["children"].index("Soundboard"):][:3] == ["Soundboard", "Band", "Konami code"]
+check("Apps has the Band (after the Sequencer), and it's not one of the Bot's \"something cool\"",
+      apps["children"][apps["children"].index("Sequencer"):][:3] == ["Sequencer", "Band", "Konami code"]
       and g.LIBRARY[bi]["sim"] == "band" and "Band" in g.COOL_SKIP and g.app_named("the band") == "Band")
 m.open_app(g.LIBRARY.index(apps))
 rows = [it["title"] for it in m.tab_items()]

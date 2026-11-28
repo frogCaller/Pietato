@@ -1,6 +1,7 @@
-"""Apps > Soundboard, in media mode (soundboard.py draws it, soundbank.py has its sounds and banks, soundplay.py plays
-them). Its player's a process of its own, as you, started with the page and gone as you leave it. While the page is
-up, your Soundboard folder and the banks' file are looked at every second, so a new sound is on its button without
+"""Apps > Sequencer, in media mode: the Sequencer, Bounce and the Soundboard's buttons, its three pages (soundboard.py
+draws it, soundbank.py has its sounds and banks, soundplay.py plays them). Its player's a process of its own, as
+you, started with the page and gone as you leave it. While the page is up, your Soundboard folder and the banks' file
+are looked at every second, so a new sound is on its button without
 anything being started again (and at once when the web page says it changed something); the sound goes where
 Settings > Sound says, as it changes; and whether there's a microphone is known, so Record a sound is on START's card
 only when there's one to record with. Your LEDs (Apps > LED backlight, an ESP32 board: screens/glow.py) are lit by its
@@ -13,9 +14,9 @@ click, the notes' scale, its reverb), where A, B or START goes on; HOME goes bac
 trimmed, a file in your Soundboard folder), the next button pressed is the one it goes on (L and R: in another bank;
 SELECT: hear it first; START: leave it where it is, record it again, or delete it).
 
-Its three pages: L and R go round them (board_cycle): these buttons, the Sequencer (screens/sequencer.py) and Bounce
-(screens/bounce.py), each of those two on this page in place of the buttons, with this player and this beat: the
-Sequencer's cells are in the loop its player's told, with the layers recorded here.
+Its three pages: L and R go round them (board_cycle): the Sequencer (screens/sequencer.py: it opens on it, the first
+time), Bounce (screens/bounce.py) and these buttons, each of those two on this page in place of the buttons, with this
+player and this beat: the Sequencer's cells are in the loop its player's told, with the layers recorded here.
 
 The loop: its card's first row (START, then A) starts recording a layer, and stops it; what's pressed meanwhile is
 played back round and round where it was pressed (to the nearest sixteenth, unless snapping's off), over the layers
@@ -81,14 +82,15 @@ NOTE_PADS = ("a", "b", "x", "y")  # held, the d-pad plays its sound as notes
 DPAD = ("up", "down", "left", "right")
 BOARD_HOW = ("R: the Sequencer, then Bounce. SELECT: the next bank. START held clears the loop. A, B, X or Y "
              "held, the d-pad plays its sound as notes.")    # (START's card, under its title: three lines at most)
-BOARD_PAGES = ("pads", "seq", "bounce")   # its three pages, as R goes round them (L: the other way): its buttons
-                                          # first (it opens on them), then the Sequencer, then Bounce
+BOARD_PAGES = ("seq", "bounce", "pads")   # its three pages, as R goes round them (L: the other way): the Sequencer
+                                          # first (it opens on it), then Bounce, then its buttons (the Soundboard)
 
 
 class Board:
     """The Soundboard while it's been opened: its player, the banks as they are, and what's going on."""
 
     def __init__(self):
+        self.shown = False             # opened since Pietato started (the first time: on the Sequencer)
         self.proc = None
         self.out = b""                 # what its player's to be told, not taken yet (its pipe full: seldom)
         self.banks, self.off = [], []
@@ -144,7 +146,7 @@ class Board:
 
 
 class SoundboardScreen:
-    """Apps > Soundboard: its player, its sounds as they change, its buttons, START's card, recording."""
+    """Apps > Sequencer: its player, its sounds as they change, its pages, START's card, recording."""
 
     # -- where it is ------------------------------------------------------------------------------------------------------
     def board_tab(self):
@@ -160,6 +162,17 @@ class SoundboardScreen:
     def board_folder(self):
         """Your Soundboard folder (made the first time, yours)."""
         return home_folder(B.FOLDER)
+
+    def board_first(self):
+        """Apps > Sequencer opened (load_tab): the first time since Pietato started, on its Sequencer's page
+        (BOARD_PAGES' first: what you see first); after that, on the page it was left on (sims.py's sim_home)."""
+        b = self.board_open()
+        if not b.shown:
+            b.shown = True
+            if b.bounce is None and not b.seq_up:
+                self.seq_tune()
+                b.seq_up = True
+                self.seq_told()                        # (its player, if it's going already: the Sequencer's bars)
 
     def board_open(self):
         """The Soundboard, as it is: made the first time its page is opened, its banks read."""
@@ -284,7 +297,7 @@ class SoundboardScreen:
             self.board_rec_over()
         if b.stops >= BOARD_AGAIN[1] and not b.gave_up:
             b.gave_up = True
-            self.toast("The Soundboard can't play just now", 4)
+            self.toast("The sounds can't play just now", 4)
         self.dirty = True
 
     def board_stop(self):
@@ -697,8 +710,8 @@ class SoundboardScreen:
         return "bounce" if b.bounce is not None else "seq" if b.seq_up else "pads"
 
     def board_cycle(self, way):
-        """L or R, on any of its three pages: the one after (R) or before (L), round and round: the Sequencer, its
-        buttons, Bounce (from its buttons, then: L the Sequencer, R Bounce). A layer being recorded is kept first
+        """L or R, on any of its three pages: the one after (R) or before (L), round and round: the Sequencer, Bounce,
+        its buttons (from its buttons, then: R the Sequencer, L Bounce). A layer being recorded is kept first
         (it's from its buttons that one's stopped). The Sequencer's tune plays on under the others, as it does left
         with HOME."""
         b = self.board

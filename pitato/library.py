@@ -7,8 +7,8 @@ from .tv import ia_best
 
 
 # ---- media mode: what's in each tab -----------------------------------------
-RENAMED = {"Simulator": "Apps"}   # what an app was called before: asked for by that name (a code kept from then, the web
-                                  # page's address for it), it opens as it's called now
+RENAMED = {"Simulator": "Apps",  # what an app was called before: asked for by that name (a code kept from then, the
+           "Soundboard": "Sequencer"}     # web page's address for it), it opens as it's called now
 LIBRARY = [
     {"name": "Home", "type": "group", "empty": "",
      "children": ["TV Remote", "Lights", "Pi-hole", "Web", "Control another Pietato"]},
@@ -29,7 +29,7 @@ LIBRARY = [
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
      "children": ["Clock", "Notes", "Fortune Cookie", "Fish Tank", "Group chat",
-                  "LED backlight", "Soundboard", "Band", "Konami code", "cmatrix", "hollywood",
+                  "LED backlight", "Sequencer", "Band", "Konami code", "cmatrix", "hollywood",
                   "nyancat", "cacafire", "htop"]},     # (LED backlight: on a Pi that can have one, screens/glow.py)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
@@ -79,8 +79,8 @@ LIBRARY = [
      "about": "Your Pietatos, talking", "empty": ""},
     {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
      "about": "The LEDs behind your TV", "empty": ""},
-    {"name": "Soundboard", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "SFX",   # (soundboard.py)
-     "about": "A sound on every button", "empty": ""},
+    {"name": "Sequencer", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "BEAT",   # (soundboard.py: the
+     "about": "Make a beat with your sounds", "empty": ""},   # Sequencer, Bounce, the Soundboard's buttons)
     {"name": "Band", "type": "sim", "sim": "band", "parent": "Apps", "badge": "JAM",           # (bandstage.py)
      "about": "Your Pietatos play together", "empty": ""},
     {"name": "Konami code", "type": "konami", "parent": "Apps", "badge": "CHEAT",   # (screens/konami.py)

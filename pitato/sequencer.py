@@ -24,6 +24,7 @@ BAR = STEPS * STEP               # ...and to the whole of it (a bar)
 DRUMS = ("Starter/Kick.wav", "Starter/Snare.wav", "Starter/Hi-hat.wav")   # the three rows above the lead, to begin
 LEAD = "Tones/Pluck"             # ...and the lead's sound (one of the player's own: Bounce's Tones)
 HEAD_BAND = 0.07                 # the column the bar's on: this much lighter than the page, from its number down
+HEAD_LIT = 0.5                   # ...its cells that are on: this much whiter than the accent (the others: just it)
 KNOBS = ("Tempo", "Key", "Scale", "Lead")   # its buttons, on its line at the top: A on one, its next
 BARS_GAP = (12, 20)              # px between the grid and the bars under it: on a small screen, on a big one
 TEMPOS = (60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)   # ...the Tempo one's, round and round (START's card:
@@ -184,16 +185,10 @@ def layout(box, big):
 
 
 def lit_tile(cw, ch, colour, head, back):
-    """A cell that's on: (its picture, its shape): the colour, lighter at its top (whiter while the bar's on it)."""
+    """A cell that's on: (its picture, its shape): the colour, flat (whiter while the bar's on it)."""
     from .fine import Image, ImageDraw
     from .theme import co_mix
-    white = (255, 255, 255)
-    top = co_mix(colour, white, 0.62 if head else 0.3)
-    low = co_mix(colour, white, 0.4) if head else co_mix(colour, back, 0.08)
-    tile = Image.new("RGB", (cw, ch), back)
-    td = ImageDraw.Draw(tile)
-    for y in range(ch):
-        td.line((0, y, cw, y), fill=co_mix(top, low, y / max(1, ch - 1)))
+    tile = Image.new("RGB", (cw, ch), co_mix(colour, (255, 255, 255), HEAD_LIT) if head else colour)
     mask = Image.new("L", (cw * 4, ch * 4), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, cw * 4 - 1, ch * 4 - 1), radius=cw * 4 // 5, fill=255)
     return tile, mask.resize((cw, ch), Image.LANCZOS)
@@ -203,7 +198,7 @@ def note_ink(colour, head=False):
     """The ink for a lead cell's note, on a cell lit in colour (whiter while the bar's on it): dark on a light one,
     light on a dark one (an accent of your own can be)."""
     from .theme import co_mix
-    mid = co_mix(colour, (255, 255, 255), 0.5 if head else 0.15)
+    mid = co_mix(colour, (255, 255, 255), HEAD_LIT) if head else colour
     return (16, 19, 23) if 0.299 * mid[0] + 0.587 * mid[1] + 0.114 * mid[2] >= 120 else (244, 246, 248)
 
 

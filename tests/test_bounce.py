@@ -532,10 +532,11 @@ if not ONLY or "app" in ONLY:
     apps = next(t_ for t_ in g.LIBRARY if t_["name"] == "Apps")
     ai = g.LIBRARY.index(apps)
     m.open_app(ai)
-    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
     m.press("a")
     spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
+    tap("l")                                           # (it opens on its Sequencer: L, its buttons)
     tap("start")
     rows = m.board_rows()
     tap("start")
@@ -777,9 +778,9 @@ if not ONLY or "app" in ONLY:
     proc, balls = b.proc, len(b.bounce.balls)
     home = m.sim_home()
     out = (m.tab == ai and m.view == "list" and not m.board_shown()
-           and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+           and m.tab_items()[m.sels[ai]]["title"] == "Sequencer")
     spin(0.5)
-    check(f"HOME in Bounce: back to Apps at once, the Soundboard picked (not its buttons' page first: {out}); its "
+    check(f"HOME in Bounce: back to Apps at once, the Sequencer picked (not its buttons' page first: {out}); its "
           f"player gone; HOME again there isn't its", was and home is True and out and m.sim_opts is None
           and b.proc is None and until(lambda: proc.poll() is not None, 5) and m.sim_home() is False)
     t1 = time.monotonic()
@@ -788,12 +789,12 @@ if not ONLY or "app" in ONLY:
     spin(0.3)
     s = m.sim_game()
     fx = [c for at, c in told if at >= t1 and c.get("do") == "fx"]
-    check(f"...the Soundboard opened again: Bounce's page, as it was left ({balls} balls), its effects told its new "
+    check(f"...the Sequencer opened again: Bounce's page, as it was left ({balls} balls), its effects told its new "
           f"player ({fx[:1]})", m.board_shown() and m.board_mode() == "bounce" and b.proc is not None
           and b.proc is not proc and s.bounce is not None and s.bounce["count"] == balls and bool(fx)
           and m.sim_hints(s)[-2:] == [("START", "Pause"), ("HOME", "Back")])
     check("...and HOME from there: Apps again", m.sim_home() is True and m.tab == ai and m.view == "list"
-          and m.tab_items()[m.sels[ai]]["title"] == "Soundboard")
+          and m.tab_items()[m.sels[ai]]["title"] == "Sequencer")
     m.press("b")
     spin(0.2)
     m.leave()

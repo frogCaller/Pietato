@@ -84,7 +84,7 @@ check(f"A opens Apps: its list, all of them but the LED backlight ({len(SHOWN)})
 rows = [(it["title"], it.get("icon")) for it in m.tab_items()]
 check(f"...Group chat after the Fish Tank, each with its badge: {rows[:6]}", rows == [
     ("Clock", "TIME"), ("Notes", "NOTE"), ("Fortune Cookie", "LUCK"), ("Fish Tank", "FISH"), ("Group chat", "CHAT"),
-    ("Soundboard", "SFX"), ("Band", "JAM"), ("Konami code", "CHEAT"), ("cmatrix", "CODE"), ("hollywood", "HACK"),
+    ("Sequencer", "BEAT"), ("Band", "JAM"), ("Konami code", "CHEAT"), ("cmatrix", "CODE"), ("hollywood", "HACK"),
     ("nyancat", "NYAN"), ("cacafire", "HEAT"), ("htop", "PROC")])
 gone = ("Game of Life", "Mandelbrot Set", "Rock Paper Scissors", "The Cookie")
 check(f"...no Game of Life, Mandelbrot Set, Rock Paper Scissors or The Cookie: not in the list, not among the apps, "

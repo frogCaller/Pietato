@@ -330,7 +330,8 @@ web = make_server("127.0.0.1", 0, webui.app, threaded=True)
 threading.Thread(target=web.serve_forever, daemon=True).start()
 URL = f"http://127.0.0.1:{web.server_port}"
 opened = c.post("/api/pi/open", json={"app": "Soundboard"}, headers=H)
-check(f"media mode's Soundboard, opened ({opened.get_json()}): its player running, its sounds ready",
+check(f"media mode's Sequencer app, opened by what it was called before, the Soundboard ({opened.get_json()}): its "
+      f"player running, its sounds ready",
       until(lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) == 32, 15))
 b = m.board
 d = c.get("/api/soundboard", headers=H).get_json()

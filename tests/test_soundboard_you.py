@@ -125,7 +125,7 @@ def owner(path):
     return st.st_uid, st.st_gid
 
 
-si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Soundboard")
+si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Sequencer")
 m.open_app(si)
 spin(8, lambda: m.board is not None and len(m.board.ready) == 32 and "home=" in read(OUT + "/aplay.txt"))
 b = m.board
@@ -169,6 +169,7 @@ check(f"the banks' file, written by media mode (root) for the new sound: yours, 
 
 # recording
 spin(4, lambda: b.mic is not None)
+m.press("l")                                           # (it opens on its Sequencer: L, its buttons)
 m.press("start"); m.press("down"); m.press("down"); m.press("a")
 spin(3, lambda: b.rec is not None and b.rec["secs"] > 1.4)
 w = said(OUT + "/arecord.txt")

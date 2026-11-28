@@ -908,19 +908,27 @@ def players():
 
 
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
-si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Soundboard")
+si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Sequencer")
 ai = g.LIBRARY.index(apps)
-check("Apps has the Soundboard (after the LED backlight, before the Band), and it's not one of the Bot's "
-      "\"something cool\"", apps["children"][apps["children"].index("LED backlight"):][:3]
-      == ["LED backlight", "Soundboard", "Band"] and g.LIBRARY[si]["sim"] == "sound"
-      and "Soundboard" in g.COOL_SKIP and g.app_named("the soundboard") == "Soundboard")
+check("Apps has the Sequencer (after the LED backlight, before the Band), its Soundboard one of its pages, and it's "
+      "not one of the Bot's \"something cool\"; asked for by its name, or as the Soundboard (what it was called "
+      "before: a Konami code kept from then, the web page)",
+      apps["children"][apps["children"].index("LED backlight"):][:3] == ["LED backlight", "Sequencer", "Band"]
+      and g.LIBRARY[si]["sim"] == "sound"
+      and "Sequencer" in g.COOL_SKIP and g.app_named("the sequencer") == "Sequencer"
+      and g.app_named("the soundboard") == "Sequencer" and g.RENAMED.get("Soundboard") == "Sequencer")
 check("nothing of it runs before it's opened", m.board is None and players() == [] and not os.path.exists(ALOG))
 m.open_app(ai)
-m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
 m.press("a")
 check("A on it in Apps opens it", m.tab == si and m.view == "list" and m.board_shown())
 spin(3, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
 b = m.board
+first = m.board_mode()
+m.press("l")
+spin(0.3)
+check(f"...on its Sequencer, the first time ({first}: what you see first); L from there: its buttons, the Soundboard "
+      f"({m.board_mode()})", first == "seq" and m.board_mode() == "pads")
 pids = players()
 check(f"...its player's started with it (one process, of its own), has read the starter pack ({len(b.ready)} ready) "
       f"and has the sound card open, where Settings > Sound says ({alog()[1][0].split('args')[1].strip()})",
@@ -1300,8 +1308,8 @@ check("...B there shuts it, and it's still the Soundboard (HOME's the way back, 
 m.press("start")
 home = m.sim_home()
 spin(0.3)
-check("...HOME there goes back to Apps, the Soundboard picked in its list", home is True and m.tab == ai
-      and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard" and m.sim_opts is None)
+check("...HOME there goes back to Apps, the Sequencer picked in its list", home is True and m.tab == ai
+      and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Sequencer" and m.sim_opts is None)
 gone = until(lambda: players() == [], 4)
 mark = log_lines()
 time.sleep(0.3)
@@ -1310,12 +1318,13 @@ check("...and its player's gone with its page (and aplay with it: nothing holds 
 check("...the bank you were on is kept for next time", m.setting("board_bank") == "Drums")
 m.press("a")
 spin(3, lambda: len(b.ready) == 32 and b.sound_ok)
-check("opened again: its player again, the bank you were on", m.board_shown() and len(players()) == 1
+check(f"opened again: on the page it was left on, its buttons ({m.board_mode()}), its player again, the bank you "
+      f"were on", m.board_shown() and m.board_mode() == "pads" and len(players()) == 1
       and players() != [pid] and m.sim_game().bank == (1, 4, "Drums"))
 home = m.sim_home()
 spin(0.3)
-check("HOME: back to Apps at once (B's a button of its own here), the Soundboard picked, its player gone", home is True
-      and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Soundboard"
+check("HOME: back to Apps at once (B's a button of its own here), the Sequencer picked, its player gone", home is True
+      and m.tab == ai and m.view == "list" and m.tab_items()[m.sels[ai]]["title"] == "Sequencer"
       and until(lambda: players() == [], 4) and m.sim_home() is False)
 m.press("a")
 spin(3, lambda: len(b.ready) == 32 and b.sound_ok)
@@ -1615,7 +1624,7 @@ open(S + "/static/soundboard.txt", "w").write(
 m.set_setting("board_bank", "Drums")
 m.board = None                                         # (as it is after the Pi's restarted with the update)
 m.open_app(ai)
-m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
 n_toasts = len(toasts)
 m.press("a")
 spin(4, lambda: m.board is not None and m.board.proc is not None and len(m.board.ready) >= 12 and m.board.sound_ok)
@@ -1629,6 +1638,8 @@ check(f"a banks' file from before the Calm bank, the Soundboard opened after the
       and b.banks[3]["pads"]["a"] == "Starter/Kalimba.wav" and s.bank[0] == 1 and s.bank[2] == "Drums"
       and toasts[n_toasts:n_toasts + 1] == ["New sounds: the Calm bank. SELECT goes through the banks"]
       and "packs = Starter, Drums, Arcade, Calm\n" in filed and "[Calm]\nup = Starter/Chime.wav\n" in filed)
+m.press("l")                                           # (on its Sequencer, the first time since: L, its buttons)
+spin(0.3)
 m.press("select"); m.release("select"); m.press("select"); m.release("select")
 spin(0.3)
 m.press("a")

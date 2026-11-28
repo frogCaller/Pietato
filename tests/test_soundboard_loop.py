@@ -371,12 +371,14 @@ if not ONLY or "app" in ONLY:
     apps = next(t_ for t_ in g.LIBRARY if t_["name"] == "Apps")
     ai = g.LIBRARY.index(apps)
     m.open_app(ai)
-    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Soundboard")
+    m.sels[ai] = next(k for k, it in enumerate(m.tab_items()) if it["title"] == "Sequencer")
     m.press("a")
     spin(4, lambda: m.board is not None and len(m.board.ready) == 32 and m.board.sound_ok)
     b = m.board
+    tap("l")                                           # (it opens on its Sequencer: L, its buttons)
     s = m.sim_game()
-    check(f"Apps > Soundboard: its buttons along the bottom: SELECT's the banks' now, and the loop's on START's card "
+    check(f"Apps > Sequencer, on its buttons' page, the Soundboard: its buttons along the bottom: SELECT's the banks' "
+          f"now, and the loop's on START's card "
           f"({m.sim_hints(s)})", m.board_shown()
           and m.sim_hints(s) == [("L", "Bounce"), ("R", "Sequencer"), ("SELECT", "Bank"), ("START", "More"),
                                  ("HOME", "Back")])
