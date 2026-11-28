@@ -140,10 +140,12 @@ for style in ["Bright", "Glass", "Cards"]:
         check("...an accent line by the time", near(img.getpixel((18, 60)), g.ACCENT))
         lift = getattr(HS, "CARD_LIFT", 0)
         inside = img.getpixel((int(x0) + 6, int((y0 + y1) / 2)))
+        beside = img.getpixel((int(x0) + 6 - 122, int((y0 + y1) / 2)))
         check(f"...cards: the picked one a little bigger ({lift} px each way), ringed in the accent "
-              f"({img.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1))}), a little of it in the card ({inside})",
+              f"({img.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1))}), and nothing more: no accent in the card, "
+              f"as the others ({inside}; the one beside it: {beside})",
               lift >= 3 and near(img.getpixel((int((x0 + x1) / 2), int(y0) - lift + 1)), g.ACCENT, 30)
-              and near(inside, g.co_mix(g.CARD, g.ACCENT, HS.CARD_TINT[1]), 6))
+              and near(inside, beside, 3))
         m.set_setting("wallpaper", "Lemon")
         drawn(m)
         pale = FB.last.convert("RGB")
@@ -153,10 +155,9 @@ for style in ["Bright", "Glass", "Cards"]:
         ring_want = m.home_accent()
         m.set_setting("wallpaper", "Midnight")
         drawn(m)
-        check(f"...over a pale background (Lemon), its white card tinted with the accent ({in_p}; another: {other}), "
-              f"ringed in a darker one of it, to stand out ({ring_p})", near(ring_p, ring_want, 30)
-              and sum(ring_p) < 400 and near(in_p, g.co_mix(g.PALE_CARD, g.ACCENT, HS.CARD_TINT[0]), 8)
-              and sum(abs(a_ - b_) for a_, b_ in zip(in_p, other)) > 40)
+        check(f"...over a pale background (Lemon), its white card as the others ({in_p}; another: {other}), ringed in "
+              f"a darker accent, to stand out ({ring_p})", near(ring_p, ring_want, 30) and sum(ring_p) < 400
+              and near(in_p, other, 3))
         check(f"...as wide as fit ({x1 - x0:.0f} x {y1 - y0:.0f})", x1 - x0 == 108 and y1 - y0 == 92)
         check("...Home on its card", "Home" in texts)
         a_x = next(xy for t, f, xy in said if t == "A")[0]

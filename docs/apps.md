@@ -340,8 +340,8 @@ steps of a bar. A cell that's on plays its row's sound as the bar comes round to
 d-pad moves from cell to cell, A turns one on or off, and B starts the tune and stops it. Each of the lead's cells
 has a note, shown on it, and X changes it. On a drum's row, X changes the row's sound to another of your
 Soundboard's. Y changes the tune a little, a few cells and a few notes, as often as you like, and SELECT changes
-the scale. Each row has its own colour, the steps are numbered over the grid, and the column that's playing is
-lit. Along the top are four buttons: Tempo, Key, Scale and Lead (the lead's sound). A narrow screen shows just
+the scale. The cells that are on are lit in your accent colour, the steps are numbered over the grid, and the
+column that's playing is lit. Along the top are four buttons: Tempo, Key, Scale and Lead (the lead's sound). A narrow screen shows just
 what each is set to. Press ▲ from the top row to reach them, ◀▶ to go from one to the next, and A to change it;
 tapping one does the same. Under the grid, bars show the sound as it plays, low notes at the left.
 

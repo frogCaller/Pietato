@@ -561,14 +561,15 @@ class Soundboard(Sim):
         return boxes, named, gap
 
     def seq_cells(self, cw, ch):
-        """A cell that's on, as it's drawn (and as it is while the bar's on it), in each row's own colour: pictures
+        """A cell that's on, as it's drawn (and as it is while the bar's on it), in the accent, every row's: pictures
         kept. [row: {the bar's on it: (picture, shape)}]."""
         from .fine import scale
-        key = ("seqcell", cw, ch, BG, scale())
+        colour = self.seq["colour"]
+        key = ("seqcell", cw, ch, BG, colour, scale())
         tiles = self.tiles.get(key)
         if tiles is None:
-            tiles = self.tiles[key] = [{head: SQ.lit_tile(cw, ch, _HUES[hue], head, BG) for head in (False, True)}
-                                       for hue in SQ.ROW_HUES]
+            lit = {head: SQ.lit_tile(cw, ch, colour, head, BG) for head in (False, True)}
+            tiles = self.tiles[key] = [lit] * SQ.ROWS
         return tiles
 
     def seq_still(self, lay, fonts, tiles):

@@ -14,8 +14,8 @@ from .draw import FOOT_NOTE
 
 LABEL = (214, 219, 226)      # Glass: an app's name under its tile
 DATE = (222, 226, 232)       # ...the date, and the weather in words
-CARD_LIFT = 4                # Cards: the picked card this much bigger each way, a little of the accent in it, ringed
-CARD_TINT = (0.24, 0.3)      # ...how much of the accent: on a white card (a pale background), on a dark one
+CARD_LIFT = 4                # Cards: the picked card this much bigger each way, ringed in the accent (nothing else)
+CARD_SOLID = (206, 232)      # ...how solid a card is over the background: a white one (a pale background), a dark one
 KEY_RING = (150, 158, 170)   # ...a button's ring, along the bottom
 INK = {    # the home screen's words over its background (home.py's WALLS say which): light, as ever (a dark one, a
            # picture of yours); white, with a soft shadow, over a strong colour; dark over a pale one. text: the time,
@@ -339,11 +339,18 @@ class HomeScreen:
         if style == "Cards":                         # its glyph on the card, its name at the card's foot
             pale = self.home_pale()
             flip = pale                              # (a white card's glyph, on a pale background)
-            if picked:
+            if picked:                               # (a card as the others are, over the background, a little
+                from ..fine import Image, ImageDraw  # bigger, and ringed)
                 g, ring = CARD_LIFT, self.home_accent(ink) if pale else ACCENT
-                tint = mix(PALE_CARD, ACCENT, CARD_TINT[0]) if pale else mix(CARD, ACCENT, CARD_TINT[1])
-                d.rounded_rectangle((x0 - g, y0 - g, x1 + g, y1 + g), radius=self.CARD_R + 2, width=3, outline=ring,
-                                    fill=tint)
+                big = (int(x0 - g - 1), int(y0 - g - 1), int(x1 + g + 2), int(y1 + g + 2))
+                card = self.wall[1].crop(big).convert("RGBA")
+                layer = Image.new("RGBA", card.size, (0, 0, 0, 0))
+                ImageDraw.Draw(layer).rounded_rectangle(
+                    (x0 - g - big[0], y0 - g - big[1], x1 + g - big[0], y1 + g - big[1]), radius=self.CARD_R + 2,
+                    fill=(PALE_CARD + (CARD_SOLID[0],)) if pale else CARD + (CARD_SOLID[1],))
+                card.alpha_composite(layer)
+                img.paste(card.convert("RGB"), big[:2])
+                d.rounded_rectangle((x0 - g, y0 - g, x1 + g, y1 + g), radius=self.CARD_R + 2, width=3, outline=ring)
             glyph = self.home_icon(name, pale=flip)
             lift = (y1 - y0 - self.HOME_GEOMETRY["Cards"][0]) // 2   # (a taller card: its glyph lower, its name
             img.paste(glyph, (int((x0 + x1 - self.GLYPH) / 2), int(y0 + 11 + lift)), glyph)   # higher: in the middle)
@@ -406,7 +413,8 @@ class HomeScreen:
                 ld = ImageDraw.Draw(layer)
                 pale = self.home_pale()
                 for _, box in shown:
-                    ld.rounded_rectangle(box, radius=self.CARD_R, fill=(PALE_CARD + (206,)) if pale else CARD + (232,),
+                    ld.rounded_rectangle(box, radius=self.CARD_R, fill=(PALE_CARD + (CARD_SOLID[0],)) if pale
+                                         else CARD + (CARD_SOLID[1],),
                                          outline=(PALE_CARD_LINE if pale else CARD_LINE) + (255,))
                 base = base.convert("RGBA")
                 base.alpha_composite(layer)

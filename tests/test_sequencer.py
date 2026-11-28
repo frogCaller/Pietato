@@ -250,32 +250,34 @@ if not ONLY or "tune" in ONLY:
           f"({SQ.next_step_in(c120, 100.1):.3f} s)", steps == [0, 0, 1, 15, 0]
           and SQ.step_at((120.0, 2.5, 100.0), 100.0) == 10 and abs(SQ.next_step_in(c120, 100.1) - 0.025) < 1e-6)
     fits, even, middle = [], [], []
-    for box, big in (((0, 40, 640, 346), False), ((0, 40, 960, 406), True), ((0, 40, 1920, 946), True)):
+    bars_gap = getattr(SQ, "BARS_GAP", (8, 16))
+    for box, big in (((0, 40, 640, 346), False), ((0, 40, 960, 406), True), ((0, 40, 1920, 946), True),
+                     ((0, 40, 960, 1200), True)):
         lay = SQ.layout(box, big)
         xs, ys, cw, ch = lay["xs"], lay["ys"], lay["cw"], lay["ch"]
         gaps = [b_ - a - cw for a, b_ in zip(xs, xs[1:])]
         bx0, by0, bx1, by1 = lay["bars"]
-        grid_h = ys[-1] + ch - ys[0]
         fits.append(len(xs) == 16 and len(ys) == 4 and cw >= 28 and ch >= cw
                     and all(g_ > 0 for g_ in gaps) and all(gaps[k] > gaps[0] for k in (3, 7, 11))
                     and len({g_ for k, g_ in enumerate(gaps) if k % 4 != 3}) == 1
                     and box[0] < lay["left"] < lay["label"] < xs[0] and xs[-1] + cw <= box[2] - 12
                     and ys[0] > box[1] and all(b_ - a > ch for a, b_ in zip(ys, ys[1:]))
-                    and by0 == ys[-1] + ch + (16 if big else 8) and box[0] < bx0 < bx1 < box[2] and by1 <= box[3]
-                    and 40 <= by1 - by0 <= round(grid_h * SQ.BARS_MOST) + 1 and "knobs" not in lay)
+                    and by0 == ys[-1] + ch + bars_gap[1 if big else 0] and box[0] < bx0 < bx1 < box[2]
+                    and by1 <= box[3]
+                    and 40 <= by1 - by0 and "knobs" not in lay)
         even.append((cw, ch, gaps[0], ys[1] - ys[0] - ch))
-        middle.append((lay["nums"] - (14 if big else 10) - box[1], box[3] - 8 - by1))
+        middle.append((lay["nums"] - (14 if big else 10) - box[1], box[3] - by1))
     short = SQ.layout((0, 40, 800, 300), False)
     check(f"where its page's parts go, on the GPi Case's screen and on bigger ones: sixteen cells across in four "
           f"beats of four, four rows, the rows' names at their left, the bars' box under them, all of it on the page "
           f"({fits})", all(fits))
     check(f"...its cells square, and as far apart down as across, as a beat's four are (wide, high, apart across, "
           f"apart down: {even})", all(w_ == h_ and a_ == b_ for w_, h_, a_, b_ in even))
-    check(f"...right under the grid, the bars (its buttons aren't there: they're on its line): no taller than "
-          f"{SQ.BARS_MOST} of the grid, a tall page's room left above and below it all, as much each way (over the "
-          f"numbers, under the bars: {middle}); a short page's as tall as there's room ({short['bars']})",
-          all(abs(a_ - b_) <= 1 for a_, b_ in middle) and middle[2][0] > 20
-          and short["bars"][1] == short["ys"][-1] + short["ch"] + 8 and short["bars"][3] == 292)
+    check(f"...under the grid, a little way down ({bars_gap} px: a small screen, a big one), the bars, in all "
+          f"the room its buttons left (they're on its line now), down to the page's foot, however tall the page (over "
+          f"the numbers, under the bars: {middle}); a short page's too ({short['bars']})",
+          bars_gap == (12, 20) and all(m_ == (0, 2) for m_ in middle)
+          and short["bars"][1] == short["ys"][-1] + short["ch"] + 12 and short["bars"][3] == 298)
 
 # ---- its player ----------------------------------------------------------------------------------------------------
 if not ONLY or "player" in ONLY:
@@ -642,24 +644,24 @@ if not ONLY or "app" in ONLY:
           f"itself ({still} times in 0.8 s)", lit == [list(r) for r in want[0]] and heads == []
           and int(ring.sum()) > 300 and int(other.sum()) < 150 and int((box.sum(axis=2) > 300).sum()) == 0
           and still <= 2)
-    hues = [dict(g.ACCENTS)[n] for n in getattr(SQ, "ROW_HUES", ())]
     cw, ch = lay["cw"], lay["ch"]
 
-    def nearest(px):
-        """Which row's colour that pixel is nearest to, and how far from it."""
-        far = [int(np.abs(np.array(px, dtype=int) - np.array(h)).max()) for h in hues]
-        return (far.index(min(far)), min(far)) if far else (None, 255)
+    def far(px):
+        """How far that pixel's colour is from the accent's."""
+        return int(np.abs(np.array(px, dtype=int) - np.array(g.ACCENT)).max())
 
     cells, marks = [], []
     for r, y in enumerate(lay["ys"]):
         on = [c for c in range(SQ.STEPS) if want[0][r][c]]
-        cells.append(nearest(page[y0 + y + ch - 5, x0 + lay["xs"][on[0]] + cw // 4]) if on else (r, 0))
-        marks.append(nearest(page[y0 + y + ch // 2, x0 + lay["left"] + 6]))
-    check(f"...each row in a colour of its own ({list(getattr(SQ, 'ROW_HUES', ()))}): its mark, before its name "
-          f"({marks}: which colour it's nearest to, how far from it), and its cells that are on ({cells})",
-          len(hues) == SQ.ROWS and len(set(hues)) == SQ.ROWS and [k for k, _ in marks] == list(range(SQ.ROWS))
-          and all(far <= 12 for _, far in marks) and [k for k, _ in cells] == list(range(SQ.ROWS))
-          and all(far <= 45 for _, far in cells))
+        cells.append(far(page[y0 + y + ch - 5, x0 + lay["xs"][on[0]] + cw // 4]) if on else 0)
+        marks.append(far(page[y0 + y + ch // 2, x0 + lay["left"] + 6]))
+    check(f"...every row in the accent, one colour for all: its mark, before its name, and its cells that are on "
+          f"(how far from the accent: marks {marks}, cells {cells})", all(f_ <= 12 for f_ in marks)
+          and all(f_ <= 45 for f_ in cells))
+    dark_ink = SQ.note_ink((24, 28, 90))
+    check(f"...a lead cell's note: dark on a light accent ({SQ.note_ink(g.ACCENT)}), light on a dark one (an accent of "
+          f"your own can be: {dark_ink}), dark again while the bar's on it, whiter ({SQ.note_ink((24, 28, 90), True)})",
+          sum(SQ.note_ink(g.ACCENT)) < 100 and sum(dark_ink) > 600 and sum(SQ.note_ink((24, 28, 90), True)) < 100)
 
     # A, X and the d-pad, stopped
     t1 = time.monotonic()
