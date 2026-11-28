@@ -666,7 +666,8 @@ open(m.glow_spi, "wb").close()
 open(S + "/m-config.txt", "w").write("dtparam=audio=on\n")
 APPS = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Apps")
 m.load_tab(APPS)
-check("Apps: LED backlight, on a Pi that can have a grid", "LED backlight" in [it["title"] for it in m.items[APPS]])
+check("Apps: no LED backlight, even on a Pi that can have a grid (the web page's Library has it)",
+      "LED backlight" not in [it["title"] for it in m.items[APPS]] and m.glow_shown())
 m.view, m.tab = "list", next(k for k, t in enumerate(g.LIBRARY) if t.get("type") == "settings")
 m.set_page = None
 check("...not in Settings any more", "glow" not in [k for k, _, _ in m.settings_all_rows()])

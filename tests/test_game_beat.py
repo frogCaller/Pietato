@@ -6,9 +6,9 @@ zombie that gets to the dancer cleared all the same; nothing moving while paused
 a note whose zombie's gone landing all the same. Then in media mode: SELECT goes round the lofi art, Game beat and
 back (kept for next time); on a Pi Zero 2 W or a Pi 3 just the lofi art and back, and Game beat kept from before not
 shown there; the whole screen the floor, what's playing at its top, how far through along its foot and how many
-cleared; its beats the ear's; GAME_FPS frames a second (Now playing's glow not drawn meanwhile, its ear kept), but no
-more than half the time spent drawing them; none while it's paused (the screen free to rest then); a station's too;
-none off Now playing."""
+cleared; its beats the ear's; GAME_FPS frames a second (Now playing's bars not drawn meanwhile, its ear kept), but no
+more than two thirds of the time spent drawing them; none while it's paused (the screen free to rest then); a
+station's too; none off Now playing. The zombies keep their distance from the dancer (KEEP), slowing as they come."""
 import collections, io, math, os, shutil, sys, threading, types
 from paths import SP, ROOT, TESTS  # noqa: E402  (this test's folder of work; the Pietato folder; tests)
 try:
@@ -60,7 +60,7 @@ check(f"the screen's size whatever it is, drawn at a part of it on a big one ({[
       all(v[0] for v in fits.values()) and fits[(1920, 1080)][1][2] == 3 and fits[(640, 480)][1][2] == 1)
 
 game = BG.BeatGame("/m/song.mp3", seed=7)
-acted, most, thrown, landed, hues, volleys = [], 0, {}, [], set(), []
+acted, most, thrown, landed, hues, volleys, nearest = [], 0, {}, [], set(), [], 1e9
 air = {}
 nb = 0
 for f in range(40 * 15):
@@ -80,6 +80,7 @@ for f in range(40 * 15):
     game.frame(640, 480, t, bars_at(t), False, ACC, progress=min(1.0, t / 60))
     most = max(most, len(game.zombies))
     hues |= {z["hue"] for z in game.zombies}
+    nearest = min([nearest] + [math.hypot(z["x"] - 320, z["y"] - 240) - z["r"] for z in game.zombies])
     now_in = {id(b) for b in game.notes}
     for key in [k for k in air if k not in now_in]:
         landed.append((thrown[key], t))
@@ -90,6 +91,8 @@ check(f"zombies come in waves on the strong beats ({spawns} of {len(acted)} beat
       len(acted) > 70 and 0.3 * len(acted) < spawns <= 0.5 * len(acted) + 1 and not twice)
 check(f"never more than {BG.GAME_MOST} on the floor ({most}); cleared as it goes ({game.kills} in 40 s)",
       0 < most <= BG.GAME_MOST and game.kills > 40)
+check(f"...none nearer the dancer than {BG.KEEP} px (the nearest's edge {nearest:.1f} px from it)",
+      BG.KEEP - 2 <= nearest < BG.KEEP + 30)
 late = [round(land - (at + 2 * SPB), 3) for at, land in landed if at > 5]
 check(f"notes thrown on the other beats land {BG.NOTE_BEATS} beats on, so in the air over the next one "
       f"({len(late)} landed, {min(late, default=0)} to {max(late, default=0)} s after that beat)",
@@ -269,9 +272,9 @@ while fake[0] < 1002.0 - 1e-9:                         # (two seconds, the loop 
 shot = m.fb.last
 shot.save(SP + "/game_beat.png")
 check(f"...{m.fb.shows / 2:.1f} frames a second ({BG.GAME_FPS}), the loop waiting no longer than the next "
-      f"({max(waits):.3f} s); Now playing's glow not drawn meanwhile ({len(glows)}), its ear kept",
+      f"({max(waits):.3f} s); Now playing's bars not drawn meanwhile ({len(glows)}), its ear kept",
       BG.GAME_FPS - 1 <= m.fb.shows / 2 <= BG.GAME_FPS + 1
-      and all(w <= max(1 / BG.GAME_FPS, 2 * t) + 0.001 for w, t in zip(waits, tooks))
+      and all(w <= max(1 / BG.GAME_FPS, 1.5 * t) + 0.001 for w, t in zip(waits, tooks))
       and not glows and m.ear is ear and not ear.closed)
 a = np.asarray(shot).astype(int)
 bg = (a[440:470, 300:600] == np.array(g.BG)).all(axis=2).mean()
@@ -289,8 +292,8 @@ check(f"...its beats the ear's (the {passed} it's passed: {m.beat_game.beats}), 
 fake[0] = m.game_next
 m.game_took = 0.1
 m.tick()
-check(f"...a frame that took a tenth of a second to draw: the next no sooner than a fifth on ({m.tick_limit():.2f} s)",
-      0.19 < m.tick_limit() <= 0.21)
+check(f"...a frame that took a tenth of a second to draw: the next no sooner than 0.15 s on ({m.tick_limit():.2f} s)",
+      0.14 < m.tick_limit() <= 0.16)
 m.flush()
 check("the screen doesn't rest while it plays", m.worth_watching(fake[0]))
 m.press("a")

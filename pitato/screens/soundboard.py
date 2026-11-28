@@ -63,8 +63,8 @@ BOARD_HUE = 0.5                  # seconds between its colour, said to your LEDs
 BOARD_HUE_ON = 0.3               # ...and this long after a button at least (its player says it's playing a moment on)
 PAD_SAY = {"up": "Up", "down": "Down", "left": "Left", "right": "Right", "x": "X", "y": "Y", "a": "A", "b": "B"}
 PAD_LIGHT = {"up": "Blue", "left": "Teal", "right": "Green", "down": "Purple", "x": "Pink", "y": "Yellow", "a": "Red",
-             "b": "White"}       # each button's colour on your LEDs (glow.py's COLOURS): its own on the page
-                                 # (soundboard.py's PAD_COLOUR), as an LED shows it
+             "b": "White"}       # each button's colour on your LEDs (glow.py's COLOURS: on the page they're all
+                                 # in the accent)
 PAD_LIGHT_NONE = "Warm white"    # ...and a sound that's on no button of the bank that's up
 BPM_RANGE = (40, 240)            # the loop's tempo: the slowest and fastest
 BARS = (1, 2, 4)                 # how long a loop can be (bars of BAR beats)

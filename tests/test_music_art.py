@@ -4,11 +4,11 @@ the colour its glow takes (the one there's most of, not a stir of them all; none
 found a moment ahead of what's heard, kept by their place in the song, a jump starting it again, the glow dying away
 after each; and the sound as bars, a look every twentieth of a second, by its place in the song too. Now playing:
 the cover on the left with its glow, a wash of it behind, the words, the line in the cover's colour, the buttons
-(each tappable); a note for a song with no cover, a sign for a station; the glow following the beat with the battery
-saver off (just its box drawn, between whole pages), still with it on, paused, on lofi art, off the page; and the
-bars under the words (just their box drawn as they move, falling back, flat with nothing to show; none with no room
-for them; there with the battery saver on too, the glow still; none on a Pi Zero 2 W or a Pi 3, the glow as ever,
-its ear only for that); a station's from its sound as MPlayer shares it (its
+(each tappable); a note for a song with no cover, a sign for a station; the cover's glow still, beat or no beat (it
+followed the beat once), the ear kept for the bars with the battery saver on or off, none paused, on lofi art, off the
+page; and the bars under the words (just their box drawn as they move, falling back, flat with nothing to show; none
+with no room for them; there with the battery saver on too; none on a Pi Zero 2 W or a Pi 3, nor an ear there for
+anything); a station's from its sound as MPlayer shares it (its
 export filter's file, read: the bars when it's heard, the same at any volume, flat silenced, paused or with nothing
 new; MPlayer told so for a station only, and played again without it when it stops over its file; for real too, an
 MPlayer sharing a low note). Music's grid: every song a square with its cover (made small once and
@@ -157,9 +157,6 @@ check(f"its wash: the page's colour with some of the cover's, top to bottom ({to
 plain = C.cover_wash(None, (640, 400), (17, 19, 24), (96, 170, 228))
 check("...with no cover: the page's colour, a little of the glow's at the top", plain.getpixel((5, 398))
       == (17, 19, 24) and plain.getpixel((5, 0))[2] > 40)
-steps = [C.glow_step(v) for v in (0.0, 0.07, 0.5, 1.0, 3.0, -1.0)]
-check(f"the glow's steps: {steps}, lit {C.glow_strength(0):.2f} at rest to {C.glow_strength(C.GLOW_STEPS - 1):.2f}",
-      steps == [0, 0, 4, 7, 7, 0] and C.glow_strength(0) == C.GLOW_REST and C.glow_strength(C.GLOW_STEPS - 1) == 1.0)
 
 # ---- the ear -----------------------------------------------------------------------------------------------------
 RATE = E.EAR_RATE
@@ -461,7 +458,7 @@ check(f"a station: its sign, LIVE, what's on, no line and no shuffle ({words(m)}
       words(m) == ("Pretend FM", "Somebody - A Song", "", "Station 1 of 1") and "y" not in taps and "left" in taps
       and not ink(r, (ax, bar, 600, bar + 6), g.ACCENT, 20) and ink(r, (tx, ay + 8, tx + 60, ay + 30), g.ACCENT))
 
-# ---- the glow, following the beat -----------------------------------------------------------------------------
+# ---- the ear, for the bars (the cover's glow as it is, beat or no beat) ----------------------------------------
 playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
 shot(m)
 found(m)
@@ -487,15 +484,14 @@ class PretendEar:
 M.Ear = PretendEar
 m.tick()
 made[0].lit = 1.0
-check(f"the battery saver on: an ear all the same (for the bars: they move on a battery too), the glow still with a "
-      f"beat heard ({m.pulse_step()}), the loop looking again for the bars' next frame ({m.tick_limit():.3f} s)",
-      not m.pulse_wanted() and m.bars_wanted() and len(made) == 1 and m.ear is made[0] and m.pulse_step() == 0
+check(f"the battery saver on: an ear all the same (for the bars: they move on a battery too), the loop looking again "
+      f"for the bars' next frame ({m.tick_limit():.3f} s)", m.bars_wanted() and len(made) == 1 and m.ear is made[0]
       and 0 < m.tick_limit() <= 1 / 15 + 1e-6)
 made[0].lit = 0.0
 m.state["settings"]["battery"] = "Off"
 m.tick()
-check("the battery saver off: an ear for the song that's playing", m.pulse_wanted() and len(made) == 1
-      and made[0].src == SONG and m.ear is made[0])
+check("the battery saver off: the same ear for the song that's playing", len(made) == 1 and made[0].src == SONG
+      and m.ear is made[0])
 m.next_query = 1e12                                    # (the player isn't asked where it is, for now: said here)
 m.pos_said(84.0)
 at0 = m.heard_now()
@@ -507,7 +503,6 @@ m.pos_said(85.1)                                       # (its word's to a tenth:
 check(f"...the player's next word a tenth out: evened out ({m.heard_now():.3f})", 85.0 < m.heard_now() < 85.05)
 m.pos_said(120.0)
 check("...and a jump (a seek): taken as it says", abs(m.heard_now() - 120.0) < 1e-6)
-box = m.now_made[1]["box"]
 shot(m)
 m.fb.parts.clear(); m.fb.shows = 0
 m.pulse_next = 0.0
@@ -516,38 +511,18 @@ check("no beat: nothing drawn", m.fb.parts == [] and m.fb.shows == 0)
 made[0].lit = 1.0
 fake[0] += 0.1
 m.tick()
-lit = np.asarray(m.fb.last.convert("RGB")).astype(int)
-out_lit = lit[ay + side // 2, ax - 5]
-check(f"a beat: just the cover and its glow go to the screen {m.fb.parts}, the glow brighter beside it "
-      f"({tuple(out)} to {tuple(out_lit)})", m.fb.parts == [box] and m.fb.shows == 0 and out_lit[0] > out[0] + 20
-      and near(lit[ay + int(side * 0.43), ax + side // 2], (255, 226, 170), 16)
-      and (lit[bar - 2:, :] == a[bar - 2:, :]).all()
-      and box == (ax - C.GLOW_REACH, ay - C.GLOW_REACH, ax + side + C.GLOW_REACH, ay + side + C.GLOW_REACH))
-check(f"...the loop looks again when its next frame's due ({m.tick_limit():.3f} s)",
+check("a beat: nothing drawn either (the cover's glow stays as it is)", m.fb.parts == [] and m.fb.shows == 0)
+check(f"...the loop looks again when the bars' next frame's due ({m.tick_limit():.3f} s)",
       0 < m.tick_limit() <= 1 / 15 + 1e-6)
-fake[0] += 0.02
-m.tick()
-check("...not before", len(m.fb.parts) == 1)
-seen = []
-for lv in (0.8, 0.8, 0.5, 0.2, 0.0, 0.0):
-    made[0].lit = lv
-    fake[0] += 0.07
-    m.tick()
-    seen.append(m.now_shot[2])
-check(f"it dies away a step at a time, drawn only as it changes ({seen}: {len(m.fb.parts)} frames)",
-      seen == [6, 6, 4, 1, 0, 0] and len(m.fb.parts) == 5 and len(m.now_made[1]["lit"]) == 5)
-made[0].lit = 1.0
-m.toast("Volume 60")
-fake[0] += 0.07
-m.tick()
-check("a notice up: the glow waits (it would draw over it)", len(m.fb.parts) == 5)
-m.msg = None
 m.next_query = 0.0                                     # (the player asked where it is, as it is each second: the
 fake[0] += 0.07                                        #  page is drawn again for its line)
 m.tick()
 m.flush()
-check(f"the page drawn again whole (how far through it is): the glow as it is now on it ({m.said[-1:]})",
-      m.fb.shows == 1 and m.now_shot[2] == 7 and len(m.fb.parts) == 5 and "get_time_pos" in m.said[-1])
+whole = np.asarray(m.fb.last.convert("RGB")).astype(int)
+check(f"the page drawn again whole (how far through it is), a beat or not: the cover's glow on it as it was "
+      f"({tuple(whole[ay + side // 2, ax - 5])}, {tuple(out)}) ({m.said[-1:]})", m.fb.shows == 1
+      and tuple(whole[ay + side // 2, ax - 5]) == tuple(out) and "get_time_pos" in m.said[-1]
+      and not hasattr(m, "pulse_step") and not hasattr(C, "glow_step"))
 m.next_query = 1e12
 m.press("a")
 m.flush()
@@ -555,8 +530,8 @@ fake[0] += 0.07
 made[0].lit = 0.3
 parts = len(m.fb.parts)
 m.tick()
-check("paused: the glow rests, where the song is isn't guessed at, and the loop waits as it does", m.paused
-      and m.heard_now() is None and m.pulse_step() == 0 and m.pos_off is None and m.tick_limit() == 0.25)
+check("paused: where the song is isn't guessed at, and the loop waits as it does", m.paused
+      and m.heard_now() is None and m.pos_off is None and m.tick_limit() == 0.25)
 m.press("a")
 m.pos_said(121.0)
 m.press("select")
@@ -756,7 +731,7 @@ if shutil.which("mplayer"):                            # (for real: an MPlayer s
 M.tap_file = real_tap_file
 m.proc = plain_proc
 
-# a Pi Zero 2 W or a Pi 3: no bars (they'd cost it too much), the glow as ever
+# a Pi Zero 2 W or a Pi 3: no bars (they'd cost it too much), nor an ear
 playing(m, 2, "Harbour Lights", "The Night Ferries", "Low Tide")
 m.state["settings"]["battery"] = "On"
 m.ear_stop()
@@ -768,13 +743,12 @@ m.tick()
 saver_on = (m.now_bars, m.ear, m.bars_wanted())
 m.state["settings"]["battery"] = "Off"
 m.tick()
-glow_ear = m.ear is not None and m.pulse_wanted()
+no_ear = m.ear is None
 shot(m)
 no_bars = m.now_bars
-check(f"a Pi Zero 2 W or a Pi 3: no bars, nor an ear for them with the battery saver on ({saver_on}); the glow as "
-      f"ever with it off, its ear for that ({glow_ear}), still no bars ({no_bars}); MPlayer not told to share a "
-      f"station's sound", saver_on == (None, None, False) and glow_ear and no_bars is None
-      and m.sound_share_args() == [])
+check(f"a Pi Zero 2 W or a Pi 3: no bars, nor an ear for them, with the battery saver on ({saver_on}) or off "
+      f"({no_ear}, {no_bars}); MPlayer not told to share a station's sound", saver_on == (None, None, False)
+      and no_ear and no_bars is None and m.sound_share_args() == [])
 M.slow_pi = real_slow
 m.bars_fit = None
 m.ear_stop()

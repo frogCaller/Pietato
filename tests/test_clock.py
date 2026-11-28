@@ -433,10 +433,8 @@ check(f"Seconds Off once more: its next frame a while away ({m.sim_next - fake[0
 m.press("b")
 check("B: back to the list, the Clock picked", m.tab == SIMI and m.sels[SIMI] == 0)
 m.press("down")
-check("the next one down is Notes", m.tab_items()[m.sels[SIMI]]["title"] == "Notes")
-m.press("down")
-check("...then the Fortune Cookie", m.tab_items()[m.sels[SIMI]]["title"] == "Fortune Cookie")
-m.press("down")
+check("the next one down is the Fish Tank (no Notes or Fortune Cookie in Apps any more)",
+      m.tab_items()[m.sels[SIMI]]["title"] == "Fish Tank")
 m.press("a")
 check("...and then the Fish Tank, in its box as before",
       m.sim_game().key == "fish" and not m.sim_bare() and (m.sim_game().w, m.sim_game().h) == (436, 342))

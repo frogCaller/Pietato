@@ -28,9 +28,10 @@ LIBRARY = [
     {"name": "Finance", "type": "finance", "files": [settings_glob("finance.txt")], "empty": ""},
     {"name": "Bot", "type": "friend", "files": [settings_glob("bot.txt")], "empty": ""},
     {"name": "Apps", "type": "group", "empty": "",
-     "children": ["Clock", "Notes", "Fortune Cookie", "Fish Tank", "Group chat",
-                  "LED backlight", "Sequencer", "Band", "Konami code", "cmatrix", "hollywood",
-                  "nyancat", "cacafire", "htop"]},     # (LED backlight: on a Pi that can have one, screens/glow.py)
+     "children": ["Clock", "Fish Tank", "Group chat",
+                  "Sequencer", "Band", "Konami code", "cmatrix", "hollywood",
+                  "nyancat", "cacafire", "htop"]},     # (not the LED backlight: the web page's Library has it. Nor
+                                                       # Notes and the Fortune Cookie, any more)
     {"name": "Files", "type": "browser", "empty": "This folder is empty"},
     {"name": "System", "type": "system", "empty": ""},
     {"name": "Settings", "type": "settings", "empty": ""},
@@ -77,8 +78,9 @@ LIBRARY = [
      "about": "Your fish, and your other Pietatos'", "empty": ""},
     {"name": "Group chat", "type": "chat", "parent": "Apps", "badge": "CHAT",   # (screens/group.py, circle.py)
      "about": "Your Pietatos, talking", "empty": ""},
-    {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py, glow.py)
-     "about": "The LEDs behind your TV", "empty": ""},
+    {"name": "LED backlight", "type": "sim", "sim": "glow", "parent": "Apps", "badge": "LED",   # (backlight.py,
+     "about": "The LEDs behind your TV", "empty": ""},   # glow.py. Not in Apps' list: the web page's Library has it.
+                                                         # Its page here still, if the web page asks for it by name)
     {"name": "Sequencer", "type": "sim", "sim": "sound", "parent": "Apps", "badge": "BEAT",   # (soundboard.py: the
      "about": "Make a beat with your sounds", "empty": ""},   # Sequencer, Bounce, the Soundboard's buttons)
     {"name": "Band", "type": "sim", "sim": "band", "parent": "Apps", "badge": "JAM",           # (bandstage.py)

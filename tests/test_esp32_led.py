@@ -6,12 +6,12 @@ keeps saying so). Lit by a Pietato's own packets (glow.py makes them): music's c
 moment it's due by the sender's clock (not before), a game's colours (their blend), a hit's red, an achievement's
 gold, dark again once it's quiet; nothing for a packet that isn't one; one Pietato followed at a time. A strip of LEDs
 instead: all of them that colour. Then media mode: a light found is one of the places a game's colours and music's
-beats go, and music's played for its beat while one's there (unless Pulse to music is off: Apps > LED backlight has
-that, on a Pietato with no LEDs of its own too while a board's on); more than one of them, each following a beat of
-its own when that's picked (the kick's, the snare's, the hi-hat's, in turn by their names: X on their page, a row on
-the web page), your grids the kick's as ever; the song at start-up, which begins before the
-network's up and any board's heard (moved to that player once one is, and on it from the start the next time, the
-boards remembered); however many there are, a
+beats go, and music's played for its beat while one's there (unless Pulse to music is off: the web page's LED
+backlight has that, on a Pietato with no LEDs of its own too while a board's on; not in Apps); more than one of
+them, each following a beat of its own when that's picked (the kick's, the snare's, the hi-hat's, in turn by their
+names: X on their page, a row on the web page), your grids the kick's as ever; the song at start-up, which begins
+before the network's up and any board's heard (moved to that player once one is, and on it from the start the next
+time, the boards remembered); however many there are, a
 game's pictures go to a couple of them at a time, in turn (a beat to all at once), and a board that gets them only now
 and then keeps its colour between them. A colour of its own: told it by a Pietato (the web page's LED backlight), it
 shows it a moment, says it back at once, keeps it through a power cut (written only when it changes), and is lit in
@@ -1556,9 +1556,9 @@ def led_app():
 
 page = type("P", (), {"blurb": "x"})()
 m.glow_page(page)
-check(f"a Pietato with no LEDs of its own (this one), a board on: Apps has LED backlight, for the boards "
-      f"({led_app()!r}), and its page is theirs ({page.facts}; {page.says}; {page.own_hints})",
-      not m.glow_can() and led_app() == "Your ESP32 boards' LEDs" and page.plain
+check(f"a Pietato with no LEDs of its own (this one), a board on: no LED backlight in Apps (the web page's Library "
+      f"has it: {led_app()!r}), its page (as the web page asks for it) theirs ({page.facts}; {page.says}; "
+      f"{page.own_hints})", not m.glow_can() and led_app() is None and m.glow_shown() and page.plain
       and page.facts == [("ESP32 boards", "1"), ("Pulse to music", "On")]
       and page.says == ("1 ESP32 board", "Lit by this Pietato's games and music")
       and page.own_hints == [("A", "Pulse off")])

@@ -12,9 +12,8 @@ Pietato starts on a home screen of apps:
   cartoons and 150 old films from the Internet Archive, and your own streams. Live channels and Plex videos are
   fetched up to half a minute ahead, so a short drop in the WiFi doesn't have to freeze the picture
 - **Music** and **Radio**. Music is a grid of your songs' covers; going right from the last song takes you back
-  to the first. Now playing shows the cover big, with a glow in its colour that follows the beat while the
-  battery saver is off. On a Pi 4 or 5 or a PC, bars beside it move with the music, a station's too, on a
-  battery as well (where there's room under the name).
+  to the first. Now playing shows the cover big, with a soft glow in its colour. On a Pi 4 or 5 or a PC, bars
+  beside it move with the music, a station's too, on a battery as well (where there's room under the name).
   A song's cover is a `cover.jpg` or `folder.jpg` in its folder, or the picture inside its
   file. For songs with neither, press Y on Music. Covers your other Pietatos have for the same songs (the same
   file name and size) are copied from them. The rest are looked up in the iTunes Store's search, then on
@@ -33,16 +32,10 @@ Pietato starts on a home screen of apps:
 - **Bot**: does what you ask, like setting a timer, adding to your list or playing some music, and chats
   through Ollama on another computer. It sees through your camera and takes pictures, and talks out loud if
   you give it a voice
-- **Apps**: [Group chat](#group-chat), the
-  [LED backlight](#led-backlight) (on a Pi with LEDs behind the TV), a [Sequencer](#sequencer), a [Band](#band), a
+- **Apps**: [Group chat](#group-chat), a [Sequencer](#sequencer), a [Band](#band), a
   Clock with the time and the date (A switches between a dial and big
   figures, ◀▶ go through a dozen fonts, ▲▼ change its colour, X its background, Y turns the date on or off, and
-  START has its seconds), Notes
-  (type with a USB or Bluetooth keyboard: ▲▼ change the words' colour, ◀▶ the background, A the font, Y adds
-  a glow, a rainbow or a shadow, X reads it out loud in your Bot's voice, and L and R go through your notes,
-  kept in Documents/Notes), a Fortune Cookie (A shows a new fortune, ▲▼ and ◀▶ pick its colours as in Notes,
-  L and R its font, Y an effect, and X reads your fortune and lucky numbers out loud) and a
-  [Fish Tank](#fish-tank). Press SELECT to watch one full screen.
+  START has its seconds) and a [Fish Tank](#fish-tank). Press SELECT to watch one full screen.
   It can also start cmatrix, hollywood, nyancat, cacafire and htop without a keyboard: in cmatrix, ◀▶ change
   its colour and ▲▼ its speed; in htop, ▲▼ move through what's running and X or Y sort it by CPU or memory;
   and B stops any of them. Konami code saves button codes of your own: hold Home and press Right, then put
@@ -157,19 +150,18 @@ To wire it to the Pi behind the TV (not one in a GPi Case, whose screen uses tho
 (pin 19) and GND to a ground pin. Power the LEDs with 5 V from their own supply, since they can draw more than a
 Pi gives, and join that supply's ground to the Pi's. Size the supply for a strip: each LED can draw up to 60 mA at
 full white, though the brightness setting keeps it well under that. If the first LED flickers, a level shifter (a
-74AHCT125) on DIN helps. Then open Apps > LED backlight and press A to turn it on. The first time, it turns on the
-Pi's SPI and asks you to restart.
+74AHCT125) on DIN helps. Then open the web page's Library > LED backlight and set LEDs to On. The first time, it
+turns on the Pi's SPI and asks you to restart.
 
-The page shows the LEDs as they're lit. ◀▶ pick their colour for whenever no game or music is lighting them:
-warm white, white, red, orange, yellow, green, teal, blue, purple, pink or a rainbow. Off keeps them dark. ▲▼
-set how bright they are. START has the rest: which Pietato it follows (any of yours that's playing, by default,
-or Nobody to keep it to your colour), and whether it pulses to music (the Soundboard's sounds go by that too).
+That tab shows the LEDs as they're lit. Colour is theirs for whenever no game or music is lighting them: warm
+white, white, red, orange, yellow, green, teal, blue, purple, pink or a rainbow. Off keeps them dark. Brightness
+sets how bright they are, Follows which Pietato it follows (any of yours that's playing, by default, or Nobody to
+keep it to your colour), and Pulse to music whether it pulses to music (the Soundboard's sounds go by that too).
 
 Shape sets a grid or a strip. For a grid, Turn, Mirror and Wiring match how it's put up. For a strip, set how
 many LEDs it has (up to 300), where its first LED is, which way it goes round as you look at the TV, and whether
-it runs along the bottom too. Each LED then takes the colour of the edge of the screen nearest it. Show which way
-is up lights the top red and the left side green. The web page's Library has an LED backlight tab with all of this
-too.
+it runs along the bottom too. Each LED then takes the colour of the edge of the screen nearest it. Which way is
+up lights the top red and the left side green.
 
 An ESP32 board's own LED can join in, with no wiring at all. Open `esp32/pietato_led/pietato_led.ino` in the
 Arduino IDE, put your WiFi's name and password at the top, and upload it to the board (an ESP32-S3 dev board, or
@@ -187,9 +179,9 @@ whether a Pietato is lighting it.
 
 Any number of boards can do it at once, on any Pietato, with or without LEDs of its own. A beat is one small
 packet to each board, and a game's colours go to a couple of them at a time, in turn, so they don't slow the Pi
-down. Apps > LED backlight shows how many it's found, and Pulse to music there is for the boards as well, for
-music played on that Pietato. On a Pietato with no LEDs of its own, the page is there while a board is on, and
-shows the boards instead: an LED for each, in its own colour.
+down. The web page's LED backlight lists the boards it's found, and Pulse to music there is for the boards as well,
+for music played on that Pietato. On a Pietato with no LEDs of its own, that tab is there once a board is found,
+with just the boards and their settings.
 
 The sketch can light a strip of WS2812B LEDs on one of the board's pins instead (with the FastLED library): set
 `LED_COUNT` and `STRIP_PIN` at the top of it. Set `ONBOARD_PIN` to the pin of the board's own LED as well (48 on
@@ -198,9 +190,9 @@ you set it, it never takes more power than a white at the sketch's `BRIGHTNESS` 
 100 LEDs at 90, and 6 A at 255. Raise `BRIGHTNESS` only as far as your supply and its wires can give.
 
 With two or more boards, each can follow a different beat instead of all pulsing to the kick drum. Set ESP32
-boards to Different beats: under START on the LED backlight's page, with X on that page on a Pietato with no LEDs
-of its own, or on the web page. One board then follows the kick, the next the snare and claps, the next the
-hi-hats, and round again, in the order of their names. The page shows which follows which. These are low, middle
+boards to Different beats on the web page's LED backlight. One board then follows the kick, the next the snare
+and claps, the next the hi-hats, and round again, in the order of their names. The web page shows which follows
+which. These are low, middle
 and high parts of the sound rather than instruments, so a voice or a guitar can move the snare's board too. It's
 set on each Pietato, for the music that one plays, and the boards' sketch stays as it is.
 
@@ -326,7 +318,8 @@ a pentagon or a hexagon: more sides, more notes), the sound (a bell, a marimba, 
 or any sound on your Soundboard, played at each wall's note), the key, the scale and Snap to the tempo (each note
 on the loop's beat). Your LEDs, if you have them, flash in the same colour.
 
-The Soundboard puts a sound on every button. The d-pad's four and A, B, X and Y each play theirs, as many at
+The Soundboard puts a sound on every button. The buttons are in your accent colour, like the Sequencer's cells,
+and turn lighter while their sound plays. The d-pad's four and A, B, X and Y each play theirs, as many at
 once as you like, and one pressed again starts again. SELECT goes through the banks of eight, and holding START
 stops them all. B is a button like the others there, so HOME is the way back. On this page,
 the bank is at the top right. START's card also has the bank, the volume, the loop's settings and Reverb, which plays the sounds in a room or a hall. The
@@ -351,8 +344,9 @@ Sequencer app takes the beat of the ones already playing. A Pietato on its own k
 changes nothing for the others.
 
 If you have an [LED backlight](#led-backlight) or ESP32 boards, each sound lights them as music does: a pulse in
-its button's colour as the sound starts, and that colour while it plays. Pulse to music, in Apps > LED backlight,
-turns that off too.
+a colour of its button's own (each button has one for the LEDs) as the sound starts, and that colour while it
+plays. Pulse to music, on the web page's LED
+backlight, turns that off too.
 
 It comes with four banks of starter sounds: Starter, Drums, Arcade and Calm. Calm is the soft one: a kalimba, a
 marimba, a bell, a glass, a plucked string, a pad, a singing bowl and wind chimes, all in one key, so any of them

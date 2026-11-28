@@ -1,9 +1,9 @@
 """Music's pages. Its songs: a grid of their covers, each with its name under it, the picked one raised a little with
-a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a glow in its colour (it follows
-the beat while the battery saver's off), what's playing beside it (and under that, the sound as bars, if there's
-room and the machine's quick enough: a Pi 4 or 5, a PC; a song of yours as the ear hears it, ear.py, a station as
-MPlayer shares it, its Tap), how far through it is and the buttons under it, all on a soft wash of the cover. A song
-with no cover, or a station: a sign in its place, and the accent colour's glow.
+a glow in its cover's colour. Now playing (Radio's too): the song's cover, big, with a soft glow in its colour, what's
+playing beside it (and under that, the sound as bars, if there's room and the machine's quick enough: a Pi 4 or 5, a
+PC; a song of yours as the ear hears it, ear.py, a station as MPlayer shares it, its Tap), how far through it is and
+the buttons under it, all on a soft wash of the cover. A song with no cover, or a station: a sign in its place, and
+the accent colour's glow.
 (SELECT on Now playing: lofi art on the whole screen instead, screens/player.py.)"""
 import collections
 import os
@@ -13,7 +13,7 @@ import time
 from ..theme import ACCENT, BG, BODY, look, MUTED, ROW, TEXT
 from ..config import CACHE_DIR
 from ..cover import (cover_at_hand, cover_colour, cover_file, cover_tile, cover_wash, COVER_SIDE, covers_dir,
-                     found_file, GLOW_REACH, glow_mask, glow_step, glow_strength, mixed, rounded, tidy)
+                     found_file, GLOW_REACH, glow_mask, mixed, rounded, tidy)
 from ..coverfind import cover_bytes, cover_from, CoverFinder, covers_had
 from ..asyou import as_you
 from ..ear import BARS, Ear, EXPORT_SIZE, mplayer_exports, SOFTVOL_TOP, Tap, tap_file, tap_ready
@@ -23,11 +23,11 @@ from ..screen import slow_pi
 from ..util import cache_name, clock, find_files
 
 NOW_RADIUS = 12                  # the cover's corners
-PULSE_FPS = 15                   # the glow's frames a second, while it follows the beat
+PULSE_FPS = 15                   # Now playing's bars' frames a second, as they move
 POS_NEAR = 0.3                   # the player's word on where the song is, this near what was expected: the same
                                  # run of it (its tenths of a second evened out); further: a jump, taken as said
 POS_KEPT = 3.0                   # ...and how long its word's good for (seconds)
-GLOW_MOST = 0.68                 # how much of the glow's colour shows at its strongest (on a beat)
+GLOW_SHOWS = 0.31                # how much of the glow's colour shows round the cover
 BARS_LEAST, BARS_MOST = 36, 0.36  # Now playing's bars: no shorter than this (the menus' pixels), no taller than so
                                  # much of the cover's side: under what's playing, where there's room
 BARS_FALL = 0.6                  # ...what a bar keeps of its height each frame as it falls
@@ -55,8 +55,8 @@ class MusicScreen:
     cover_busy = False           # ...and that there's a thread looking
     cover_lock = threading.Lock()
     now_made = None              # what Now playing's made of for this song and screen: (what for, the pictures)
-    now_shot = None              # Now playing as last drawn: (the picture, the pictures it's made of, the glow's step,
-                                 # the screen's frame count then)
+    now_shot = None              # Now playing as last drawn: (the picture, the pictures it's made of, the screen's
+                                 # frame count then)
     song_tiles = None            # the grid's covers: {song: which of the tiles is its, or None: it has no cover}
     tiles = None                 # ...{which: (the picture at the grid's size, its glow's colour)}, the ones lately used
     tiles_busy = False           # ...and that there's a thread getting them ready
@@ -199,12 +199,8 @@ class MusicScreen:
         followed (now_followed); on a battery too."""
         return self.bars_here() and self.now_followed()
 
-    def pulse_wanted(self):
-        """Now playing's glow follows the beat: a song of yours (a file) on it, the battery saver off."""
-        return self.kind == "audio" and self.now_followed() and not self.saver_on()
-
     def now_moving(self):
-        """Now playing's glow or its bars have frames to draw (the main loop waits no longer than the next one)."""
+        """Now playing's bars have frames to draw (the main loop waits no longer than the next one)."""
         return not self.paused and (self.ear is not None or self.bars_wanted())
 
     def sound_share_args(self):
@@ -250,7 +246,7 @@ class MusicScreen:
         return True
 
     def music_tick(self, now):
-        """(Main loop.) Now playing's glow, and what the search for covers says when it's done."""
+        """(Main loop.) Now playing's bars, and what the search for covers says when it's done."""
         f = self.cover_finder
         if f is not None and not f.busy and f.note:
             note, f.note = f.note, ""
@@ -258,9 +254,9 @@ class MusicScreen:
         self.pulse_tick(now)
 
     def pulse_tick(self, now):
-        """The ear for the song on Now playing (for its bars, and its glow), kept or let go; their next frame, when
-        it's due."""
-        if not (self.bars_wanted() or self.pulse_wanted()):
+        """The ear for the song on Now playing (for its bars, and Game beat's beats), kept or let go; the bars' next
+        frame, when it's due."""
+        if not self.bars_wanted():
             if self.ear is not None:
                 self.ear_stop()
             return
@@ -281,11 +277,6 @@ class MusicScreen:
         ear, self.ear = self.ear, None
         if ear is not None:
             ear.close()
-
-    def pulse_step(self):
-        """How lit the glow is now: which of its steps."""
-        ear = self.ear
-        return glow_step(ear.level(self.heard_now())) if ear is not None and self.pulse_wanted() else 0
 
     def now_heard(self):
         """What Now playing's bars show now: the ear's look at the song where it's heard, or a station's sound as
@@ -308,32 +299,26 @@ class MusicScreen:
         return tuple(max(v, round(w * BARS_FALL, 3)) if w * BARS_FALL >= 0.01 else v for v, w in zip(look, was))
 
     def pulse_frame(self):
-        """The glow a frame on: just the cover and its glow go to the screen, the rest as the page was drawn. (The
-        whole page again if something else has been on the screen since; none while a notice or a bubble's up.)"""
+        """The bars a frame on: just their box goes to the screen, the rest as the page was drawn. (The whole page
+        again if something else has been on the screen since; none while a notice or a bubble's up.)"""
         shot, fb = self.now_shot, self.fb
         if self.msg or getattr(self, "group_pop", None) or self.bored_said():
             return
-        if self.dirty or shot is None or shot[3] != getattr(fb, "frames", None) or not hasattr(fb, "show_part"):
+        if self.dirty or shot is None or shot[2] != getattr(fb, "frames", None) or not hasattr(fb, "show_part"):
             self.dirty = True
             return
-        img, pics, was, shown = shot
-        step = self.pulse_step()
+        img, pics, shown = shot
         bars = self.now_bars
         levels = self.now_levels(bars[1]) if bars is not None else None
-        if step == was and (bars is None or levels == bars[1]):
+        if bars is None or levels == bars[1]:
             return
-        if step != was:
-            box = pics["box"]
-            img.paste(self.now_lit(pics, step), (box[0], box[1]))
-            fb.show_part(img, box)
-        if bars is not None and levels != bars[1]:   # (the bars: their box, the wash behind them again)
-            from ..fine import ImageDraw
-            box = bars[0]
-            img.paste(pics["wash"].crop(box), (box[0], box[1]))
-            self.now_bars_draw(ImageDraw.Draw(img), box, levels, pics["colour"])
-            fb.show_part(img, box)
-            self.now_bars = (box, levels)
-        self.now_shot = (img, pics, step, getattr(fb, "frames", None))
+        from ..fine import ImageDraw                   # (their box, the wash behind them again)
+        box = bars[0]
+        img.paste(pics["wash"].crop(box), (box[0], box[1]))
+        self.now_bars_draw(ImageDraw.Draw(img), box, levels, pics["colour"])
+        fb.show_part(img, box)
+        self.now_bars = (box, levels)
+        self.now_shot = (img, pics, getattr(fb, "frames", None))
         self.taps_kept(shown)                          # (its buttons are where they were, for a tap on the web page's
                                                        #  copy of the screen)
 
@@ -358,8 +343,8 @@ class MusicScreen:
 
     def now_pics(self, it, lay):
         """What Now playing's made of for this song on this screen: the wash behind it (spread over a 16-bit screen's
-        few steps, its soft one kept to light), and the cover (or the sign in its place) with its glow, lit as each
-        step has it. Made once, and kept till the song or the screen changes."""
+        few steps, its soft one kept for the glow on it), and the cover (or the sign in its place) with its glow.
+        Made once, and kept till the song or the screen changes."""
         from PIL import Image
         from ..fine import made_fine, scale
         im, colour = self.cover_for(it) or (None, None)
@@ -377,24 +362,23 @@ class MusicScreen:
         box = (lay["ax"] - reach, lay["ay"] - reach, lay["ax"] + side + reach, lay["ay"] + side + reach)
         soft = cover_wash(im, (lay["W"] * s, lay["foot"] * s), BG, colour)
         pics = {"wash": made_fine(stepped(soft, depth), s), "soft": made_fine(soft, s), "depth": depth,
-                "tile": made_fine(tile, s), "colour": colour, "box": box, "reach": reach, "lit": {}, "s": s,
+                "tile": made_fine(tile, s), "colour": colour, "box": box, "reach": reach, "lit": None, "s": s,
                 "mask": glow_mask(side * s, reach * s, NOW_RADIUS * s),
                 "sign": None if im is not None else ("radio" if radio else "note")}
         self.now_made = (key, pics)
         return pics
 
-    def now_lit(self, pics, step):
-        """The cover and its glow, lit as step says, on their piece of the wash (a picture the size of the glow's
-        box): made once for each step."""
+    def now_lit(self, pics):
+        """The cover and its glow on their piece of the wash (a picture the size of the glow's box): made once."""
         from PIL import Image as Plain
         from ..fine import Image, ImageDraw, made_fine
-        hit = pics["lit"].get(step)
+        hit = pics["lit"]
         if hit is not None:
             return hit
         s, box, mask, tile, reach = pics["s"], pics["box"], pics["mask"], pics["tile"], pics["reach"]
         part = Image.new("RGB", (box[2] - box[0], box[3] - box[1]), BG)
         part.paste(pics["soft"].crop(box), (0, 0))
-        strength = glow_strength(step) * GLOW_MOST
+        strength = GLOW_SHOWS
         part.paste(made_fine(Plain.new("RGB", mask.size, pics["colour"]), s), (0, 0),
                    made_fine(mask.point(lambda v: int(v * strength)), s))
         if pics["depth"] != 8:                         # (the glow on the wash, spread over the screen's few steps
@@ -406,7 +390,7 @@ class MusicScreen:
         part.paste(tile, (reach, reach), tile)
         if pics["sign"]:
             self.cover_sign(ImageDraw.Draw(part), reach + tile.width / 2, reach + tile.height / 2, pics["sign"])
-        pics["lit"][step] = part
+        pics["lit"] = part
         return part
 
     def now_bars_draw(self, d, box, levels, colour):
@@ -499,8 +483,7 @@ class MusicScreen:
         colour = pics["colour"]
         lit, soft, empty = self.now_inks(colour)
         img.paste(pics["wash"], (0, 0))
-        step = self.pulse_step()
-        img.paste(self.now_lit(pics, step), (pics["box"][0], pics["box"][1]))
+        img.paste(self.now_lit(pics), (pics["box"][0], pics["box"][1]))
         if not self.full_app():
             self.status_bar(d)
 
@@ -554,7 +537,7 @@ class MusicScreen:
         self.now_buttons(d, lay, colour, radio)
         self.footer(d, hints)
         self.fb.show(img)
-        self.now_shot = (img, pics, step, getattr(self.fb, "frames", None))
+        self.now_shot = (img, pics, getattr(self.fb, "frames", None))
 
     # -- Music's grid: every song a tile -----------------------------------------------------------------------------
     def music_grid(self):

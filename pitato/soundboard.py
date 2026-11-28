@@ -23,11 +23,9 @@ import time
 from . import bounce as BN
 from . import sequencer as SQ
 from .sims import Sim
-from .theme import accent_for, ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
+from .theme import ACCENTS, BG, BODY, co_mix, FONT_UI, FONT_UI_BOLD, LINE, MUTED, ROW, TEXT, WARN
 
 _HUES = dict(ACCENTS)
-PAD_COLOUR = {"up": _HUES["Blue"], "left": _HUES["Teal"], "right": _HUES["Green"], "down": _HUES["Purple"],
-              "x": _HUES["Pink"], "y": _HUES["Gold"], "a": _HUES["Red"], "b": _HUES["White"]}   # each button's own
 PAD_NAME = {"up": "▲", "left": "◀", "right": "▶", "down": "▼", "x": "X", "y": "Y", "a": "A", "b": "B"}
 PAD_PLACE = {"up": (0, 0.5, 0), "left": (0, 0, 1), "right": (0, 1, 1), "down": (0, 0.5, 2),     # (which side, how far
              "x": (1, 0.5, 0), "y": (1, 0, 1), "a": (1, 1, 1), "b": (1, 0.5, 2)}                # across it, which row)
@@ -42,12 +40,9 @@ SPACE = (0.15, 1.15, 0.2, 0.05)  # its buttons are square, with room to breathe.
 TILE_MOST = 170                  # ...and no bigger than this, px (a big screen): as big as what's on it needs, no more
 STILL = 30.0                     # seconds between its frames when nothing changes (it's drawn again when something does)
 REC_CARD = (344, 118)
-INK = (16, 19, 23)               # the words on a lit tile: dark, whatever the page is
-LIT_SHADE = (0.12, 0.10)         # a tile whose sound's playing: its colour, this much lighter at its top, darker below
+INK = (16, 19, 23)               # the words on a tile in a light accent: dark, whatever the page is
 BANK_DOTS = 8                    # banks shown as a dot each, at most (more: which, of how many)
-RIM = (0.5, 0.22)                # a tile's outline: this much of its button's colour (one that can't play yet: this)
-FILL = (0.2, 0.11)               # ...and what it's filled with, of the page's own: this much of it at its top, at its
-                                 # bottom
+DIM = 0.3                        # a tile whose sound can't play yet (or at all): this much of the accent, on the page
 
 
 class Soundboard(Sim):
@@ -181,37 +176,32 @@ class Soundboard(Sim):
         d.polygon(pts, fill=fill)
 
     @staticmethod
-    def shaded(w, h, top, bottom, radius):
-        """A tile with round corners, its colour going evenly from `top` to `bottom` (a pad lit a little from
-        above), on the page's own."""
+    def flat(w, h, colour, radius):
+        """A tile with round corners (smooth ones, as the Sequencer's cells have), all in one colour, on the page's
+        own."""
         from .fine import Image, ImageDraw
-        body = Image.new("RGB", (w, h), bottom)
-        bd = ImageDraw.Draw(body)
-        for y in range(h - 1):
-            bd.rectangle((0, y, w - 1, y), fill=co_mix(top, bottom, y / (h - 1)))
-        mask = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=255)
+        mask = Image.new("L", (w * 4, h * 4), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, w * 4 - 1, h * 4 - 1), radius=radius * 4, fill=255)
         tile = Image.new("RGB", (w, h), BG)
-        tile.paste(body, (0, 0), mask)
+        tile.paste(Image.new("RGB", (w, h), colour), (0, 0), mask.resize((w, h), Image.LANCZOS))
         return tile
 
     def tile(self, pad, w, h):
-        """A button's tile, a pad lit from behind in its button's colour: dimly, and brightly while its sound plays;
-        its button and its sound's name, one over the other in its middle. Nothing on it: an outline. Kept."""
+        """A button's tile, flat in the accent as the Sequencer's cells are: whiter while its sound plays (as the
+        Sequencer's are while the bar's on them), dim while it can't play; its button and its sound's name, one over
+        the other in its middle. Nothing on it: an outline. Kept."""
         from .fine import Image, ImageDraw, scale
+        from .theme import ACCENT
         got = self.pads.get(pad)
         lit = pad in self.lit and got is not None
         here = self.placing is not None and self.placing[1] == pad
         held = self.held_note
         note = held[1] if held is not None and held[0] == pad and got is not None else None
-        key = (pad, got, lit, here, note, w, h, scale(), BG)
+        key = (pad, got, lit, here, note, w, h, scale(), BG, ACCENT)
         tile = self.tiles.get(key)
         if tile is not None:
             return tile
-        colour = PAD_COLOUR[pad]
-        tint = colour                                  # (what its outline, its fill and its button take theirs from:
-        if max(abs(a - b) for a, b in zip(colour, BG)) < 48:   # its colour, but white on a light page, which wouldn't
-            tint = accent_for("White")                 # show: the grey a light page has for it)
+        colour = tint = ACCENT
         size = max(16, min(28, round(h * 0.17)))       # (a bigger screen than the GPi Case's: bigger words to match)
         size = max(13, min(size, round(w * 0.165)))    # (...a narrow tile, a square one on a small screen: smaller,
         f, small = self.font(size, bold=True), self.font(max(11, size - 3))   # so a word like Explosion's all there)
@@ -225,21 +215,19 @@ class Soundboard(Sim):
             cap, ink, words = co_mix(BG, tint, 0.22), BG, [("Empty", MUTED)]
         else:
             name, state = got
-            if lit:                                    # (dark words on it, on a light page too)
-                tile = self.shaded(w, h, co_mix(colour, (255, 255, 255), LIT_SHADE[0]),
-                                   co_mix(colour, INK, LIT_SHADE[1]), edge)
+            if lit or state == "ready":                # (in the accent, whiter while it plays; its words dark on a
+                colour = co_mix(ACCENT, (255, 255, 255), SQ.HEAD_LIT) if lit else ACCENT   # light one, light on a
+                tile = self.flat(w, h, colour, edge)                                         # dark one)
                 d = ImageDraw.Draw(tile)
-                cap, ink, text = co_mix(colour, INK, 0.82), colour, co_mix(colour, INK, 0.9)
+                dark = SQ.note_ink(colour) == INK
+                cap = co_mix(colour, INK if dark else (255, 255, 255), 0.82)
+                ink, text = colour, co_mix(colour, INK if dark else (255, 255, 255), 0.9)
             else:
-                ready = state == "ready"
-                dim = 1.0 if ready else 0.35
-                tile = self.shaded(w, h, co_mix(BG, tint, FILL[0] * dim), co_mix(BG, tint, FILL[1] * dim), edge)
+                tile = self.flat(w, h, co_mix(BG, ACCENT, DIM), edge)
                 d = ImageDraw.Draw(tile)
-                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, width=2,
-                                    outline=TEXT if here else co_mix(BG, tint, RIM[0] if ready else RIM[1]))
-                cap = tint if state == "ready" else co_mix(ROW, tint, 0.45)
-                ink = co_mix(tint, BG, 0.85)
-                text = TEXT if state == "ready" else MUTED
+                cap, ink, text = co_mix(ROW, tint, 0.45), co_mix(tint, BG, 0.85), MUTED
+            if here:
+                d.rounded_rectangle((0, 0, w - 1, h - 1), radius=edge, width=2, outline=TEXT)
             words = [(line, text) for line in self.fitted(name, f, room)]
             if state == "bad" and not lit:
                 words = words[:1] + [("Can't play it", co_mix(WARN, ROW, 0.25))]
@@ -255,7 +243,7 @@ class Soundboard(Sim):
             wide = w >= 110                            #  in the corner, on a narrow tile: clear of its button)
             d.text((w - edge, edge + 6) if wide else (w - 7, 12), note,
                    font=self.font(size + 1 if wide else size - 1, bold=True),
-                   fill=co_mix(colour, BG, 0.85) if lit else tint, anchor="rm")
+                   fill=text if got is not None else tint, anchor="rm")
         y = top + 2 * r + gap + step // 2
         for k, (line, fill) in enumerate(words):
             plain = got is None or (k and got[1] == "bad" and not lit)

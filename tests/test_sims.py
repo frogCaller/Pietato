@@ -76,14 +76,14 @@ m.dirty = True; m.flush()
 m.press("a")
 SIMI = m.tab
 corner = (g.SIM_BOX[0], g.SIM_BOX[1])
-# (Apps' list as it is here: LED backlight only on a Pi with LEDs)
 SHOWN = [it["title"] for it in m.tab_items()]
-check(f"A opens Apps: its list, all of them but the LED backlight ({len(SHOWN)})", m.tab_type() == "group"
-      and g.LIBRARY[m.tab]["name"] == "Apps"
-      and SHOWN == [n for n in g.LIBRARY[SIMI]["children"] if n != "LED backlight"])
+check(f"A opens Apps: its list, all of them ({len(SHOWN)}); no LED backlight (the web page's Library has it), no Notes "
+      f"or Fortune Cookie", m.tab_type() == "group" and g.LIBRARY[m.tab]["name"] == "Apps"
+      and SHOWN == g.LIBRARY[SIMI]["children"]
+      and not {"LED backlight", "Notes", "Fortune Cookie"} & set(SHOWN))
 rows = [(it["title"], it.get("icon")) for it in m.tab_items()]
 check(f"...Group chat after the Fish Tank, each with its badge: {rows[:6]}", rows == [
-    ("Clock", "TIME"), ("Notes", "NOTE"), ("Fortune Cookie", "LUCK"), ("Fish Tank", "FISH"), ("Group chat", "CHAT"),
+    ("Clock", "TIME"), ("Fish Tank", "FISH"), ("Group chat", "CHAT"),
     ("Sequencer", "BEAT"), ("Band", "JAM"), ("Konami code", "CHEAT"), ("cmatrix", "CODE"), ("hollywood", "HACK"),
     ("nyancat", "NYAN"), ("cacafire", "HEAT"), ("htop", "PROC")])
 gone = ("Game of Life", "Mandelbrot Set", "Rock Paper Scissors", "The Cookie")

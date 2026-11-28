@@ -44,8 +44,7 @@ SAVE_EXTS = (".srm", ".rtc", ".state.auto", ".disc")   # (yours, copied: where t
 BORED_FOR = {"camera": 80.0, "weather": 40.0, "finance": 40.0, "app": 75.0, "toy": 60.0, "photos": 60.0,
              "system": 30.0}
 BORED_STILL = 45.0            # ...a camera that doesn't turn: this long (it looks once)
-BORED_APPS = ("Fish Tank", "Clock",                 # Apps' it watches
-              "Fortune Cookie")                     # (...or opens)
+BORED_APPS = ("Fish Tank", "Clock")                 # Apps' it watches
 BORED_TOYS = ("cmatrix", "hollywood", "nyancat", "cacafire", "htop")   # Linux's own it puts on (Apps': those installed)
 BORED_OWN_WORDS = ("Clock",)  # Apps' it only ever has a line of its own for (its model isn't asked)
 BORED_TOY_SOON = 5.0          # seconds: one of Linux's own that stops by itself sooner didn't really start (not again)
@@ -83,8 +82,6 @@ BORED_ASKS = {
                "doing, in a sentence or two.",
     "app": "You're bored, so you just put {name} on the screen to watch ({about}). Say something about it, in a "
            "sentence.",
-    "fortune": "You're bored, so you just cracked open a fortune cookie on the screen. Its fortune says: {text} Say "
-               "something about it, in a sentence.",
     "photos": "You're bored, so you're looking through their photos. The attached picture is one of them{when}. Say "
               "something about it, in a sentence or two.",
     "system": "You're bored, so you just put your own numbers on the screen (you live on this Raspberry Pi): {facts}. "
@@ -258,13 +255,6 @@ class AttractScreen:
             if name not in self.bored_apps() or self.web_tab(name) is None:
                 return False
             a["shown"] = self.tab
-            if name == "Fortune Cookie":               # (a new fortune, and what it says read out)
-                cookie = self.sim_game()
-                cookie.new()
-                self.sim_next = 0.0
-                self.bored_remark(f"Fortune cookie time! It says: {cookie.text}",
-                                  BORED_ASKS["fortune"].format(text=cookie.text))
-                return True
             about = next((t.get("about", "") for t in LIBRARY if t["name"] == name), "")
             self.bored_remark(BORED_APP_LINES.get(name) or f"Here's {name}.", None if name in BORED_OWN_WORDS else
                               BORED_ASKS["app"].format(name=name, about=about[:1].lower() + about[1:] or name))

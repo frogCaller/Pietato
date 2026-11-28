@@ -161,8 +161,8 @@ def pick(things):
 
 m.bored_pick = pick
 want = ["weather"]
-EVERYTHING = ([("camera", None), ("weather", None), ("finance", None), ("app", "Fish Tank"), ("app", "Clock"),
-               ("app", "Fortune Cookie")] + [("toy", name) for name in INSTALLED]
+EVERYTHING = ([("camera", None), ("weather", None), ("finance", None), ("app", "Fish Tank"), ("app", "Clock")]
+              + [("toy", name) for name in INSTALLED]
               + [("photos", None), ("system", None)])
 
 
@@ -272,13 +272,13 @@ later(9)
 m.tick()
 name = g.LIBRARY[m.tab]["name"]
 check(f"one of Apps': up, watched, with a word about it ({name}, {m.bored_said()!r})", m.attract["kind"] == "app"
-      and name in AM.BORED_APPS and m.on_sim_page() and m.bored_said() == AM.BORED_APP_LINES.get(
-          name, f"Fortune cookie time! It says: {m.sims['fortune'].text if 'fortune' in m.sims else ''}"))
+      and name in AM.BORED_APPS and m.on_sim_page()
+      and m.bored_said() == (AM.BORED_APP_LINES.get(name) or f"Here's {name}."))
 check("...along the foot of the page, over the app", m.bored_said() in drawn())
 FB.last.save(SP + "/bored_app.png")
 settle()
-check(f"...then its model's ({asked[-1][0][:40]!r})", (asked[-1][0].startswith(f"You're bored, so you just put {name} on")
-      or name == "Fortune Cookie" and "fortune cookie" in asked[-1][0]) and m.bored_said() == f"What a sight, {len(asked)}.")
+check(f"...then its model's ({asked[-1][0][:40]!r})", asked[-1][0].startswith(f"You're bored, so you just put {name} on")
+      and m.bored_said() == f"What a sight, {len(asked)}.")
 
 # ---- your photos ---------------------------------------------------------------------------------------------------
 want[0] = "photos"
@@ -341,22 +341,16 @@ m.tick()
 m.tick()
 check(f"one that stops by itself: on to the next thing ({started}, {m.attract and m.attract['kind']})",
       m.attract is not None and started[-1] == "htop" and m.prog_name == "htop" and stopped[-1] == "cacafire")
-want[0] = "Fortune Cookie"
-later(AM.BORED_FOR["toy"] + 1)
-m.tick()
-settle()
 did = [which or kind for kind, which in m.attract["round"]]
-check(f"...and the last of Apps' ({g.LIBRARY[m.tab]['name']}): everything but a game now, each once ({did}); its "
-      f"model asked nothing about the Clock or Linux's own ({len(asked) - n_asked} more: the fortune)",
-      stopped[-1] == "htop" and m.prog is None and g.LIBRARY[m.tab]["name"] == "Fortune Cookie"
-      and sorted(m.attract["round"], key=str) == sorted(EVERYTHING, key=str) and len(asked) == n_asked + 1
-      and "fortune cookie" in asked[-1][0])
+check(f"...and that's everything but a game, each once ({did}); its model asked nothing about the Clock or Linux's own "
+      f"({len(asked) - n_asked} more); no fortune cookie any more", len(asked) == n_asked
+      and sorted(m.attract["round"], key=str) == sorted(EVERYTHING, key=str) and "Fortune Cookie" not in AM.BORED_APPS)
 
 # ---- a game, only now: what it says goes over the game ---------------------------------------------------------------
 gate.clear()                                          # (its model slow to answer)
 sent.clear()
 said_before = len(said)
-later(AM.BORED_FOR["app"] + 1)
+later(AM.BORED_FOR["toy"] + 1)
 m.tick()
 check(f"it's been through all the rest: only now a game ({picks[-1]}): it plays it, a line of its own over the game "
       f"at once ({m.view}, {sent[-1:]})", picks[-1] == [("game", None)]

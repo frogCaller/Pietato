@@ -6,8 +6,9 @@ the next time it'd go somewhere; and nothing's left behind by any of its frames:
 whole page again would give. No glow round it while music plays (it had one, which didn't look good on a GPi Case's
 screen): with a song or the radio on it's drawn just as it is with nothing playing, and no ear's kept for the song.
 Its X menu over it: left as it is, the main loop left to wait (it wasn't: a whole core, for as long as the menu was
-open). Its chat page with the conversation, as it was; Now playing's own glow, as ever, its buttons still there for a
-tap on the web page's copy of the screen after a frame of it (they weren't). Pictures saved, to look at."""
+open). Its chat page with the conversation, as it was; Now playing's bars, as ever, its buttons still there for a
+tap on the web page's copy of the screen after a frame of them (they weren't, after a frame of its cover's glow, once
+there was one). Pictures saved, to look at."""
 import math, os, shutil, sys, time
 from paths import SP, TESTS  # noqa: E402  (this test's folder of work; the tests' own)
 S = SP + "/t_faceroom"
@@ -131,13 +132,17 @@ ears = []
 
 
 class FakeEar:
-    """The ear for the song (ear.py's, Now playing's), stood in for: a beat as hard as the test says."""
+    """The ear for the song (ear.py's, Now playing's), stood in for: a beat as hard as the test says, its bars as
+    high."""
     def __init__(self, src, where):
         self.src, self.closed = src, False
         ears.append(self)
 
     def level(self, place):
         return level[0]
+
+    def levels(self, place):
+        return (level[0],) * M.BARS
 
     def close(self):
         self.closed = True
@@ -397,8 +402,7 @@ for name, kind, src in (("a song of yours", "audio", None), ("the radio", "radio
     shown = m.fb.last.copy()
     check(f"{name} playing: its face just as it is with nothing playing, no glow ({n} frames in 0.9 s; "
           f"{len({c for _, c in shown.getcolors(100000)})} colours on the screen), no ear for it",
-          same(shown, bare) and same(whole(), bare) and n == 0 and not ears and not m.pulse_wanted()
-          and m.ear is None)
+          same(shown, bare) and same(whole(), bare) and n == 0 and not ears and m.ear is None)
 bare.save(S + "/pics/music.png")
 left = [n for n in dir(m) if n.startswith(("face_glow", "face_lit", "face_pulse"))] \
     + [n for n in dir(F) + dir(B) if "glow" in n.lower()]
@@ -437,7 +441,7 @@ outside.paste(0, (0, 0, W, m.LIST_TOP))            # (not the clock, along the t
 check("...the rest of its page untouched by its face's frames",
       ImageChops.multiply(ImageChops.difference(m.fb.last, chat).convert("L"), outside).getbbox() is None)
 
-# Now playing: the cover's glow, as ever, and its buttons still there for a tap after a frame of it
+# Now playing: its bars, as ever, and its buttons still there for a tap after a frame of them
 bot_txt()
 m.view = "now"
 m.meta, m.pos = {"title": "Song", "length": 180.0}, 12.0
@@ -452,9 +456,9 @@ was = FB.frames
 level[0] = 1.0
 T[0] += 1.0
 m.pulse_tick(T[0])
-check(f"Now playing: its glow's frame on a beat, as ever (step {m.now_shot[2]}): the cover's part of the screen "
-      f"({m.fb.parts[-1]}), an ear for the song", FB.frames == was + 1 and m.fb.parts[-1] is not None
-      and m.now_shot[2] == g.GLOW_STEPS - 1 and len(ears) == had + 1 and ears[-1].src == m.cur["src"])
+check(f"Now playing: its bars' frame as they move, as ever: just their part of the screen ({m.fb.parts[-1]}), an "
+      f"ear for the song", FB.frames == was + 1 and m.now_bars is not None and m.fb.parts[-1] == m.now_bars[0]
+      and len(ears) == had + 1 and ears[-1].src == m.cur["src"])
 taps = [t for t in m.taps_now() if t[1] == ("keys", "a")]
 check(f"...and its buttons still there for a tap on the web page's copy, after it ({taps[:1]})", bool(taps))
 

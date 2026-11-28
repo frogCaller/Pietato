@@ -49,8 +49,8 @@ toasts = []
 was_toast = m.toast
 m.toast = lambda text, secs=4: (toasts.append(text), was_toast(text, secs))[1]
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
-check(f"Apps has the Fortune Cookie, after Notes ({apps['children'][:4]})",
-      apps["children"][:3] == ["Clock", "Notes", "Fortune Cookie"])
+check(f"Apps' list has no Fortune Cookie any more ({apps['children'][:4]}), its page still there by name",
+      "Fortune Cookie" not in apps["children"] and any(t["name"] == "Fortune Cookie" for t in g.LIBRARY))
 fi = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Fortune Cookie")
 
 
@@ -147,7 +147,7 @@ rows = [k for k, _, _, _ in m.sim_rows(type(s))]
 check(f"START: its options {rows}", m.sim_opts == 0 and rows == ["ink", "paper", "font", "size", "effect", "full"])
 m.press("b")
 m.press("b")
-check("B: back to the list, the Fortune Cookie picked", m.view == "list" and g.LIBRARY[m.tab]["name"] == "Apps"
-      and m.tab_items()[m.sels[m.tab]]["title"] == "Fortune Cookie")
+check("B: back to Apps' list (the Fortune Cookie not in it now)", m.view == "list"
+      and g.LIBRARY[m.tab]["name"] == "Apps" and "Fortune Cookie" not in [it["title"] for it in m.tab_items()])
 print("ALL OK" if all(ok_all) else f"FAILED {ok_all.count(False)}", flush=True)
 os._exit(0)

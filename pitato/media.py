@@ -279,7 +279,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         self.beat_game = None        # Now playing's Game beat (pitato/beatgame.py), once it's been on
         self.game_next = 0.0         # ...when its next frame's due
         self.game_place = None       # ...where the song was heard at its last frame (the ear's beats since then)
-        self.game_took = 0.0         # ...how long its last frame took to draw (its next no sooner than twice that)
+        self.game_took = 0.0         # ...how long its last frame took to draw (the next: no sooner than half again)
+        self.game_kept = {}          # ...its words along its top and foot, as last drawn (screens/player.py)
         self.sim_next = 0.0          # when its next frame is due
         self.sim_due = None          # ...for which sim, with which options (another, or them changed: one now)
         self.sim_base = (None, None, None)       # what doesn't move: (what it shows, it, the box's corners)
@@ -704,12 +705,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
         elif tab["type"] == "group":
             rows = []
             for name in tab["children"]:
-                boards = name == "LED backlight" and not self.glow_can()   # (an LED grid: only a Pi with the pins free
-                if boards and not self.lamps_on():                         #  for one. Any other: while ESP32 boards
-                    continue                                               #  are on your network, their page)
                 ci = next(k for k, t in enumerate(LIBRARY) if t["name"] == name)
-                rows.append(dict(item("grp:" + name, name, "child", str(ci),
-                                      sub="Your ESP32 boards' LEDs" if boards else LIBRARY[ci].get("about", "")),
+                rows.append(dict(item("grp:" + name, name, "child", str(ci), sub=LIBRARY[ci].get("about", "")),
                                  icon=LIBRARY[ci].get("badge", "")))
             self.items[i] = rows
         elif tab["type"] == "radio":
@@ -1950,8 +1947,8 @@ class Media(DrawScreen, HomeScreen, KeyboardScreen, PlayerScreen, PlexScreen, Je
             self.lofi_next = now + 1.0 / self.lofi_fps()
             self.dirty = True
         if (self.now_game() and not self.paused and not self.resting   # (...or its Game beat: its dancer; still
-                and now >= self.game_next):                                 # while it's paused; on a big screen
-            self.game_next = now + max(1.0 / GAME_FPS, 2 * self.game_took)  # a Pi's slow to draw, half its time)
+                and now >= self.game_next):                                 # while it's paused; where it's slow to
+            self.game_next = now + max(1.0 / GAME_FPS, 1.5 * self.game_took)   # draw, two thirds of the time)
             self.dirty = True
         self.music_tick(now)                           # (...and its cover's glow, following the beat)
         if (self.fin_auto and self.active and not self.resting and self.view == "list"

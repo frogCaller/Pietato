@@ -910,10 +910,10 @@ def players():
 apps = next(t for t in g.LIBRARY if t["name"] == "Apps")
 si = next(k for k, t in enumerate(g.LIBRARY) if t["name"] == "Sequencer")
 ai = g.LIBRARY.index(apps)
-check("Apps has the Sequencer (after the LED backlight, before the Band), its Soundboard one of its pages, and it's "
+check("Apps has the Sequencer (after Group chat, before the Band), its Soundboard one of its pages, and it's "
       "not one of the Bot's \"something cool\"; asked for by its name, or as the Soundboard (what it was called "
       "before: a Konami code kept from then, the web page)",
-      apps["children"][apps["children"].index("LED backlight"):][:3] == ["LED backlight", "Sequencer", "Band"]
+      apps["children"][apps["children"].index("Group chat"):][:3] == ["Group chat", "Sequencer", "Band"]
       and g.LIBRARY[si]["sim"] == "sound"
       and "Sequencer" in g.COOL_SKIP and g.app_named("the sequencer") == "Sequencer"
       and g.app_named("the soundboard") == "Sequencer" and g.RENAMED.get("Soundboard") == "Sequencer")
@@ -953,13 +953,29 @@ check(f"...each with its sound's name ({ {k: v[0] for k, v in s.pads.items()} })
       {k: v for k, v in s.pads.items()} == {pad: (name, "ready") for pad, name in dict(B.STARTER_BANKS)["Starter"].items()})
 
 
+import pitato.theme as THEME  # noqa: E402
+import pitato.sequencer as SEQ  # noqa: E402
+FLAT = THEME.ACCENT                                    # (the buttons' colour: the accent, as the Sequencer's cells)
+CAP = g.co_mix(FLAT, SBD.INK, 0.82)                    # (...and a button's mark on one: dark, on a light accent)
+LIT = g.co_mix(FLAT, (255, 255, 255), SEQ.HEAD_LIT)    # (...and one whose sound's playing: whiter)
+WORDS = g.co_mix(FLAT, SBD.INK, 0.9)                   # (...and its sound's name on it: dark, on a light accent)
+
+
 def mark_of(pad):
-    """A button's own colour on its tile: how many pixels of it round the tile's middle, above its name (its mark's
-    there), and how many at its top left corner (where it isn't)."""
+    """A button's mark on its tile: how many pixels of it round the tile's middle, above its name (it's there), and
+    how many at its top left corner (where it isn't)."""
     x0, y0, x1, y1 = boxes[pad]
     cx = (x0 + x1) // 2
-    return (near(page, (cx - 16, y0 + 4, cx + 16, y0 + (y1 - y0) // 2 + 8), SBD.PAD_COLOUR[pad]),
-            near(page, (x0 + 3, y0 + 3, x0 + 22, y0 + 22), SBD.PAD_COLOUR[pad]))
+    return (near(page, (cx - 16, y0 + 4, cx + 16, y0 + (y1 - y0) // 2 + 8), CAP),
+            near(page, (x0 + 3, y0 + 3, x0 + 22, y0 + 22), CAP))
+
+
+def fill_of(pad):
+    """A button's tile's colour at its top, at its foot and at its side (all one: it's flat)."""
+    x0, y0, x1, y1 = boxes[pad]
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    return [tuple(int(v) for v in page[y0 + 3, cx]), tuple(int(v) for v in page[y1 - 4, cx]),
+            tuple(int(v) for v in page[cy, x0 + 4])]
 
 
 def name_middle(pad):
@@ -967,19 +983,22 @@ def name_middle(pad):
     half)."""
     x0, y0, x1, y1 = boxes[pad]
     part = page[y0 + (y1 - y0) // 2 + 8:y1 - 3, x0 + 2:x1 - 2]
-    cols = np.where((np.abs(part - np.array(g.TEXT)).max(axis=2) <= 40).any(axis=0))[0]
+    cols = np.where((np.abs(part - np.array(WORDS)).max(axis=2) <= 40).any(axis=0))[0]
     return (cols[0] + cols[-1]) / 2 + x0 + 2 if len(cols) else None
 
 
 marks = {pad: mark_of(pad) for pad in B.PADS}
+fills = {pad: fill_of(pad) for pad in B.PADS}
 names = {pad: name_middle(pad) for pad in B.PADS}
 off = {pad: None if names[pad] is None else round(float(names[pad] - (boxes[pad][0] + boxes[pad][2] - 1) / 2), 1)
        for pad in B.PADS}
-check(f"...and its button's own mark, each in a colour of its own ({len(set(SBD.PAD_COLOUR.values()))} colours), in "
-      f"the middle of its tile ({min(v[0] for v in marks.values())} pixels of it or more there; at its corner, "
-      f"{max(v[1] for v in marks.values())} at most), its sound's name under it, in the middle too (px off it: {off})",
-      min(v[0] for v in marks.values()) > 150 and max(v[1] for v in marks.values()) < 30
-      and len(set(SBD.PAD_COLOUR.values())) == 8 and all(v is not None and abs(v) <= 2.5 for v in off.values()))
+check(f"...each tile flat in the accent, as the Sequencer's cells are (the same at its top, its foot and its side: "
+      f"{fills['a']}, the accent {FLAT}), its button's mark in its middle ({min(v[0] for v in marks.values())} pixels "
+      f"of it or more there; at its corner, {max(v[1] for v in marks.values())} at most), its sound's name under it, "
+      f"in the middle too (px off it: {off})",
+      all(max(abs(a - b) for a, b in zip(c, FLAT)) <= 3 for v in fills.values() for c in v)
+      and min(v[0] for v in marks.values()) > 150 and max(v[1] for v in marks.values()) < 30
+      and all(v is not None and abs(v) <= 2.5 for v in off.values()))
 tw, th = boxes["up"][2] - boxes["up"][0], boxes["up"][3] - boxes["up"][1]
 gap = boxes["left"][1] - boxes["up"][3]                 # (between a button and the one under it)
 gaps = (boxes["right"][0] - boxes["left"][2], boxes["a"][0] - boxes["y"][2], boxes["y"][0] - boxes["right"][2],
@@ -1046,31 +1065,28 @@ check(f"...its line: its own name at the left, after its picture (‹ › after 
 rims = {}
 for pad in B.PADS:
     x0_, y0_, x1_, y1_ = boxes[pad]
-    rim = g.co_mix(g.BG, SBD.PAD_COLOUR[pad], getattr(SBD, "RIM", (1.0,))[0])
-    rims[pad] = near(page, (x0_ + 20, y0_, x1_ - 20, y0_ + 2), rim, 10)
+    rims[pad] = near(page, (x0_ + 20, y0_, x1_ - 20, y0_ + 2), FLAT, 10)
 mid_d = page[(boxes["left"][1] + boxes["left"][3]) // 2, (boxes["left"][2] + boxes["right"][0]) // 2]
 mid_l = page[(boxes["y"][1] + boxes["y"][3]) // 2 - round(tw * 0.16), (boxes["y"][2] + boxes["a"][0]) // 2]
-check(f"...each button outlined in its own colour ({min(rims.values())} px of it along its top edge, or more), and "
+check(f"...each button's edge in the accent too ({min(rims.values())} px of it along its top edge, or more), and "
       f"in the middle of each cross, faintly, what its buttons are: a d-pad ({mid_d.tolist()}), a controller's four "
       f"round ones ({mid_l.tolist()}; the page's own: {list(g.BG)})", min(rims.values()) >= 2 * (tw - 44)
       and int(np.abs(mid_l - np.array(g.BG)).max()) > 6 and int(np.abs(mid_l - np.array(g.BG)).max()) < 40
       and int(np.abs(page[(boxes["left"][1] + boxes["left"][3]) // 2 - round(tw * 0.15),
                           (boxes["left"][2] + boxes["right"][0]) // 2] - np.array(g.BG)).max()) > 6)
-import pitato.theme as THEME  # noqa: E402
 m.set_setting("look", "Light")
-pale = THEME.PALETTES["Light"]["BG"]
+pale, light_accent = THEME.PALETTES["Light"]["BG"], THEME.ACCENT
 lp = flush()
 bx0, by0, bx1, by1 = boxes["b"]
-b_rim = lp[by0 + 1, (bx0 + bx1) // 2]
+b_fill = lp[by0 + 3, (bx0 + bx1) // 2]
 b_mark = int((np.abs(lp[by0 + 4:(by0 + by1) // 2 + 8, bx0 + 4:bx1 - 4] - np.array(pale)).max(axis=2) > 100).sum())
-a_rim = near(lp, (boxes["a"][0] + 20, boxes["a"][1], boxes["a"][2] - 20, boxes["a"][1] + 2),
-             g.co_mix(pale, SBD.PAD_COLOUR["a"], getattr(SBD, "RIM", (1.0,))[0]), 10)
+a_rim = near(lp, (boxes["a"][0] + 20, boxes["a"][1], boxes["a"][2] - 20, boxes["a"][1] + 2), light_accent, 10)
 m.set_setting("look", "Dark")
 again = flush()
-check(f"...on a light page (Settings > Appearance > App pages): B's tile, white's, shows too: its outline grey "
-      f"({b_rim.tolist()}, on the page's {list(pale)}), its button dark enough to read ({b_mark} px of it), the "
-      f"others in their own colours as ever (A's outline: {a_rim} px); and Dark again, the page as it was",
-      int(np.abs(b_rim - np.array(pale)).max()) >= 40 and b_mark >= 200 and a_rim >= 2 * (tw - 44)
+check(f"...on a light page (Settings > Appearance > App pages): the tiles in the accent as a light page has it "
+      f"({b_fill.tolist()}, {list(light_accent)}; A's edge: {a_rim} px), their buttons dark enough to read ({b_mark} "
+      f"px of B's); and Dark again, the page as it was",
+      int(np.abs(b_fill - np.array(light_accent)).max()) <= 3 and b_mark >= 200 and a_rim >= 2 * (tw - 44)
       and (again == page).all())
 taps = {w[1]: box for box, w in m.taps_now() if w[0] == "keys"}
 check("...each tile tapped (the web page's copy of the screen, a touch screen) is its button pressed; the bank's "
@@ -1082,14 +1098,14 @@ for pad in B.PADS:
     m.press(pad)
     ok = spin(1.5, lambda: sid(want[pad]) in b.playing)
     page = flush()
-    lit = near(page, boxes[pad], SBD.PAD_COLOUR[pad])
-    others = max(near(page, boxes[q], SBD.PAD_COLOUR[q]) for q in B.PADS if q != pad and sid(want[q]) not in b.playing)
+    lit = near(page, boxes[pad], LIT)
+    others = max(near(page, boxes[q], LIT) for q in B.PADS if q != pad and sid(want[q]) not in b.playing)
     ok_each.append((pad, ok, lit, others))
     quiet()
     spin(1.0, lambda: not b.playing)
 area = (boxes["a"][2] - boxes["a"][0]) * (boxes["a"][3] - boxes["a"][1])
-check(f"each of the eight buttons plays the sound that's on it, and its tile lights up in its colour while it plays "
-      f"(most of its {area} pixels: {[(p_, n_) for p_, _, n_, _ in ok_each]}; the others', their marks alone)",
+check(f"each of the eight buttons plays the sound that's on it, and its tile lights up while it plays, the accent "
+      f"whiter (most of its {area} pixels: {[(p_, n_) for p_, _, n_, _ in ok_each]}; none of the others')",
       all(ok and lit > area * 0.6 and others < area * 0.15 for _, ok, lit, others in ok_each))
 check("...each stopped, one after another", not b.playing)
 m.press("x")

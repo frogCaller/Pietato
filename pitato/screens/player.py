@@ -704,21 +704,41 @@ class PlayerScreen:
         length = 0 if radio else (self.meta.get("length") or self.length(it) or 0)
         progress = min(1.0, self.pos / length) if length else min(1.0, (now - g.born) / STATION_LONG)
         img = enlarged(g.frame(W, H, now, levels, self.paused, on_dark("ACCENT"), progress, self.colour_depth()))
-        d = ImageDraw.Draw(img)
         F = self.fonts
         title, sub = self.lofi_words()
-        d.text((18, 22), self.fit(d, title, F["head"], W - 36), font=F["head"], fill=on_dark("TEXT"), anchor="lm")
-        d.text((18, 46), self.fit(d, sub, F["small"], W - 36), font=F["small"],
-               fill=on_dark("ACCENT" if self.paused else "BODY"), anchor="lm")
+
+        def top(d):
+            d.text((18, 22), self.fit(d, title, F["head"], W - 36), font=F["head"], fill=on_dark("TEXT"), anchor="lm")
+            d.text((18, 46), self.fit(d, sub, F["small"], W - 36), font=F["small"],
+                   fill=on_dark("ACCENT" if self.paused else "BODY"), anchor="lm")
+
+        def foot(d):
+            if length:
+                d.text((16, 14), f"{clock(self.pos)} / {clock(length)}", font=F["small"], fill=on_dark("MUTED"),
+                       anchor="ls")
+            d.text((W - 16, 14), f"{g.kills} cleared", font=F["small"], fill=on_dark("MUTED"), anchor="rs")
+        for at, part in ((0, self.game_words("top", (title, sub, self.paused, W), (W, 60), top)),
+                         (H - 30, self.game_words("foot", (int(self.pos), length, g.kills, W), (W, 30), foot))):
+            img.paste(part, (0, at), part)
+        d = ImageDraw.Draw(img)
         if length:                                     # how far through it is: a thin line along the foot
             d.rectangle((0, H - 3, W, H), fill=on_dark("LINE"))
             d.rectangle((0, H - 3, int(W * progress), H), fill=on_dark("ACCENT"))
-            d.text((16, H - 16), f"{clock(self.pos)} / {clock(length)}", font=F["small"], fill=on_dark("MUTED"),
-                   anchor="ls")
-        d.text((W - 16, H - 16), f"{g.kills} cleared", font=F["small"], fill=on_dark("MUTED"), anchor="rs")
         self.msg_pill(d)                               # (a notice, over it)
         self.fb.show(img)
         self.game_took = time.perf_counter() - took
+
+    def game_words(self, which, key, size, draw):
+        """Game beat's words along its top or its foot (which), on nothing (RGBA, size big): made again only when
+        they change (key), not each of its frames."""
+        from ..fine import Image, ImageDraw
+        kept = self.game_kept.get(which)
+        key = (key, ACCENT)
+        if kept is None or kept[0] != key:
+            pic = Image.new("RGBA", size, (0, 0, 0, 0))
+            draw(ImageDraw.Draw(pic))
+            kept = self.game_kept[which] = (key, pic)
+        return kept[1]
 
     # -- Now playing's lofi art (SELECT there) --------------------------------------------------------------
     def now_art(self):

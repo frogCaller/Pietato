@@ -16,7 +16,6 @@ COVER_WAIT = 20                  # seconds FFmpeg may take over it
 COVERS_MOST = 400                # ...and how many of them the cache keeps (the ones not used longest go first)
 WASH_KEEP = 0.34                 # how much of the cover's own colours its wash keeps (the rest: the page's)
 GLOW_REACH = 22                  # how far the glow reaches past the cover (the menus' pixels)
-GLOW_REST, GLOW_STEPS = 0.45, 8  # how lit it is between beats (1: on one), and how many steps there are between
 INSIDE = threading.Lock()        # one song's file looked inside at a time (two may want the same one's at once: Now
                                  # playing here, and another of yours it's playing on too)
 
@@ -202,12 +201,3 @@ def glow_mask(side, reach, radius):
     small = small.filter(ImageFilter.GaussianBlur(r * 0.3))
     return small if small.size == (full, full) else small.resize((full, full), Image.BILINEAR)
 
-
-def glow_step(level):
-    """Which of the glow's steps a level's (0: at rest, to GLOW_STEPS - 1: on a beat)."""
-    return max(0, min(GLOW_STEPS - 1, int(round(level * (GLOW_STEPS - 1)))))
-
-
-def glow_strength(step):
-    """How strongly the glow shows at a step (GLOW_REST of its strongest at rest, all of it on a beat)."""
-    return GLOW_REST + (1.0 - GLOW_REST) * step / (GLOW_STEPS - 1)

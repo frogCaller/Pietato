@@ -1,20 +1,24 @@
 """Game beat, for Now playing (SELECT there, after the lofi art): a dancer in the middle of a dance floor at night,
 moving to the beat. On its strong beats zombies (balls, each a soft colour, glowing brighter on the beat) drift in from
-the edges; on the others the dancer throws notes at the nearest, each its own colour and glowing: they arc through the
-air, flaring on the next beat, and land on the one after, clearing them. Nothing to do but watch: the dancer never
-falls (a zombie that gets to it is cleared too). Its beats are the ones the ear finds in a song of yours (ear.py), or
-a station's bass rising (hear: its bars); the ring round the dancer is Now playing's bars. Drawn at a whole part of
-the screen's size (fewer than twice GAME_LINES up its shorter side) and enlarged, so a Pi 4 or 5 keeps up (not a Pi
-Zero 2 W or a Pi 3: screens/music.py's bars_here)."""
+the edges, slowing as they come and stopping short of the dancer (KEEP); on the others the dancer throws notes at the
+nearest, each its own colour and glowing: they arc through the air, flaring on the next beat, and land on the one
+after, clearing them. Nothing to do but watch: the dancer never falls (one that gets to it all the same is cleared).
+Its beats are the ones the ear finds in a song of yours (ear.py), or a station's bass rising (hear: its bars); the
+ring round the dancer is Now playing's bars. Drawn at a whole part of the screen's size (fewer than twice GAME_LINES
+up its shorter side) and enlarged, so a Pi 4 or 5 keeps up (not a Pi Zero 2 W or a Pi 3: screens/music.py's
+bars_here)."""
+import bisect
 import collections
 import math
 import random
 
-GAME_FPS = 15                    # its frames a second
+GAME_FPS = 24                    # its frames a second (fewer where they're slow to draw: media.py)
 GAME_LINES = 360                 # drawn a whole part of the screen's size, fewer than twice this up its shorter
                                  # side (then enlarged)
 GAME_UNIT = 480                  # ...its sizes as on a screen this many pixels up its shorter side
 GAME_MOST = 50                   # zombies on the floor at once, at most
+KEEP = 64                        # ...and no nearer the dancer than this (their edge; slowing as they come)
+BITS_MOST = 120                  # bits flying from what's hit, at most
 LATE = 0.2                       # a beat heard this long ago or more (a pause, a slow frame): a move, nothing else
 IDLE = 2.0                       # no beat this long: the dancer keeps moving at the tempo it had, all the same
 STATION_LONG = 180.0             # a station's waves grow over this long (a song's over its length)
@@ -65,6 +69,7 @@ class BeatGame:
         self.low, self.low_at, self.low_was = 0.0, -9.0, 0.0   # (a station's bass, as it's been lately)
         self.progress, self.born = 0.0, None
         self.hue, self.glows = 0, {}                   # (the next note's colour; their glows' pictures, made once)
+        self.tiles, self.tile_at = None, []            # (the floor's tiles, by how far they are from its middle)
 
     # -- the beat ---------------------------------------------------------------------------------------------
     def beat(self, t, hard=0.7, now=None):
@@ -118,7 +123,7 @@ class BeatGame:
                 kind = "brute"
             size, hits, speed = KINDS[kind]
             self.zombies.append({"x": w / 2 + math.cos(a) * reach, "y": h / 2 + math.sin(a) * reach, "r": size * u,
-                                 "hp": hits, "k": kind, "hit": 0.0, "a": 0.0, "ph": rnd() * TAU, "born": t,
+                                 "hp": hits, "k": kind, "hit": 0.0, "born": t,
                                  "sp": speed * u * (0.85 + rnd() * 0.3), "marked": 0,
                                  "hue": int(rnd() * len(PASTELS)) % len(PASTELS)})
 
@@ -143,7 +148,7 @@ class BeatGame:
                                "at": now, "tgt": z, "tx": z["x"], "ty": z["y"],
                                "bend": (0.2 + rnd() * 0.25) * (1 if n % 2 else -1),
                                "lift": (20 + rnd() * 28) * u, "hue": self.hue % len(NOTE_HUES), "vx": 0.0,
-                               "vy": 0.0, "tr": collections.deque(maxlen=7)})
+                               "vy": 0.0, "tr": collections.deque(maxlen=4)})
             self.hue += 1
         if near:
             self.face = -1 if self.zombies[near[0][1]]["x"] < cx else 1
@@ -152,7 +157,7 @@ class BeatGame:
     def burst(self, z):
         self.kills += 1
         rnd = self.rnd.random
-        for k in range(16):
+        for k in range(12):
             a, s = rnd() * TAU, (40 + rnd() * 140) * self.u
             colour = INK if k % 3 == 0 else PASTELS[z["hue"]]
             self.bits.append([z["x"], z["y"], math.cos(a) * s, math.sin(a) * s - 30 * self.u, 0.9 + rnd() * 0.6, 1.5,
@@ -178,16 +183,19 @@ class BeatGame:
         for z in list(self.zombies):
             dx, dy = cx - z["x"], cy - z["y"]
             d = math.hypot(dx, dy) or 1.0
-            s = z["sp"] * (0.25 + 1.9 * pu)
-            z["x"] += dx / d * s * dt
-            z["y"] += dy / d * s * dt
-            z["a"] = math.atan2(dy, dx)
+            room = d - z["r"] - KEEP * u               # (how much nearer it may come: slower as it does, then still)
+            s = z["sp"] * (0.25 + 1.9 * pu) * max(0.0, min(1.0, room / (40 * u)))
+            go = min(s * dt, max(0.0, room))
+            z["x"] += dx / d * go
+            z["y"] += dy / d * go
             z["hit"] = max(0.0, z["hit"] - dt)
-            if d < z["r"] + 20 * u:                    # (at the dancer: cleared all the same)
+            if d < z["r"] + 20 * u:                    # (one at the dancer all the same: cleared)
                 self.burst(z)
                 self.zombies.remove(z)
         for b in list(self.notes):
             self.fly(b, dt, t)
+        if len(self.bits) > BITS_MOST:
+            del self.bits[:len(self.bits) - BITS_MOST]
         for p in list(self.bits):
             p[0] += p[2] * dt
             p[1] += p[3] * dt
@@ -261,7 +269,7 @@ class BeatGame:
             self.notes.clear()
             self.bits.clear()
         self.size, self.u = (w, h), min(w, h) / GAME_UNIT
-        self.glows = {}
+        self.glows, self.tiles = {}, None
 
     def background(self, accent, depth=8):
         """The floor with nothing on it: its tiles, darker towards the edges, a little of the accent in the middle
@@ -323,15 +331,17 @@ class BeatGame:
             else:
                 d.ellipse((at[0] - r, at[1] - r, at[0] + r, at[1] + r), outline=colour, width=max(1, round(2 * u)))
         self.draw_ring(d, cx, cy, levels, accent)
-        for x, y, _, _, life, most, colour, s in self.bits:
-            a = max(0.0, min(1.0, life / most * 1.4))
-            c = tuple(accent if colour is None else colour) + (int(255 * a),)
-            d.ellipse((x - s, y - s, x + s, y + s), fill=c)
+        for x, y, _, _, life, most, colour, s in self.bits:   # (faded into the dark floor: no mixing to do)
+            a = min(1.0, life / most * 1.4)
+            if a > 0.08:
+                d.ellipse((x - s, y - s, x + s, y + s), fill=tuple(int(b + (c - b) * a) for b, c in zip(BACK, colour)))
         lit = min(GLOWS - 1, int((0.25 + 0.75 * pu) * GLOWS))   # (glowing: brightest on the beat)
-        for z in self.zombies:                         # (all their glows, then the balls over them)
-            self.zombie_glow(img, z, t, lit)
         for z in self.zombies:
-            self.draw_zombie(d, z, t, pu)
+            pic = self.ball(z["hue"], round(z["r"]), lit, z["hit"] > 0)
+            r = pic.width // 2
+            x, y = round(z["x"]), round(z["y"])
+            if -r < x < w + r and -r < y < h + r:
+                img.paste(pic, (x - r, y - r), pic)
         self.draw_dancer(d, cx, cy, pu, t, accent)
         for b in self.notes:
             self.draw_note(img, d, b, lit, pu)
@@ -345,25 +355,28 @@ class BeatGame:
         if pu < 0.02:
             return
         w, h = self.size
-        T = 56 * self.u
-        cx, cy = w / 2, h / 2
+        u = self.u
+        if self.tiles is None:                         # (each tile: how far its middle is from the floor's, and
+            T = 56 * u                                 #  where it is; nearest first)
+            cx, cy = w / 2, h / 2
+            ox, oy = cx % T - T / 2, cy % T - T / 2
+            self.tiles = sorted((math.hypot(ox + (i + 0.5) * T - cx, oy + (j + 0.5) * T - cy),
+                                 (ox + i * T + 1, oy + j * T + 1, ox + (i + 1) * T - 2, oy + (j + 1) * T - 2))
+                                for i in range(-1, int(w / T) + 2) for j in range(-1, int(h / T) + 2))
+            self.tile_at = [t[0] for t in self.tiles]
         ring = (1 - pu) * max(w, h) * 0.45
+        band = 80 * u
         colour, most = (tuple(accent), 0.08) if self.last == "spawn" else (INK, 0.05)
-        ox, oy = cx % T - T / 2, cy % T - T / 2
-        x = ox - T
-        while x < w + T:
-            y = oy - T
-            while y < h + T:
-                a = max(0.0, 1 - abs(math.hypot(x + T / 2 - cx, y + T / 2 - cy) - ring) / (80 * self.u)) * pu
-                if a > 0.02:
-                    d.rectangle((x + 1, y + 1, x + T - 2, y + T - 2), fill=colour + (int(255 * a * most),))
-                y += T
-            x += T
+        for k in range(bisect.bisect_left(self.tile_at, ring - band), bisect.bisect_right(self.tile_at, ring + band)):
+            at, box = self.tiles[k]
+            a = int(255 * (1 - abs(at - ring) / band) * pu * most)
+            if a >= 3:                                 # (any fainter, and it wouldn't show)
+                d.rectangle(box, fill=colour + (a,))
 
     def draw_ring(self, d, cx, cy, levels, accent):
         """Now playing's bars, round the dancer's feet: low notes at the top and bottom, in the accent."""
         u = self.u
-        n = 64
+        n = 48
         r0 = (58 + self.bass * 10) * u
         oy = cy + 14 * u
         d.ellipse((cx - r0, oy - r0 * 0.42, cx + r0, oy + r0 * 0.42), outline=INK + (20,), width=1)
@@ -380,20 +393,23 @@ class BeatGame:
                 colour = INK + (int(255 * (0.12 + v * 0.5)),)
             d.line((cx + ca * r0, oy + sa * r0, cx + ca * (r0 + ln), oy + sa * (r0 + ln)), fill=colour, width=width)
 
-    def zombie_glow(self, img, z, t, lit):
-        if t - z["born"] < 0.4:                        # (just come: its glow when it's there)
-            return
-        pic = self.halo(PASTELS[z["hue"]], round(z["r"] * (1.9 + 0.2 * lit)), 0.22 + 0.09 * lit, 0.0)
-        r = pic.width // 2
-        img.paste(pic, (round(z["x"]) - r, round(z["y"]) - r), pic)
-
-    def draw_zombie(self, d, z, t, pu):
-        """A zombie: a ball in its colour, a little lighter on the beat (white for a moment when it's hit)."""
-        r, x, y = z["r"], z["x"], z["y"]
-        fade = max(0.0, min(1.0, (t - z["born"]) * 1.5))
-        colour = PASTELS[z["hue"]]
-        ink = INK if z["hit"] > 0 else tuple(int(c + (255 - c) * 0.35 * pu) for c in colour)
-        d.ellipse((x - r, y - r, x + r, y + r), fill=ink + (int(255 * fade),))
+    def ball(self, hue, r, lit, hit):
+        """A zombie as it's drawn: a ball r pixels round in its colour (white for a moment when it's hit), a little
+        lighter the more lit (of GLOWS) it is, its glow round it. An RGBA picture, made once for each (at this size),
+        its edge smooth (drawn three times as big, then made small)."""
+        key = ("ball", hue, r, lit, hit)
+        pic = self.glows.get(key)
+        if pic is None:
+            from PIL import Image, ImageDraw
+            glow = self.halo(PASTELS[hue], round(r * (1.9 + 0.2 * lit)), 0.22 + 0.09 * lit, 0.0)
+            R, k = glow.width // 2, 3
+            edge = Image.new("L", (glow.width * k, glow.height * k), 0)
+            ImageDraw.Draw(edge).ellipse(((R - r) * k, (R - r) * k, (R + r + 1) * k - 1, (R + r + 1) * k - 1), fill=255)
+            ink = INK if hit else tuple(int(c + (255 - c) * 0.35 * lit / (GLOWS - 1)) for c in PASTELS[hue])
+            disc = Image.new("RGBA", glow.size, ink + (0,))
+            disc.putalpha(edge.resize(glow.size, Image.BOX))
+            pic = self.glows[key] = Image.alpha_composite(glow, disc)
+        return pic
 
     def draw_dancer(self, d, x, y, pu, t, accent):
         """The dancer: holding its pose, leaning a little towards the next one late in the beat, then swinging into

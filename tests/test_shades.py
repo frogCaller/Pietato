@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 import pietato_all as g
 from pitato import beatgame as BG
 from pitato import cover as C
-from pitato.screens.music import GLOW_MOST
+from pitato.screens.music import GLOW_SHOWS
 from pitato.home import stepped
 
 S = SP + "/tshades"
@@ -118,13 +118,13 @@ check(f"Now playing on a 16-bit screen: its wash smooth there (patches within {e
       f"of {runs(shown(wash.crop(region))):.1f} px; as it was, runs of {runs(shown(plain.crop(region))):.1f})",
       screens_own(wash) and err < 1.5 and runs(shown(wash.crop(region))) < 3
       and runs(shown(plain.crop(region))) > 6 and np.array_equal(np.asarray(pics["soft"]), np.asarray(plain)))
-part = m.now_lit(pics, 6)
+part = m.now_lit(pics)
 x0, y0, x1, y1 = pics["box"]
 a, w = np.asarray(part), np.asarray(wash)
 ring = np.ones(a.shape[:2], bool)
 r = pics["reach"]
 ring[r - 2:a.shape[0] - r + 2, r - 2:a.shape[1] - r + 2] = False
-unlit = (np.asarray(pics["mask"]) * (C.glow_strength(6) * GLOW_MOST)).astype(int) == 0
+unlit = (np.asarray(pics["mask"]) * GLOW_SHOWS).astype(int) == 0
 inside = w[y0:y1, x0:x1]
 check(f"...its cover's glow too, each pixel round the cover one of the screen's shades, its piece the same as the "
       f"wash round it where the glow's gone ({int(unlit.sum())} px)",

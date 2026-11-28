@@ -49,7 +49,7 @@ pictures, it tells you.
 Left alone for five minutes while it's plugged in, it gets bored and finds something to do, something
 else every minute or so: it looks through your camera and says what it sees (a camera that turns, like
 an OBSBOT, it turns to look around, then back), or puts up the weather, your stocks and coins, one of
-Apps (the Fish Tank, a fortune, the Clock), one of Apps' terminal toys that's installed (cmatrix,
+Apps (the Fish Tank, the Clock), one of Apps' terminal toys that's installed (cmatrix,
 hollywood, nyancat, cacafire, htop), a slideshow of your photos or how the Pi's doing. When it has been
 through all of those, it plays one of your games, then starts round again. A game keeps your bot's
 computer busiest, because the AI player decides every move there, so it comes last.
